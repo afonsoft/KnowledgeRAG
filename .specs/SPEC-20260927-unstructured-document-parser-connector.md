@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / HttpClient / System.Text.Json / Unstructured.io REST API / Upstage Document Parse` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#276` |
+| Status | `Approved` |
 
 ## 1. User Story
 

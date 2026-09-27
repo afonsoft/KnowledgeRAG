@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / Polly / Microsoft.Extensions.AI / C# 12 / Serilog` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#275` |
+| Status | `Approved` |
 
 ## 1. User Story
 

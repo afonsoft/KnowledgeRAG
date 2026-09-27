@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / C# 12 / KnowledgeHub.McpEngine / Minimal APIs / Agentic RAG` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#279` |
+| Status | `Approved` |
 
 ## 1. User Story
 
