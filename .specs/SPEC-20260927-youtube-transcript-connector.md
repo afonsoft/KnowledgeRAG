@@ -8,9 +8,9 @@
 | Type | `Feature` |
 | Stack | `.NET 10 / YoutubeExplode (NuGet) / YouTube closed captions` |
 | Repository | `afonsoft/LangGraph-UI` |
-| Branch | `feature/Devin-20260927-youtube-transcript-connector` |
+| Branch | `feature/OpenCode-20260927-youtube-transcript-connector` |
 | Ticket | `#262` — https://github.com/afonsoft/LangGraph-UI/issues/262 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 

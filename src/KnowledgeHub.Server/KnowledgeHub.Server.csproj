@@ -37,6 +37,7 @@
     <PackageReference Include="StackExchange.Redis" Version="2.7.27" />
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="YoutubeExplode" Version="6.6.1" />
   </ItemGroup>
 
   <PropertyGroup>

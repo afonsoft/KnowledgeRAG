@@ -58,7 +58,8 @@ public sealed class ScheduledSyncBackgroundService(
                     || s.SourceType == SourceType.GoogleDrive
                     || s.SourceType == SourceType.RestApi
                     || s.SourceType == SourceType.SqlDatabase
-                    || s.SourceType == SourceType.RssFeed))
+                    || s.SourceType == SourceType.RssFeed
+                    || s.SourceType == SourceType.YouTube))
             .Select(s => new { s.Id, s.SyncIntervalMinutes })
             .ToListAsync(ct);
 

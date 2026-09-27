@@ -40,7 +40,8 @@ public sealed class KnowledgeSourceService(
         [SourceType.AzureFiles] = ["shareName"],
         [SourceType.OciStorage] = ["namespace", "region", "bucketName", "accessKeyId"],
         [SourceType.GoogleDrive] = ["sharedUrl"],
-        [SourceType.RssFeed] = ["feedUrl"]
+        [SourceType.RssFeed] = ["feedUrl"],
+        [SourceType.YouTube] = ["urls"]
     };
 
     public async Task<IReadOnlyList<KnowledgeSourceDto>> ListAsync(SourceType? type, bool? active, CancellationToken ct = default)
@@ -449,6 +450,17 @@ public sealed class KnowledgeSourceService(
             if (!Uri.TryCreate(feedUrl, UriKind.Absolute, out var feedUri)
                 || feedUri.Scheme is not ("http" or "https"))
                 return "Configuration key 'feedUrl' must be an absolute http(s) URI for RssFeed";
+        }
+
+        if (type == SourceType.YouTube)
+        {
+            var language = configuration["language"]?.GetValue<string>();
+            if (language is { Length: > 0 } lang)
+            {
+                var valid = System.Text.RegularExpressions.Regex.IsMatch(lang, @"^[a-zA-Z-]{2,8}$");
+                if (!valid)
+                    return "Configuration key 'language' must be 2-8 chars of letters and hyphens (e.g. 'pt', 'pt-BR', 'en')";
+            }
         }
 
         if (type == SourceType.RestApi)
