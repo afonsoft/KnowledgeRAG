@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / HttpClient / System.Text.Json / GitHub & GitLab REST APIs` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#272` |
+| Status | `Approved` |
 
 ## 1. User Story
 

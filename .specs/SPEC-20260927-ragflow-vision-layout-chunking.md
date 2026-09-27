@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / C# 12 / System.Text.Json / Document Layout Analysis / Vision LLM Bridge` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#278` |
+| Status | `Approved` |
 
 ## 1. User Story
 

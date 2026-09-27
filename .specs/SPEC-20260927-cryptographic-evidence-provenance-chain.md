@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / System.Security.Cryptography (SHA-256, Ed25519/HMAC) / System.Text.Json / EF Core SQLite` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#271` |
+| Status | `Approved` |
 
 ## 1. User Story
 

@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / Microsoft.Extensions.AI / OpenTelemetry / C# 12 / SQLite / Blazor WASM` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#281` |
+| Status | `Approved` |
 
 ## 1. User Story
 

@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / Microsoft.Extensions.AI / C# 12 / System.Text.Json` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#269` |
+| Status | `Approved` |
 
 ## 1. User Story
 

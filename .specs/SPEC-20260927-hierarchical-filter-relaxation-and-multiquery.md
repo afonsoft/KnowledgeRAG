@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / Microsoft.Data.Sqlite / Npgsql / pgvector / FTS5 / System.Text.Json` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
-| Ticket | `[A DEFINIR]` |
-| Status | `Draft` |
+| Ticket | `#273` |
+| Status | `Approved` |
 
 ## 1. User Story
 
