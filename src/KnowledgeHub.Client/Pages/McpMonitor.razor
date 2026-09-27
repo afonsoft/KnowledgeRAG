@@ -31,7 +31,8 @@
             Falha na conexão em tempo real: @monitorError<br />
             <small class="text-muted">WebSocket pode estar bloqueado pela rede/proxy — a página continua funcional.</small>
         </span>
-        <Button Size="Size.ExtraSmall" Color="Color.Warning" Text="Reconectar"
+        <Button Size="Size.ExtraSmall" Color="Color.Warning" Icon="fa-solid fa-rotate"
+                Text="Reconectar" TooltipText="Reconectar" TooltipPlacement="Placement.Left"
                 IsAsync="true" OnClick="ReconnectAsync" />
     </div>
 }
@@ -87,8 +88,8 @@
                     </div>
                 }
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-file-csv"
-                        Text="Exportar CSV" IsDisabled="_activity.Count == 0"
-                        OnClick="ExportCsvAsync" class="mt-2" />
+                        Text="Exportar CSV" TooltipText="Exportar CSV" TooltipPlacement="Placement.Top"
+                        IsDisabled="_activity.Count == 0" OnClick="ExportCsvAsync" class="mt-2" />
             </BodyTemplate>
         </Card>
     </div>
@@ -174,7 +175,8 @@
             <div class="d-flex justify-content-between gap-2 align-items-center mb-1">
                 <strong>Claude Code</strong>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        Text="Copiar" OnClick="() => Copy(ClaudeCodeConfig)" />
+                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        OnClick="() => Copy(ClaudeCodeConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@ClaudeCodeConfig</code></pre>
         </div>
@@ -184,7 +186,8 @@
                 <strong>Devin</strong>
                 <small class="text-muted me-auto ms-2">Settings → MCP Servers</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        Text="Copiar" OnClick="() => Copy(DevinConfig)" />
+                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        OnClick="() => Copy(DevinConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@DevinConfig</code></pre>
         </div>
@@ -194,7 +197,8 @@
                 <strong>opencode</strong>
                 <small class="text-muted me-auto ms-2">opencode.json</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        Text="Copiar" OnClick="() => Copy(OpencodeConfig)" />
+                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        OnClick="() => Copy(OpencodeConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@OpencodeConfig</code></pre>
         </div>
@@ -204,7 +208,8 @@
                 <strong>agy (Antigravity)</strong>
                 <small class="text-muted me-auto ms-2">mcp_config.json</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        Text="Copiar" OnClick="() => Copy(AgyConfig)" />
+                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        OnClick="() => Copy(AgyConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@AgyConfig</code></pre>
         </div>
@@ -214,7 +219,8 @@
                 <strong>Genérico (qualquer client MCP)</strong>
                 <small class="text-muted me-auto ms-2">SSE / mcp-remote</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        Text="Copiar" OnClick="() => Copy(GenericConfig)" />
+                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        OnClick="() => Copy(GenericConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@GenericConfig</code></pre>
         </div>

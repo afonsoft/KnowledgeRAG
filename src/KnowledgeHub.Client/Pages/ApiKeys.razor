@@ -20,7 +20,7 @@
            EmptyText="Nenhuma chave criada." CreateItemCallback="CreatePlaceholder">
     <TableToolbarTemplate>
         <TableToolbarButton TItem="ApiKeyDto" Text="Nova chave" Icon="fa-solid fa-plus"
-                            Color="Color.Primary" OnClick="ShowCreate" />
+                            Title="Nova chave" Color="Color.Primary" OnClick="ShowCreate" />
     </TableToolbarTemplate>
     <TableColumns>
         <TableColumn Field="@context.Name" FieldExpression="@(() => context.Name)" Text="Nome" />
@@ -68,7 +68,8 @@
 
 <Modal @ref="_createModal">
     <ModalDialog Title="Nova API key" ShowSaveButton="true" SaveButtonText="Criar"
-                 CloseButtonText="Cancelar" OnSaveAsync="CreateAsync">
+                 SaveButtonIcon="fa-solid fa-plus" CloseButtonText="Cancelar"
+                 CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="CreateAsync">
         <BodyTemplate>
             <label class="form-label">Nome do client</label>
             <input class="form-control" @bind="_newName" placeholder="ex.: cursor-laptop" />
@@ -88,8 +89,8 @@
             </div>
             <div class="input-group">
                 <input class="form-control font-monospace" readonly value="@_createdKey" />
-                <Button Color="Color.Secondary" Icon="fa-solid fa-copy" Text="Copiar"
-                        OnClick="CopyKey" />
+                <Button Color="Color.Secondary" Icon="fa-solid fa-copy" TooltipText="Copiar"
+                        TooltipPlacement="Placement.Top" OnClick="CopyKey" />
             </div>
         </BodyTemplate>
     </ModalDialog>
@@ -97,7 +98,7 @@
 
 <Modal @ref="_usageModal">
     <ModalDialog Title="Detalhes e uso da chave" Size="Size.Large" ShowSaveButton="false"
-                 CloseButtonText="Fechar">
+                 CloseButtonText="Fechar" CloseButtonIcon="fa-solid fa-xmark">
         <BodyTemplate>
             @if (_usageKey is not null)
             {
@@ -129,8 +130,8 @@
                                     Title="@(_revealSecret ? "Ocultar segredo" : "Revelar segredo")"
                                     OnClick="() => _revealSecret = !_revealSecret" />
                             <Button Size="Size.Small" Color="Color.Primary" Icon="fa-solid fa-copy"
-                                    Text="Copiar chave" Title="Copiar chave completa"
-                                    OnClick="CopySecretAsync" />
+                                    TooltipText="Copiar chave completa" TooltipPlacement="Placement.Top"
+                                    Title="Copiar chave completa" OnClick="CopySecretAsync" />
                         </div>
                     }
                     else
@@ -240,7 +241,7 @@
     <ModalDialog Title="@(_settingsKey is not null ? $"Configurações — {_settingsKey.Name}" : "Configurações da chave")"
                  Size="Size.Large" ShowSaveButton="true" SaveButtonText="Salvar"
                  SaveButtonIcon="fa-solid fa-floppy-disk"
-                 CloseButtonText="Cancelar" OnSaveAsync="SaveSettingsAsync">
+                 CloseButtonText="Cancelar" CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="SaveSettingsAsync">
         <BodyTemplate>
             @if (_settings is null)
             {

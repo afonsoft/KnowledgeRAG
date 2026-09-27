@@ -12,7 +12,7 @@
             <HeaderTemplate>
                 <div class="d-flex justify-content-between gap-2 align-items-center">
                     <span>Threads</span>
-                    <Button Size="Size.Small" Icon="fa-solid fa-plus" Text="Nova" IsAsync="true"
+                    <Button Size="Size.Small" Icon="fa-solid fa-plus" Text="Nova" TooltipText="Nova conversa" IsAsync="true"
                             OnClick="NewThreadAsync" />
                 </div>
             </HeaderTemplate>
@@ -57,6 +57,7 @@
                                 <Badge Color="Color.Info" class="me-2">contexto resumido</Badge>
                             }
                             <Button Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash" Text="Excluir"
+                                    TooltipText="Excluir thread"
                                     IsAsync="true" OnClick="DeleteThreadAsync" />
                         </div>
                     </div>
@@ -84,6 +85,7 @@
                         <BootstrapInput @bind-Value="_draft" PlaceHolder="Mensagem…"
                                         IsDisabled="_sending" />
                         <Button Color="Color.Primary" Icon="fa-solid fa-paper-plane" Text="Enviar"
+                                TooltipText="Enviar mensagem"
                                 IsAsync="true" OnClick="SendAsync" IsDisabled="_sending" />
                     </div>
                 </BodyTemplate>

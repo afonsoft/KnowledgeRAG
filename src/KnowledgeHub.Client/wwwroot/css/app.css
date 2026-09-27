@@ -372,24 +372,35 @@ img, table, pre, code, .table-responsive {
     justify-content: center;
 }
 
-/* <576px: cramped rows collapse to icon-only buttons — the text node is
-   shrunk to zero (still exposed to screen readers), the FA icon keeps its
-   own size. .kh-icon-btns marks button groups outside grids (form footers,
-   input-groups). :has(> i) limits the collapse to buttons with an icon —
-   text-only buttons keep their label. Min width/height 44px still applies. */
+/* SPEC-20260926-mobile-icon-only-buttons RF-001/RF-002:
+   Em viewports < 576px, botões que possuem ícone (i ou svg) colapsam seu rótulo
+   de texto (font-size: 0 preserva no DOM para leitores de tela), exibindo unicamente
+   o ícone perfeitamente centralizado. Touch target mínimo de 44x44px garantido.
+   Botões full-width (.w-100, .btn-block) e com .kh-keep-text mantêm o texto. */
 @media (max-width: 575.98px) {
-    .kh-actions .btn:has(> i),
-    .kh-icon-btns .btn:has(> i) {
-        font-size: 0;
+    .btn:has(i):not(.w-100):not(.btn-block):not(.kh-keep-text),
+    .btn:has(svg):not(.w-100):not(.btn-block):not(.kh-keep-text),
+    .table-toolbar .btn:has(i),
+    .kh-actions .btn:has(i),
+    .kh-icon-btns .btn:has(i) {
+        font-size: 0 !important;
         min-width: 44px;
         min-height: 44px;
+        display: inline-flex;
+        align-items: center;
         justify-content: center;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
     }
 
-        .kh-actions .btn i,
-        .kh-icon-btns .btn i {
-            font-size: 0.875rem;
-        }
+    .btn:has(i):not(.w-100):not(.btn-block):not(.kh-keep-text) i,
+    .btn:has(svg):not(.w-100):not(.btn-block):not(.kh-keep-text) svg,
+    .table-toolbar .btn:has(i) i,
+    .kh-actions .btn i,
+    .kh-icon-btns .btn i {
+        font-size: 0.875rem !important;
+        margin: 0 !important;
+    }
 }
 /* SPEC-20260926-settings-ux-embeddings RF-002: respiro à esquerda dos badges —
    sem ajuste eles colam no texto/elemento anterior em todas as telas. */
