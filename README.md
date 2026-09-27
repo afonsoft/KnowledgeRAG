@@ -66,7 +66,8 @@ Accepted on `/mcp`, `/mcp/sse`, `/api/*` and `/hubs/mcp` (SignalR clients that c
 | Web page | `WebPage` | Fetch + markdown extraction |
 | Document file | `DocumentFile` | Uploaded files (md/txt/pdf/docx/…) |
 | Notion | `Notion` | REST read-only, encrypted token, incremental via `last_edited_time` |
-| REST API / SQL | `RestApi` / `SqlDatabase` | Query-driven ingestion |
+| REST API | `RestApi` | `GET` JSON endpoint; `itemsPath` dot-path + field mapping (`titleField`/`contentFields`/`idField`/`urlField`), `pageParam` pagination; headers encrypted at rest (`restapi:{id}`) |
+| SQL database | `SqlDatabase` | `sqlite` / `postgres`; SELECT-only query guard (no write keywords outside literals/comments), SQLite `Mode=ReadOnly`, Postgres `READ ONLY` transaction; connection string encrypted at rest (`sql:{id}`); `maxRows`/`Truncated` |
 | AWS S3 | `AwsS3` | Bucket staging, ETag-based incremental sync |
 | Azure Files | `AzureFiles` | Share crawl with staged incremental sync |
 | OCI Object Storage | `OciStorage` | S3-compatible endpoint, same staging model |

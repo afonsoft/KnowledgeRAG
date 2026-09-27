@@ -1,12 +1,13 @@
 # Short-term memory — session state (overwritten each session, ≤100 lines)
 
-- **Last verified commit on `main`**: `db1bc55` (PR #250 — mobile nav toggler).
-- **Baseline**: build 0 warnings · 719 unit verdes (local) · prod container healthy :5550 pós-#250 redeploy.
-- **Done hoje (2026-09-26, sessões ingestion-deflake + mobile)**: root cause do flake `Jobs_List_FiltersBySource` corrigido (#247); 6 branches locais deletadas; mobile UX — settings tabs alcançáveis (#249) e hambúrguer visível (#250); redeploys healthy.
+- **Last verified commit on `main`**: `3ea3202` (PR #363 — SPEC approval sync).
+- **Baseline**: build 0 warnings · 801 unit + 283 integration verdes (local) · `dotnet format --verify-no-changes` limpo.
+- **Done (2026-09-27, sessão pentagi/Verba → execução)**: análise comparativa pentagi+Verba → 13 SPECs aprovadas (#269–#281) + issues conectadas; **#263 implementada** (RestApi + SqlDatabase connectors) — SqlQueryGuard (SELECT-only, keywords fora de literais/comentários), JsonPathResolver (dot-path), RestApiConnector (paginação pageParam/maxPages, headers no secret store `restapi:{id}`), SqlDatabaseConnector (sqlite `Mode=ReadOnly`/postgres `READ ONLY` tx, connstring no secret store `sql:{id}`, maxRows/Truncated), RequiredKeys[SqlDatabase]=["provider","query"], auto-sync whitelist, UI completa no SourceEditDialog; 79 novos testes (48 guard/resolver + 16 restapi + 15 sql + 11 integration − repoint de 1 obsoleto para McpProxy).
+- **Ordem de execução aprovada**: #263→#264→#262 | #280→#270→#273→#281 | #278→#276→#272→#277 | #269→#275→#274 | #271→#279 (dependências: #263→#279; #278→#276; #269→#279; #270+#273→#271).
 - **Blockers**: nenhum.
-- **Next**: enforce_admins decisão pendente; teste shutdown gracioso×abrupto em aberto; watchdog de jobs `queued` stale continua como follow-up opcional.
+- **Next**: executar #264 (RSS/Atom) e #262 (YouTube) — fase 1 restante; depois fase 2 (#280 Voyage/Cohere → #270 Window/Autocut → #273 Multi-query/Relaxation → #281 Tríade).
 
-## Session summary (2026-09-26 — ingestion orphan-job root cause + fix)
+## Session summary (2026-09-27 — pentagi/Verba analysis + #263 implementation)
 
 - Erro CI: `Jobs_List_FiltersBySource` timeout 300s — `last status: queued, running: [], queued count: 1`.
 - Análise: `eb` (enfileirado depois de `ea`) completou → canal FIFO single-reader implica que `ea` FOI dequeued mas descartado antes da transição `running` persistir — crash no gap entre dequeue e `SaveChangesAsync` (fora do try/finally de terminal). Provável SQLITE_BUSY (sem WAL/busy_timeout na connstring).

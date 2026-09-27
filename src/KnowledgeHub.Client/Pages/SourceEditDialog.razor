@@ -111,19 +111,95 @@
     @if (Model.Type is SourceType.RestApi)
     {
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="Endpoint *" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="Endpoint *" ShowLabel="true"
+                            PlaceHolder="https://api.example.com/v1/items" />
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.Headers" DisplayText="Headers (JSON)" ShowLabel="true" rows="3" />
+            <label class="form-label">
+                Headers (JSON) @(Model.HasStoredKey ? "(armazenados — em branco mantém)" : "(opcional)")
+            </label>
+            <Textarea @bind-Value="Model.Headers" rows="2"
+                      PlaceHolder='{"Authorization":"Bearer …"}' />
+            <div class="form-text">
+                Objeto JSON de headers — ex.: <code>X-Api-Key</code>, <code>Authorization</code>.
+                Armazenado criptografado; nunca retornado pela API.
+            </div>
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.ItemsPath" DisplayText="Caminho dos itens (dot-path, opcional)"
+                            ShowLabel="true" PlaceHolder="data.results" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.TitleField" DisplayText="Campo do título (opcional)"
+                            ShowLabel="true" PlaceHolder="title" />
+        </div>
+        <div class="col-12">
+            <Textarea @bind-Value="Model.ContentFields" DisplayText="Campos de conteúdo (um por linha, opcional)"
+                      ShowLabel="true" rows="2" PlaceHolder="title&#10;body" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.IdField" DisplayText="Campo do ID (opcional)"
+                            ShowLabel="true" PlaceHolder="id" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.UrlField" DisplayText="Campo da URL (opcional)"
+                            ShowLabel="true" PlaceHolder="link" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.PageParam" DisplayText="Parâmetro de paginação (opcional)"
+                            ShowLabel="true" PlaceHolder="page" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInputNumber @bind-Value="Model.MaxPages" DisplayText="Máx. páginas (padrão 1)"
+                                  ShowLabel="true" IsNullable="true" Min="1" Max="50" />
         </div>
     }
     @if (Model.Type is SourceType.SqlDatabase)
     {
-        <div class="col-12">
-            <Textarea @bind-Value="Model.ConnectionString" DisplayText="Connection string *" ShowLabel="true" rows="2" />
+        <div class="col-12 col-md-6">
+            <Select @bind-Value="Model.Provider" Items="SqlProviderItems" DisplayText="Provider *"
+                    ShowLabel="true" />
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.Query" DisplayText="Query" ShowLabel="true" rows="3" />
+            <label class="form-label">
+                Connection string @(Model.HasStoredKey ? "* (armazenada — em branco mantém)" : "*")
+            </label>
+            <Textarea @bind-Value="Model.ConnectionString" rows="2"
+                      PlaceHolder="@(Model.Provider == "postgres"
+                          ? "Host=localhost;Database=app;Username=readonly"
+                          : "Data Source=notes.db")" />
+            <div class="form-text">
+                Armazenada criptografada; nunca retornada pela API. SQLite com caminho
+                relativo resolve ao lado do executável e abre em modo somente leitura.
+            </div>
+        </div>
+        <div class="col-12">
+            <Textarea @bind-Value="Model.Query" DisplayText="Query (SELECT/WITH somente, read-only) *"
+                      ShowLabel="true" rows="3" PlaceHolder="SELECT id, title, body FROM notes" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.IdColumn" DisplayText="Coluna(s) do ID (opcional, separadas por vírgula)"
+                            ShowLabel="true" PlaceHolder="id" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.TitleColumn" DisplayText="Coluna do título (opcional)"
+                            ShowLabel="true" PlaceHolder="title" />
+        </div>
+        <div class="col-12">
+            <Textarea @bind-Value="Model.ContentColumns" DisplayText="Colunas de conteúdo (uma por linha, opcional)"
+                      ShowLabel="true" rows="2" PlaceHolder="title&#10;body" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.UrlColumn" DisplayText="Coluna de URL (opcional)"
+                            ShowLabel="true" PlaceHolder="url" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInputNumber @bind-Value="Model.MaxRows" DisplayText="Máx. linhas (padrão 1000)"
+                                  ShowLabel="true" IsNullable="true" Min="1" Max="10000" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInputNumber @bind-Value="Model.CommandTimeoutSeconds" DisplayText="Timeout do comando em s (padrão 30)"
+                                  ShowLabel="true" IsNullable="true" Min="5" Max="300" />
         </div>
     }
     @if (Model.Type is SourceType.McpProxy)
@@ -357,7 +433,10 @@
             SourceType.RestApi or SourceType.McpProxy
                 when string.IsNullOrWhiteSpace(Model.Endpoint) => "Endpoint é obrigatório",
             SourceType.SqlDatabase
-                when string.IsNullOrWhiteSpace(Model.ConnectionString) => "Connection string é obrigatória",
+                when string.IsNullOrWhiteSpace(Model.Query) => "Query é obrigatória",
+            SourceType.SqlDatabase
+                when string.IsNullOrEmpty(Model.ConnectionString) && !Model.HasStoredKey
+                => "Connection string é obrigatória (em branco mantém a armazenada)",
             SourceType.Notion
                 when string.IsNullOrEmpty(Model.NotionToken) && !Model.HasStoredKey
                 => "Integration token é obrigatório",
@@ -389,13 +468,19 @@
          "token", "rootPageIds", "rootDatabaseIds", "maxPages",
          "bucketName", "region", "namespace", "shareName", "directoryPath", "prefix",
          "glob", "maxFileSizeMB", "accessKeyId", "secretAccessKey", "accountName", "accountKey",
-         "chunking", "sharedUrl", "maxFiles"];
+         "chunking", "sharedUrl", "maxFiles",
+         "provider", "itemsPath", "titleField", "contentFields", "urlField", "idField",
+         "pageParam", "idColumn", "titleColumn", "contentColumns", "urlColumn",
+         "maxRows", "commandTimeoutSeconds"];
 
     private static readonly List<SelectedItem> TransportItems =
         [new("auto", "auto"), new("http", "http"), new("sse", "sse")];
 
     private static readonly List<SelectedItem> ChunkingItems =
         [new("", "Auto (estrutural)"), new("semantic", "Semantic (por assunto)")];
+
+    private static readonly List<SelectedItem> SqlProviderItems =
+        [new("sqlite", "SQLite"), new("postgres", "PostgreSQL")];
 
     /// <summary>
     /// Builds the JsonObject configuration payload: starts from the original
@@ -419,13 +504,48 @@
                 break;
             case SourceType.RestApi:
                 config["endpoint"] = Model.Endpoint;
+                // Empty keeps the stored headers; non-empty replaces them (server
+                // moves the value to the encrypted store — never persisted).
                 if (!string.IsNullOrWhiteSpace(Model.Headers))
                     config["headers"] = Model.Headers;
+                config["hasKey"] = Model.HasStoredKey;
+                if (!string.IsNullOrWhiteSpace(Model.ItemsPath))
+                    config["itemsPath"] = Model.ItemsPath;
+                if (!string.IsNullOrWhiteSpace(Model.TitleField))
+                    config["titleField"] = Model.TitleField;
+                var contentFields = ToJsonArray(Model.ContentFields);
+                if (contentFields.Count > 0)
+                    config["contentFields"] = contentFields;
+                if (!string.IsNullOrWhiteSpace(Model.IdField))
+                    config["idField"] = Model.IdField;
+                if (!string.IsNullOrWhiteSpace(Model.UrlField))
+                    config["urlField"] = Model.UrlField;
+                if (!string.IsNullOrWhiteSpace(Model.PageParam))
+                    config["pageParam"] = Model.PageParam;
+                if (Model.MaxPages is not null)
+                    config["maxPages"] = Model.MaxPages;
                 break;
             case SourceType.SqlDatabase:
-                config["connectionString"] = Model.ConnectionString;
-                if (!string.IsNullOrWhiteSpace(Model.Query))
-                    config["query"] = Model.Query;
+                config["provider"] = Model.Provider;
+                config["query"] = Model.Query;
+                // Empty keeps the stored connection string; non-empty replaces it
+                // (server moves the value to the encrypted store — never persisted).
+                if (!string.IsNullOrEmpty(Model.ConnectionString))
+                    config["connectionString"] = Model.ConnectionString;
+                config["hasKey"] = Model.HasStoredKey;
+                if (!string.IsNullOrWhiteSpace(Model.IdColumn))
+                    config["idColumn"] = Model.IdColumn;
+                if (!string.IsNullOrWhiteSpace(Model.TitleColumn))
+                    config["titleColumn"] = Model.TitleColumn;
+                var contentColumns = ToJsonArray(Model.ContentColumns);
+                if (contentColumns.Count > 0)
+                    config["contentColumns"] = contentColumns;
+                if (!string.IsNullOrWhiteSpace(Model.UrlColumn))
+                    config["urlColumn"] = Model.UrlColumn;
+                if (Model.MaxRows is not null)
+                    config["maxRows"] = Model.MaxRows;
+                if (Model.CommandTimeoutSeconds is not null)
+                    config["commandTimeoutSeconds"] = Model.CommandTimeoutSeconds;
                 break;
             case SourceType.McpProxy:
                 config["endpoint"] = Model.Endpoint;
@@ -541,6 +661,19 @@
         public string? RootPageIds { get; set; }
         public string? RootDatabaseIds { get; set; }
         public int? MaxPages { get; set; }
+        public string? ItemsPath { get; set; }
+        public string? TitleField { get; set; }
+        public string? ContentFields { get; set; }
+        public string? IdField { get; set; }
+        public string? UrlField { get; set; }
+        public string? PageParam { get; set; }
+        public string Provider { get; set; } = "sqlite";
+        public string? IdColumn { get; set; }
+        public string? TitleColumn { get; set; }
+        public string? ContentColumns { get; set; }
+        public string? UrlColumn { get; set; }
+        public int? MaxRows { get; set; }
+        public int? CommandTimeoutSeconds { get; set; }
         public string? BucketName { get; set; }
         public string? Region { get; set; }
         public string? Namespace { get; set; }
@@ -585,6 +718,22 @@
             RootDatabaseIds = ReadStringList(dto.Configuration, "rootDatabaseIds"),
             MaxPages = dto.Configuration?["maxPages"] is JsonValue mp
                 && mp.TryGetValue<int>(out var mpn) ? mpn : null,
+            ItemsPath = dto.Configuration?["itemsPath"]?.GetValue<string>(),
+            TitleField = dto.Configuration?["titleField"]?.GetValue<string>(),
+            ContentFields = ReadStringList(dto.Configuration, "contentFields"),
+            IdField = dto.Configuration?["idField"]?.GetValue<string>(),
+            UrlField = dto.Configuration?["urlField"]?.GetValue<string>(),
+            PageParam = dto.Configuration?["pageParam"]?.GetValue<string>(),
+            Provider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } provider
+                ? provider : "sqlite",
+            IdColumn = dto.Configuration?["idColumn"]?.GetValue<string>(),
+            TitleColumn = dto.Configuration?["titleColumn"]?.GetValue<string>(),
+            ContentColumns = ReadStringList(dto.Configuration, "contentColumns"),
+            UrlColumn = dto.Configuration?["urlColumn"]?.GetValue<string>(),
+            MaxRows = dto.Configuration?["maxRows"] is JsonValue mr
+                && mr.TryGetValue<int>(out var mrn) ? mrn : null,
+            CommandTimeoutSeconds = dto.Configuration?["commandTimeoutSeconds"] is JsonValue ct
+                && ct.TryGetValue<int>(out var ctn) ? ctn : null,
             BucketName = dto.Configuration?["bucketName"]?.GetValue<string>(),
             Region = dto.Configuration?["region"]?.GetValue<string>(),
             Namespace = dto.Configuration?["namespace"]?.GetValue<string>(),

@@ -32,7 +32,7 @@ public sealed class KnowledgeSourceService(
         [SourceType.ObsidianVault] = ["path"],
         [SourceType.WebPage] = ["url"],
         [SourceType.RestApi] = ["endpoint"],
-        [SourceType.SqlDatabase] = ["connectionString", "query"],
+        [SourceType.SqlDatabase] = ["provider", "query"],
         [SourceType.DocumentFile] = ["path"],
         [SourceType.McpProxy] = ["endpoint"],
         [SourceType.Notion] = [],
@@ -143,6 +143,12 @@ public sealed class KnowledgeSourceService(
                 await secrets.RemoveAsync(McpProxySession.SecretKey(source.Id), ct);
             if (source.SourceType == SourceType.Notion)
                 await secrets.RemoveAsync(Ingestion.Connectors.NotionConnector.SecretKey(source.Id), ct);
+            // SPEC-20260927-restapi-sqldatabase-connectors RF-003/RF-006:
+            // stored headers/connectionString are purged with the source.
+            if (source.SourceType == SourceType.RestApi)
+                await secrets.RemoveAsync(Ingestion.Connectors.RestApiConnector.SecretKey(source.Id), ct);
+            if (source.SourceType == SourceType.SqlDatabase)
+                await secrets.RemoveAsync(Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id), ct);
             // SPEC-20260924-cloud-storage-connectors RF-006: purge cloud secrets + staging.
             if (source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage)
             {
@@ -212,6 +218,29 @@ public sealed class KnowledgeSourceService(
                 : null;
         }
 
+        if (source.SourceType == SourceType.SqlDatabase)
+        {
+            if (UsableSecret(configuration, "connectionString"))
+                return null;
+            return await secrets.GetAsync(Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id), ct) is null
+                ? "Configuration key 'connectionString' is required for SqlDatabase — no stored secret for this source"
+                : null;
+        }
+
+        // SPEC-20260927-restapi-sqldatabase-connectors RF-003: headers are
+        // optional, but hasKey:true without a stored secret is a stale update
+        // that could never sync.
+        if (source.SourceType == SourceType.RestApi)
+        {
+            var hasHeaders = configuration["hasKey"] is JsonValue hv
+                && hv.TryGetValue<bool>(out var flagged) && flagged;
+            if (!hasHeaders)
+                return null;
+            return await secrets.GetAsync(Ingestion.Connectors.RestApiConnector.SecretKey(source.Id), ct) is null
+                ? "Configuration key 'headers' marked as stored (hasKey) but no stored headers for this source"
+                : null;
+        }
+
         if (source.SourceType is SourceType.AwsS3 or SourceType.OciStorage)
         {
             if (UsableSecret(configuration, "secretAccessKey"))
@@ -267,6 +296,11 @@ public sealed class KnowledgeSourceService(
             SourceType.McpProxy => ("apiKey", McpProxySession.SecretKey(source.Id)),
             SourceType.Notion => ("token", Ingestion.Connectors.NotionConnector.SecretKey(source.Id)),
             SourceType.GoogleDrive => ("apiKey", Ingestion.Connectors.GoogleDriveSharedConnector.SecretKey(source.Id)),
+            // SPEC-20260927-restapi-sqldatabase-connectors RF-003/RF-006: the
+            // RestApi headers JSON and the SqlDatabase connection string move
+            // to the encrypted store — config persists only hasKey.
+            SourceType.RestApi => ("headers", Ingestion.Connectors.RestApiConnector.SecretKey(source.Id)),
+            SourceType.SqlDatabase => ("connectionString", Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id)),
             _ => (null, null)
         };
         if (configKey is not null && secretKey is not null && configuration is not null)
@@ -406,6 +440,45 @@ public sealed class KnowledgeSourceService(
             if (configuration["transport"]?.GetValue<string>()?.ToLowerInvariant()
                     is not (null or "auto" or "http" or "sse"))
                 return "Configuration key 'transport' must be auto|http|sse for McpProxy";
+        }
+
+        if (type == SourceType.RestApi)
+        {
+            var restEndpoint = configuration["endpoint"]?.GetValue<string>();
+            if (!Uri.TryCreate(restEndpoint, UriKind.Absolute, out var restUri)
+                || restUri.Scheme is not ("http" or "https"))
+                return "Configuration key 'endpoint' must be an absolute http(s) URI for RestApi";
+
+            if (configuration["headers"] is JsonValue headersValue
+                && headersValue.TryGetValue<string>(out var headers)
+                && !string.IsNullOrWhiteSpace(headers) && headers != "***")
+            {
+                try
+                {
+                    if (JsonNode.Parse(headers) is not JsonObject)
+                        return "Configuration key 'headers' must be a JSON object of header names to values";
+                }
+                catch (Exception ex) when (ex is JsonException or NotSupportedException)
+                {
+                    return "Configuration key 'headers' must be valid JSON like {\"Authorization\":\"Bearer …\"}";
+                }
+            }
+        }
+
+        if (type == SourceType.SqlDatabase)
+        {
+            var provider = configuration["provider"]?.GetValue<string>();
+            if (provider?.ToLowerInvariant() is not ("sqlite" or "postgres"))
+                return "Configuration key 'provider' must be 'sqlite' or 'postgres' for SqlDatabase";
+
+            if (configuration["query"] is JsonValue queryValue
+                && queryValue.TryGetValue<string>(out var sqlQuery)
+                && !string.IsNullOrWhiteSpace(sqlQuery))
+            {
+                var (ok, reason) = Ingestion.Connectors.SqlQueryGuard.Validate(sqlQuery);
+                if (!ok)
+                    return $"Configuration key 'query' rejected (read-only queries only): {reason}";
+            }
         }
 
         if (type == SourceType.Notion)
