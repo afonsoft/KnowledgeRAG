@@ -39,7 +39,8 @@ public sealed class KnowledgeSourceService(
         [SourceType.AwsS3] = ["bucketName", "region", "accessKeyId"],
         [SourceType.AzureFiles] = ["shareName"],
         [SourceType.OciStorage] = ["namespace", "region", "bucketName", "accessKeyId"],
-        [SourceType.GoogleDrive] = ["sharedUrl"]
+        [SourceType.GoogleDrive] = ["sharedUrl"],
+        [SourceType.RssFeed] = ["feedUrl"]
     };
 
     public async Task<IReadOnlyList<KnowledgeSourceDto>> ListAsync(SourceType? type, bool? active, CancellationToken ct = default)
@@ -440,6 +441,14 @@ public sealed class KnowledgeSourceService(
             if (configuration["transport"]?.GetValue<string>()?.ToLowerInvariant()
                     is not (null or "auto" or "http" or "sse"))
                 return "Configuration key 'transport' must be auto|http|sse for McpProxy";
+        }
+
+        if (type == SourceType.RssFeed)
+        {
+            var feedUrl = configuration["feedUrl"]?.GetValue<string>();
+            if (!Uri.TryCreate(feedUrl, UriKind.Absolute, out var feedUri)
+                || feedUri.Scheme is not ("http" or "https"))
+                return "Configuration key 'feedUrl' must be an absolute http(s) URI for RssFeed";
         }
 
         if (type == SourceType.RestApi)

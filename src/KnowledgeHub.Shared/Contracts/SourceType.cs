@@ -25,5 +25,19 @@ public enum SourceType
     OciStorage = 10,
     /// <summary>Shared Google Drive folder/file link
     /// (SPEC-20260924-gdrive-shared-link-connector).</summary>
-    GoogleDrive = 11
+    GoogleDrive = 11,
+    /// <summary>YouTube videos/playlists/channels via YoutubeExplode
+    /// (SPEC-20260927-youtube-transcript-connector).</summary>
+    YouTube = 12,
+    /// <summary>RSS 2.0 / Atom 1.0 feed (SPEC-20260927-rss-feed-connector).</summary>
+    RssFeed = 13,
+    /// <summary>Git repository (GitHub/GitLab/Gitea) via REST Tree API
+    /// (SPEC-20260927-git-repository-source-connector).</summary>
+    GitRepository = 14,
+    /// <summary>Unstructured documents (PDF/OCR/Office) via Unstructured.io
+    /// (SPEC-20260927-unstructured-document-parser-connector).</summary>
+    UnstructuredDocument = 15,
+    /// <summary>Audio/video transcription via AssemblyAI/Whisper
+    /// (SPEC-20260927-audio-transcription-connector).</summary>
+    AudioTranscription = 16
 }
