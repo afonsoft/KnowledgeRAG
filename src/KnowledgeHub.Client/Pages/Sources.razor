@@ -16,7 +16,7 @@
            EmptyText="Nenhuma fonte cadastrada.">
     <TableToolbarTemplate>
         <TableToolbarButton TItem="KnowledgeSourceDto" Text="Nova fonte" Icon="fa-solid fa-plus"
-                            Color="Color.Primary" OnClick="ShowCreate" />
+                            Title="Nova fonte" Color="Color.Primary" OnClick="ShowCreate" />
     </TableToolbarTemplate>
     <TableColumns>
         <TableColumn Field="@context.Name" FieldExpression="@(() => context.Name)" Text="Nome" />
@@ -108,8 +108,8 @@
 
 <Modal @ref="_modal">
     <ModalDialog Title="@(_editModel.Id is null ? "Nova fonte" : $"Editar — {_editModel.Name}")"
-                 Size="Size.Large" ShowSaveButton="true" SaveButtonText="Salvar"
-                 CloseButtonText="Cancelar" OnSaveAsync="SaveAsync">
+                 Size="Size.Large" ShowSaveButton="true" SaveButtonText="Salvar" SaveButtonIcon="fa-solid fa-floppy-disk"
+                 CloseButtonText="Cancelar" CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="SaveAsync">
         <BodyTemplate>
             @* String params need @ — bare Error="_editError" passes the literal
                text, not the field value (Blazor string-attribute rule). *@
@@ -124,7 +124,7 @@
 
 @* SPEC-20260925-sources-grid-ux RF-003: status/error detail modal. *@
 <Modal @ref="_statusModal">
-    <ModalDialog Title="@($"Status — {_statusSource?.Name}")" ShowSaveButton="false" CloseButtonText="Fechar">
+    <ModalDialog Title="@($"Status — {_statusSource?.Name}")" ShowSaveButton="false" CloseButtonText="Fechar" CloseButtonIcon="fa-solid fa-xmark">
         <BodyTemplate>
             @if (_statusSource is not null)
             {

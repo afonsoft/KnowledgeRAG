@@ -109,9 +109,11 @@
                             <strong>Confirma escrita?</strong> Esta tool modifica a base.
                             <pre class="border rounded p-2 mt-2 mb-2 bg-light" style="white-space: pre-wrap;">@_pendingArgsJson</pre>
                             <div class="d-flex gap-2">
-                                <Button Size="Size.Small" Color="Color.Warning" Text="Confirmar escrita"
+                                <Button Size="Size.Small" Color="Color.Warning" Icon="fa-solid fa-triangle-exclamation"
+                                        Text="Confirmar escrita" TooltipText="Confirmar escrita"
                                         IsAsync="true" OnClick="RunToolAsync" />
-                                <Button Size="Size.Small" Color="Color.Secondary" Text="Cancelar"
+                                <Button Size="Size.Small" Color="Color.Secondary" Icon="fa-solid fa-xmark"
+                                        Text="Cancelar" TooltipText="Cancelar"
                                         OnClick="() => _awaitingWriteConfirm = false" />
                             </div>
                         </div>
@@ -120,9 +122,10 @@
                     {
                         <div class="d-flex align-items-center gap-2 mt-3">
                             <Button Color="Color.Primary" Icon="fa-solid fa-play" Text="Executar"
+                                    TooltipText="Executar"
                                     IsAsync="true" OnClick="RunToolAsync" IsDisabled="_running" />
                             <Button Color="Color.Secondary" Icon="fa-solid fa-wand-magic-sparkles"
-                                    Text="Preencher exemplo" OnClick="FillExample" />
+                                    Text="Preencher exemplo" TooltipText="Preencher exemplo" OnClick="FillExample" />
                             @if (_elapsedMs is not null)
                             {
                                 <span class="text-muted">@_elapsedMs.Value.ToString("F0") ms</span>

@@ -54,8 +54,8 @@
                                     }
                                 </td>
                                 <td>
-                                    <Button Size="Size.ExtraSmall" Text="Ver" Color="Color.Secondary"
-                                            OnClick="() => SelectAsync(r.Id)" />
+                                    <Button Size="Size.ExtraSmall" Text="Ver" Icon="fa-solid fa-eye" Color="Color.Secondary"
+                                            TooltipText="Ver detalhes" OnClick="() => SelectAsync(r.Id)" />
                                 </td>
                             </tr>
                         }
@@ -110,8 +110,8 @@
                 <div class="mt-3 d-flex gap-2 align-items-center">
                     <BootstrapInput @bind-Value="_baselineName" DisplayText="Nome do baseline" ShowLabel="false"
                                     PlaceHolder="ex.: main" style="max-width:200px" />
-                    <Button Size="Size.ExtraSmall" Color="Color.Primary" Text="Promover a baseline"
-                            OnClick="PromoteAsync" IsDisabled="string.IsNullOrWhiteSpace(_baselineName)" />
+                    <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-star" Text="Promover a baseline"
+                            TooltipText="Promover a baseline" OnClick="PromoteAsync" IsDisabled="string.IsNullOrWhiteSpace(_baselineName)" />
                 </div>
                 <details class="mt-2">
                     <summary class="small">Casos (@report.Results.Count)</summary>
@@ -155,7 +155,7 @@
                           PlaceHolder="[{""metric"":""recall_at_k"",""direction"":""gte"",""threshold"":0.8}]" />
             </div>
             <Button Color="Color.Primary" Text="@(_running ? "Executando…" : "Executar eval")"
-                    Icon="fa-solid fa-flask" IsDisabled="_running" OnClick="RunEvalAsync" class="mt-2" />
+                    Icon="fa-solid fa-flask" TooltipText="Executar eval" IsDisabled="_running" OnClick="RunEvalAsync" class="mt-2" />
             @if (_runError is not null)
             {
                 <Alert Color="Color.Danger" ShowDismiss="false" class="mt-2">@_runError</Alert>

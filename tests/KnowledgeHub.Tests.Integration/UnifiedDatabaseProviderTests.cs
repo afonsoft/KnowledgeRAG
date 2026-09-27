@@ -195,7 +195,9 @@ public sealed class UnifiedDatabaseProviderTests
         var src = new KnowledgeSource { Name = $"lex-{Guid.NewGuid():N}", SourceType = SourceType.DocumentFile };
         var doc = new KnowledgeDocument
         {
-            KnowledgeSourceId = src.Id, Title = "t", UriReference = "/t"
+            KnowledgeSourceId = src.Id,
+            Title = "t",
+            UriReference = "/t"
         };
         var chunk = new DocumentChunk
         {

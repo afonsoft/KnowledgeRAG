@@ -13,6 +13,7 @@
                     <strong>Resumo</strong>
                     <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-rotate"
                             Text="@(SyncRunning ? "Sincronizando…" : "Sincronizar agora")"
+                            TooltipText="Sincronizar agora" TooltipPlacement="Placement.Left"
                             IsDisabled="SyncRunning" OnClick="RequestSyncAsync" />
                 </div>
                 @if (SummaryLoading)

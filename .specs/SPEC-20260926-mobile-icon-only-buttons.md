@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/opencode-20260926-mobile-icon-only-buttons` |
 | Ticket | `#mobile-buttons-ux` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -139,11 +139,11 @@ src/KnowledgeHub.Client/Pages/Sources.razor
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Botões de Copiar:** Remover a propriedade `Text="Copiar"` e adicionar `TooltipText="Copiar"` em `McpMonitor.razor` e `ApiKeys.razor`.
-- [ ] **T2 — Inclusão de Ícones Faltantes:** Adicionar ícones semânticos em `Approvals.razor`, `Playground.razor`, `Eval.razor`, `McpMonitor.razor` e `Settings.razor`.
-- [ ] **T3 — Regras CSS Responsivas Globais:** Expandir `app.css` com a media query `< 575.98px` para `.btn:has(i), .btn:has(svg)` com reset de margin e touch targets.
-- [ ] **T4 — Toolbars e Modais:** Garantir que `.table-toolbar .btn` e botões de `ModalDialog` colapsem adequadamente e possuam ícones.
-- [ ] **T5 — Verificação:** Compilar a solução (`dotnet build`), compilar client Blazor WASM e executar a suíte de testes (`dotnet test`).
+- [x] **T1 — Botões de Copiar:** Remover a propriedade `Text="Copiar"` e adicionar `TooltipText="Copiar"` em `McpMonitor.razor` e `ApiKeys.razor`.
+- [x] **T2 — Inclusão de Ícones Faltantes:** Adicionar ícones semânticos em `Approvals.razor`, `Playground.razor`, `Eval.razor`, `McpMonitor.razor` e `Settings.razor`.
+- [x] **T3 — Regras CSS Responsivas Globais:** Expandir `app.css` com a media query `< 575.98px` para `.btn:has(i), .btn:has(svg)` com reset de margin e touch targets.
+- [x] **T4 — Toolbars e Modais:** Garantir que `.table-toolbar .btn` e botões de `ModalDialog` colapsem adequadamente e possuam ícones.
+- [x] **T5 — Verificação:** Compilar a solução (`dotnet build`), compilar client Blazor WASM e executar a suíte de testes (`dotnet test`).
 
 **7.1 Validation strategy by type/stack**
 
@@ -160,11 +160,11 @@ src/KnowledgeHub.Client/Pages/Sources.razor
 
 ## 9. Definition of Done
 
-- [ ] Todos os botões de copiar tornados icon-only com tooltip em toda a aplicação.
-- [ ] Requisitos RF-001 a RF-005 implementados.
-- [ ] Critérios de aceite validados.
-- [ ] `dotnet build` e `dotnet test` executados com sucesso.
-- [ ] Guardrails respeitados.
+- [x] Todos os botões de copiar tornados icon-only com tooltip em toda a aplicação.
+- [x] Requisitos RF-001 a RF-005 implementados.
+- [x] Critérios de aceite validados.
+- [x] `dotnet build` e `dotnet test` executados com sucesso.
+- [x] Guardrails respeitados.
 
 ## Open Questions / Pending Ambiguity
 
