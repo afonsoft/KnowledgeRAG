@@ -117,6 +117,9 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.RestApiConnector>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.SqlDatabaseConnector>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.RssFeedConnector>();
+        // SPEC-20260927-youtube-transcript-connector: YoutubeExplode adapter + connector.
+        services.AddSingleton<Ingestion.Connectors.IYouTubeClient, Ingestion.Connectors.YouTubeClientAdapter>();
+        services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.YouTubeConnector>();
         // SPEC-20260924-cloud-storage-connectors: remote object stores staged locally.
         services.AddSingleton<Ingestion.Staging.IStagingStorageService, Ingestion.Staging.StagingStorageService>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.Cloud.AwsS3Connector>();

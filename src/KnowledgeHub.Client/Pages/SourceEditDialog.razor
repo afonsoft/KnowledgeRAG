@@ -135,6 +135,39 @@
             </div>
         </div>
     }
+    @if (Model.Type is SourceType.YouTube)
+    {
+        <div class="col-12">
+            <Textarea @bind-Value="Model.Urls" DisplayText="URLs dos vídeos/playlists/canais *"
+                      ShowLabel="true" rows="4"
+                      PlaceHolder="https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/dQw4w9WgXcQ&#10;https://youtube.com/playlist?list=PL..." />
+        </div>
+        <div class="col-12 col-md-4">
+            <BootstrapInput @bind-Value="Model.Language" DisplayText="Idioma preferido (opcional)"
+                            ShowLabel="true" PlaceHolder="pt, en, pt-BR" />
+        </div>
+        <div class="col-12 col-md-4">
+            <BootstrapInputNumber @bind-Value="Model.MaxVideos" DisplayText="Máx. vídeos (padrão 100)"
+                                  ShowLabel="true" IsNullable="true" Min="1" Max="500" />
+        </div>
+        <div class="col-6 col-md-2">
+            <Switch @bind-Value="Model.IncludeAutoCaptions" DisplayText="Auto-captions"
+                    ShowLabel="true" />
+        </div>
+        <div class="col-6 col-md-2">
+            <Switch @bind-Value="Model.IncludeTimestamps" DisplayText="Timestamps"
+                    ShowLabel="true" />
+        </div>
+        <div class="col-12">
+            <Switch @bind-Value="Model.ForceRefresh" DisplayText="Forçar refresh (re-baixar legendas)"
+                    ShowLabel="true" />
+            <div class="form-text">
+                Indexa transcrições (legendas) de vídeos públicos do YouTube via <strong>YoutubeExplode</strong>.
+                Aceita URLs de vídeos, playlists e canais (ou IDs crus). Sync incremental por
+                <code>yt:{videoId}</code> — vídeos já indexados são pulados. Sem credenciais.
+            </div>
+        </div>
+    }
     @if (Model.Type is SourceType.RestApi)
     {
         <div class="col-12">
@@ -459,6 +492,8 @@
                 when string.IsNullOrWhiteSpace(Model.Url) => "URL é obrigatória",
             SourceType.RssFeed
                 when string.IsNullOrWhiteSpace(Model.FeedUrl) => "URL do feed é obrigatória",
+            SourceType.YouTube
+                when string.IsNullOrWhiteSpace(Model.Urls) => "URLs são obrigatórias (uma por linha)",
             SourceType.RestApi or SourceType.McpProxy
                 when string.IsNullOrWhiteSpace(Model.Endpoint) => "Endpoint é obrigatório",
             SourceType.SqlDatabase
@@ -501,7 +536,8 @@
          "provider", "itemsPath", "titleField", "contentFields", "urlField", "idField",
          "pageParam", "idColumn", "titleColumn", "contentColumns", "urlColumn",
          "maxRows", "commandTimeoutSeconds",
-         "feedUrl", "maxItems", "fetchFullContent", "forceRefresh"];
+         "feedUrl", "maxItems", "fetchFullContent", "forceRefresh",
+         "urls", "language", "includeAutoCaptions", "includeTimestamps", "maxVideos"];
 
     private static readonly List<SelectedItem> TransportItems =
         [new("auto", "auto"), new("http", "http"), new("sse", "sse")];
@@ -538,6 +574,21 @@
                     config["maxItems"] = Model.MaxItems;
                 if (Model.FetchFullContent)
                     config["fetchFullContent"] = true;
+                if (Model.ForceRefresh)
+                    config["forceRefresh"] = true;
+                break;
+            case SourceType.YouTube:
+                var urlArray = ToJsonArray(Model.Urls);
+                if (urlArray.Count > 0)
+                    config["urls"] = urlArray;
+                if (!string.IsNullOrWhiteSpace(Model.Language))
+                    config["language"] = Model.Language;
+                if (Model.IncludeAutoCaptions)
+                    config["includeAutoCaptions"] = true;
+                if (Model.IncludeTimestamps)
+                    config["includeTimestamps"] = true;
+                if (Model.MaxVideos is not null)
+                    config["maxVideos"] = Model.MaxVideos;
                 if (Model.ForceRefresh)
                     config["forceRefresh"] = true;
                 break;
@@ -731,6 +782,11 @@
         public int? MaxItems { get; set; }
         public bool FetchFullContent { get; set; }
         public bool ForceRefresh { get; set; }
+        public string? Urls { get; set; }
+        public string? Language { get; set; }
+        public bool IncludeAutoCaptions { get; set; } = true;
+        public bool IncludeTimestamps { get; set; }
+        public int? MaxVideos { get; set; }
 
         /// <summary>True when the source already has an API key in the
         /// encrypted store (McpProxy) — the value itself is never returned.</summary>
@@ -797,6 +853,13 @@
                 && mi.TryGetValue<int>(out var min) ? min : null,
             FetchFullContent = ReadBool(dto.Configuration, "fetchFullContent"),
             ForceRefresh = ReadBool(dto.Configuration, "forceRefresh"),
+            Urls = ReadStringList(dto.Configuration, "urls"),
+            Language = dto.Configuration?["language"]?.GetValue<string>(),
+            IncludeAutoCaptions = dto.Configuration?.TryGetPropertyValue("includeAutoCaptions", out _) ?? false
+                ? ReadBool(dto.Configuration, "includeAutoCaptions") : true,
+            IncludeTimestamps = ReadBool(dto.Configuration, "includeTimestamps"),
+            MaxVideos = dto.Configuration?["maxVideos"] is JsonValue mv
+                && mv.TryGetValue<int>(out var mvn) ? mvn : null,
             OriginalConfiguration = dto.Configuration?.DeepClone() as JsonObject
         };
 

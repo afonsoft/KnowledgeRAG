@@ -1444,6 +1444,11 @@
         "resolved": "18.1.0",
         "contentHash": "5K+9KFg2TdTl7VXv88Qzi/0lqK6JFoNP3lRuImPYGRV7K/QYklDyTrj4+A+KAki1JsQi6qKY+hDyY7d6WRqjrw=="
       },
+      "YoutubeExplode": {
+        "type": "Transitive",
+        "resolved": "6.6.1",
+        "contentHash": "9sVVl1n/YqzVN4olebZuZgMdhNCuYXOUt9KPhyivi90QIfm8QQt7GoTQtPpMJCtON6QUCUGZubBxK2xwlGHRMg=="
+      },
       "KnowledgeHub": {
         "type": "Project",
         "dependencies": {
@@ -1474,7 +1479,8 @@
           "Serilog.Sinks.OpenTelemetry": "[4.2.0, )",
           "StackExchange.Redis": "[2.7.27, )",
           "UglyToad.PdfPig": "[1.7.0-custom-5, )",
-          "YamlDotNet": "[18.1.0, )"
+          "YamlDotNet": "[18.1.0, )",
+          "YoutubeExplode": "[6.6.1, )"
         }
       },
       "knowledgehub.client": {
