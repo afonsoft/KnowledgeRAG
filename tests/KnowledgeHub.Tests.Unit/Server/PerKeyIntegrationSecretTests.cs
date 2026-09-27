@@ -12,6 +12,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Xunit;
@@ -289,11 +290,88 @@ public class PerKeyIntegrationSecretTests
         Assert.Equal([IntegrationProviders.DeepWiki], settings.Removed);
     }
 
+    // Covers SPEC-20260926-split-settings-tools RF-001: set_api_key_settings
+    // only configures integrations, rejects provider "chat".
+    [Fact]
+    public async Task SetApiKeySettings_ChatProvider_ThrowsInvalidParams()
+    {
+        var provider = new SettingsToolsProvider();
+        var tools = await provider.GetToolsAsync(BareServices, CancellationToken.None);
+        var tool = tools.Single(t => t.Name == "set_api_key_settings");
+
+        var settings = new FakeApiKeySettings(secret: null);
+        var ctx = new ToolCallContext
+        {
+            Services = ApiKeyServices(Guid.NewGuid(), settings),
+            Arguments = new Dictionary<string, JsonElement>
+            {
+                ["provider"] = JsonDocument.Parse("\"chat\"").RootElement
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<McpProtocolException>(async () => await tool.Handler(ctx, CancellationToken.None));
+        Assert.Equal(McpErrorCode.InvalidParams, ex.ErrorCode);
+    }
+
+    // Covers SPEC-20260926-split-settings-tools RF-002: set_chat_settings
+    // configures chat LLM settings for the current API key.
+    [Fact]
+    public async Task SetChatSettings_SavesChatSettings()
+    {
+        var provider = new SettingsToolsProvider();
+        var tools = await provider.GetToolsAsync(BareServices, CancellationToken.None);
+        var tool = tools.Single(t => t.Name == "set_chat_settings");
+
+        var settings = new FakeApiKeySettings(secret: null);
+        var keyId = Guid.NewGuid();
+        var ctx = new ToolCallContext
+        {
+            Services = ApiKeyServices(keyId, settings),
+            Arguments = new Dictionary<string, JsonElement>
+            {
+                ["endpoint"] = JsonDocument.Parse("\"http://localhost:11434\"").RootElement,
+                ["model"] = JsonDocument.Parse("\"llama3\"").RootElement,
+                ["apiKey"] = JsonDocument.Parse("\"sk-test\"").RootElement
+            }
+        };
+
+        var result = await tool.Handler(ctx, CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Contains(("http://localhost:11434", "llama3", "sk-test"), settings.SavedChat);
+    }
+
+    // Covers SPEC-20260926-split-settings-tools RF-002: set_chat_settings
+    // requires an API-key authenticated session.
+    [Fact]
+    public async Task SetChatSettings_AnonymousCaller_ThrowsInvalidParams()
+    {
+        var provider = new SettingsToolsProvider();
+        var tools = await provider.GetToolsAsync(BareServices, CancellationToken.None);
+        var tool = tools.Single(t => t.Name == "set_chat_settings");
+
+        var settings = new FakeApiKeySettings(secret: null);
+        var http = new DefaultHttpContext();
+        var services = new ServiceCollection()
+            .AddSingleton<IHttpContextAccessor>(new HttpContextAccessor { HttpContext = http })
+            .AddSingleton<IApiKeyChatSettingsService>(settings)
+            .BuildServiceProvider();
+        var ctx = new ToolCallContext
+        {
+            Services = services,
+            Arguments = new Dictionary<string, JsonElement>()
+        };
+
+        var ex = await Assert.ThrowsAsync<McpProtocolException>(async () => await tool.Handler(ctx, CancellationToken.None));
+        Assert.Equal(McpErrorCode.InvalidParams, ex.ErrorCode);
+    }
+
     private sealed class FakeApiKeySettings(string? secret) : IApiKeyChatSettingsService
     {
         public int IntegrationLookups;
         public List<(string Provider, string Key)> Saved = [];
         public List<string> Removed = [];
+        public List<(string? Endpoint, string? Model, string? ApiKey)> SavedChat = [];
 
         public ChatProviderOptions GetEffectiveOptions(Guid apiKeyId) => new();
         public IChatClient? GetClient(Guid apiKeyId) => null;
@@ -312,7 +390,11 @@ public class PerKeyIntegrationSecretTests
             });
 
         public Task SaveAsync(Guid apiKeyId, string? endpoint, string? model, string? apiKey,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default)
+        {
+            SavedChat.Add((endpoint, model, apiKey));
+            return Task.CompletedTask;
+        }
 
         public Task SaveIntegrationKeyAsync(Guid apiKeyId, string provider, string apiKey,
             CancellationToken cancellationToken = default)

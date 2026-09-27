@@ -63,8 +63,10 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
         ["firecrawl_crawl"] = """{"type":"object","additionalProperties":true,"properties":{"url":{"type":"string","description":"Starting URL","examples":["https://docs.firecrawl.dev"]},"limit":{"type":"integer","description":"Max pages to crawl"}},"required":["url"],"examples":[{"url":"https://docs.firecrawl.dev","limit":5}]}""",
         ["firecrawl_check_crawl_status"] = """{"type":"object","additionalProperties":true,"properties":{"id":{"type":"string","description":"Crawl job id","examples":["550e8400-e29b-41d4-a716-446655440000"]}},"required":["id"],"examples":[{"id":"550e8400-e29b-41d4-a716-446655440000"}]}""",
         ["firecrawl_parse"] = """{"type":"object","additionalProperties":true,"properties":{"url":{"type":"string","description":"Public URL of the document to parse","examples":["https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"]},"filePath":{"type":"string","description":"Local file path (two-phase upload flow)"}},"examples":[{"url":"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"}]}""",
-        // SPEC-20260916-api-key-settings: per-API-key settings (chat + integrations).
-        ["set_api_key_settings"] = """{"type":"object","properties":{"provider":{"type":"string","enum":["chat","firecrawl","deepwiki","tavily","context7"],"description":"Which provider to configure"},"endpoint":{"type":["string","null"],"description":"OpenAI-compatible base URL (chat only, null = inherit)"},"model":{"type":["string","null"],"description":"Model name (chat only, null = inherit)"},"apiKey":{"type":["string","null"],"description":"API key override (null = inherit from global)"}},"required":["provider"],"examples":[{"provider":"chat","endpoint":"http://localhost:11434","model":"llama3","apiKey":null}]}""",
+        // SPEC-20260916-api-key-settings + SPEC-20260926-split-settings-tools:
+        // per-API-key settings separated into integrations and chat.
+        ["set_api_key_settings"] = """{"type":"object","properties":{"provider":{"type":"string","enum":["firecrawl","deepwiki","tavily","context7"],"description":"Which integration provider to configure"},"apiKey":{"type":["string","null"],"description":"API key override (null or empty = inherit from global)"}},"required":["provider"],"examples":[{"provider":"deepwiki","apiKey":"dw-secret-key"},{"provider":"firecrawl","apiKey":null}]}""",
+        ["set_chat_settings"] = """{"type":"object","properties":{"endpoint":{"type":["string","null"],"description":"OpenAI-compatible base URL (null = inherit from global)"},"model":{"type":["string","null"],"description":"Model name (null = inherit from global)"},"apiKey":{"type":["string","null"],"description":"Chat provider API key override (null = inherit from global)"}},"examples":[{"endpoint":"http://localhost:11434","model":"llama3","apiKey":null}]}""",
         // SPEC-20260916-tavily-mcp-proxy: static Tavily core (keyless fixture —
         // only the static surface is pinned; upstream merge needs a real key).
         ["tavily_search"] = """{"type":"object","additionalProperties":true,"properties":{"query":{"type":"string","description":"Search query","examples":["latest .NET 10 release notes"]},"max_results":{"type":"integer","description":"Max results (default 5)"},"search_depth":{"type":"string","description":"basic | advanced"},"include_domains":{"type":"array","items":{"type":"string"}},"exclude_domains":{"type":"array","items":{"type":"string"}}},"required":["query"],"examples":[{"query":"latest .NET 10 release notes"},{"query":"site reliability best practices","max_results":3,"search_depth":"basic"}]}""",
@@ -92,7 +94,7 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
     ];
 
     private static readonly HashSet<string> WriteTools =
-        ["write_knowledge", "write_note", "firecrawl_crawl", "tavily_crawl", "tavily_research", "set_api_key_settings"];
+        ["write_knowledge", "write_note", "firecrawl_crawl", "tavily_crawl", "tavily_research", "set_api_key_settings", "set_chat_settings"];
 
     [Fact]
     public async Task ToolCatalog_NamesSchemasAndHints_MatchPinnedContract()
