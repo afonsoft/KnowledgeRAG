@@ -17,4 +17,17 @@
 - Redeploy: rebuild compose, container healthy, healthz 200, autosync ok (Postgres catalog).
 - Detalhe aprendido: `FailOrphanedJobsAsync` varre queued/running no start — jobs enfileirados antes do worker subir morrem como "interrupted by restart" sem evento terminal (edge case, não corrigido).
 
-- 2026-09-27: Pedido de SPECs para 3 novos conectores de conhecimento — YouTube transcripts, RestApi+SqlDatabase (enum debt), RSS/Atom. NotebookLM cancelado antes (sem API oficial de leitura p/ consumer; Enterprise só metadados).
+- 2026-09-27: Análise comparativa aprofundada dos repositórios vxcontrol/pentagi e weaviate/Verba (além de referências a RAGFlow, LlamaIndex e Dify). 11 novas SPECs SDD criadas em .specs/ cobrindo:
+  - Chain AST, reparo de tool calls órfãs e compactor de histórico conversacional (SPEC-20260927-chain-ast-thread-compactor).
+  - Decomposição multi-query paralela e relaxamento hierárquico de filtros (SPEC-20260927-hierarchical-filter-relaxation-and-multiquery).
+  - Motor de políticas de resiliência e fallback para modelos e tools (SPEC-20260927-tool-and-model-resilience-fallback).
+  - Cadeia de evidências criptográficas à prova de adulteração (SPEC-20260927-cryptographic-evidence-provenance-chain).
+  - Grafo de conhecimento temporal e episódico (SPEC-20260927-temporal-episodic-knowledge-graph).
+  - Expansão de janela de chunks (Window Retrieval) e Autocut dinâmico (SPEC-20260927-chunk-window-retrieval-and-autocut).
+  - Conector de repositórios Git remotos GitHub/GitLab/Gitea (SPEC-20260927-git-repository-source-connector).
+  - Conector de documentos não estruturados com OCR/layout analysis Unstructured.io (SPEC-20260927-unstructured-document-parser-connector).
+  - Conector de transcrição de áudios e reuniões AssemblyAI/Whisper (SPEC-20260927-audio-transcription-connector).
+  - Chunking profundo orientado a visão e preservação de tabelas RAGFlow (SPEC-20260927-ragflow-vision-layout-chunking).
+  - Sinergia MCP + RAG: Ponte de ações dinâmicas em tempo real (SPEC-20260927-mcp-dynamic-rag-action-bridge).
+  - Provedores de embeddings Voyage AI e Cohere Embed v3 (SPEC-20260927-voyage-and-cohere-embeddings).
+  - Avaliador automatizado da Tríade RAG: Relevância, Fidelidade e Resposta (SPEC-20260927-rag-evaluation-triad-metrics).
