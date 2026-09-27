@@ -91,7 +91,8 @@ integrações mudam, e sessões ativas recebem `tools/list_changed`.
 | `write_knowledge` | Persiste conteúdo na base — arquivo `.md` para fontes vault, documento indexado nas demais |
 | `read_document` | Lê um documento markdown completo de um vault ativo pelo caminho relativo |
 | `write_note` | Escreve uma nota markdown num vault ativo e re-indexa |
-| `set_api_key_settings` | Overrides por API key: endpoint/modelo de chat e keys de integração |
+| `set_chat_settings` | Overrides por API key: endpoint, modelo e chave de API do chat LLM |
+| `set_api_key_settings` | Overrides por API key: chaves de integração upstream (DeepWiki, Firecrawl, Tavily, Context7) |
 | `query_{source_slug}` | Busca semântica escopada — uma tool por fonte ativa |
 | `find_dependencies` / `find_dependents` | Travessia GraphRAG outbound/inbound com evidência por aresta (chunk + doc + fonte) |
 | `find_path` / `analyze_impact` | Caminho mais curto entre entidades; blast radius de 1 hop com documentos de suporte |
@@ -99,10 +100,51 @@ integrações mudam, e sessões ativas recebem `tools/list_changed`.
 | `firecrawl_*` | Upstream Firecrawl (scrape, search, crawl, map…) |
 | `tavily_*` | Upstream Tavily (search, extract, map, crawl, research) |
 | `resolve-library-id`, `query-docs` | Upstream Context7 — consulta de docs de bibliotecas |
-| Tools de `McpProxy` | Passthrough de `tools/list` de servidores MCP arbitrários registrados como fontes |
+| `Tools de McpProxy` | Passthrough de `tools/list` de servidores MCP arbitrários registrados como fontes |
 
 Integrações podem ser ligadas/desligadas em **Settings → Integrações** —
 um provider desligado some do catálogo sem reiniciar.
+
+## Conectando Agentes de IA (Prompt para o LLM)
+
+Para conectar um agente de IA ou assistente de código (como Claude Code, OpenCode, Cursor ou Devin) ao Knowledge MCP Hub, copie e envie o prompt abaixo para o assistente:
+
+```text
+Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de conhecimento e ferramentas RAG da organização:
+
+1. Parâmetros de Conexão:
+- URL: http://<host>:5000/mcp (ou SSE legado em http://<host>:5000/mcp/sse?access_token=aft_SUA_CHAVE)
+- Transporte: Streamable HTTP
+- Cabeçalho de Autenticação: Authorization: Bearer aft_SUA_CHAVE
+(Gere uma chave em /api-keys se ainda não tiver).
+
+2. Exemplos de Configuração por Cliente:
+- Claude Code:
+  claude mcp add --transport http knowledge http://<host>:5000/mcp --header "Authorization: Bearer aft_SUA_CHAVE"
+
+- OpenCode (opencode.json):
+  {
+    "mcp": {
+      "knowledge": {
+        "type": "remote",
+        "url": "http://<host>:5000/mcp",
+        "headers": {
+          "Authorization": "Bearer aft_SUA_CHAVE"
+        }
+      }
+    }
+  }
+
+- Cursor / Devin / Genérico:
+  Adicione o servidor MCP HTTP com URL "http://<host>:5000/mcp" e cabeçalho "Authorization: Bearer aft_SUA_CHAVE".
+
+3. Recomendações de Uso das Ferramentas:
+- search_knowledge(query, topK): Execute buscas semânticas e híbridas (BM25 + vetorial) para obter contexto antes de implementar código.
+- ask_knowledge(question, topK): Faça perguntas conceituais para obter respostas sintetizadas e fundamentadas com citações.
+- find_dependencies / analyze_impact: Avalie o grafo de entidades e dependências (GraphRAG) ao planejar refatorações.
+- read_document / write_note: Acesse ou registre notas no cofre Obsidian conectado.
+- set_chat_settings / set_api_key_settings: Configure seu modelo de chat ou chaves de integração upstream se desejar overrides para sua sessão.
+```
 
 ## Configuração
 

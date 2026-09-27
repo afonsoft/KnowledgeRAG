@@ -89,7 +89,8 @@ integrations change, and live sessions get `tools/list_changed`.
 | `write_knowledge` | Persists content into the base — `.md` file for vault sources, indexed document otherwise |
 | `read_document` | Reads a full markdown document from an active vault by vault-relative path |
 | `write_note` | Writes a markdown note into an active vault and re-indexes it |
-| `set_api_key_settings` | Per-API-key overrides: chat endpoint/model and integration keys |
+| `set_chat_settings` | Per-API-key overrides: chat LLM endpoint, model and API key |
+| `set_api_key_settings` | Per-API-key overrides: integration API keys (DeepWiki, Firecrawl, Tavily, Context7) |
 | `query_{source_slug}` | Scoped semantic search — one tool per active source |
 | `find_dependencies` / `find_dependents` | GraphRAG outbound/inbound traversal with evidence per edge (chunk + doc + source) |
 | `find_path` / `analyze_impact` | Shortest entity path; 1-hop blast radius with backing documents |
@@ -101,6 +102,47 @@ integrations change, and live sessions get `tools/list_changed`.
 
 Integrations can be toggled at **Settings → Integrações** — a disabled
 provider drops its tools from the catalog without a restart.
+
+## Connecting AI Agents (LLM Prompt)
+
+To connect an AI coding assistant (such as Claude Code, OpenCode, Cursor, or Devin) to the Knowledge MCP Hub, copy and paste the prompt below into the assistant:
+
+```text
+Configure the Knowledge Hub MCP server in your environment to access organizational knowledge and RAG tools:
+
+1. Connection Parameters:
+- URL: http://<host>:5000/mcp (or legacy SSE at http://<host>:5000/mcp/sse?access_token=aft_YOUR_KEY)
+- Transport: Streamable HTTP
+- Authentication Header: Authorization: Bearer aft_YOUR_KEY
+(Generate a key in /api-keys if you do not have one yet).
+
+2. Client Setup Examples:
+- Claude Code:
+  claude mcp add --transport http knowledge http://<host>:5000/mcp --header "Authorization: Bearer aft_YOUR_KEY"
+
+- OpenCode (opencode.json):
+  {
+    "mcp": {
+      "knowledge": {
+        "type": "remote",
+        "url": "http://<host>:5000/mcp",
+        "headers": {
+          "Authorization": "Bearer aft_YOUR_KEY"
+        }
+      }
+    }
+  }
+
+- Cursor / Devin / Generic:
+  Add an HTTP MCP server with URL "http://<host>:5000/mcp" and header "Authorization: Bearer aft_YOUR_KEY".
+
+3. Recommended Tool Usage:
+- search_knowledge(query, topK): Run semantic and hybrid queries across vaults and documents before writing code.
+- ask_knowledge(question, topK): Ask questions to receive answers synthesized from indexed evidence with citations.
+- find_dependencies / analyze_impact: Inspect entity graphs (GraphRAG) when assessing architectural impact.
+- read_document / write_note: Read from or persist notes into the connected Obsidian vault.
+- set_chat_settings / set_api_key_settings: Configure custom chat models or integration API keys for your session.
+```
 
 ## Configuration
 
