@@ -1,5 +1,8 @@
 ﻿@page "/"
 @attribute [Authorize]
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ToastService Toast
 
 <PageTitle>Knowledge</PageTitle>
 
@@ -10,7 +13,29 @@
     e servidor MCP nativo (<code>/mcp</code> + <code>/mcp/sse</code>) num único processo .NET.
 </p>
 
-<div class="row g-3 mt-2">
+@* SPEC-20260926-home-mcp-prompt-and-agents-recommendations RF-001:
+   Painel central com o prompt para o LLM configurar o servidor MCP. *@
+<Card class="mt-4 mb-4 border-primary border-opacity-25 shadow-sm">
+    <HeaderTemplate>
+        <div class="d-flex justify-content-between gap-2 align-items-center">
+            <span class="fw-semibold">
+                <i class="fa-solid fa-robot text-primary me-2"></i>Conectar Agente de IA ao MCP
+            </span>
+            <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-copy"
+                    TooltipText="Copiar prompt para o LLM" TooltipPlacement="Placement.Left"
+                    OnClick="CopyPromptAsync" />
+        </div>
+    </HeaderTemplate>
+    <BodyTemplate>
+        <p class="text-muted small mb-2">
+            Copie o prompt abaixo e envie diretamente para o seu LLM ou agente de IA (Claude Code, OpenCode, Cursor, Devin) para configurá-lo e ensiná-lo a consultar a base de conhecimento.
+            Crie sua API key em <a href="api-keys" class="fw-semibold">/api-keys</a> e substitua <code>aft_SUA_CHAVE</code>.
+        </p>
+        <pre class="bg-light border rounded p-3 mb-0 small" style="white-space: pre-wrap; font-family: var(--bs-font-monospace); font-size: 0.85rem; max-height: 380px; overflow-y: auto;"><code>@LlmConfigPrompt</code></pre>
+    </BodyTemplate>
+</Card>
+
+<div class="row g-3">
     <div class="col-12 col-md-4">
         <Card>
             <HeaderTemplate>Fontes</HeaderTemplate>
@@ -39,3 +64,58 @@
         </Card>
     </div>
 </div>
+
+@code {
+    private string McpUrl => $"{Nav.BaseUri.TrimEnd('/')}/mcp";
+    private string SseUrl => $"{Nav.BaseUri.TrimEnd('/')}/mcp/sse";
+
+    private string LlmConfigPrompt => $$"""
+        Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de conhecimento e ferramentas RAG da organização:
+
+        1. Parâmetros de Conexão:
+        - URL: {{McpUrl}}
+        - Transporte: Streamable HTTP (ou SSE legado em {{SseUrl}}?access_token=aft_SUA_CHAVE)
+        - Cabeçalho: Authorization: Bearer aft_SUA_CHAVE
+        (Gere uma chave em /api-keys se ainda não tiver).
+
+        2. Exemplos de Configuração por Cliente:
+        - Claude Code:
+          claude mcp add --transport http knowledge {{McpUrl}} --header "Authorization: Bearer aft_SUA_CHAVE"
+
+        - OpenCode (opencode.json):
+          {
+            "mcp": {
+              "knowledge": {
+                "type": "remote",
+                "url": "{{McpUrl}}",
+                "headers": {
+                  "Authorization": "Bearer aft_SUA_CHAVE"
+                }
+              }
+            }
+          }
+
+        - Cursor / Devin / Generic:
+          Adicione o servidor MCP HTTP com URL "{{McpUrl}}" e cabeçalho "Authorization: Bearer aft_SUA_CHAVE".
+
+        3. Recomendações de Uso das Ferramentas:
+        - search_knowledge(query, topK): Execute buscas semânticas e híbridas (BM25 + vetorial) para obter contexto antes de implementar código.
+        - ask_knowledge(question, topK): Faça perguntas conceituais para obter respostas sintetizadas e fundamentadas com citações.
+        - find_dependencies / analyze_impact: Avalie o grafo de entidades e dependências (GraphRAG) ao planejar refatorações.
+        - read_document / write_note: Acesse ou registre notas no cofre Obsidian conectado.
+        - set_chat_settings / set_api_key_settings: Configure seu modelo de chat ou chaves de integração upstream se desejar overrides para sua sessão.
+        """;
+
+    private async Task CopyPromptAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", LlmConfigPrompt);
+            await Toast.Success("Copiado!", "Prompt para o LLM copiado para a área de transferência.");
+        }
+        catch
+        {
+            await Toast.Warning("Atenção", "Não foi possível acessar a área de transferência.");
+        }
+    }
+}

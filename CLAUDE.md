@@ -52,6 +52,38 @@ Para revisão: `/code-review`, `/simplify` ou invoque `code-review-and-quality` 
 
 Save everything, always. Read `memory.md` and the 3 most recent long-term files at session start. Log a one-line summary of every user prompt or instruction under `## Prompts`, each verified checkpoint, decision, mistake or discovery under its section, and a `## Session summary` — outcome and where work stopped — before compaction, context reset or any possible end of session. Promote reusable knowledge to `.claude/knowledge/`. Nothing survives only in context.
 
+## MCP Server & Como Usar
+
+O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e clientes externos:
+
+- **Endpoints de Transporte**:
+  - Streamable HTTP (especificação `2026-07-28` / C# SDK 2.2): `/mcp`
+  - SSE legado: `/mcp/sse`
+- **Autenticação**:
+  - Header HTTP `Authorization: Bearer aft_SUA_CHAVE` (gerada na tela `/api-keys`).
+  - Clients SSE que não enviam headers customizados aceitam query string: `/mcp/sse?access_token=aft_SUA_CHAVE`.
+
+### Catálogo de Ferramentas Principais
+
+1. **RAG & Conhecimento**:
+   - `search_knowledge(query, topK)`: Busca híbrida (FTS5 + SQLite-Vec/PgVector) com RRF e diversificação MMR. Use antes de implementar código para verificar especificações e convenções existentes.
+   - `ask_knowledge(question, topK)`: Síntese de resposta fundamentada em citações de chunks.
+   - `agent_chat(message, threadId)`: Loop de raciocínio reativo com chamadas encadeadas de tools.
+   - `read_document(path)`: Lê o conteúdo integral de um documento cadastrado.
+   - `write_knowledge(title, content)` / `write_note(title, content, path)`: Registra novos documentos ou notas no Obsidian vault conectado.
+2. **GraphRAG & Relações**:
+   - `find_dependencies(entity)` / `find_dependents(entity)`: Localiza dependências diretas e reversas no grafo de conhecimento.
+   - `analyze_impact(entity)`: Avalia o impacto arquitetural e componentes afetados por mudanças em um nó.
+3. **Configurações per-key**:
+   - `set_chat_settings(endpoint, model, apiKey)`: Configura modelo LLM e endpoint específicos para a sessão da chave chamadora.
+   - `set_api_key_settings(provider, apiKey)`: Configura chaves de integração upstream (`firecrawl`, `deepwiki`, `tavily`, `context7`) para a sessão da chave chamadora.
+
+### Recomendações para Agentes
+
+- **Grounding First**: Sempre consulte `search_knowledge` antes de supor regras de negócio ou duplicar classes utilitárias já existentes no repositório.
+- **Análise de Impacto**: Execute `analyze_impact` antes de refatorar contratos ou tipos compartilhados em `KnowledgeHub.Shared`.
+- **Segurança**: Nunca realize commit ou emita em logs chaves `aft_*`, credenciais ou segredos presentes em `.env`.
+
 ## Convenções
 
 - **Branches**: `feature/{AgentLLM}-{YYYYMMDD}-{descricao-curta}` baseada em `main`. Nunca commitar em `main`, `master` ou `develop`.

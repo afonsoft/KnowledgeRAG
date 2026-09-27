@@ -34,3 +34,13 @@ dotnet run --project src/KnowledgeHub.Server      # serve http://localhost:5000
 - `.github/workflows/` is protected.
 - Never commit `.env`, `*.key`, `*.pem` or secrets.
 - Specs live in `.specs/`; approved SPEC is the source of truth for implementation.
+
+## MCP Server & Recomendações
+
+O Knowledge MCP Hub expõe um servidor MCP nativo para agentes de IA (Claude Code, OpenCode, Cursor, Devin, etc.). Detalhes completos em [`CLAUDE.md`](CLAUDE.md).
+
+- **Conexão**: Endpoint HTTP `/mcp` (Streamable HTTP) ou `/mcp/sse`. Header: `Authorization: Bearer aft_*` (gerar em `/api-keys`).
+- **Grounding First**: Consulte `search_knowledge` ou `ask_knowledge` antes de assumir regras de negócio, contratos ou criar artefatos duplicados.
+- **Impacto**: Utilize `find_dependencies` e `analyze_impact` para avaliar o impacto de alterações em componentes compartilhados.
+- **Isolamento de Sessão**: Utilize `set_chat_settings` (chat LLM) e `set_api_key_settings` (integrações upstream) para customizar a chave da sua sessão.
+- **Segurança**: Nunca exponha, printe ou commite chaves de autenticação `aft_*`.
