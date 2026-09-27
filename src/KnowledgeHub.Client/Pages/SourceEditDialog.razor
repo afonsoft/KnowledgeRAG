@@ -108,6 +108,33 @@
             <BootstrapInput @bind-Value="Model.Url" DisplayText="URL *" ShowLabel="true" />
         </div>
     }
+    @if (Model.Type is SourceType.RssFeed)
+    {
+        <div class="col-12">
+            <BootstrapInput @bind-Value="Model.FeedUrl" DisplayText="URL do feed (RSS/Atom) *"
+                            ShowLabel="true" PlaceHolder="https://blog.example.com/feed.xml" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInputNumber @bind-Value="Model.MaxItems" DisplayText="Máx. itens (padrão 100)"
+                                  ShowLabel="true" IsNullable="true" Min="1" Max="500" />
+        </div>
+        <div class="col-12 col-md-3">
+            <Switch @bind-Value="Model.FetchFullContent" DisplayText="Buscar conteúdo completo"
+                    ShowLabel="true" />
+        </div>
+        <div class="col-12 col-md-3">
+            <Switch @bind-Value="Model.ForceRefresh" DisplayText="Forçar refresh"
+                    ShowLabel="true" />
+        </div>
+        <div class="col-12">
+            <div class="form-text">
+                Sincroniza RSS 2.0 e Atom 1.0. Sync incremental por <code>guid</code> do item.
+                "Buscar conteúdo completo" baixa a página linkada de cada item e extrai o texto
+                (útil quando o feed só traz teasers). "Forçar refresh" reprocessa todos os itens,
+                mesmo sem alterações de <code>guid</code>/data.
+            </div>
+        </div>
+    }
     @if (Model.Type is SourceType.RestApi)
     {
         <div class="col-12">
@@ -430,6 +457,8 @@
                 when string.IsNullOrWhiteSpace(Model.Path) => "Caminho é obrigatório",
             SourceType.WebPage
                 when string.IsNullOrWhiteSpace(Model.Url) => "URL é obrigatória",
+            SourceType.RssFeed
+                when string.IsNullOrWhiteSpace(Model.FeedUrl) => "URL do feed é obrigatória",
             SourceType.RestApi or SourceType.McpProxy
                 when string.IsNullOrWhiteSpace(Model.Endpoint) => "Endpoint é obrigatório",
             SourceType.SqlDatabase
@@ -471,7 +500,8 @@
          "chunking", "sharedUrl", "maxFiles",
          "provider", "itemsPath", "titleField", "contentFields", "urlField", "idField",
          "pageParam", "idColumn", "titleColumn", "contentColumns", "urlColumn",
-         "maxRows", "commandTimeoutSeconds"];
+         "maxRows", "commandTimeoutSeconds",
+         "feedUrl", "maxItems", "fetchFullContent", "forceRefresh"];
 
     private static readonly List<SelectedItem> TransportItems =
         [new("auto", "auto"), new("http", "http"), new("sse", "sse")];
@@ -501,6 +531,15 @@
                 break;
             case SourceType.WebPage:
                 config["url"] = Model.Url;
+                break;
+            case SourceType.RssFeed:
+                config["feedUrl"] = Model.FeedUrl;
+                if (Model.MaxItems is not null)
+                    config["maxItems"] = Model.MaxItems;
+                if (Model.FetchFullContent)
+                    config["fetchFullContent"] = true;
+                if (Model.ForceRefresh)
+                    config["forceRefresh"] = true;
                 break;
             case SourceType.RestApi:
                 config["endpoint"] = Model.Endpoint;
@@ -688,6 +727,10 @@
         public string? Chunking { get; set; }
         public string? SharedUrl { get; set; }
         public int? MaxFiles { get; set; }
+        public string? FeedUrl { get; set; }
+        public int? MaxItems { get; set; }
+        public bool FetchFullContent { get; set; }
+        public bool ForceRefresh { get; set; }
 
         /// <summary>True when the source already has an API key in the
         /// encrypted store (McpProxy) — the value itself is never returned.</summary>
@@ -749,6 +792,11 @@
             SharedUrl = dto.Configuration?["sharedUrl"]?.GetValue<string>(),
             MaxFiles = dto.Configuration?["maxFiles"] is JsonValue mx
                 && mx.TryGetValue<int>(out var mxn) ? mxn : null,
+            FeedUrl = dto.Configuration?["feedUrl"]?.GetValue<string>(),
+            MaxItems = dto.Configuration?["maxItems"] is JsonValue mi
+                && mi.TryGetValue<int>(out var min) ? min : null,
+            FetchFullContent = ReadBool(dto.Configuration, "fetchFullContent"),
+            ForceRefresh = ReadBool(dto.Configuration, "forceRefresh"),
             OriginalConfiguration = dto.Configuration?.DeepClone() as JsonObject
         };
 

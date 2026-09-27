@@ -8,9 +8,9 @@
 | Type | `Feature` |
 | Stack | `.NET 10 / HttpClient + System.Xml.Linq / HtmlTextExtractor (existente)` |
 | Repository | `afonsoft/LangGraph-UI` |
-| Branch | `feature/Devin-20260927-rss-feed-connector` |
+| Branch | `feature/OpenCode-20260927-rss-feed-connector` |
 | Ticket | `#264` — https://github.com/afonsoft/LangGraph-UI/issues/264 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 

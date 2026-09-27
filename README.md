@@ -68,6 +68,7 @@ Accepted on `/mcp`, `/mcp/sse`, `/api/*` and `/hubs/mcp` (SignalR clients that c
 | Notion | `Notion` | REST read-only, encrypted token, incremental via `last_edited_time` |
 | REST API | `RestApi` | `GET` JSON endpoint; `itemsPath` dot-path + field mapping (`titleField`/`contentFields`/`idField`/`urlField`), `pageParam` pagination; headers encrypted at rest (`restapi:{id}`) |
 | SQL database | `SqlDatabase` | `sqlite` / `postgres`; SELECT-only query guard (no write keywords outside literals/comments), SQLite `Mode=ReadOnly`, Postgres `READ ONLY` transaction; connection string encrypted at rest (`sql:{id}`); `maxRows`/`Truncated` |
+| RSS / Atom | `RssFeed` | RSS 2.0 + Atom 1.0; incremental sync by `guid` fingerprint; optional `fetchFullContent` (downloads linked page); `forceRefresh` reprocesses all |
 | AWS S3 | `AwsS3` | Bucket staging, ETag-based incremental sync |
 | Azure Files | `AzureFiles` | Share crawl with staged incremental sync |
 | OCI Object Storage | `OciStorage` | S3-compatible endpoint, same staging model |
