@@ -8,19 +8,27 @@ using ModelContextProtocol.Protocol;
 namespace KnowledgeHub.Server.Mcp.ToolProviders;
 
 /// <summary>
-/// Settings tools (SPEC-20260916-api-key-settings RF-004 expanded):
-/// set_api_key_settings — allows an API key to configure chat, firecrawl, deepwiki, tavily and context7.
+/// Settings tools (SPEC-20260916-api-key-settings RF-004 + SPEC-20260926-split-settings-tools):
+/// set_api_key_settings — allows an API key to configure integration API keys (firecrawl, deepwiki, tavily, context7).
+/// set_chat_settings — allows an API key to configure chat LLM endpoint, model and API key.
 /// </summary>
 public sealed class SettingsToolsProvider : IToolProvider
 {
     private static readonly JsonObject SetApiKeySettingsSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "provider":{"type":"string","enum":["chat","firecrawl","deepwiki","tavily","context7"],"description":"Which provider to configure"},
-          "endpoint":{"type":["string","null"],"description":"OpenAI-compatible base URL (chat only, null = inherit)"},
-          "model":{"type":["string","null"],"description":"Model name (chat only, null = inherit)"},
-          "apiKey":{"type":["string","null"],"description":"API key override (null = inherit from global)"}
+          "provider":{"type":"string","enum":["firecrawl","deepwiki","tavily","context7"],"description":"Which integration provider to configure"},
+          "apiKey":{"type":["string","null"],"description":"API key override (null or empty = inherit from global)"}
         },"required":["provider"],
-        "examples":[{"provider":"chat","endpoint":"http://localhost:11434","model":"llama3","apiKey":null}]}
+        "examples":[{"provider":"deepwiki","apiKey":"dw-secret-key"},{"provider":"firecrawl","apiKey":null}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject SetChatSettingsSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "endpoint":{"type":["string","null"],"description":"OpenAI-compatible base URL (null = inherit from global)"},
+          "model":{"type":["string","null"],"description":"Model name (null = inherit from global)"},
+          "apiKey":{"type":["string","null"],"description":"Chat provider API key override (null = inherit from global)"}
+        },
+        "examples":[{"endpoint":"http://localhost:11434","model":"llama3","apiKey":null}]}
         """)!.AsObject();
 
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -31,13 +39,13 @@ public sealed class SettingsToolsProvider : IToolProvider
             {
                 Name = "set_api_key_settings",
                 Title = "Set API key settings",
-                Description = "Override settings (chat endpoint/model, or integration API keys for firecrawl/deepwiki/tavily/context7) for the current API key. Null fields inherit from global defaults. Only available to API-key-authenticated sessions.",
+                Description = "Override integration API keys (firecrawl, deepwiki, tavily, context7) for the current API key. Pass null or empty apiKey to remove the override and inherit from global. Only available to API-key-authenticated sessions.",
                 InputSchema = SetApiKeySettingsSchema,
                 ReadOnly = false,
                 IdempotentHint = true,
                 Handler = async (ctx, ct) =>
                 {
-                    var http = ctx.Services!.GetRequiredService<IHttpContextAccessor>().HttpContext;
+                    var http = ctx.Services?.GetService<IHttpContextAccessor>()?.HttpContext;
                     if (http is null)
                         throw new McpProtocolException("HTTP context not available", McpErrorCode.InternalError);
 
@@ -49,24 +57,7 @@ public sealed class SettingsToolsProvider : IToolProvider
                     var provider = ToolArgs.RequiredString(ctx, "provider");
                     var service = ctx.Services!.GetRequiredService<IApiKeyChatSettingsService>();
 
-                    if (provider == "chat")
-                    {
-                        var endpoint = ToolArgs.OptionalString(ctx, "endpoint");
-                        var model = ToolArgs.OptionalString(ctx, "model");
-                        var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
-
-                        await service.SaveAsync(keyId, endpoint, model, apiKey, ct);
-                        var result = await service.DescribeAsync(keyId, ct);
-
-                        var msg = $"Chat settings updated for API key '{keyId}'.\n" +
-                                  $"Provider: {result.Provider}\n" +
-                                  $"Endpoint: {result.Endpoint ?? "(inherited)"}\n" +
-                                  $"Model: {result.Model ?? "(inherited)"}\n" +
-                                  $"Has override: {result.HasOverride}\n" +
-                                  $"Override fields: {string.Join(", ", result.OverrideFields)}";
-                        return await ToolResults.Text(msg);
-                    }
-                    else if (provider is "firecrawl" or "deepwiki" or "tavily" or "context7")
+                    if (provider is "firecrawl" or "deepwiki" or "tavily" or "context7")
                     {
                         var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
                         if (apiKey is not null && !string.IsNullOrWhiteSpace(apiKey))
@@ -84,6 +75,42 @@ public sealed class SettingsToolsProvider : IToolProvider
                     {
                         throw new McpProtocolException($"Unknown provider '{provider}'", McpErrorCode.InvalidParams);
                     }
+                }
+            },
+            new CatalogTool
+            {
+                Name = "set_chat_settings",
+                Title = "Set chat settings",
+                Description = "Override chat LLM settings (endpoint, model, API key) for the current API key. Null fields inherit from global defaults. Only available to API-key-authenticated sessions.",
+                InputSchema = SetChatSettingsSchema,
+                ReadOnly = false,
+                IdempotentHint = true,
+                Handler = async (ctx, ct) =>
+                {
+                    var http = ctx.Services?.GetService<IHttpContextAccessor>()?.HttpContext;
+                    if (http is null)
+                        throw new McpProtocolException("HTTP context not available", McpErrorCode.InternalError);
+
+                    var authMethod = http.User.FindFirst(ApiKeyAuthenticationHandler.AuthMethodClaim)?.Value;
+                    var keyIdValue = http.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
+                    if (authMethod != "apikey" || !Guid.TryParse(keyIdValue, out var keyId))
+                        throw new McpProtocolException("This tool is only available to API-key-authenticated sessions", McpErrorCode.InvalidParams);
+
+                    var endpoint = ToolArgs.OptionalString(ctx, "endpoint");
+                    var model = ToolArgs.OptionalString(ctx, "model");
+                    var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
+
+                    var service = ctx.Services!.GetRequiredService<IApiKeyChatSettingsService>();
+                    await service.SaveAsync(keyId, endpoint, model, apiKey, ct);
+                    var result = await service.DescribeAsync(keyId, ct);
+
+                    var msg = $"Chat settings updated for API key '{keyId}'.\n" +
+                              $"Provider: {result.Provider}\n" +
+                              $"Endpoint: {result.Endpoint ?? "(inherited)"}\n" +
+                              $"Model: {result.Model ?? "(inherited)"}\n" +
+                              $"Has override: {result.HasOverride}\n" +
+                              $"Override fields: {string.Join(", ", result.OverrideFields)}";
+                    return await ToolResults.Text(msg);
                 }
             }
         ];

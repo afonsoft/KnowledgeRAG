@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/opencode-20260926-split-settings-tools` |
 | Ticket | `#settings-tools-split` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -205,18 +205,18 @@ tests/KnowledgeHub.Tests.Integration/PerKeyIntegrationApiTests.cs
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Atualização de `SettingsToolsProvider.cs`:**
+- [x] **T1 — Atualização de `SettingsToolsProvider.cs`:**
   - Redefinir `SetApiKeySettingsSchema` removendo `chat`, `endpoint` e `model`.
   - Criar `SetChatSettingsSchema` com `endpoint`, `model` e `apiKey`.
   - Separar a lógica do handler: `set_api_key_settings` atende apenas integrações; nova tool `set_chat_settings` atende o chat.
-- [ ] **T2 — Atualização de Testes Contratuais (`McpContractTests.cs`):**
+- [x] **T2 — Atualização de Testes Contratuais (`McpContractTests.cs`):**
   - Atualizar o schema fixado de `set_api_key_settings`.
   - Adicionar o schema fixado de `set_chat_settings`.
   - Adicionar `"set_chat_settings"` em `WriteTools`.
-- [ ] **T3 — Atualização de Testes Unitários e de Integração:**
+- [x] **T3 — Atualização de Testes Unitários e de Integração:**
   - Atualizar `PerKeyIntegrationSecretTests.cs` e `PerKeyIntegrationApiTests.cs`.
   - Adicionar testes cobrindo `set_chat_settings` (salvar endpoint/model, herança de campos e rejeição para chamadas não-apikey).
-- [ ] **T4 — Validação e DoD:**
+- [x] **T4 — Validação e DoD:**
   - Rodar `dotnet build` e `dotnet test`.
   - Verificar que não há warnings de compilação ou regressões de contrato.
 
@@ -234,11 +234,11 @@ tests/KnowledgeHub.Tests.Integration/PerKeyIntegrationApiTests.cs
 
 ## 9. Definition of Done
 
-- [ ] Tool `set_api_key_settings` refatorada e validada para integrações apenas.
-- [ ] Tool `set_chat_settings` criada e registrada no catálogo.
-- [ ] `McpContractTests` atualizado e passando.
-- [ ] Testes unitários e de integração cobrindo ambas as tools passando.
-- [ ] `dotnet build` e `dotnet test` 100% verdes.
+- [x] Tool `set_api_key_settings` refatorada e validada para integrações apenas.
+- [x] Tool `set_chat_settings` criada e registrada no catálogo.
+- [x] `McpContractTests` atualizado e passando.
+- [x] Testes unitários e de integração cobrindo ambas as tools passando.
+- [x] `dotnet build` e `dotnet test` 100% verdes.
 
 ## Open Questions / Pending Ambiguity
 

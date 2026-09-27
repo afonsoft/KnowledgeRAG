@@ -107,6 +107,45 @@ public class PerKeyIntegrationApiTests : IClassFixture<PerKeyIntegrationApiTests
         Assert.False(DeepWikiHasKey(settings.RootElement));
     }
 
+    // Covers SPEC-20260926-split-settings-tools RF-002: set_chat_settings
+    // over Bearer aft_* saves chat endpoint and model per-key.
+    [Fact]
+    public async Task SetChatSettings_BearerCaller_SavesPerKey()
+    {
+        var (cookie, key) = await NewKeyAsync();
+        var bearer = _factory.CreateClient();
+        bearer.DefaultRequestHeaders.Authorization = new("Bearer", key.Key);
+
+        var call = await bearer.PostAsJsonAsync("/api/tools/set_chat_settings",
+            new { endpoint = "http://localhost:11434", model = "llama3-test" });
+        Assert.Equal(HttpStatusCode.OK, call.StatusCode);
+
+        var body = await call.Content.ReadAsStringAsync();
+        using (var doc = JsonDocument.Parse(body))
+            Assert.False(doc.RootElement.GetProperty("isError").GetBoolean());
+
+        using var settings = JsonDocument.Parse(
+            await cookie.GetStringAsync($"/api/api-keys/{key.Id}/settings/chat"));
+        Assert.Equal("http://localhost:11434", settings.RootElement.GetProperty("endpoint").GetString());
+        Assert.Equal("llama3-test", settings.RootElement.GetProperty("model").GetString());
+    }
+
+    // Covers SPEC-20260926-split-settings-tools RF-001: set_api_key_settings
+    // rejects "chat" provider.
+    [Fact]
+    public async Task SetApiKeySettings_ChatProvider_ReturnsError()
+    {
+        var (_, key) = await NewKeyAsync();
+        var bearer = _factory.CreateClient();
+        bearer.DefaultRequestHeaders.Authorization = new("Bearer", key.Key);
+
+        var call = await bearer.PostAsJsonAsync("/api/tools/set_api_key_settings",
+            new { provider = "chat" });
+        var body = await call.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        Assert.True(doc.RootElement.GetProperty("isError").GetBoolean());
+    }
+
     [Fact]
     public async Task PerKeyIntegration_UnknownProvider_404()
     {
