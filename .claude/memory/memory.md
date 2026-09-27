@@ -16,3 +16,5 @@
 - CI #247 todos os checks verdes; squash-merge; branch remota deletada.
 - Redeploy: rebuild compose, container healthy, healthz 200, autosync ok (Postgres catalog).
 - Detalhe aprendido: `FailOrphanedJobsAsync` varre queued/running no start — jobs enfileirados antes do worker subir morrem como "interrupted by restart" sem evento terminal (edge case, não corrigido).
+
+- 2026-09-27: Pedido de SPECs para 3 novos conectores de conhecimento — YouTube transcripts, RestApi+SqlDatabase (enum debt), RSS/Atom. NotebookLM cancelado antes (sem API oficial de leitura p/ consumer; Enterprise só metadados).
