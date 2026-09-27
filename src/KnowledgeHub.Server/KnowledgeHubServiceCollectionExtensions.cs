@@ -105,10 +105,16 @@ public static class KnowledgeHubServiceCollectionExtensions
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(3);
             });
 
+        // SPEC-20260927-restapi-sqldatabase-connectors RF-001/RF-007: named
+        // "restapi" client (30 s) + connector registry entries.
+        services.AddHttpClient("restapi", c => c.Timeout = TimeSpan.FromSeconds(30));
+
         // SPEC-20260914-webpage-docfile-connectors: connector registry.
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.WebPageConnector>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.DocumentFileConnector>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.NotionConnector>();
+        services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.RestApiConnector>();
+        services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.SqlDatabaseConnector>();
         // SPEC-20260924-cloud-storage-connectors: remote object stores staged locally.
         services.AddSingleton<Ingestion.Staging.IStagingStorageService, Ingestion.Staging.StagingStorageService>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.Cloud.AwsS3Connector>();

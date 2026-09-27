@@ -111,15 +111,19 @@ public class SourcesApiTests : IClassFixture<SourcesApiTests.Fixture>
     [Fact]
     public async Task Get_Source_RedactsSensitiveConfiguration()
     {
+        // SPEC-20260927-restapi-sqldatabase-connectors RF-006: the connection
+        // string is lifted to the encrypted store — GET echoes only hasKey.
         var response = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"sql-{Guid.NewGuid():N}",
             type = "SqlDatabase",
-            configuration = new { connectionString = "Server=x;Password=s3cret", query = "SELECT 1" }
+            configuration = new { provider = "sqlite", query = "SELECT 1", connectionString = "Data Source=x.db" }
         });
         var created = await response.Content.ReadFromJsonAsync<KnowledgeSourceDto>();
-        Assert.Equal("***", created!.Configuration!["connectionString"]!.GetValue<string>());
-        Assert.Equal("SELECT 1", created.Configuration!["query"]!.GetValue<string>());
+        Assert.True(created!.Configuration!["hasKey"]!.GetValue<bool>());
+        Assert.Null(created.Configuration["connectionString"]);
+        Assert.Equal("SELECT 1", created.Configuration["query"]!.GetValue<string>());
+        Assert.Equal("sqlite", created.Configuration["provider"]!.GetValue<string>());
     }
 
     [Fact]
@@ -194,12 +198,14 @@ public class SourcesApiTests : IClassFixture<SourcesApiTests.Fixture>
     [Fact]
     public async Task Sync_UnimplementedConnector_ReturnsSkipped()
     {
-        // RestApi connector is registered but intentionally not implemented → "skipped"
+        // McpProxy is proxy-only (never ingestible) → sync lands on "skipped".
+        // (RestApi/SqlDatabase became real connectors in
+        // SPEC-20260927-restapi-sqldatabase-connectors.)
         var response = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"sync-{Guid.NewGuid():N}",
-            type = "RestApi",
-            configuration = new { endpoint = "https://example.com/api" }
+            type = "McpProxy",
+            configuration = new { endpoint = "https://mcp.example.com/mcp" }
         });
         var created = await response.Content.ReadFromJsonAsync<KnowledgeSourceDto>();
 

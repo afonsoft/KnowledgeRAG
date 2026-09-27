@@ -55,7 +55,9 @@ public sealed class ScheduledSyncBackgroundService(
                     || s.SourceType == SourceType.AwsS3
                     || s.SourceType == SourceType.AzureFiles
                     || s.SourceType == SourceType.OciStorage
-                    || s.SourceType == SourceType.GoogleDrive))
+                    || s.SourceType == SourceType.GoogleDrive
+                    || s.SourceType == SourceType.RestApi
+                    || s.SourceType == SourceType.SqlDatabase))
             .Select(s => new { s.Id, s.SyncIntervalMinutes })
             .ToListAsync(ct);
 

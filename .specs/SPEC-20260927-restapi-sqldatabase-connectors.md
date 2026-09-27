@@ -8,9 +8,9 @@
 | Type | `Feature` |
 | Stack | `.NET 10 / HttpClient + System.Text.Json / Microsoft.Data.Sqlite + Npgsql` |
 | Repository | `afonsoft/LangGraph-UI` |
-| Branch | `feature/Devin-20260927-restapi-sqldatabase-connectors` |
+| Branch | `feature/OpenCode-20260927-restapi-sqldatabase-connectors` |
 | Ticket | `#263` — https://github.com/afonsoft/LangGraph-UI/issues/263 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
