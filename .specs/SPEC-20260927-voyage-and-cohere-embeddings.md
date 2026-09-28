@@ -8,9 +8,10 @@
 | Type | `Feature` |
 | Stack | `.NET 10 / HttpClient / System.Text.Json / Voyage AI REST / Cohere Embed v3` |
 | Repository | `afonsoft/LangGraph-UI` |
-| Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
+| Branch | `feature/OpenCode-20260927-voyage-and-cohere-embeddings` |
 | Ticket | `#280` |
-| Status | `Approved` |
+| Status | `Done` |
+
 
 ## 1. User Story
 
