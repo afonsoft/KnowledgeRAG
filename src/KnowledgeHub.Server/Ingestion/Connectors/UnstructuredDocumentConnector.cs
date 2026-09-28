@@ -25,7 +25,7 @@ public sealed class UnstructuredDocumentConnector(
     /// <summary>Secret-store slot for the API key (optional — local endpoints).</summary>
     public static string SecretKey(Guid sourceId) => $"unstructured:{sourceId}";
 
-    public static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".pdf", ".docx", ".pptx", ".xlsx", ".jpg", ".jpeg", ".png", ".tiff"
     };
