@@ -364,7 +364,7 @@ public sealed class SearchService(
                 .Select(s => (SourceType?)s.SourceType)
                 .FirstOrDefaultAsync(ct);
             var f = filter is null
-                ? new ResolvedSearchFilter(null, null, null, null, SourceType: type)
+                ? new ResolvedSearchFilter(type, null, null, null)
                 : filter with { SourceType = type };
             return (null, f, ResolvedSearchFilter.DescribeScope(null, f));
         }
