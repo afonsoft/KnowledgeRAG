@@ -57,4 +57,8 @@ public sealed record AskResponse
     public bool Cached { get; init; }
     /// <summary>Raw context used for the answer (when generated=false).</summary>
     public IReadOnlyList<SearchResultItem>? Context { get; init; }
+    /// <summary>SPEC-20260927-mcp-dynamic-rag-action-bridge RF-001: live MCP
+    /// tool executions fused into this answer — empty/null when the bridge
+    /// produced none or was disabled.</summary>
+    public IReadOnlyList<LiveToolExecution>? LiveToolExecutions { get; init; }
 }

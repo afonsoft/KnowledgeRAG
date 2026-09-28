@@ -46,6 +46,14 @@ public sealed class AgentOptions
     /// rewriting for retrieval tools invoked inside a thread.</summary>
     public QueryContextOptions QueryContext { get; set; } = new();
 
+    /// <summary>SPEC-20260927-mcp-dynamic-rag-action-bridge: action-augmented
+    /// RAG — retrieved chunks may nominate live MCP tools (markers or explicit
+    /// mentions) which are executed and fused into the answer.</summary>
+    public bool EnableDynamicActionBridge { get; set; } = true;
+
+    /// <summary>Hard cap on chained live-tool executions per ask (RF-003).</summary>
+    public int MaxChainedDynamicCalls { get; set; } = 3;
+
     public sealed class QueryContextOptions
     {
         /// <summary>Pass the conversation snapshot to retrieval tools.</summary>
