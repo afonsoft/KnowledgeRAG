@@ -141,6 +141,11 @@ public static class KnowledgeHubServiceCollectionExtensions
         // connector (github/gitlab/gitea).
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.GitRepositoryConnector>();
         services.AddHttpClient("git");
+        // SPEC-20260927-audio-transcription-connector: external transcription
+        // (AssemblyAI / OpenAI-whisper-compatible) — long-running uploads.
+        services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.AudioTranscriptionConnector>();
+        services.AddHttpClient("audio", c => c.Timeout = Timeout.InfiniteTimeSpan)
+            .SetHandlerLifetime(TimeSpan.FromMinutes(10));
         // SPEC-20260927-youtube-transcript-connector: YoutubeExplode adapter + connector.
         services.AddSingleton<Ingestion.Connectors.IYouTubeClient, Ingestion.Connectors.YouTubeClientAdapter>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.YouTubeConnector>();
@@ -190,15 +195,40 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<IServiceScopeFactory>(),
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<Settings.ApiKeyChatSettingsService>>()));
+        // SPEC-20260927-tool-and-model-resilience-fallback: policy engine +
+        // capability registry are singletons; the IChatClient decorator wraps
+        // the resolved primary when Mode != disabled and fallbacks exist.
+        services.AddOptions<Resilience.FallbackOptions>()
+            .Configure<IConfiguration>((options, cfg) =>
+                cfg.GetSection(Resilience.FallbackOptions.SectionName).Bind(options));
+        services.AddSingleton<Resilience.IFallbackPolicyEngine, Resilience.FallbackPolicyEngine>();
+        services.AddSingleton<Resilience.ToolCapabilityRegistry>();
         services.AddScoped<Microsoft.Extensions.AI.IChatClient>(sp =>
         {
             var http = sp.GetService<Microsoft.AspNetCore.Http.IHttpContextAccessor>()?.HttpContext;
             var keyIdValue = http?.User.FindFirst(Auth.ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
+            Microsoft.Extensions.AI.IChatClient? client;
+            string? primaryName;
             if (keyIdValue is not null && Guid.TryParse(keyIdValue, out var keyId))
             {
-                return sp.GetRequiredService<Settings.IApiKeyChatSettingsService>().GetClient(keyId)!;
+                var perKey = sp.GetRequiredService<Settings.IApiKeyChatSettingsService>();
+                client = perKey.GetClient(keyId);
+                primaryName = perKey.GetEffectiveOptions(keyId).Provider;
             }
-            return sp.GetRequiredService<Settings.IChatSettingsService>().GetClient()!;
+            else
+            {
+                var chat = sp.GetRequiredService<Settings.IChatSettingsService>();
+                client = chat.GetClient();
+                primaryName = chat.GetEffectiveOptions().Provider;
+            }
+            if (client is null)
+                return client!;
+            var fb = sp.GetRequiredService<IOptions<Resilience.FallbackOptions>>().Value;
+            return Resilience.ResilientChatClient.Wrap(
+                client, primaryName ?? "primary", fb.ChatFallbacks,
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<Resilience.IFallbackPolicyEngine>(),
+                sp.GetRequiredService<ILogger<Resilience.ResilientChatClient>>());
         });
         services.AddScoped<IAnswerService>(sp =>
         {
@@ -223,6 +253,12 @@ public static class KnowledgeHubServiceCollectionExtensions
                 sp.GetRequiredService<Evaluation.IRagEvaluationEnqueuer>());
         });
 
+        // SPEC-20260927-chain-ast-thread-compactor: compaction/repair of the
+        // message projection sent to the LLM (transcript stays untouched).
+        services.AddSingleton<McpEngine.Agents.ChainAst.IChainCompactor>(sp =>
+            new McpEngine.Agents.ChainAst.ChainCompactor(
+                sp.GetRequiredService<IOptions<Agent.AgentOptions>>().Value.ContextManagement));
+
         // SPEC-20260914-agent-chat-loop: model→tools→model loop over the live catalog.
         services.AddOptions<Agent.AgentOptions>()
             .Configure<IConfiguration>((options, cfg) =>
@@ -234,7 +270,8 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
             sp.GetRequiredService<IOptions<Agent.AgentOptions>>().Value,
             sp.GetService<IMcpActivityFeed>(),
-            sp.GetRequiredService<ILogger<AgentService>>()));
+            sp.GetRequiredService<ILogger<AgentService>>(),
+            sp.GetService<McpEngine.Agents.ChainAst.IChainCompactor>()));
         services.AddScoped<IApprovalService>(sp => new ApprovalService(
             sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
             TimeSpan.FromMinutes(

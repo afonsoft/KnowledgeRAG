@@ -156,6 +156,8 @@ public sealed class KnowledgeSourceService(
                 await secrets.RemoveAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct);
             if (source.SourceType == SourceType.GitRepository)
                 await secrets.RemoveAsync(Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id), ct);
+            if (source.SourceType == SourceType.AudioTranscription)
+                await secrets.RemoveAsync(Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id), ct);
             // SPEC-20260924-cloud-storage-connectors RF-006: purge cloud secrets + staging.
             if (source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage)
             {
@@ -274,6 +276,18 @@ public sealed class KnowledgeSourceService(
                 : null;
         }
 
+        // SPEC-20260927-audio-transcription-connector: apiKey optional.
+        if (source.SourceType == SourceType.AudioTranscription)
+        {
+            var flagged = configuration["hasKey"] is JsonValue hv
+                && hv.TryGetValue<bool>(out var f) && f;
+            if (!flagged)
+                return null;
+            return await secrets.GetAsync(Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id), ct) is null
+                ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
+                : null;
+        }
+
         if (source.SourceType is SourceType.AwsS3 or SourceType.OciStorage)
         {
             if (UsableSecret(configuration, "secretAccessKey"))
@@ -340,6 +354,9 @@ public sealed class KnowledgeSourceService(
             // SPEC-20260927-git-repository-source-connector RF-001: PAT is
             // optional (public repos need none) — same optional-secret slot.
             SourceType.GitRepository => ("token", Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id)),
+            // SPEC-20260927-audio-transcription-connector: apiKey optional for
+            // whisper-compatible self-hosted endpoints.
+            SourceType.AudioTranscription => ("apiKey", Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id)),
             _ => (null, null)
         };
         if (configKey is not null && secretKey is not null && configuration is not null)

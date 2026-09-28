@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#277` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -125,9 +125,9 @@ Configuração no `KnowledgeSource`:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** um arquivo `.mp3` de reunião **when** a sincronização roda **then** o texto final gerado contém identificação de speakers e capítulos legíveis.
-- [ ] **Given** um arquivo de áudio já processado sem alteração de bytes **when** o auto-sync roda **then** nenhuma chamada de upload é emitida.
-- [ ] **Given** falha no serviço de transcrição (HTTP 500) **when** o polling falha **then** o item é reportado em `FailedUris` com mensagem clara de erro.
+- [x] **Given** um arquivo `.mp3` de reunião **when** a sincronização roda **then** o texto final gerado contém identificação de speakers e capítulos legíveis.
+- [x] **Given** um arquivo de áudio já processado sem alteração de bytes **when** o auto-sync roda **then** nenhuma chamada de upload é emitida.
+- [x] **Given** falha no serviço de transcrição (HTTP 500) **when** o polling falha **then** o item é reportado em `FailedUris` com mensagem clara de erro.
 
 **Edge cases:**
 
@@ -138,12 +138,12 @@ Configuração no `KnowledgeSource`:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Analisar conectores de mídia e secret store.
-- [ ] **T2 — Enum:** Adicionar `SourceType.AudioTranscription = 16`.
-- [ ] **T3 — Client:** Implementar `AssemblyAiClient.cs` com upload e polling assíncrono.
-- [ ] **T4 — Renderer:** Implementar `AudioTranscriptionRenderer.cs` para formatação Markdown.
-- [ ] **T5 — Connector Core:** Implementar `AudioTranscriptionConnector.cs`.
-- [ ] **T6 — UI & Tests:** Adicionar formulário no Blazor e testes unitários com mocks.
+- [x] **T1 — Discovery:** Analisar conectores de mídia e secret store.
+- [x] **T2 — Enum:** Adicionar `SourceType.AudioTranscription = 16`.
+- [x] **T3 — Client:** Implementar `AssemblyAiClient.cs` com upload e polling assíncrono.
+- [x] **T4 — Renderer:** Implementar `AudioTranscriptionRenderer.cs` para formatação Markdown.
+- [x] **T5 — Connector Core:** Implementar `AudioTranscriptionConnector.cs`.
+- [x] **T6 — UI & Tests:** Adicionar formulário no Blazor e testes unitários com mocks.
 
 ## 8. Organization Guardrails
 
@@ -152,6 +152,6 @@ Configuração no `KnowledgeSource`:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-003) implementados.
-- [ ] Testes unitários com mocks de API cobrindo happy path e edge cases de timeout.
-- [ ] Documentação e formulário Blazor atualizados.
+- [x] Todos os requisitos (RF-001 a RF-003) implementados.
+- [x] Testes unitários com mocks de API cobrindo happy path e edge cases de timeout.
+- [x] Documentação e formulário Blazor atualizados.

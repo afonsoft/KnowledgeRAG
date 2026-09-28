@@ -311,6 +311,53 @@
             <div class="form-text">Armazenado criptografado; nunca retornado pela API.</div>
         </div>
     }
+    @if (Model.Type is SourceType.AudioTranscription)
+    {
+        <div class="col-12 col-md-6">
+            <Select @bind-Value="Model.AudioProvider" Items="AudioProviderItems"
+                    DisplayText="Provedor de transcrição" ShowLabel="true" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.Language" DisplayText="Idioma (código ou auto)"
+                            ShowLabel="true" PlaceHolder="pt" />
+        </div>
+        <div class="col-12">
+            <BootstrapInput @bind-Value="Model.FolderPath" DisplayText="Pasta com áudios *"
+                            ShowLabel="true" PlaceHolder="/data/recordings" />
+            <div class="form-text">
+                Diretório local não recursivo. Aceita .mp3 .wav .m4a .mp4 .aac .flac .ogg .webm.
+            </div>
+        </div>
+        <div class="col-12">
+            <Textarea @bind-Value="Model.Files" DisplayText="Arquivos avulsos (um por linha, opcional)"
+                      ShowLabel="true" rows="2" PlaceHolder="/data/reuniao.mp3" />
+        </div>
+        @if (Model.AudioProvider == "whisper")
+        {
+            <div class="col-12 col-md-6">
+                <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="Endpoint whisper-compatible"
+                                ShowLabel="true" PlaceHolder="https://api.openai.com" />
+            </div>
+        }
+        <div class="col-12 col-md-3">
+            <BootstrapInputNumber @bind-Value="Model.TimeoutMinutes" DisplayText="Timeout por arquivo (min)"
+                                  ShowLabel="true" IsNullable="true" Min="1" Max="120" />
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+            <Switch @bind-Value="Model.EnableSpeakerDiarization" DisplayText="Diarização (speakers)" ShowLabel="true" />
+        </div>
+        <div class="col-12 col-md-4 d-flex align-items-end">
+            <Switch @bind-Value="Model.EnableAutoChapters" DisplayText="Capítulos automáticos" ShowLabel="true" />
+        </div>
+        <div class="col-12">
+            <label class="form-label">
+                API Key @(Model.HasStoredKey ? "(armazenada — em branco mantém)" : "(obrigatória p/ AssemblyAI)")
+            </label>
+            <BootstrapInput type="password" @bind-Value="Model.ApiKey"
+                            PlaceHolder="assemblyai / openai api key" />
+            <div class="form-text">Armazenada criptografada; nunca retornada pela API.</div>
+        </div>
+    }
     @if (Model.Type is SourceType.SqlDatabase)
     {
         <div class="col-12 col-md-6">
@@ -501,7 +548,8 @@
        chunking strategy for document-producing types. *@
     @if (Model.Type is SourceType.ObsidianVault or SourceType.DocumentFile or SourceType.WebPage
         or SourceType.Notion or SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage
-        or SourceType.GoogleDrive or SourceType.UnstructuredDocument or SourceType.GitRepository)
+        or SourceType.GoogleDrive or SourceType.UnstructuredDocument or SourceType.GitRepository
+        or SourceType.AudioTranscription)
     {
         <div class="col-12 col-md-6">
             <Select @bind-Value="Model.Chunking" Items="ChunkingItems" DisplayText="Estratégia de chunking"
@@ -610,6 +658,10 @@
                 when string.IsNullOrWhiteSpace(Model.RepoUrl)
                   && (string.IsNullOrWhiteSpace(Model.Owner) || string.IsNullOrWhiteSpace(Model.RepoName))
                 => "Informe a URL do repositório ou owner + nome",
+            SourceType.AudioTranscription
+                when string.IsNullOrWhiteSpace(Model.FolderPath)
+                  && string.IsNullOrWhiteSpace(Model.Files)
+                => "Informe uma pasta ou ao menos um arquivo de áudio",
             SourceType.AwsS3 or SourceType.OciStorage
                 when string.IsNullOrWhiteSpace(Model.BucketName)
                   || string.IsNullOrWhiteSpace(Model.Region)
@@ -646,7 +698,8 @@
          "urls", "language", "includeAutoCaptions", "includeTimestamps", "maxVideos",
          "folderPath", "files", "apiUrl", "strategy", "coordinates", "tableExtraction",
          "repoUrl", "owner", "name", "instanceUrl", "branch",
-         "includePatterns", "excludePatterns", "maxFileSizeBytes", "allowPrivateHosts"];
+         "includePatterns", "excludePatterns", "maxFileSizeBytes", "allowPrivateHosts",
+         "enableSpeakerDiarization", "enableAutoChapters", "timeoutMinutes"];
 
     private static readonly List<SelectedItem> TransportItems =
         [new("auto", "auto"), new("http", "http"), new("sse", "sse")];
@@ -663,6 +716,9 @@
 
     private static readonly List<SelectedItem> GitProviderItems =
         [new("github", "GitHub"), new("gitlab", "GitLab"), new("gitea", "Gitea")];
+
+    private static readonly List<SelectedItem> AudioProviderItems =
+        [new("assemblyai", "AssemblyAI"), new("whisper", "OpenAI Whisper")];
 
     /// <summary>
     /// Builds the JsonObject configuration payload: starts from the original
@@ -864,6 +920,31 @@
                     config["token"] = Model.GitToken;
                 config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.GitToken);
                 break;
+            case SourceType.AudioTranscription:
+                // SPEC-20260927-audio-transcription-connector.
+                config["provider"] = string.IsNullOrWhiteSpace(Model.AudioProvider)
+                    ? "assemblyai" : Model.AudioProvider;
+                if (!string.IsNullOrWhiteSpace(Model.FolderPath))
+                    config["folderPath"] = Model.FolderPath;
+                var audioFiles = ToJsonArray(Model.Files);
+                if (audioFiles.Count > 0)
+                    config["files"] = audioFiles;
+                if (!string.IsNullOrWhiteSpace(Model.Language))
+                    config["language"] = Model.Language;
+                if (Model.AudioProvider == "whisper" && !string.IsNullOrWhiteSpace(Model.Endpoint))
+                    config["endpoint"] = Model.Endpoint;
+                if (!Model.EnableSpeakerDiarization)
+                    config["enableSpeakerDiarization"] = false;
+                if (!Model.EnableAutoChapters)
+                    config["enableAutoChapters"] = false;
+                if (Model.TimeoutMinutes is not null)
+                    config["timeoutMinutes"] = Model.TimeoutMinutes;
+                // Empty keeps the stored key; non-empty replaces it (server
+                // moves the value to the encrypted store — never persisted).
+                if (!string.IsNullOrEmpty(Model.ApiKey))
+                    config["apiKey"] = Model.ApiKey;
+                config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.ApiKey);
+                break;
             case SourceType.GoogleDrive:
                 config["sharedUrl"] = Model.SharedUrl;
                 // Empty keeps the stored key; non-empty replaces it (server
@@ -978,6 +1059,10 @@
         public int? MaxFileSizeBytes { get; set; }
         public string? GitToken { get; set; }
         public bool AllowPrivateHosts { get; set; }
+        public string AudioProvider { get; set; } = "assemblyai";
+        public bool EnableSpeakerDiarization { get; set; } = true;
+        public bool EnableAutoChapters { get; set; } = true;
+        public int? TimeoutMinutes { get; set; }
 
         /// <summary>True when the source already has an API key in the
         /// encrypted store (McpProxy) — the value itself is never returned.</summary>
@@ -1062,6 +1147,14 @@
             MaxFileSizeBytes = dto.Configuration?["maxFileSizeBytes"] is JsonValue mfb
                 && mfb.TryGetValue<int>(out var mfbn) ? mfbn : null,
             AllowPrivateHosts = ReadBool(dto.Configuration, "allowPrivateHosts"),
+            AudioProvider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } ap
+                ? ap : "assemblyai",
+            EnableSpeakerDiarization = dto.Configuration?["enableSpeakerDiarization"] is JsonValue sd
+                && sd.TryGetValue<bool>(out var sdb) ? sdb : true,
+            EnableAutoChapters = dto.Configuration?["enableAutoChapters"] is JsonValue ac
+                && ac.TryGetValue<bool>(out var acb) ? acb : true,
+            TimeoutMinutes = dto.Configuration?["timeoutMinutes"] is JsonValue tm
+                && tm.TryGetValue<int>(out var tmn) ? tmn : null,
             FeedUrl = dto.Configuration?["feedUrl"]?.GetValue<string>(),
             MaxItems = dto.Configuration?["maxItems"] is JsonValue mi
                 && mi.TryGetValue<int>(out var min) ? min : null,
