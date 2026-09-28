@@ -18,6 +18,7 @@ public sealed class EvaluationWorker(
     ILogger<EvaluationWorker> logger) : BackgroundService
 {
     private const int QuestionCap = 1000;
+    private static readonly TimeSpan Retention = TimeSpan.FromDays(90);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -72,5 +73,28 @@ public sealed class EvaluationWorker(
             FlaggedAsHallucination = result.FlaggedAsHallucination
         });
         await db.SaveChangesAsync(ct);
+        await PruneAsync(db, ct);
+    }
+
+    // Stored questions may contain sensitive data — bound retention to 90 days.
+    // SQLite cannot translate DateTimeOffset comparisons, so the cutoff is
+    // applied in memory (same pattern as the api-key audit prune).
+    private static async Task PruneAsync(KnowledgeHubDbContext db, CancellationToken ct)
+    {
+        var cutoff = DateTimeOffset.UtcNow - Retention;
+        var stale = await db.RagEvaluations
+            .Select(e => new { e.Id, e.TimestampUtc })
+            .ToListAsync(ct);
+
+        var removeIds = stale
+            .Where(e => e.TimestampUtc < cutoff)
+            .Select(e => e.Id)
+            .ToList();
+        if (removeIds.Count == 0)
+            return;
+
+        await db.RagEvaluations
+            .Where(e => removeIds.Contains(e.Id))
+            .ExecuteDeleteAsync(ct);
     }
 }
