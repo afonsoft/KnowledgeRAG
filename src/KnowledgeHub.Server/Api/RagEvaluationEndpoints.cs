@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace KnowledgeHub.Server.Api;
 
@@ -31,14 +30,19 @@ public static class RagEvaluationEndpoints
 {
     public static IEndpointConventionBuilder MapRagEvaluationApi(this IEndpointRouteBuilder app)
     {
-        return app.MapGet("/api/v1/evaluation/stats", async (IServiceProvider sp, CancellationToken ct) =>
+        return app.MapGet("/api/v1/evaluation/stats", async (KnowledgeHubDbContext db, CancellationToken ct) =>
         {
-            await using var db = sp.GetRequiredService<KnowledgeHubDbContext>();
             var since = DateTimeOffset.UtcNow.AddDays(-7);
 
-            var rows = await db.RagEvaluations
+            // SQLite cannot translate DateTimeOffset comparisons — materialize and
+            // filter in memory (same pattern as the api-key audit prune). The table
+            // is bounded by the worker's retention prune, so the scan stays small.
+            // The DbContext is the shared scoped instance — ApiKeyUsageMiddleware
+            // writes the audit event on it after this handler returns, so it must
+            // NOT be disposed here.
+            var rows = (await db.RagEvaluations.AsNoTracking().ToListAsync(ct))
                 .Where(r => r.TimestampUtc >= since)
-                .ToListAsync(ct);
+                .ToList();
 
             var total = rows.Count;
             var stats = new RagEvaluationStats(

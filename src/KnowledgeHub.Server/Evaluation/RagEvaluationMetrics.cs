@@ -9,7 +9,10 @@ namespace KnowledgeHub.Server.Evaluation;
 /// </summary>
 public static class RagEvaluationMetrics
 {
-    private static readonly Meter Meter = new("KnowledgeHub.Server.RagEvaluation", "0.1.0");
+    /// <summary>Registered in WithMetrics so Prometheus/OTLP exporters see the gauges.</summary>
+    public const string MeterName = "KnowledgeHub.Server.RagEvaluation";
+
+    private static readonly Meter Meter = new(MeterName, "0.1.0");
 
     /// <summary>Share of retrieved context relevant to the query (0–1).</summary>
     public static readonly Gauge<double> ContextRelevance =
