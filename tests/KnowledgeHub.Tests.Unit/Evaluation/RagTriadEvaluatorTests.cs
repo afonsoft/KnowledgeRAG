@@ -36,6 +36,49 @@ public class RagTriadEvaluatorTests
     }
 
     [Fact]
+    public void CitedAnswer_MarkersStripped_NotFlagged()
+    {
+        // PR #367 follow-up: [n] markers are required by the synthesis prompt but
+        // must not be graded as invented numbers.
+        var chunks = new[]
+        {
+            "The admin default password is 'changeme' and expires after 90 days.",
+            "Passwords rotate automatically."
+        };
+        var answer = "The default password is 'changeme' [1]. It expires after 90 days [1].";
+
+        var r = Eval.Evaluate("What is the default admin password?", chunks, answer);
+
+        Assert.InRange(r.Groundedness, 0.90, 1.0);
+        Assert.False(r.FlaggedAsHallucination);
+    }
+
+    [Fact]
+    public void FalseClaim_SingleSharedWord_ScoresLow_Flagged()
+    {
+        // PR #367 follow-up: one overlapping token must not mark a whole
+        // invented clause as grounded.
+        var chunks = new[] { "The reactor core reached 500 degrees under nominal load." };
+        var answer = "The reactor meltdown destroyed everything nearby yesterday.";
+
+        var r = Eval.Evaluate("What happened to the reactor?", chunks, answer);
+
+        Assert.True(r.Groundedness < 0.60);
+        Assert.True(r.FlaggedAsHallucination);
+    }
+
+    [Fact]
+    public void NumericClause_RightNumberWrongClaim_ScoresLow_Flagged()
+    {
+        var chunks = new[] { "The server has 4 cores and was deployed in 2024." };
+        var answer = "Unicorns danced wildly in 2024.";
+
+        var r = Eval.Evaluate("When was it deployed?", chunks, answer);
+
+        Assert.True(r.FlaggedAsHallucination);
+    }
+
+    [Fact]
     public void EmptyContext_ZeroContextRelevance()
     {
         var r = Eval.Evaluate("Anything?", [], "No context was provided for this answer.");

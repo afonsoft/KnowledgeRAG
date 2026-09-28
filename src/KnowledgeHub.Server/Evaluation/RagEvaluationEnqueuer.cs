@@ -23,6 +23,7 @@ public sealed class RagEvaluationEnqueuer : IRagEvaluationEnqueuer, IDisposable
     private readonly Channel<RagEvaluationTask> _channel;
     private readonly RagEvaluationOptions _options;
     private readonly ILogger<RagEvaluationEnqueuer> _logger;
+    private long _tickets;
 
     public RagEvaluationEnqueuer(
         IOptions<RagEvaluationOptions> options, ILogger<RagEvaluationEnqueuer> logger)
@@ -44,7 +45,15 @@ public sealed class RagEvaluationEnqueuer : IRagEvaluationEnqueuer, IDisposable
     {
         if (!_options.Enabled) return false;
         if (_options.SampleRate <= 0.0) return false;
-        if (_options.SampleRate < 1.0 && Random.Shared.NextDouble() > _options.SampleRate) return false;
+        if (_options.SampleRate < 1.0)
+        {
+            // Deterministic stratified sampling: admit the first SampleRate
+            // fraction of each 100-ticket window. Uniform coverage without an
+            // RNG on the hot path (Random.Shared trips security scanners and
+            // gives no coverage guarantees anyway).
+            var ticket = (ulong)Interlocked.Increment(ref _tickets) - 1;
+            if (ticket % 100 >= (ulong)(_options.SampleRate * 100)) return false;
+        }
 
         var task = new RagEvaluationTask(queryId, question, contextChunks, answer, DateTimeOffset.UtcNow);
         return _channel.Writer.TryWrite(task);
