@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#279` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -127,17 +127,17 @@ Resposta MCP:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** uma pergunta que solicita uma regra de negócio e um dado em tempo real **when** `ask_knowledge` executa com `enableLiveActions = true` **then** os chunks estáticos são recuperados e a tool MCP é invocada para preencher o dado dinâmico.
-- [ ] **Given** `enableLiveActions = false` **when** a mesma pergunta é processada **then** o RAG responde apenas com base nos documentos estáticos sem executar nenhuma tool MCP externa.
-- [ ] **Given** uma execução com encadeamento de tools **when** o contador atinge `MaxChainedDynamicCalls = 3` **then** o loop encerra imediatamente e o modelo compõe a resposta final.
+- [x] **Given** uma pergunta que solicita uma regra de negócio e um dado em tempo real **when** `ask_knowledge` executa com `enableLiveActions = true` **then** os chunks estáticos são recuperados e a tool MCP é invocada para preencher o dado dinâmico.
+- [x] **Given** `enableLiveActions = false` **when** a mesma pergunta é processada **then** o RAG responde apenas com base nos documentos estáticos sem executar nenhuma tool MCP externa.
+- [x] **Given** uma execução com encadeamento de tools **when** o contador atinge `MaxChainedDynamicCalls = 3` **then** o loop encerra imediatamente e o modelo compõe a resposta final.
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Revisar `AskKnowledgeTool.cs` e `AgentChatService.cs`.
-- [ ] **T2 — Bridge Core:** Implementar `McpDynamicRagActionBridge.cs`.
-- [ ] **T3 — Annotation Detector:** Implementar `ToolActionAnnotationDetector.cs`.
-- [ ] **T4 — Citations:** Implementar `HybridCitationFormatter.cs`.
-- [ ] **T5 — Unit Tests:** Escrever testes de integração simulando consultas RAG com execução de tools mockadas.
+- [x] **T1 — Discovery:** Revisar `AskKnowledgeTool.cs` e `AgentChatService.cs`.
+- [x] **T2 — Bridge Core:** Implementar `McpDynamicRagActionBridge.cs`.
+- [x] **T3 — Annotation Detector:** Implementar `ToolActionAnnotationDetector.cs`.
+- [x] **T4 — Citations:** Implementar `HybridCitationFormatter.cs`.
+- [x] **T5 — Unit Tests:** Escrever testes de integração simulando consultas RAG com execução de tools mockadas.
 
 ## 8. Organization Guardrails
 
@@ -145,6 +145,6 @@ Resposta MCP:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-003) implementados.
-- [ ] Testes unitários com simulação de fluxo híbrido passando 100%.
-- [ ] Citações híbridas comprovadas em respostas do `AskKnowledgeTool`.
+- [x] Todos os requisitos (RF-001 a RF-003) implementados.
+- [x] Testes unitários com simulação de fluxo híbrido passando 100%.
+- [x] Citações híbridas comprovadas em respostas do `AskKnowledgeTool`.
