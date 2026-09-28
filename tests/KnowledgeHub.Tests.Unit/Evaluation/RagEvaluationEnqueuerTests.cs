@@ -41,4 +41,20 @@ public class RagEvaluationEnqueuerTests
         while (enq.Reader.TryRead(out _)) count++;
         Assert.Equal(50, count);
     }
+
+    [Fact]
+    public void PartialSampleRate_DeterministicStratified()
+    {
+        // PR #367 follow-up: stratified sampling admits exactly the configured
+        // fraction of each 100-ticket window — no RNG.
+        var enq = new RagEvaluationEnqueuer(
+            Options.Create(new RagEvaluationOptions { Enabled = true, SampleRate = 0.2 }), NullLogger<RagEvaluationEnqueuer>.Instance);
+
+        var admitted = 0;
+        for (var i = 0; i < 1000; i++)
+            if (enq.TryEnqueue("q", "q", ["c"], "a"))
+                admitted++;
+
+        Assert.Equal(200, admitted);
+    }
 }

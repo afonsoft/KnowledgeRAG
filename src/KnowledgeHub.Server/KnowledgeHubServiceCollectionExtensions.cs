@@ -645,6 +645,7 @@ public static class KnowledgeHubServiceCollectionExtensions
             var otel = services.AddOpenTelemetry()
                 .WithMetrics(m => m
                     .AddMeter(Telemetry.KnowledgeHubMetrics.MeterName)
+                    .AddMeter(Evaluation.RagEvaluationMetrics.MeterName)
                     .AddAspNetCoreInstrumentation())
                 .WithTracing(t => t
                     .AddSource(Telemetry.KnowledgeHubMetrics.MeterName)
