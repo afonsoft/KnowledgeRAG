@@ -397,6 +397,7 @@ app.MapToolsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimi
 app.MapSettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 app.MapApiKeySettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 app.MapEvalApi().RequireAuthorization(AuthPolicies.Operational);
+app.MapEvidenceApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 app.MapRagEvaluationApi().RequireAuthorization(AuthPolicies.Operational);
 app.MapSecurityApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 app.MapMcpInfoApi().RequireRateLimiting("general");

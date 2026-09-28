@@ -30,7 +30,8 @@ public sealed class AgentService(
     AgentOptions options,
     IMcpActivityFeed? feed,
     ILogger<AgentService> logger,
-    McpEngine.Agents.ChainAst.IChainCompactor? compactor = null) : IAgentService
+    McpEngine.Agents.ChainAst.IChainCompactor? compactor = null,
+    Audit.Evidence.IEvidenceChainService? evidence = null) : IAgentService
 {
     private const string SystemPrompt =
         "You are the KnowledgeHub agent. Use the available tools to research the " +
@@ -43,7 +44,7 @@ public sealed class AgentService(
     public async Task<AgentResponse> RunAsync(AgentRequest request, CancellationToken cancellationToken = default)
     {
         var prep = await PrepareAsync(request, cancellationToken);
-        var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken);
+        var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken, prep.Thread?.Id);
         var result = await RunLoopAsync(prep.Client, loop, cancellationToken);
         return await CompleteAsync(prep, request, result, cancellationToken);
     }
@@ -53,7 +54,7 @@ public sealed class AgentService(
         AgentRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var prep = await PrepareAsync(request, cancellationToken);
-        var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken);
+        var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken, prep.Thread?.Id);
 
         var channel = CreateEventChannel(options.SseChannelCapacity);
         var run = RunLoopAsync(prep.Client, loop, cancellationToken, channel.Writer);
@@ -203,7 +204,7 @@ public sealed class AgentService(
         var state = JsonSerializer.Deserialize<SuspendState>(approval.StateJson, JsonSerializerOptions.Web)
             ?? throw new InvalidOperationException("corrupt approval state");
 
-        var loop = await BuildLoopAsync(state.Request, RestoreMessages(state), cancellationToken);
+        var loop = await BuildLoopAsync(state.Request, RestoreMessages(state), cancellationToken, approval.ThreadId);
         loop.Steps.AddRange(state.Steps);
         loop.Iterations = state.Iterations;
         loop.ToolCalls = state.ToolCalls;
@@ -422,7 +423,8 @@ public sealed class AgentService(
             || options.RequireApprovalFor.Contains(tool.Name, StringComparer.OrdinalIgnoreCase));
 
     private async Task<LoopState> BuildLoopAsync(
-        AgentRequest request, List<ChatMessage> messages, CancellationToken ct)
+        AgentRequest request, List<ChatMessage> messages, CancellationToken ct,
+        Guid? threadId = null)
     {
         var maxIterations = request.MaxIterations is > 0
             ? Math.Min(request.MaxIterations.Value, options.MaxIterations)
@@ -459,7 +461,10 @@ public sealed class AgentService(
             ChatOptions = new ChatOptions { Tools = [.. functions] },
             ToolsByName = visible.ToDictionary(t => t.Name),
             MaxIterations = maxIterations,
-            Request = request
+            Request = request,
+            // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002:
+            // receipts for this run chain under one session id.
+            EvidenceSessionId = $"agent:{threadId?.ToString("N") ?? request.ThreadId?.ToString("N") ?? "ephemeral"}"
         };
     }
 
@@ -627,6 +632,17 @@ public sealed class AgentService(
                         result = Security.PromptBoundary.WrapToolResult(call.Name, textResult);
                     loop.Messages.Add(new ChatMessage(ChatRole.Tool,
                         [new FunctionResultContent(call.CallId, result)]));
+
+                    // SPEC-20260927-cryptographic-evidence-provenance-chain
+                    // RF-002: every executed tool call emits a chained
+                    // ToolExecuted receipt (best-effort, never breaks the loop).
+                    if (evidence is not null && loop.EvidenceSessionId is { } sess)
+                        loop.LastReceipt = await Audit.Evidence.EvidenceEmission.RecordToolAsync(
+                            evidence, logger, sess, apiKeyId: null,
+                            threadId: loop.Request.ThreadId?.ToString("N"),
+                            call.Name ?? "", call.CallId,
+                            Summarize(call.Arguments), result?.ToString(),
+                            loop.LastReceipt, cancellationToken);
                 }
             }
         }
@@ -793,6 +809,8 @@ public sealed class AgentService(
         public required Dictionary<string, CatalogTool> ToolsByName { get; init; }
         public required int MaxIterations { get; init; }
         public required AgentRequest Request { get; init; }
+        public string? EvidenceSessionId { get; init; }
+        public Domain.Entities.EvidenceReceipt? LastReceipt { get; set; }
         public List<AgentStep> Steps { get; } = [];
         public int Iterations { get; set; }
         public int ToolCalls { get; set; }

@@ -36,6 +36,9 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<McpTask> McpTasks => Set<McpTask>();
     /// <summary>SPEC-20260927-rag-evaluation-triad-metrics: persisted triad scores.</summary>
     public DbSet<RagEvaluationEntity> RagEvaluations => Set<RagEvaluationEntity>();
+    // SPEC-20260927-cryptographic-evidence-provenance-chain: append-only
+    // receipt log — no UPDATE/DELETE contract.
+    public DbSet<EvidenceReceipt> EvidenceReceipts => Set<EvidenceReceipt>();
 
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -286,6 +289,27 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.Property(r => r.Question).IsRequired().HasMaxLength(1000);
             e.HasIndex(r => r.TimestampUtc);
             e.HasIndex(r => r.FlaggedAsHallucination);
+        });
+
+        // SPEC-20260927-cryptographic-evidence-provenance-chain RF-001.
+        modelBuilder.Entity<EvidenceReceipt>(e =>
+        {
+            e.HasKey(r => r.ReceiptId);
+            e.Property(r => r.ReceiptId).HasMaxLength(80);
+            e.Property(r => r.SessionId).IsRequired().HasMaxLength(120);
+            e.Property(r => r.EventType).IsRequired().HasMaxLength(32);
+            e.Property(r => r.ActorType).IsRequired().HasMaxLength(16);
+            e.Property(r => r.InputHash).IsRequired().HasMaxLength(64);
+            e.Property(r => r.OutputHash).IsRequired().HasMaxLength(64);
+            e.Property(r => r.ParentDigest).HasMaxLength(64);
+            e.Property(r => r.ReceiptDigest).IsRequired().HasMaxLength(64);
+            e.Property(r => r.Signature).IsRequired().HasMaxLength(128);
+            e.Property(r => r.KeyId).IsRequired().HasMaxLength(40);
+            e.Property(r => r.ThreadId).HasMaxLength(80);
+            e.Property(r => r.ApiKeyId).HasMaxLength(80);
+            e.HasIndex(r => r.SessionId);
+            e.HasIndex(r => r.Timestamp);
+            e.HasIndex(r => r.ReceiptDigest);
         });
     }
 }

@@ -14,6 +14,9 @@ public static class AskEndpoints
             AskRequest request,
             CorrectiveRetrievalService retrieval,
             IAnswerService answers,
+            Audit.Evidence.IEvidenceChainService? evidence,
+            ILoggerFactory? loggerFactory,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Question))
@@ -56,11 +59,18 @@ public static class AskEndpoints
             if (!answers.IsConfigured)
                 return Results.BadRequest(new { error = "chat provider not configured (Chat:Provider=none)" });
 
-            return Results.Ok((await answers.AnswerAsync(request.Question, context, ct)) with
+            var answer = (await answers.AnswerAsync(request.Question, context, ct)) with
             {
                 RetrievalGrade = grade,
                 Retried = outcome.Retried
-            });
+            };
+            // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002.
+            var apiKeyId = http.User.FindFirst(Auth.ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
+            await Audit.Evidence.EvidenceEmission.RecordAskAsync(
+                evidence, loggerFactory?.CreateLogger("EvidenceEmission"),
+                $"rest:{apiKeyId ?? "session"}", apiKeyId,
+                request.Question, context, answer.Answer ?? "", ct);
+            return Results.Ok(answer);
         });
 
         return group;

@@ -1,0 +1,62 @@
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace KnowledgeHub.Server.Migrations.Postgres
+{
+    /// <inheritdoc />
+    public partial class AddEvidenceReceipts : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.CreateTable(
+                name: "EvidenceReceipts",
+                columns: table => new
+                {
+                    ReceiptId = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: false),
+                    ParentReceiptIds = table.Column<string>(type: "text", nullable: true),
+                    SessionId = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: false),
+                    ThreadId = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    ApiKeyId = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
+                    EventType = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    ActorType = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
+                    InputHash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    OutputHash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    ArtifactHashes = table.Column<string>(type: "text", nullable: true),
+                    Timestamp = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    ParentDigest = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    ReceiptDigest = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    Signature = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    KeyId = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_EvidenceReceipts", x => x.ReceiptId);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EvidenceReceipts_ReceiptDigest",
+                table: "EvidenceReceipts",
+                column: "ReceiptDigest");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EvidenceReceipts_SessionId",
+                table: "EvidenceReceipts",
+                column: "SessionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EvidenceReceipts_Timestamp",
+                table: "EvidenceReceipts",
+                column: "Timestamp");
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: "EvidenceReceipts");
+        }
+    }
+}
