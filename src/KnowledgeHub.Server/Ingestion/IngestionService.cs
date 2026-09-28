@@ -714,6 +714,15 @@ public sealed class IngestionService(
             if (result is null || (result.Entities.Count == 0 && result.Relations.Count == 0))
                 return batch.Count;
 
+            // SPEC-20260927-temporal-episodic-knowledge-graph RF-001: every
+            // extraction run that yields facts opens an episode — new nodes and
+            // all edges are attributed to it for episodic retrieval.
+            var episodes = graphScope.ServiceProvider.GetService<Graph.GraphEpisodeService>();
+            var episode = episodes is null
+                ? null
+                : await episodes.StartIngestionEpisodeAsync(
+                    source.Id, $"{doc.Title} ({doc.UriReference})", cancellationToken);
+
             // Entity resolution: normalized-name merge per RF-003.
             var nodes = new Dictionary<string, Domain.Entities.KgNode>(StringComparer.Ordinal);
             foreach (var e in result.Entities)
@@ -721,7 +730,8 @@ public sealed class IngestionService(
                 var norm = Graph.EntityResolver.Normalize(e.Name);
                 if (norm.Length == 0 || nodes.ContainsKey(norm))
                     continue;
-                nodes[norm] = await store.ResolveNodeAsync(e.Name, e.Type, source.Id, cancellationToken);
+                nodes[norm] = await store.ResolveNodeAsync(
+                    e.Name, e.Type, source.Id, cancellationToken, episode?.Id);
             }
 
             var edges = new List<Domain.Entities.KgEdge>();
@@ -742,7 +752,8 @@ public sealed class IngestionService(
                     EvidenceChunkId = evidence,
                     KnowledgeDocumentId = doc.Id,
                     KnowledgeSourceId = source.Id,
-                    PromptVersion = Graph.EntityExtractor.PromptVersion
+                    PromptVersion = Graph.EntityExtractor.PromptVersion,
+                    EpisodeId = episode?.Id
                 });
             }
             var added = await store.AddEdgesAsync(edges, cancellationToken);

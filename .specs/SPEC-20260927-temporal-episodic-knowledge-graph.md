@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#274` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -158,10 +158,10 @@ Resposta MCP:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** uma requisição para `search_graph_recent` com `window = "24h"` **when** executada **then** apenas nós observados nas últimas 24 horas são retornados.
-- [ ] **Given** strings de data variadas (`"2026-09-27T10:00:00"`, `"2026-09-27"`, `"2026-09-27T10:00:00Z"`) **when** processadas pelo `TemporalDateParser` **then** todas são convertidas corretamente para `DateTime` em UTC sem exceções.
-- [ ] **Given** uma busca com `diversityLevel = high` contendo 10 nós do mesmo label `Database` e 2 nós de `Security` **when** `SearchDiverseResultsAsync` é executado com limite 5 **then** o resultado distribui os nós entre os diferentes labels em vez de monopolizar com `Database`.
-- [ ] **Given** uma resposta de grafo de 25KB **when** formatada para retorno de tool MCP **then** o conteúdo é podado respeitando o limite seguro de bytes com aviso de truncamento.
+- [x] **Given** uma requisição para `search_graph_recent` com `window = "24h"` **when** executada **then** apenas nós observados nas últimas 24 horas são retornados.
+- [x] **Given** strings de data variadas (`"2026-09-27T10:00:00"`, `"2026-09-27"`, `"2026-09-27T10:00:00Z"`) **when** processadas pelo `TemporalDateParser` **then** todas são convertidas corretamente para `DateTime` em UTC sem exceções.
+- [x] **Given** uma busca com `diversityLevel = high` contendo 10 nós do mesmo label `Database` e 2 nós de `Security` **when** `SearchDiverseResultsAsync` é executado com limite 5 **then** o resultado distribui os nós entre os diferentes labels em vez de monopolizar com `Database`.
+- [x] **Given** uma resposta de grafo de 25KB **when** formatada para retorno de tool MCP **then** o conteúdo é podado respeitando o limite seguro de bytes com aviso de truncamento.
 
 **Edge cases:**
 
@@ -173,12 +173,12 @@ Resposta MCP:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Avaliar modelo de grafos atual em `KnowledgeHub.Server/Graph/`.
-- [ ] **T2 — Entities:** Adicionar colunas `ObservedAt`, `ValidTo`, `EpisodeId` às entidades de grafo e gerar migração EF Core.
-- [ ] **T3 — Date Parser:** Implementar `TemporalDateParser.cs` com testes para múltiplos formatos.
-- [ ] **T4 — Temporal Engine:** Implementar `TemporalGraphRetriever.cs` e `DiversityRanker.cs`.
-- [ ] **T5 — MCP Tools:** Implementar `TemporalGraphSearchTools.cs` integrando as novas operações ao catálogo MCP.
-- [ ] **T6 — Tests:** Escrever testes de integração e unitários cobrindo consultas de tempo, diversificação e truncamento.
+- [x] **T1 — Discovery:** Avaliar modelo de grafos atual em `KnowledgeHub.Server/Graph/`.
+- [x] **T2 — Entities:** Adicionar colunas `ObservedAt`, `ValidTo`, `EpisodeId` às entidades de grafo e gerar migração EF Core.
+- [x] **T3 — Date Parser:** Implementar `TemporalDateParser.cs` com testes para múltiplos formatos.
+- [x] **T4 — Temporal Engine:** Implementar `TemporalGraphRetriever.cs` e `DiversityRanker.cs`.
+- [x] **T5 — MCP Tools:** Implementar `TemporalGraphSearchTools.cs` integrando as novas operações ao catálogo MCP.
+- [x] **T6 — Tests:** Escrever testes de integração e unitários cobrindo consultas de tempo, diversificação e truncamento.
 
 ## 8. Organization Guardrails
 
@@ -187,6 +187,6 @@ Resposta MCP:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-005) implementados.
-- [ ] Testes unitários com 100% dos cenários temporais passando.
-- [ ] Novas ferramentas MCP registradas e documentadas no catálogo dinâmico.
+- [x] Todos os requisitos (RF-001 a RF-005) implementados.
+- [x] Testes unitários com 100% dos cenários temporais passando.
+- [x] Novas ferramentas MCP registradas e documentadas no catálogo dinâmico.

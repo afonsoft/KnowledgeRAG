@@ -7,6 +7,7 @@ using KnowledgeHub.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 
@@ -58,7 +59,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "limitMode":{"type":"string","enum":["fixed","autocut"],"description":"Result limit: fixed=topK, autocut=prunes the long tail at the score elbow (default: server config)"},
           "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"},
           "subQueries":{"type":"array","items":{"type":"string"},"description":"Extra query variants searched in parallel and fused via RRF (max 4) — for multi-faceted questions"},
-          "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"}
+          "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"},
+          "enableLiveActions":{"type":"boolean","description":"Action-Augmented RAG: execute live MCP tools nominated by retrieved chunks (mcp-tool markers) or the question itself, then fuse outputs with document citations (default: server config)"}
         },"required":["question"],
         "examples":[{"question":"How does synchronization work?","topK":5,"generate":true}]}
         """)!.AsObject();
@@ -136,6 +138,18 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     // surface the applied limit mode + final count so agents can
                     // tell a pruned (autocut) answer set from a full topK.
                     var limitCfg = ctx.Services!.GetRequiredService<IConfiguration>();
+                    // SPEC-20260927-mcp-dynamic-rag-action-bridge: markers in
+                    // retrieved chunks surface as suggested live actions —
+                    // inside agent_chat the model can invoke them next turn.
+                    var bridgeOptions = ctx.Services!
+                        .GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
+                    var suggested = bridgeOptions.EnableDynamicActionBridge
+                        ? Bridge.ToolActionAnnotationDetector.Detect(
+                            query, outcome.Results,
+                            await ctx.Services!.GetRequiredService<IDynamicToolCatalog>()
+                                .GetToolsAsync(ctx.Services!, ct),
+                            Math.Clamp(bridgeOptions.MaxChainedDynamicCalls, 0, 3))
+                        : [];
                     return await ToolResults.Structured(
                         grade + FormatHits(outcome.Results),
                         new
@@ -150,7 +164,13 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                             filterRelaxed = outcome.Results.Any(r => r.IsRelaxed),
                             originalFilter = Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
                             appliedFilter = outcome.Results.FirstOrDefault(r => r.IsRelaxed)?.RelaxedScope
-                                ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter)
+                                ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
+                            suggestedActions = suggested.Count == 0 ? null : suggested.Select(a => new
+                            {
+                                tool = a.ToolName,
+                                args = a.Args.Count == 0 ? null : a.Args,
+                                origin = a.Origin.ToString().ToLowerInvariant()
+                            })
                         });
                 }
             },
@@ -256,12 +276,33 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         var outcome = await retrieval.RetrieveAsync(question, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
         var results = outcome.Results;
 
+        // SPEC-20260927-mcp-dynamic-rag-action-bridge RF-001/RF-003: execute
+        // live MCP tools nominated by retrieved chunks (mcp-tool markers) or by
+        // the question itself — inside the caller's scope (catalog is already
+        // scope-filtered) — then fuse outputs as clearly-labelled live context.
+        var agentOptions = ctx.Services!.GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
+        var enableLiveActions = ToolArgs.OptionalBool(ctx, "enableLiveActions")
+            ?? agentOptions.EnableDynamicActionBridge;
+        IReadOnlyList<LiveToolExecution> liveExecutions = [];
+        if (enableLiveActions)
+        {
+            var catalog = ctx.Services!.GetRequiredService<IDynamicToolCatalog>();
+            var visible = await catalog.GetToolsAsync(ctx.Services!, ct);
+            liveExecutions = await Bridge.McpDynamicRagActionBridge.ExecuteAsync(
+                question, results, visible, ctx,
+                Math.Clamp(agentOptions.MaxChainedDynamicCalls, 0, 3), ct);
+            var liveContext = Bridge.HybridCitationFormatter.AsContextItems(liveExecutions);
+            if (liveContext.Count > 0)
+                results = [.. results, .. liveContext];
+        }
+        var liveCitationBlock = Bridge.HybridCitationFormatter.FormatLiveCitations(liveExecutions);
+
         var answers = ctx.Services!.GetRequiredService<IAnswerService>();
         var generate = ToolArgs.OptionalBool(ctx, "generate") ?? answers.IsConfigured;
 
         // SPEC-20260927-multiquery RF-003: when every piece of evidence came from
         // a relaxed scope, the response must say so — never relax silently.
-        var relaxedWarning = results.Count > 0 && results.All(r => r.IsRelaxed)
+        var relaxedWarning = outcome.Results.Count > 0 && outcome.Results.All(r => r.IsRelaxed)
             ? "\n\n(evidence found outside the strict requested scope)"
             : null;
 
@@ -271,11 +312,16 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             return await ToolResults.Structured(
                 retrieval.BuildAbstention(question, outcome).Answer
                 + (results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(results.Take(3).ToList()) : "")
-                + relaxedWarning,
-                retrieval.BuildAbstention(question, outcome));
+                + relaxedWarning
+                + liveCitationBlock,
+                retrieval.BuildAbstention(question, outcome) with
+                {
+                    LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions
+                });
 
         if (!generate)
-            return await ToolResults.Text(FormatAnswerContext(question, results) + relaxedWarning);
+            return await ToolResults.Text(
+                FormatAnswerContext(question, results) + relaxedWarning + liveCitationBlock);
 
         if (!answers.IsConfigured)
         {
@@ -292,7 +338,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                 RetrievalGrade = retrieval.GradingEnabled
                     ? outcome.Grading.Grade.ToString().ToLowerInvariant()
                     : null,
-                Retried = outcome.Retried
+                Retried = outcome.Retried,
+                LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions
             };
             // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002:
             // QuerySubmitted → ChunksRetrieved → AnswerSynthesized receipts,
@@ -319,6 +366,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                         text.Append(" [components: ").Append(string.Join(", ", comps)).Append(']');
                 }
             }
+            text.Append(liveCitationBlock);
             return await ToolResults.Structured(text.ToString(), answer);
         }
         catch (Chat.ChatProviderException ex)

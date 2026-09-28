@@ -15,4 +15,20 @@ public sealed class KgNode
     /// <summary>Small ontology type: service|database|api|person|team|concept.</summary>
     public required string Type { get; set; }
     public DateTimeOffset FirstSeenAt { get; set; } = DateTimeOffset.UtcNow;
+
+    // SPEC-20260927-temporal-episodic-knowledge-graph RF-001: every observation
+    // bumps ObservedAt; ValidFrom/ValidTo delimit the interval in which the
+    // entity is considered current (soft historicization — never deleted).
+    /// <summary>Last time this entity was observed by extraction/traversal writes (UTC).</summary>
+    public DateTime ObservedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Start of the validity window — defaults to first observation (UTC).</summary>
+    public DateTime ValidFrom { get; set; } = DateTime.UtcNow;
+    /// <summary>End of validity — non-null means the entity was superseded (UTC).</summary>
+    public DateTime? ValidTo { get; set; }
+    /// <summary>Episode (ingestion run / agent session) that first observed it.</summary>
+    public Guid? EpisodeId { get; set; }
+    /// <summary>Semantic labels for diversity clustering (JSON primitive collection).</summary>
+    public List<string> Labels { get; set; } = [];
+
+    public KgEpisode? Episode { get; set; }
 }
