@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#273` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -144,10 +144,10 @@ Resposta MCP:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** uma busca executada com `subQueries` contendo 3 termos distintos **when** `MultiQuerySearchService` executa **then** 3 tarefas paralelas de busca são despachadas e os resultados são consolidados sem chunks duplicados.
-- [ ] **Given** uma busca com `sourceId = 42` que não possui chunks indexados sobre o tema **when** `allowRelaxation = true` **then** o motor busca na base global e retorna chunks de outras fontes marcados com `isRelaxed = true`.
-- [ ] **Given** uma busca com `sourceId = 42` que não possui chunks indexados **when** `allowRelaxation = false` **then** o motor retorna 0 resultados respeitando estritamente o filtro do usuário.
-- [ ] **Given** chunks retornados tanto no nível estrito quanto no nível relaxado **when** o ranking RRF é computado **then** os chunks do filtro estrito recebem pontuação maior devido à penalidade de relaxamento nos chunks fallback.
+- [x] **Given** uma busca executada com `subQueries` contendo 3 termos distintos **when** `MultiQuerySearchService` executa **then** 3 tarefas paralelas de busca são despachadas e os resultados são consolidados sem chunks duplicados.
+- [x] **Given** uma busca com `sourceId = 42` que não possui chunks indexados sobre o tema **when** `allowRelaxation = true` **then** o motor busca na base global e retorna chunks de outras fontes marcados com `isRelaxed = true`.
+- [x] **Given** uma busca com `sourceId = 42` que não possui chunks indexados **when** `allowRelaxation = false` **then** o motor retorna 0 resultados respeitando estritamente o filtro do usuário.
+- [x] **Given** chunks retornados tanto no nível estrito quanto no nível relaxado **when** o ranking RRF é computado **then** os chunks do filtro estrito recebem pontuação maior devido à penalidade de relaxamento nos chunks fallback.
 
 **Edge cases:**
 
@@ -159,11 +159,11 @@ Resposta MCP:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Analisar `HybridRetriever.cs`, `RrfRanker.cs` e estruturas de query atuais.
-- [ ] **T2 — Hierarchical Resolver:** Criar `HierarchicalFilterResolver.cs` implementando os 4 níveis de escopo e fator de penalização.
-- [ ] **T3 — Multi-Query Engine:** Implementar `MultiQuerySearchService.cs` com paralelismo seguro e fusão RRF.
-- [ ] **T4 — Tool Update:** Atualizar `SearchKnowledgeTool` e `AskKnowledgeTool` com os novos parâmetros e metadados de relaxamento.
-- [ ] **T5 — Tests & Verification:** Escrever testes unitários para cenários de fallback, deduplicação RRF e tolerância a falhas parciais.
+- [x] **T1 — Discovery:** Analisar `HybridRetriever.cs`, `RrfRanker.cs` e estruturas de query atuais.
+- [x] **T2 — Hierarchical Resolver:** Criar `HierarchicalFilterResolver.cs` implementando os 4 níveis de escopo e fator de penalização.
+- [x] **T3 — Multi-Query Engine:** Implementar `MultiQuerySearchService.cs` com paralelismo seguro e fusão RRF.
+- [x] **T4 — Tool Update:** Atualizar `SearchKnowledgeTool` e `AskKnowledgeTool` com os novos parâmetros e metadados de relaxamento.
+- [x] **T5 — Tests & Verification:** Escrever testes unitários para cenários de fallback, deduplicação RRF e tolerância a falhas parciais.
 
 ## 8. Organization Guardrails
 
@@ -172,6 +172,6 @@ Resposta MCP:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-003) implementados.
-- [ ] Testes unitários com 100% dos cenários de aceitação passando.
-- [ ] Ferramentas MCP atualizadas sem quebrar retrocompatibilidade com chamadas simples de `query`.
+- [x] Todos os requisitos (RF-001 a RF-003) implementados.
+- [x] Testes unitários com 100% dos cenários de aceitação passando.
+- [x] Ferramentas MCP atualizadas sem quebrar retrocompatibilidade com chamadas simples de `query`.

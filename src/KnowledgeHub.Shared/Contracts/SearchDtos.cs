@@ -61,6 +61,13 @@ public sealed record SearchFilter
     /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut RF-004: autocut
     /// elbow sensitivity (1–3; cut at the N-th abrupt score drop).</summary>
     public int? AutocutSensitivity { get; init; }
+    /// <summary>SPEC-20260927-hierarchical-filter-relaxation-and-multiquery RF-001:
+    /// caller-supplied sub-queries — each runs as an extra retrieval arm fused via
+    /// RRF (max 4; blank entries are dropped).</summary>
+    public IReadOnlyList<string>? SubQueries { get; init; }
+    /// <summary>SPEC-20260927-hierarchical-filter-relaxation-and-multiquery RF-002:
+    /// per-call opt-out of the hierarchical scope fallback (default: server config).</summary>
+    public bool? AllowRelaxation { get; init; }
 }
 
 /// <summary>One ranked chunk hit from semantic search (SPEC-02 RF-004).</summary>
@@ -113,6 +120,12 @@ public sealed record SearchResultItem
     public IReadOnlyList<int>? ExpandedChunkIndices { get; init; }
     /// <summary>True when surrounding context was stitched in (window retrieval).</summary>
     public bool WindowExpanded => Context is not null;
+    /// <summary>SPEC-20260927-hierarchical-filter-relaxation-and-multiquery RF-002:
+    /// the hit came from a relaxed scope, not the strict filter requested.</summary>
+    public bool IsRelaxed { get; init; }
+    /// <summary>Effective scope that surfaced a relaxed hit — e.g.
+    /// <c>sourceType=DocumentFile</c> or <c>global</c>. Null for strict hits.</summary>
+    public string? RelaxedScope { get; init; }
 }
 
 public sealed record SearchResponse
@@ -124,6 +137,14 @@ public sealed record SearchResponse
     /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut: the limit mode
     /// applied to this result set (fixed | autocut).</summary>
     public string? LimitModeApplied { get; init; }
+    /// <summary>SPEC-20260927-hierarchical-filter-relaxation-and-multiquery RF-003:
+    /// true when any hit came from a relaxed scope.</summary>
+    public bool? FilterRelaxed { get; init; }
+    /// <summary>The scope the caller originally requested (e.g. <c>sourceId=…</c>).</summary>
+    public string? OriginalFilter { get; init; }
+    /// <summary>The effective scope that produced relaxed hits
+    /// (e.g. <c>sourceType=…</c> or <c>global</c>).</summary>
+    public string? AppliedFilter { get; init; }
 }
 
 /// <summary>POST /api/search body (SPEC-20260923-retrieval-quality §5).</summary>

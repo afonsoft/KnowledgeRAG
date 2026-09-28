@@ -308,6 +308,9 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.Property<Guid>("KnowledgeDocumentId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("SectionPath")
                         .HasColumnType("text");
 

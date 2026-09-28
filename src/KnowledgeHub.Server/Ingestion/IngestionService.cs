@@ -175,7 +175,7 @@ public sealed class IngestionService(
                         relative,
                         note.Body,
                         maxTokens, overlapTokens,
-                        embeddings, configuration, chunkStrategy, logger, cancellationToken);
+                        embeddings, configuration, chunkStrategy, logger, cancellationToken, scope.ServiceProvider);
 
                     // RF-201: delete + replace inside a transaction — same
                     // zero-chunks-on-failure fix as the remote path.
@@ -219,6 +219,7 @@ public sealed class IngestionService(
                                 ChunkKind = kind.ToString().ToLowerInvariant(),
                                 SymbolPath = piece.SymbolPath,
                                 SectionPath = piece.SectionPath,
+                                MetadataJson = piece.MetadataJson,
                                 EnrichedText = EnrichPiece(source.Name, note.Title, piece)
                             }).ToList();
                             db.Chunks.AddRange(newChunks);
@@ -447,7 +448,7 @@ public sealed class IngestionService(
                             raw.UriReference,
                             text,
                             maxTokens, overlapTokens,
-                            embeddings, configuration, chunkStrategy, logger, cancellationToken);
+                            embeddings, configuration, chunkStrategy, logger, cancellationToken, scope.ServiceProvider);
                         newChunks = pieces
                             .Select((piece, i) => new DocumentChunk
                             {
@@ -457,6 +458,7 @@ public sealed class IngestionService(
                                 ChunkKind = kind.ToString().ToLowerInvariant(),
                                 SymbolPath = piece.SymbolPath,
                                 SectionPath = piece.SectionPath,
+                                MetadataJson = piece.MetadataJson,
                                 EnrichedText = EnrichPiece(source.Name, raw.Title, piece)
                             }).ToList();
                         db.Chunks.AddRange(newChunks);
@@ -892,7 +894,7 @@ public sealed class IngestionService(
                 chunkOverlapTokens,
                 embeddings, configuration,
                 Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson),
-                logger, cancellationToken);
+                logger, cancellationToken, scope.ServiceProvider);
 
             if (doc is null)
             {
@@ -920,6 +922,7 @@ public sealed class IngestionService(
                 ChunkKind = kind.ToString().ToLowerInvariant(),
                 SymbolPath = piece.SymbolPath,
                 SectionPath = piece.SectionPath,
+                MetadataJson = piece.MetadataJson,
                 EnrichedText = EnrichPiece(source.Name, title, piece)
             }).ToList();
             db.Chunks.AddRange(newChunks);

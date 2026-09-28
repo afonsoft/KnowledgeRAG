@@ -18,7 +18,9 @@ public sealed record ResolvedSearchFilter(
     bool? UseGraph = null,
     int? WindowSize = null,
     string? LimitMode = null,
-    int? AutocutSensitivity = null)
+    int? AutocutSensitivity = null,
+    IReadOnlyList<string>? SubQueries = null,
+    bool? AllowRelaxation = null)
 {
     public bool IsEmpty =>
         SourceType is null && PathPrefix is null && IndexedAfter is null && Language is null;
@@ -37,7 +39,9 @@ public sealed record ResolvedSearchFilter(
         + (UseGraph is null ? "" : $"|graph:{(UseGraph.Value ? 1 : 0)}")
         + (WindowSize is null ? "" : $"|win:{WindowSize}")
         + (LimitMode is null ? "" : $"|lim:{LimitMode}")
-        + (AutocutSensitivity is null ? "" : $"|acs:{AutocutSensitivity}");
+        + (AutocutSensitivity is null ? "" : $"|acs:{AutocutSensitivity}")
+        + (SubQueries is { Count: > 0 } sq ? $"|sub:{string.Join('|', sq)}" : "")
+        + (AllowRelaxation is null ? "" : $"|relax:{(AllowRelaxation.Value ? 1 : 0)}");
 
     public static bool TryResolve(
         SearchFilter? filter, out ResolvedSearchFilter resolved, out string? error)
@@ -117,6 +121,14 @@ public sealed record ResolvedSearchFilter(
             return false;
         }
 
+        // SPEC-20260927-multiquery: caller-supplied sub-queries — blank entries
+        // dropped, capped at 4 arms (guardrail: bounded fan-out per call).
+        var subQueries = filter.SubQueries?
+            .Where(q => !string.IsNullOrWhiteSpace(q))
+            .Select(q => q.Trim())
+            .Take(4)
+            .ToList();
+
         resolved = new ResolvedSearchFilter(
             sourceType,
             string.IsNullOrWhiteSpace(filter.PathPrefix) ? null : filter.PathPrefix,
@@ -127,7 +139,20 @@ public sealed record ResolvedSearchFilter(
             filter.UseGraph,
             filter.WindowSize,
             limitMode,
-            filter.AutocutSensitivity);
+            filter.AutocutSensitivity,
+            subQueries is { Count: > 0 } ? subQueries : null,
+            filter.AllowRelaxation);
         return true;
+    }
+
+    /// <summary>Human-readable scope descriptor for envelope metadata
+    /// (originalFilter/appliedFilter) — no PII beyond caller-supplied params.</summary>
+    public static string DescribeScope(Guid? sourceId, ResolvedSearchFilter? filter)
+    {
+        var parts = new List<string>();
+        if (sourceId is { } sid) parts.Add($"sourceId={sid:N}");
+        if (filter?.SourceType is { } st) parts.Add($"sourceType={st}");
+        if (filter?.PathPrefix is { } pp) parts.Add($"pathPrefix={pp}");
+        return parts.Count > 0 ? string.Join(",", parts) : "global";
     }
 }

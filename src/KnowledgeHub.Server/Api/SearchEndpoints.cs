@@ -18,6 +18,7 @@ public static class SearchEndpoints
             ISearchService svc, IConfiguration config, string? query, int? topK, Guid? sourceId,
             string? mode, string? sourceType, string? pathPrefix, string? indexedAfter,
             string? language, int? windowSize, string? limitMode, int? autocutSensitivity,
+            string[]? subQueries, bool? allowRelaxation,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(query))
@@ -38,18 +39,15 @@ public static class SearchEndpoints
                         Language = language,
                         WindowSize = windowSize,
                         LimitMode = limitMode,
-                        AutocutSensitivity = autocutSensitivity
+                        AutocutSensitivity = autocutSensitivity,
+                        SubQueries = subQueries,
+                        AllowRelaxation = allowRelaxation
                     }, out var filter, out var error))
                 return Results.BadRequest(new { error });
 
             var k = topK is null or <= 0 ? DefaultTopK : Math.Min(topK.Value, MaxTopK);
             var results = await svc.SearchAsync(query, k, sourceId, searchMode.Value, filter, ct: ct);
-            return Results.Ok(new SearchResponse
-            {
-                Results = results,
-                TotalMatches = results.Count,
-                LimitModeApplied = filter.EffectiveLimitMode(config)
-            });
+            return Results.Ok(Enrich(results, filter, sourceId, config));
         });
 
         // SPEC-20260923-retrieval-quality §5: POST variant accepting a filters object.
@@ -68,16 +66,26 @@ public static class SearchEndpoints
 
             var k = request.TopK is null or <= 0 ? DefaultTopK : Math.Min(request.TopK.Value, MaxTopK);
             var results = await svc.SearchAsync(request.Query, k, request.SourceId, searchMode.Value, filter, ct: ct);
-            return Results.Ok(new SearchResponse
-            {
-                Results = results,
-                TotalMatches = results.Count,
-                LimitModeApplied = filter.EffectiveLimitMode(config)
-            });
+            return Results.Ok(Enrich(results, filter, request.SourceId, config));
         });
 
         return group;
     }
+
+    /// <summary>Envelope metadata: limit mode + relaxation provenance
+    /// (SPEC-20260927 RF-003 — never relax silently).</summary>
+    private static SearchResponse Enrich(
+        IReadOnlyList<SearchResultItem> results, Search.ResolvedSearchFilter filter,
+        Guid? sourceId, IConfiguration config) => new()
+        {
+            Results = results,
+            TotalMatches = results.Count,
+            LimitModeApplied = filter.EffectiveLimitMode(config),
+            FilterRelaxed = results.Any(r => r.IsRelaxed),
+            OriginalFilter = Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
+            AppliedFilter = results.FirstOrDefault(r => r.IsRelaxed)?.RelaxedScope
+                ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter)
+        };
 
     internal static SearchMode? ParseMode(string? mode) => mode switch
     {
