@@ -15,7 +15,8 @@ public sealed class SqliteKnowledgeGraphStore(
     ILogger<SqliteKnowledgeGraphStore> logger) : IKnowledgeGraphStore
 {
     /// <inheritdoc />
-    public async Task<KgNode> ResolveNodeAsync(string name, string? type, Guid sourceId, CancellationToken ct)
+    public async Task<KgNode> ResolveNodeAsync(
+        string name, string? type, Guid sourceId, CancellationToken ct, Guid? episodeId = null)
     {
         var normalized = EntityResolver.Normalize(name);
         var nodeType = EntityResolver.NormalizeType(type);
@@ -26,7 +27,13 @@ public sealed class SqliteKnowledgeGraphStore(
             .FirstOrDefaultAsync(n => n.NormalizedName == normalized && n.Type == nodeType, ct);
         if (node is null)
         {
-            node = new KgNode { Name = name.Trim(), NormalizedName = normalized, Type = nodeType };
+            node = new KgNode
+            {
+                Name = name.Trim(),
+                NormalizedName = normalized,
+                Type = nodeType,
+                EpisodeId = episodeId
+            };
             db.KgNodes.Add(node);
             // Conflict visibility: another node already holds this normalized
             // name under a different type — both get conflict alias rows.
@@ -64,17 +71,23 @@ public sealed class SqliteKnowledgeGraphStore(
                     });
             }
         }
-        else if (node.Name != name.Trim()
-            && !await AliasExistsOrPendingAsync(normalized, node.Id, ct))
+        else
         {
-            // Variant spelling merged into the canonical node — recorded.
-            db.KgAliases.Add(new KgAlias
+            // SPEC-20260927-temporal-episodic-knowledge-graph RF-001: every
+            // re-observation moves the temporal cursor.
+            node.ObservedAt = DateTime.UtcNow;
+            if (node.Name != name.Trim()
+                && !await AliasExistsOrPendingAsync(normalized, node.Id, ct))
             {
-                AliasNormalized = normalized,
-                KgNodeId = node.Id,
-                KnowledgeSourceId = sourceId,
-                Reason = "merge"
-            });
+                // Variant spelling merged into the canonical node — recorded.
+                db.KgAliases.Add(new KgAlias
+                {
+                    AliasNormalized = normalized,
+                    KgNodeId = node.Id,
+                    KnowledgeSourceId = sourceId,
+                    Reason = "merge"
+                });
+            }
         }
         await db.SaveChangesAsync(ct);
         return node;
@@ -99,7 +112,7 @@ public sealed class SqliteKnowledgeGraphStore(
     {
         var normalized = EntityResolver.Normalize(name);
         var node = await db.KgNodes
-            .Where(n => n.NormalizedName == normalized)
+            .Where(n => n.NormalizedName == normalized && n.ValidTo == null)
             .OrderBy(n => n.Type)
             .FirstOrDefaultAsync(ct);
         if (node is not null)
@@ -110,7 +123,7 @@ public sealed class SqliteKnowledgeGraphStore(
             .FirstOrDefaultAsync(ct);
         return alias == default
             ? null
-            : await db.KgNodes.FirstOrDefaultAsync(n => n.Id == alias, ct);
+            : await db.KgNodes.FirstOrDefaultAsync(n => n.Id == alias && n.ValidTo == null, ct);
     }
 
     /// <inheritdoc />
@@ -121,12 +134,12 @@ public sealed class SqliteKnowledgeGraphStore(
             return [];
         // Prefix first, then contains — bounded by max.
         var prefix = await db.KgNodes
-            .Where(n => n.NormalizedName.StartsWith(normalized))
+            .Where(n => n.ValidTo == null && n.NormalizedName.StartsWith(normalized))
             .OrderBy(n => n.NormalizedName).Take(max).ToListAsync(ct);
         if (prefix.Count >= max)
             return prefix;
         var rest = await db.KgNodes
-            .Where(n => n.NormalizedName.Contains(normalized)
+            .Where(n => n.ValidTo == null && n.NormalizedName.Contains(normalized)
                 && !prefix.Select(p => p.Id).Contains(n.Id))
             .OrderBy(n => n.NormalizedName).Take(max - prefix.Count).ToListAsync(ct);
         return [.. prefix, .. rest];
@@ -138,19 +151,53 @@ public sealed class SqliteKnowledgeGraphStore(
         var batch = edges.ToList();
         if (batch.Count == 0)
             return 0;
+        var now = DateTime.UtcNow;
         var added = 0;
         foreach (var edge in batch)
         {
             if (edge.EvidenceChunkId == Guid.Empty)
                 continue; // provenance is non-negotiable
-            var exists = await db.KgEdges.AnyAsync(x =>
+
+            // Re-observation of the identical fact: bump ObservedAt only.
+            var existing = await db.KgEdges.FirstOrDefaultAsync(x =>
                 x.FromNodeId == edge.FromNodeId && x.ToNodeId == edge.ToNodeId
                 && x.Kind == edge.Kind && x.EvidenceChunkId == edge.EvidenceChunkId, ct);
-            if (!exists)
+            var pendingSame = existing is null
+                ? db.ChangeTracker.Entries<KgEdge>()
+                    .FirstOrDefault(x => x.State == EntityState.Added
+                        && x.Entity.ValidTo == null
+                        && x.Entity.FromNodeId == edge.FromNodeId
+                        && x.Entity.ToNodeId == edge.ToNodeId
+                        && x.Entity.Kind == edge.Kind
+                        && x.Entity.EvidenceChunkId == edge.EvidenceChunkId)?.Entity
+                : null;
+            if (existing is not null || pendingSame is not null)
             {
-                db.KgEdges.Add(edge);
-                added++;
+                (existing ?? pendingSame)!.ObservedAt = now;
+                continue;
             }
+
+            // Same relation learned from fresher evidence → soft-historicize
+            // the still-valid prior rows (ValidTo instead of delete).
+            var superseded = await db.KgEdges
+                .Where(x => x.FromNodeId == edge.FromNodeId && x.ToNodeId == edge.ToNodeId
+                    && x.Kind == edge.Kind && x.ValidTo == null)
+                .ToListAsync(ct);
+            foreach (var stale in superseded)
+                stale.ValidTo = now;
+            // Also catch identical triples still pending in the change tracker.
+            foreach (var pending in db.ChangeTracker.Entries<KgEdge>()
+                         .Where(x => x.State == EntityState.Added
+                             && x.Entity.FromNodeId == edge.FromNodeId
+                             && x.Entity.ToNodeId == edge.ToNodeId
+                             && x.Entity.Kind == edge.Kind
+                             && x.Entity.ValidTo == null))
+                pending.Entity.ValidTo = now;
+
+            edge.ObservedAt = now;
+            edge.ValidFrom = now;
+            db.KgEdges.Add(edge);
+            added++;
         }
         await db.SaveChangesAsync(ct);
         return added;
@@ -170,9 +217,9 @@ public sealed class SqliteKnowledgeGraphStore(
         {
             var batch = await db.KgEdges
                 .Include(e => e.From).Include(e => e.To).Include(e => e.Document)
-                .Where(e => direction == GraphDirection.Outbound
+                .Where(e => e.ValidTo == null && (direction == GraphDirection.Outbound
                     ? frontier.Contains(e.FromNodeId)
-                    : frontier.Contains(e.ToNodeId))
+                    : frontier.Contains(e.ToNodeId)))
                 .Take(maxEdges - edges.Count + 1)
                 .ToListAsync(ct);
             if (batch.Count == 0)
@@ -213,7 +260,7 @@ public sealed class SqliteKnowledgeGraphStore(
         {
             var batch = await db.KgEdges
                 .Include(e => e.From).Include(e => e.To).Include(e => e.Document)
-                .Where(e => frontier.Contains(e.FromNodeId))
+                .Where(e => e.ValidTo == null && frontier.Contains(e.FromNodeId))
                 .ToListAsync(ct);
             var next = new List<Guid>();
             foreach (var e in batch)
@@ -247,7 +294,7 @@ public sealed class SqliteKnowledgeGraphStore(
         // 1-hop dependents (inbound) + the documents behind the evidence.
         var edges = await db.KgEdges
             .Include(e => e.From).Include(e => e.To).Include(e => e.Document)
-            .Where(e => e.ToNodeId == nodeId)
+            .Where(e => e.ToNodeId == nodeId && e.ValidTo == null)
             .Take(maxEdges + 1)
             .ToListAsync(ct);
         var truncated = edges.Count > maxEdges;

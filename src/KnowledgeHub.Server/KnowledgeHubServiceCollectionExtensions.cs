@@ -354,6 +354,10 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddScoped<Graph.IKnowledgeGraphStore, Graph.SqliteKnowledgeGraphStore>();
         // SPEC-20260924-graph-expanded-retrieval RF-001: lexical entity linker.
         services.AddScoped<Graph.GraphEntityLinker>();
+        // SPEC-20260927-temporal-episodic-knowledge-graph: temporal retriever +
+        // episode registry for ingestion runs and agent sessions.
+        services.AddScoped<Graph.TemporalGraphRetriever>();
+        services.AddScoped<Graph.GraphEpisodeService>();
         services.AddScoped<Graph.EntityExtractor>(sp => new Graph.EntityExtractor(
             sp.GetService<Microsoft.Extensions.AI.IChatClient>(),
             sp.GetRequiredService<Settings.IGraphSettingsService>()));
@@ -527,6 +531,11 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<KnowledgeHub.Server.Mcp.ToolProviders.SettingsToolsProvider>());
         services.AddSingleton<IToolProvider>(sp =>
             new KnowledgeHub.Server.Mcp.ToolProviders.GraphToolsProvider(
+                sp.GetRequiredService<Settings.IGraphSettingsService>()));
+        // SPEC-20260927-temporal-episodic-knowledge-graph RF-005: temporal,
+        // recent-window, diverse and episodic graph search tools.
+        services.AddSingleton<IToolProvider>(sp =>
+            new KnowledgeHub.Server.Mcp.ToolProviders.TemporalGraphToolsProvider(
                 sp.GetRequiredService<Settings.IGraphSettingsService>()));
 
         services.AddOptions<McpServerOptions>().Configure(options =>

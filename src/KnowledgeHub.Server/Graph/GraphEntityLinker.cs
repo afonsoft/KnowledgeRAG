@@ -28,7 +28,7 @@ public sealed class GraphEntityLinker(
         // Word-boundary contains is not expressible in SQL — scan the bounded
         // node/alias name set and match in memory.
         var names = await db.KgNodes.AsNoTracking()
-            .Where(n => n.NormalizedName.Length >= MinNameLength)
+            .Where(n => n.NormalizedName.Length >= MinNameLength && n.ValidTo == null)
             .OrderBy(n => n.FirstSeenAt)
             .Take(NodeScanCap)
             .Select(n => new { n.Id, n.NormalizedName })
@@ -67,7 +67,8 @@ public sealed class GraphEntityLinker(
             return ([], []);
 
         var directEdges = await db.KgEdges.AsNoTracking()
-            .Where(e => nodeIds.Contains(e.FromNodeId) || nodeIds.Contains(e.ToNodeId))
+            .Where(e => e.ValidTo == null
+                && (nodeIds.Contains(e.FromNodeId) || nodeIds.Contains(e.ToNodeId)))
             .Select(e => new { e.FromNodeId, e.ToNodeId, e.EvidenceChunkId })
             .Take(maxNeighbors * 4)
             .ToListAsync(ct);
@@ -84,7 +85,8 @@ public sealed class GraphEntityLinker(
         List<Guid> neighborChunks = [];
         if (neighborIds.Count > 0)
             neighborChunks = await db.KgEdges.AsNoTracking()
-                .Where(e => neighborIds.Contains(e.FromNodeId) || neighborIds.Contains(e.ToNodeId))
+                .Where(e => e.ValidTo == null
+                    && (neighborIds.Contains(e.FromNodeId) || neighborIds.Contains(e.ToNodeId)))
                 .Select(e => e.EvidenceChunkId)
                 .Distinct()
                 .Take(maxNeighbors * 4)
