@@ -8,7 +8,6 @@ using KnowledgeHub.Server.Chat;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Server.Embeddings;
-using KnowledgeHub.Server.Evaluation;
 using KnowledgeHub.Server.Graph;
 using KnowledgeHub.Server.Mcp;
 using KnowledgeHub.Server.Search;
@@ -16,6 +15,7 @@ using KnowledgeHub.Server.Services;
 using KnowledgeHub.Server.Telemetry;
 using KnowledgeHub.Server.VectorStore;
 using KnowledgeHub.Shared.Contracts;
+using KnowledgeHub.Tests.Unit.Fakes;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -365,11 +365,4 @@ public sealed class TelemetryTests
             Task.FromResult<IReadOnlyList<CatalogTool>>([tool]);
     }
 
-    private sealed class NoopRagEvaluationEnqueuer : IRagEvaluationEnqueuer
-    {
-        public static readonly NoopRagEvaluationEnqueuer Instance = new();
-        public System.Threading.Channels.ChannelReader<KnowledgeHub.Server.Evaluation.RagEvaluationTask> Reader { get; } =
-            System.Threading.Channels.Channel.CreateUnbounded<KnowledgeHub.Server.Evaluation.RagEvaluationTask>().Reader;
-        public bool TryEnqueue(string queryId, string question, IReadOnlyList<string> contextChunks, string answer) => false;
-    }
 }
