@@ -132,6 +132,11 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.RestApiConnector>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.SqlDatabaseConnector>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.RssFeedConnector>();
+        // SPEC-20260927-unstructured-document-parser-connector: external parsing
+        // endpoint (Unstructured.io/Upstage-compatible) for PDF/Office/images.
+        services.AddSingleton<Ingestion.Connectors.UnstructuredApiClient>();
+        services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.UnstructuredDocumentConnector>();
+        services.AddHttpClient("unstructured");
         // SPEC-20260927-youtube-transcript-connector: YoutubeExplode adapter + connector.
         services.AddSingleton<Ingestion.Connectors.IYouTubeClient, Ingestion.Connectors.YouTubeClientAdapter>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.YouTubeConnector>();

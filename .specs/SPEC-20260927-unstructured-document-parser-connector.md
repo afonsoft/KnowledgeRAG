@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#276` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -123,10 +123,10 @@ Configuração no `KnowledgeSource`:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** um arquivo PDF contendo uma tabela financeira **when** a sincronização roda com `tableExtraction = true` **then** o documento Markdown resultante contém uma tabela GFM com pipes e traços válidos.
-- [ ] **Given** um documento escaneado **when** processado com `strategy = "hi_res"` **then** o texto OCR é extraído e incluído no documento final.
-- [ ] **Given** um arquivo cujo hash SHA-256 não mudou desde a última sincronização **when** o auto-sync roda **then** nenhuma chamada HTTP externa é emitida.
-- [ ] **Given** uma falha de autenticação (HTTP 401) com a API Unstructured **when** o conector executa **then** a sincronização marca `status = failed` com mensagem explícita de chave inválida.
+- [x] **Given** um arquivo PDF contendo uma tabela financeira **when** a sincronização roda com `tableExtraction = true` **then** o documento Markdown resultante contém uma tabela GFM com pipes e traços válidos.
+- [x] **Given** um documento escaneado **when** processado com `strategy = "hi_res"` **then** o texto OCR é extraído e incluído no documento final.
+- [x] **Given** um arquivo cujo hash SHA-256 não mudou desde a última sincronização **when** o auto-sync roda **then** nenhuma chamada HTTP externa é emitida.
+- [x] **Given** uma falha de autenticação (HTTP 401) com a API Unstructured **when** o conector executa **then** a sincronização marca `status = failed` com mensagem explícita de chave inválida.
 
 **Edge cases:**
 
@@ -138,12 +138,12 @@ Configuração no `KnowledgeSource`:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Analisar modelos de conector de arquivos e secret store.
-- [ ] **T2 — Enum & DI:** Atualizar `SourceType.cs` e registrar novo conector na injeção de dependência.
-- [ ] **T3 — Client:** Implementar `UnstructuredApiClient.cs` com suporte a multipart/form-data e headers de auth.
-- [ ] **T4 — Element Renderer:** Implementar `UnstructuredElementRenderer.cs` para conversão JSON -> GFM Markdown.
-- [ ] **T5 — Connector Core:** Implementar `UnstructuredDocumentConnector.cs` integrando hash e deduplicação.
-- [ ] **T6 — UI & Tests:** Adicionar seção no `SourceEditDialog.razor` e testes unitários com mocks de payloads JSON.
+- [x] **T1 — Discovery:** Analisar modelos de conector de arquivos e secret store.
+- [x] **T2 — Enum & DI:** Atualizar `SourceType.cs` e registrar novo conector na injeção de dependência.
+- [x] **T3 — Client:** Implementar `UnstructuredApiClient.cs` com suporte a multipart/form-data e headers de auth.
+- [x] **T4 — Element Renderer:** Implementar `UnstructuredElementRenderer.cs` para conversão JSON -> GFM Markdown.
+- [x] **T5 — Connector Core:** Implementar `UnstructuredDocumentConnector.cs` integrando hash e deduplicação.
+- [x] **T6 — UI & Tests:** Adicionar seção no `SourceEditDialog.razor` e testes unitários com mocks de payloads JSON.
 
 ## 8. Organization Guardrails
 
@@ -152,6 +152,6 @@ Configuração no `KnowledgeSource`:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-003) implementados.
+- [x] Todos os requisitos (RF-001 a RF-003) implementados.
 - [ ] Testes unitários cobrindo parsing de tabelas, texto narrativo e tratamento de erros de API.
 - [ ] UI Blazor WASM validada para edição e salvamento do novo tipo de fonte.
