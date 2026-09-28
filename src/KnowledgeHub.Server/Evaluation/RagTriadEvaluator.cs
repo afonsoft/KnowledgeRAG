@@ -11,7 +11,9 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
 {
     private static readonly Regex TokenRe = new(@"[a-z0-9]+(?:[./-][a-z0-9]+)*", RegexOptions.Compiled);
     private static readonly Regex SentenceRe = new(@"[^.!?;]+[.!?;]?", RegexOptions.Compiled);
+    private static readonly Regex CitationRe = new(@"\[\d{1,3}\]", RegexOptions.Compiled);
     private const int MinTokenLen = 3;
+    private const double MinClauseOverlap = 0.5;
 
     public RagEvaluationResult Evaluate(
         string question, IReadOnlyList<string> contextChunks, string answer,
@@ -20,9 +22,14 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
         var ctxText = string.Join(" ", contextChunks ?? []);
         var ctxTokens = TokenSet(ctxText);
 
+        // Strip [n] citation markers before scoring — the synthesizer requires
+        // them (AnswerService.SystemPrompt), but their digits would otherwise be
+        // graded as invented numbers and faithful answers would look hallucinated.
+        var scoredAnswer = CitationRe.Replace(answer ?? "", " ");
+
         var contextRelevance = ContextRelevanceScore(question, contextChunks);
-        var groundedness = GroundednessScore(answer, ctxTokens);
-        var answerRelevance = AnswerRelevanceScore(question, answer);
+        var groundedness = GroundednessScore(scoredAnswer, ctxTokens);
+        var answerRelevance = AnswerRelevanceScore(question, scoredAnswer);
         var overall = HarmonicMean(contextRelevance, groundedness, answerRelevance);
 
         return new RagEvaluationResult
@@ -51,9 +58,10 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
         return Clamp((double)relevant / sentences.Count);
     }
 
-    // Groundedness: share of answer clauses supported by the context. A clause with
-    // numeric/date tokens is supported only if those tokens appear in the context;
-    // a purely textual clause is supported if it shares any content token.
+    // Groundedness: share of answer clauses supported by the context. A clause is
+    // supported only when every numeric/date token appears in the context AND at
+    // least MinClauseOverlap of its remaining content tokens do — a single shared
+    // word must not mark an entire invented claim as grounded.
     private static double GroundednessScore(string answer, HashSet<string> ctxTokens)
     {
         var clauses = Sentences(answer);
@@ -66,15 +74,13 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
             if (tokens.Count == 0) { supported++; continue; }
 
             var numbers = tokens.Where(t => t.Any(char.IsDigit)).ToList();
-            if (numbers.Count > 0)
-            {
-                // Invented numbers/dates → unsupported unless present in context.
-                if (numbers.All(n => ctxTokens.Contains(n))) supported++;
-            }
-            else if (tokens.Overlaps(ctxTokens))
-            {
+            // Invented numbers/dates → unsupported unless present in context.
+            if (numbers.Any(n => !ctxTokens.Contains(n))) continue;
+
+            var words = tokens.Count - numbers.Count;
+            var wordOverlap = tokens.Count(t => ctxTokens.Contains(t) && !t.Any(char.IsDigit));
+            if (words == 0 || wordOverlap >= Math.Ceiling(words * MinClauseOverlap))
                 supported++;
-            }
         }
         return Clamp((double)supported / clauses.Count);
     }
