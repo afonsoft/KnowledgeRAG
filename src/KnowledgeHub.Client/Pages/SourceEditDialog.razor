@@ -252,6 +252,65 @@
             <div class="form-text">Armazenada criptografada; nunca retornada pela API.</div>
         </div>
     }
+    @if (Model.Type is SourceType.GitRepository)
+    {
+        <div class="col-12 col-md-6">
+            <Select @bind-Value="Model.GitProvider" Items="GitProviderItems"
+                    DisplayText="Plataforma" ShowLabel="true" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.RepoUrl" DisplayText="URL do repositório"
+                            ShowLabel="true" PlaceHolder="https://github.com/owner/repo" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.Owner" DisplayText="Owner/organização"
+                            ShowLabel="true" PlaceHolder="weaviate" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.RepoName" DisplayText="Nome do repositório"
+                            ShowLabel="true" PlaceHolder="Verba" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.Branch" DisplayText="Branch (padrão main→master)"
+                            ShowLabel="true" PlaceHolder="main" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.Path" DisplayText="Subdiretório raiz (opcional)"
+                            ShowLabel="true" PlaceHolder="docs/" />
+        </div>
+        <div class="col-12">
+            <Textarea @bind-Value="Model.IncludePatterns" DisplayText="Include patterns (glob, um por linha)"
+                      ShowLabel="true" rows="2" PlaceHolder="**/*.md&#10;**/README*" />
+        </div>
+        <div class="col-12">
+            <Textarea @bind-Value="Model.ExcludePatterns" DisplayText="Exclude patterns (glob, um por linha)"
+                      ShowLabel="true" rows="2" PlaceHolder=".git/**&#10;**/node_modules/**" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.InstanceUrl" DisplayText="Instance URL (self-hosted GitLab/Gitea)"
+                            ShowLabel="true" PlaceHolder="https://gitlab.example.com" />
+        </div>
+        <div class="col-12 col-md-3">
+            <BootstrapInputNumber @bind-Value="Model.MaxFiles" DisplayText="Máx. arquivos (padrão 200)"
+                                  ShowLabel="true" IsNullable="true" Min="1" Max="1000" />
+        </div>
+        <div class="col-12 col-md-3">
+            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeBytes" DisplayText="Máx. bytes/arquivo (padrão 500KB)"
+                                  ShowLabel="true" IsNullable="true" Min="10240" Max="5242880" />
+        </div>
+        <div class="col-12 col-md-6 d-flex align-items-end">
+            <Switch @bind-Value="Model.AllowPrivateHosts"
+                    DisplayText="Permitir hosts privados (SSRF opt-in)" ShowLabel="true" />
+        </div>
+        <div class="col-12">
+            <label class="form-label">
+                Personal Access Token @(Model.HasStoredKey ? "(armazenado — em branco mantém)" : "(opcional — repos públicos)")
+            </label>
+            <BootstrapInput type="password" @bind-Value="Model.GitToken"
+                            PlaceHolder="ghp_… / glpat-…" />
+            <div class="form-text">Armazenado criptografado; nunca retornado pela API.</div>
+        </div>
+    }
     @if (Model.Type is SourceType.SqlDatabase)
     {
         <div class="col-12 col-md-6">
@@ -442,7 +501,7 @@
        chunking strategy for document-producing types. *@
     @if (Model.Type is SourceType.ObsidianVault or SourceType.DocumentFile or SourceType.WebPage
         or SourceType.Notion or SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage
-        or SourceType.GoogleDrive or SourceType.UnstructuredDocument)
+        or SourceType.GoogleDrive or SourceType.UnstructuredDocument or SourceType.GitRepository)
     {
         <div class="col-12 col-md-6">
             <Select @bind-Value="Model.Chunking" Items="ChunkingItems" DisplayText="Estratégia de chunking"
@@ -547,6 +606,10 @@
                 when string.IsNullOrWhiteSpace(Model.FolderPath)
                   && string.IsNullOrWhiteSpace(Model.Files)
                 => "Informe uma pasta ou ao menos um arquivo",
+            SourceType.GitRepository
+                when string.IsNullOrWhiteSpace(Model.RepoUrl)
+                  && (string.IsNullOrWhiteSpace(Model.Owner) || string.IsNullOrWhiteSpace(Model.RepoName))
+                => "Informe a URL do repositório ou owner + nome",
             SourceType.AwsS3 or SourceType.OciStorage
                 when string.IsNullOrWhiteSpace(Model.BucketName)
                   || string.IsNullOrWhiteSpace(Model.Region)
@@ -581,7 +644,9 @@
          "maxRows", "commandTimeoutSeconds",
          "feedUrl", "maxItems", "fetchFullContent", "forceRefresh",
          "urls", "language", "includeAutoCaptions", "includeTimestamps", "maxVideos",
-         "folderPath", "files", "apiUrl", "strategy", "coordinates", "tableExtraction"];
+         "folderPath", "files", "apiUrl", "strategy", "coordinates", "tableExtraction",
+         "repoUrl", "owner", "name", "instanceUrl", "branch",
+         "includePatterns", "excludePatterns", "maxFileSizeBytes", "allowPrivateHosts"];
 
     private static readonly List<SelectedItem> TransportItems =
         [new("auto", "auto"), new("http", "http"), new("sse", "sse")];
@@ -595,6 +660,9 @@
 
     private static readonly List<SelectedItem> UnstructuredStrategyItems =
         [new("auto", "auto"), new("hi_res", "hi_res"), new("ocr_only", "ocr_only"), new("fast", "fast")];
+
+    private static readonly List<SelectedItem> GitProviderItems =
+        [new("github", "GitHub"), new("gitlab", "GitLab"), new("gitea", "Gitea")];
 
     /// <summary>
     /// Builds the JsonObject configuration payload: starts from the original
@@ -762,6 +830,40 @@
                     config["apiKey"] = Model.ApiKey;
                 config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.ApiKey);
                 break;
+            case SourceType.GitRepository:
+                // SPEC-20260927-git-repository-source-connector.
+                config["provider"] = string.IsNullOrWhiteSpace(Model.GitProvider)
+                    ? "github" : Model.GitProvider;
+                if (!string.IsNullOrWhiteSpace(Model.RepoUrl))
+                    config["repoUrl"] = Model.RepoUrl;
+                if (!string.IsNullOrWhiteSpace(Model.Owner))
+                    config["owner"] = Model.Owner;
+                if (!string.IsNullOrWhiteSpace(Model.RepoName))
+                    config["name"] = Model.RepoName;
+                if (!string.IsNullOrWhiteSpace(Model.InstanceUrl))
+                    config["instanceUrl"] = Model.InstanceUrl;
+                if (!string.IsNullOrWhiteSpace(Model.Branch) && Model.Branch != "main")
+                    config["branch"] = Model.Branch;
+                if (!string.IsNullOrWhiteSpace(Model.Path))
+                    config["path"] = Model.Path;
+                var includePatterns = ToJsonArray(Model.IncludePatterns);
+                if (includePatterns.Count > 0)
+                    config["includePatterns"] = includePatterns;
+                var excludePatterns = ToJsonArray(Model.ExcludePatterns);
+                if (excludePatterns.Count > 0)
+                    config["excludePatterns"] = excludePatterns;
+                if (Model.MaxFiles is not null)
+                    config["maxFiles"] = Model.MaxFiles;
+                if (Model.MaxFileSizeBytes is not null)
+                    config["maxFileSizeBytes"] = Model.MaxFileSizeBytes;
+                if (Model.AllowPrivateHosts)
+                    config["allowPrivateHosts"] = true;
+                // Empty keeps the stored PAT; non-empty replaces it (server
+                // moves the value to the encrypted store — never persisted).
+                if (!string.IsNullOrEmpty(Model.GitToken))
+                    config["token"] = Model.GitToken;
+                config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.GitToken);
+                break;
             case SourceType.GoogleDrive:
                 config["sharedUrl"] = Model.SharedUrl;
                 // Empty keeps the stored key; non-empty replaces it (server
@@ -865,6 +967,17 @@
         public bool Coordinates { get; set; }
         public bool TableExtraction { get; set; } = true;
         public int? MaxFileSizeMb { get; set; }
+        public string GitProvider { get; set; } = "github";
+        public string? RepoUrl { get; set; }
+        public string? Owner { get; set; }
+        public string? RepoName { get; set; }
+        public string? InstanceUrl { get; set; }
+        public string Branch { get; set; } = "main";
+        public string? IncludePatterns { get; set; }
+        public string? ExcludePatterns { get; set; }
+        public int? MaxFileSizeBytes { get; set; }
+        public string? GitToken { get; set; }
+        public bool AllowPrivateHosts { get; set; }
 
         /// <summary>True when the source already has an API key in the
         /// encrypted store (McpProxy) — the value itself is never returned.</summary>
@@ -936,6 +1049,19 @@
                 && te.TryGetValue<bool>(out var teb) ? teb : true,
             MaxFileSizeMb = dto.Configuration?["maxFileSizeMb"] is JsonValue msm
                 && msm.TryGetValue<int>(out var msmn) ? msmn : null,
+            GitProvider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } gp
+                ? gp : "github",
+            RepoUrl = dto.Configuration?["repoUrl"]?.GetValue<string>(),
+            Owner = dto.Configuration?["owner"]?.GetValue<string>(),
+            RepoName = dto.Configuration?["name"]?.GetValue<string>(),
+            InstanceUrl = dto.Configuration?["instanceUrl"]?.GetValue<string>(),
+            Branch = dto.Configuration?["branch"]?.GetValue<string>() is { Length: > 0 } br
+                ? br : "main",
+            IncludePatterns = ReadStringList(dto.Configuration, "includePatterns"),
+            ExcludePatterns = ReadStringList(dto.Configuration, "excludePatterns"),
+            MaxFileSizeBytes = dto.Configuration?["maxFileSizeBytes"] is JsonValue mfb
+                && mfb.TryGetValue<int>(out var mfbn) ? mfbn : null,
+            AllowPrivateHosts = ReadBool(dto.Configuration, "allowPrivateHosts"),
             FeedUrl = dto.Configuration?["feedUrl"]?.GetValue<string>(),
             MaxItems = dto.Configuration?["maxItems"] is JsonValue mi
                 && mi.TryGetValue<int>(out var min) ? min : null,

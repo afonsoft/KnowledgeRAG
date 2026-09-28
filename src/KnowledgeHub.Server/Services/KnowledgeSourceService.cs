@@ -154,6 +154,8 @@ public sealed class KnowledgeSourceService(
             // SPEC-20260927-unstructured-document-parser-connector.
             if (source.SourceType == SourceType.UnstructuredDocument)
                 await secrets.RemoveAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct);
+            if (source.SourceType == SourceType.GitRepository)
+                await secrets.RemoveAsync(Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id), ct);
             // SPEC-20260924-cloud-storage-connectors RF-006: purge cloud secrets + staging.
             if (source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage)
             {
@@ -260,6 +262,18 @@ public sealed class KnowledgeSourceService(
                 : null;
         }
 
+        // SPEC-20260927-git-repository-source-connector: PAT optional.
+        if (source.SourceType == SourceType.GitRepository)
+        {
+            var flagged = configuration["hasKey"] is JsonValue hv
+                && hv.TryGetValue<bool>(out var f) && f;
+            if (!flagged)
+                return null;
+            return await secrets.GetAsync(Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id), ct) is null
+                ? "Configuration key 'token' marked as stored (hasKey) but no stored PAT for this source"
+                : null;
+        }
+
         if (source.SourceType is SourceType.AwsS3 or SourceType.OciStorage)
         {
             if (UsableSecret(configuration, "secretAccessKey"))
@@ -323,6 +337,9 @@ public sealed class KnowledgeSourceService(
             // SPEC-20260927-unstructured-document-parser-connector RF-001:
             // apiKey is optional (self-hosted endpoints need none).
             SourceType.UnstructuredDocument => ("apiKey", Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id)),
+            // SPEC-20260927-git-repository-source-connector RF-001: PAT is
+            // optional (public repos need none) — same optional-secret slot.
+            SourceType.GitRepository => ("token", Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id)),
             _ => (null, null)
         };
         if (configKey is not null && secretKey is not null && configuration is not null)

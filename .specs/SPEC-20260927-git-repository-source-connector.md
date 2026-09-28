@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#272` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -144,10 +144,10 @@ Configuração no `KnowledgeSource`:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** uma URL pública de repositório GitHub **when** a sincronização roda **then** todos os arquivos Markdown que casam com o padrão `includePatterns` são baixados e convertidos em `RawDocument`.
-- [ ] **Given** um repositório sincronizado com sucesso **when** uma nova sincronização é acionada sem novos commits na branch **then** o conector retorna status `NoChanges` e nenhum blob é re-baixado.
-- [ ] **Given** um repositório privado onde o usuário cadastrou um Personal Access Token **when** a árvore é consultada **then** o header `Authorization: Bearer <token>` é enviado e os arquivos são recuperados.
-- [ ] **Given** arquivos correspondendo a `excludePatterns` (ex.: `.git/config` ou `node_modules/index.js`) **when** a árvore é processada **then** esses arquivos são rigorosamente ignorados.
+- [x] **Given** uma URL pública de repositório GitHub **when** a sincronização roda **then** todos os arquivos Markdown que casam com o padrão `includePatterns` são baixados e convertidos em `RawDocument`.
+- [x] **Given** um repositório sincronizado com sucesso **when** uma nova sincronização é acionada sem novos commits na branch **then** o conector retorna status `NoChanges` e nenhum blob é re-baixado.
+- [x] **Given** um repositório privado onde o usuário cadastrou um Personal Access Token **when** a árvore é consultada **then** o header `Authorization: Bearer <token>` é enviado e os arquivos são recuperados.
+- [x] **Given** arquivos correspondendo a `excludePatterns` (ex.: `.git/config` ou `node_modules/index.js`) **when** a árvore é processada **then** esses arquivos são rigorosamente ignorados.
 
 **Edge cases:**
 
@@ -159,13 +159,13 @@ Configuração no `KnowledgeSource`:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Revisar contratos de conectores em `KnowledgeHub.Server/Ingestion/Connectors/`.
-- [ ] **T2 — SourceType Enum:** Adicionar `GitRepository = 14` em `SourceType.cs`.
-- [ ] **T3 — Git Clients:** Implementar `GitHubApiClient.cs` e `GitLabApiClient.cs` com suporte a autenticação por token.
-- [ ] **T4 — Path Matcher:** Implementar `GitPathMatcher.cs` para testes de inclusão e exclusão por wildcard/glob.
-- [ ] **T5 — Connector Core:** Implementar `GitRepositoryConnector.cs` integrando descoberta incremental por SHA.
-- [ ] **T6 — UI & Service:** Adicionar campos na UI do Blazor `SourceEditDialog.razor` e registrar no `KnowledgeSourceService`.
-- [ ] **T7 — Unit Tests:** Escrever testes cobrindo parsing de árvore, casamento de globs, tolerância a falhas e incrementalidade.
+- [x] **T1 — Discovery:** Revisar contratos de conectores em `KnowledgeHub.Server/Ingestion/Connectors/`.
+- [x] **T2 — SourceType Enum:** Adicionar `GitRepository = 14` em `SourceType.cs`.
+- [x] **T3 — Git Clients:** Implementar `GitHubApiClient.cs` e `GitLabApiClient.cs` com suporte a autenticação por token.
+- [x] **T4 — Path Matcher:** Implementar `GitPathMatcher.cs` para testes de inclusão e exclusão por wildcard/glob.
+- [x] **T5 — Connector Core:** Implementar `GitRepositoryConnector.cs` integrando descoberta incremental por SHA.
+- [x] **T6 — UI & Service:** Adicionar campos na UI do Blazor `SourceEditDialog.razor` e registrar no `KnowledgeSourceService`.
+- [x] **T7 — Unit Tests:** Escrever testes cobrindo parsing de árvore, casamento de globs, tolerância a falhas e incrementalidade.
 
 ## 8. Organization Guardrails
 
@@ -174,7 +174,7 @@ Configuração no `KnowledgeSource`:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-004) implementados.
+- [x] Todos os requisitos (RF-001 a RF-004) implementados.
 - [ ] Testes unitários com clientes HTTP mockados atingindo 100% de cobertura nos cenários principais.
 - [ ] UI Blazor atualizada e validada para cadastro de novas fontes Git.
 - [ ] Sincronização incremental por commit SHA testada e comprovada.
