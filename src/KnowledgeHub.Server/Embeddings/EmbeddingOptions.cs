@@ -5,7 +5,7 @@ public sealed class EmbeddingOptions
 {
     public const string SectionName = "Embeddings";
 
-    /// <summary>deterministic | ollama | openai | onnx</summary>
+    /// <summary>deterministic | ollama | openai | voyage | cohere | onnx</summary>
     public string Provider { get; set; } = "deterministic";
 
     /// <summary>Base URL — e.g. http://localhost:11434 (Ollama) or https://api.openai.com.</summary>
@@ -37,6 +37,12 @@ public sealed class EmbeddingOptions
     /// <summary>OpenAI-compatible <c>input_type</c> sent with document embeddings.</summary>
     public string? DocumentInputType { get; set; }
 
+    /// <summary>Voyage AI provider configuration (SPEC-20260927-voyage-and-cohere-embeddings).</summary>
+    public VoyageOptions Voyage { get; set; } = new();
+
+    /// <summary>Cohere Embed v3 provider configuration (SPEC-20260927-voyage-and-cohere-embeddings).</summary>
+    public CohereOptions Cohere { get; set; } = new();
+
     public sealed class AsymmetricOptions
     {
         /// <summary>Master switch — default off so existing corpora keep working.</summary>
@@ -51,5 +57,44 @@ public sealed class EmbeddingOptions
 
         /// <summary>Explicit document prefix — wins over auto-detection.</summary>
         public string? DocumentPrefix { get; set; }
+    }
+
+    /// <summary>Voyage AI embedding provider options (SPEC-20260927-voyage-and-cohere-embeddings RF-001).</summary>
+    public sealed class VoyageOptions
+    {
+        /// <summary>Bearer key for Voyage AI. Never logged.</summary>
+        public string? ApiKey { get; set; }
+
+        /// <summary>Model name — voyage-3 (1024), voyage-3-large (1536), voyage-code-3 (1536).</summary>
+        public string? Model { get; set; }
+
+        /// <summary>Expected vector length; 0 falls back to the top-level Embeddings:Dimensions.</summary>
+        public int Dimensions { get; set; }
+
+        /// <summary>Maximum texts per request — Voyage allows up to 128.</summary>
+        public int BatchSize { get; set; }
+
+        /// <summary>Endpoint — defaults to the public Voyage AI API.</summary>
+        public string? Endpoint { get; set; }
+    }
+
+    /// <summary>Cohere Embed v3 provider options (SPEC-20260927-voyage-and-cohere-embeddings RF-002).</summary>
+    public sealed class CohereOptions
+    {
+        /// <summary>Bearer key for Cohere. Never logged.</summary>
+        public string? ApiKey { get; set; }
+
+        /// <summary>Model name — embed-multilingual-v3.0 (1024), embed-english-v3.0 (1024),
+        /// embed-multilingual-light-v3.0 (384).</summary>
+        public string? Model { get; set; }
+
+        /// <summary>Expected vector length; 0 falls back to the top-level Embeddings:Dimensions.</summary>
+        public int Dimensions { get; set; }
+
+        /// <summary>Maximum texts per request — Cohere allows up to 96.</summary>
+        public int BatchSize { get; set; }
+
+        /// <summary>Endpoint — defaults to the public Cohere API v2.</summary>
+        public string? Endpoint { get; set; }
     }
 }

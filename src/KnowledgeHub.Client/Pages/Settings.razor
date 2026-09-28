@@ -182,6 +182,8 @@ else
                                 <option value="deterministic">deterministic</option>
                                 <option value="ollama">ollama</option>
                                 <option value="openai">openai</option>
+                                <option value="voyage">voyage</option>
+                                <option value="cohere">cohere</option>
                                 <option value="onnx">onnx</option>
                             </select>
                         </div>
@@ -198,6 +200,17 @@ else
                                    placeholder="nomic-embed-text" autocomplete="off" />
                         </div>
                     </div>
+
+                    @if (_embForm.Provider == "voyage" || _embForm.Provider == "cohere")
+                    {
+                        <div class="alert alert-info py-2 mb-2 small" role="status">
+                            <strong>@(_embForm.Provider == "voyage" ? "Voyage AI" : "Cohere")</strong>:
+                            usa <code>input_type</code> assimétrico automaticamente —
+                            <code>query</code>/<code>search_query</code> nas buscas e
+                            <code>document</code>/<code>search_document</code> na indexação.
+                            A API key e o modelo são enviados via <code>Embeddings:@(_embForm.Provider == "voyage" ? "Voyage" : "Cohere")</code>.
+                        </div>
+                    }
 
                     <div class="row g-2 mb-2">
                         <div class="col-6 col-md-3">
