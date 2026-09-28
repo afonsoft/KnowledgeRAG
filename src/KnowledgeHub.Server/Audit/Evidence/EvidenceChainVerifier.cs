@@ -64,9 +64,9 @@ public static class EvidenceChainVerifier
                 var parentDigests = new List<string>();
                 foreach (var id in ids)
                 {
-                    if (!byId.TryGetValue(id, out var parent))
+                    if (!byId.TryGetValue(id, out var parent) || !seen.Contains(id))
                         violations.Add(new EvidenceViolation(r.ReceiptId, "BrokenParentLink",
-                            $"parent '{id}' missing from bundle"));
+                            $"parent '{id}' missing from bundle or appears out of order"));
                     else
                         parentDigests.Add(parent.ReceiptDigest);
                 }

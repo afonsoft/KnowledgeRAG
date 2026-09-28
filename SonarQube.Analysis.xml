@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  dotnet-sonarscanner reads this file from the analysis working directory and
+  merges these properties into the `begin` step. EF Core migrations under
+  */Migrations/ are generated scaffolding — identical Up/Down and model
+  snapshot blocks across the SQLite/Postgres sets are expected and must not
+  count toward the duplication quality gate.
+-->
+<SonarQubeAnalysisProperties xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                             xmlns="http://www.sonarsource.com/msbuild/integration/2015/1">
+  <Property Name="sonar.cpd.exclusions">**/Migrations/**</Property>
+</SonarQubeAnalysisProperties>
