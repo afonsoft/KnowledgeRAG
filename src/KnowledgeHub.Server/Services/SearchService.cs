@@ -240,9 +240,21 @@ public sealed class SearchService(
             ? items.Take(topK).ToList()
             : await RerankAsync(query, items, breakdowns, topK, ct);
 
+        // SPEC-20260927-chunk-window-retrieval-and-autocut RF-003: dynamic tail
+        // pruning — the elbow in the score curve decides the count (≤topK).
+        var limitMode = filter?.EffectiveLimitMode(configuration) ?? "fixed";
+        if (limitMode == "autocut" && final.Count > 1)
+        {
+            var sensitivity = Math.Clamp(filter?.AutocutSensitivity
+                ?? configuration.GetValue("Search:Autocut:Sensitivity", 1), 1, 3);
+            var maxClamp = Math.Min(topK, Math.Max(1,
+                configuration.GetValue("Search:Autocut:MaxClamp", AutocutFilter.DefaultMaxClamp)));
+            final = AutocutFilter.Apply(final, sensitivity, maxClamp);
+        }
+
         // SPEC-20260924-hierarchical-retrieval: post-selection context expansion
         // (neighbours / parent section) — never affects ranking.
-        return await ApplyContextExpansionAsync(final, filter?.ContextExpand, ct);
+        return await ApplyContextExpansionAsync(final, filter, ct);
     }
 
     /// <summary>RF-002: re-orders the hydrated window by rerank score; any
@@ -358,27 +370,42 @@ public sealed class SearchService(
     }
 
     /// <summary>
-    /// SPEC-20260924-hierarchical-retrieval: attaches surrounding context to each
-    /// hit — window = ±WindowSize same-document neighbours; section = the full
-    /// parent section (degrades to window when no SectionPath). Never changes
-    /// which/how many hits are returned; total context bounded by MaxTotalTokens.
+    /// SPEC-20260924-hierarchical-retrieval + SPEC-20260927-chunk-window: attaches
+    /// surrounding context to each hit — window = ±WindowSize same-document
+    /// neighbours (gated by the normalized-score threshold, RF-002); section = the
+    /// full parent section (degrades to window when no SectionPath). A per-call
+    /// <c>windowSize</c> implies window mode. Never changes which/how many hits
+    /// are returned; total context bounded by MaxTotalTokens.
     /// </summary>
     private async Task<List<SearchResultItem>> ApplyContextExpansionAsync(
-        IReadOnlyList<SearchResultItem> items, string? contextExpand, CancellationToken ct)
+        IReadOnlyList<SearchResultItem> items, ResolvedSearchFilter? filter, CancellationToken ct)
     {
+        // windowSize arg implies window mode; explicit contextExpand wins.
+        var contextExpand = filter?.ContextExpand
+            ?? (filter?.WindowSize > 0 ? "window" : null);
         if (contextExpand is null or "none" || items.Count == 0)
             return items.ToList();
 
-        var windowSize = Math.Clamp(
-            configuration.GetValue("Search:Expansion:WindowSize", 1), 0, 5);
+        var windowSize = Math.Clamp(filter?.WindowSize
+            ?? configuration.GetValue("Search:Expansion:WindowSize", 1), 0, 5);
+        if (contextExpand == "window" && windowSize == 0)
+            return items.ToList(); // W=0: no neighbour query, hit preserved intact
+
         var maxParentChars = Math.Max(200,
             configuration.GetValue("Search:Expansion:MaxParentTokens", 1500)) * 4;
         var budgetChars = Math.Max(400,
             configuration.GetValue("Search:Expansion:MaxTotalTokens", 6000)) * 4;
 
+        // RF-002: only high-relevance hits earn a window — score normalized by
+        // the top hit so the gate works across RRF/cosine/bm25 scales.
+        var thresholdPct = Math.Clamp(
+            configuration.GetValue("Search:Expansion:WindowThresholdPercent", 80), 0, 100);
+        var maxScore = items.Max(i => AutocutFilter.EffectiveScore(i));
         var expandable = items
             .Select((Item, Pos) => (Item, Pos))
-            .Where(t => t.Item.DocumentId is not null && t.Item.ChunkIndex is not null)
+            .Where(t => t.Item.DocumentId is not null && t.Item.ChunkIndex is not null
+                && (contextExpand != "window" || thresholdPct <= 0 || maxScore <= 0
+                    || AutocutFilter.EffectiveScore(t.Item) >= maxScore * thresholdPct / 100.0))
             .ToList();
         if (expandable.Count == 0)
             return items.ToList();
@@ -401,7 +428,7 @@ public sealed class SearchService(
                 .Select(c => new { c.ChunkIndex, c.TextContent })
                 .ToListAsync(ct);
 
-            Dictionary<string, List<string>>? sections = null;
+            Dictionary<string, List<(int Idx, string Text)>>? sections = null;
             if (contextExpand == "section")
             {
                 var paths = docGroup
@@ -416,38 +443,43 @@ public sealed class SearchService(
                         .Select(c => new { c.ChunkIndex, c.TextContent, c.SectionPath })
                         .ToListAsync(ct))
                         .GroupBy(c => c.SectionPath!)
-                        .ToDictionary(g => g.Key, g => g.Select(c => c.TextContent).ToList());
+                        .ToDictionary(g => g.Key,
+                            g => g.Select(c => (Idx: c.ChunkIndex, Text: c.TextContent)).ToList());
             }
 
             foreach (var (item, pos) in docGroup.OrderBy(t => t.Pos))
             {
                 var own = item.ChunkIndex!.Value;
                 IEnumerable<string> parts;
+                List<int> expanded;
                 if (contextExpand == "section" && item.SectionPath is { } path
                     && sections is not null && sections.TryGetValue(path, out var sectionTexts))
                 {
                     // Whole parent section minus the hit itself, capped.
-                    var joined = string.Join("\n\n",
-                        sectionTexts.Where(t => t != item.ChunkText));
+                    var picked = sectionTexts.Where(t => t.Text != item.ChunkText).ToList();
+                    var joined = string.Join("\n\n", picked.Select(t => t.Text));
                     if (joined.Length > maxParentChars)
                         joined = joined[..maxParentChars] + "…";
                     parts = joined.Length > 0 ? [joined] : [];
+                    expanded = picked.Select(t => t.Idx).ToList();
                 }
                 else
                 {
-                    parts = neighbours
+                    var picked = neighbours
                         .Where(n => n.ChunkIndex != own
                             && n.ChunkIndex >= own - windowSize
                             && n.ChunkIndex <= own + windowSize)
-                        .Select(n => n.TextContent);
+                        .ToList();
+                    parts = picked.Select(n => n.TextContent);
+                    expanded = picked.Select(n => n.ChunkIndex).ToList();
                 }
 
                 var context = string.Join("\n\n", parts);
                 if (context.Length == 0 || spent + context.Length > budgetChars)
                     continue;
                 spent += context.Length;
-                addedChunks += parts.Count();
-                result[pos] = item with { Context = context };
+                addedChunks += expanded.Count;
+                result[pos] = item with { Context = context, ExpandedChunkIndices = expanded };
             }
         }
 

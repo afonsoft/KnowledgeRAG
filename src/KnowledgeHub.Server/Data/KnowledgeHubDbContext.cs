@@ -114,6 +114,9 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.Property(c => c.ChunkKind).IsRequired().HasMaxLength(16);
             e.Property(c => c.SymbolPath).HasMaxLength(300);
             e.Property(c => c.SuspicionFlags).HasMaxLength(200);
+            // SPEC-20260927-chunk-window-retrieval-and-autocut RF-001: neighbour
+            // lookup by (document, index) — one indexed range scan per expansion.
+            e.HasIndex(c => new { c.KnowledgeDocumentId, c.ChunkIndex });
         });
 
         modelBuilder.Entity<SecurityEvent>(e =>

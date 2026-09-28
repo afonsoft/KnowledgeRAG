@@ -316,7 +316,7 @@ namespace KnowledgeHub.Server.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("KnowledgeDocumentId");
+                    b.HasIndex("KnowledgeDocumentId", "ChunkIndex");
 
                     b.ToTable("Chunks");
                 });

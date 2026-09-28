@@ -51,6 +51,16 @@ public sealed record SearchFilter
     /// <summary>SPEC-20260924-graph-expanded-retrieval RF-004: per-call toggle
     /// for the graph arm — null = configured default.</summary>
     public bool? UseGraph { get; init; }
+    /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut RF-004: per-call
+    /// window breadth (0–3). A value &gt;0 implies <c>contextExpand=window</c>;
+    /// 0 disables neighbour expansion. Null = configured default.</summary>
+    public int? WindowSize { get; init; }
+    /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut RF-004: result
+    /// limit mode — fixed|autocut. Null = configured default.</summary>
+    public string? LimitMode { get; init; }
+    /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut RF-004: autocut
+    /// elbow sensitivity (1–3; cut at the N-th abrupt score drop).</summary>
+    public int? AutocutSensitivity { get; init; }
 }
 
 /// <summary>One ranked chunk hit from semantic search (SPEC-02 RF-004).</summary>
@@ -97,11 +107,23 @@ public sealed record SearchResultItem
     /// names to the find_* graph tools (SPEC-20260924-graph-tool-discovery RF-001).
     /// Null when GraphRAG is disabled or the chunk has no graph evidence.</summary>
     public IReadOnlyList<string>? Components { get; init; }
+    /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut RF-002: indices of
+    /// the same-document chunks stitched into <see cref="Context"/> (excludes the
+    /// hit itself). Null when no expansion ran.</summary>
+    public IReadOnlyList<int>? ExpandedChunkIndices { get; init; }
+    /// <summary>True when surrounding context was stitched in (window retrieval).</summary>
+    public bool WindowExpanded => Context is not null;
 }
 
 public sealed record SearchResponse
 {
     public required IReadOnlyList<SearchResultItem> Results { get; init; }
+    /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut: number of hits
+    /// actually returned after the limit mode ran.</summary>
+    public int? TotalMatches { get; init; }
+    /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut: the limit mode
+    /// applied to this result set (fixed | autocut).</summary>
+    public string? LimitModeApplied { get; init; }
 }
 
 /// <summary>POST /api/search body (SPEC-20260923-retrieval-quality §5).</summary>

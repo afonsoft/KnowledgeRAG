@@ -1,4 +1,5 @@
 using KnowledgeHub.Shared.Contracts;
+using Microsoft.Extensions.Configuration;
 
 namespace KnowledgeHub.Server.Search;
 
@@ -14,10 +15,18 @@ public sealed record ResolvedSearchFilter(
     string? Language,
     string? Expansion = null,
     string? ContextExpand = null,
-    bool? UseGraph = null)
+    bool? UseGraph = null,
+    int? WindowSize = null,
+    string? LimitMode = null,
+    int? AutocutSensitivity = null)
 {
     public bool IsEmpty =>
         SourceType is null && PathPrefix is null && IndexedAfter is null && Language is null;
+
+    /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut RF-004: the limit
+    /// mode that applies to this call (per-call arg → <c>Search:LimitMode</c>).</summary>
+    public string EffectiveLimitMode(IConfiguration cfg) =>
+        LimitMode ?? cfg.GetValue("Search:LimitMode", "fixed");
 
     /// <summary>Stable fingerprint for the v2 result-cache key (RF-005).
     /// Expansion is part of result identity even when other filters are empty.</summary>
@@ -25,7 +34,10 @@ public sealed record ResolvedSearchFilter(
         (IsEmpty ? "-" : $"{SourceType}|{PathPrefix}|{IndexedAfter:O}|{Language}")
         + (Expansion is null ? "" : $"|expand:{Expansion}")
         + (ContextExpand is null or "none" ? "" : $"|ctx:{ContextExpand}")
-        + (UseGraph is null ? "" : $"|graph:{(UseGraph.Value ? 1 : 0)}");
+        + (UseGraph is null ? "" : $"|graph:{(UseGraph.Value ? 1 : 0)}")
+        + (WindowSize is null ? "" : $"|win:{WindowSize}")
+        + (LimitMode is null ? "" : $"|lim:{LimitMode}")
+        + (AutocutSensitivity is null ? "" : $"|acs:{AutocutSensitivity}");
 
     public static bool TryResolve(
         SearchFilter? filter, out ResolvedSearchFilter resolved, out string? error)
@@ -81,6 +93,30 @@ public sealed record ResolvedSearchFilter(
             contextExpand = ce.ToLowerInvariant();
         }
 
+        // SPEC-20260927-chunk-window-retrieval-and-autocut RF-004: per-call knobs.
+        if (filter.WindowSize is < 0 or > 3)
+        {
+            error = $"invalid windowSize '{filter.WindowSize}' (expected: 0-3)";
+            return false;
+        }
+
+        string? limitMode = null;
+        if (filter.LimitMode is { Length: > 0 } lm)
+        {
+            if (lm.ToLowerInvariant() is not ("fixed" or "autocut"))
+            {
+                error = $"invalid limitMode '{lm}' (expected: fixed | autocut)";
+                return false;
+            }
+            limitMode = lm.ToLowerInvariant();
+        }
+
+        if (filter.AutocutSensitivity is < 1 or > 3)
+        {
+            error = $"invalid autocutSensitivity '{filter.AutocutSensitivity}' (expected: 1-3)";
+            return false;
+        }
+
         resolved = new ResolvedSearchFilter(
             sourceType,
             string.IsNullOrWhiteSpace(filter.PathPrefix) ? null : filter.PathPrefix,
@@ -88,7 +124,10 @@ public sealed record ResolvedSearchFilter(
             string.IsNullOrWhiteSpace(filter.Language) ? null : filter.Language,
             expansion,
             contextExpand,
-            filter.UseGraph);
+            filter.UseGraph,
+            filter.WindowSize,
+            limitMode,
+            filter.AutocutSensitivity);
         return true;
     }
 }
