@@ -26,6 +26,17 @@ public static class ToolArgs
         return Math.Min(value, max);
     }
 
+    /// <summary>Nullable variant — distinguishes "not passed" (null) from 0
+    /// (SPEC-20260927-chunk-window-retrieval-and-autocut: windowSize=0 is meaningful).</summary>
+    public static int? OptionalIntOrNull(ToolCallContext ctx, string name)
+    {
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        if (el.ValueKind != JsonValueKind.Number || !el.TryGetInt32(out var value))
+            throw new McpProtocolException($"argument '{name}' must be an integer", McpErrorCode.InvalidParams);
+        return value;
+    }
+
     public static bool? OptionalBool(ToolCallContext ctx, string name) =>
         TryGet(ctx, name, out var el) && el.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? el.GetBoolean()

@@ -1,5 +1,6 @@
 using KnowledgeHub.Server.Services;
 using KnowledgeHub.Shared.Contracts;
+using Microsoft.Extensions.Configuration;
 
 namespace KnowledgeHub.Server.Api;
 
@@ -14,8 +15,9 @@ public static class SearchEndpoints
         var group = app.MapGroup("/api/search");
 
         group.MapGet("/", async (
-            ISearchService svc, string? query, int? topK, Guid? sourceId, string? mode,
-            string? sourceType, string? pathPrefix, string? indexedAfter, string? language,
+            ISearchService svc, IConfiguration config, string? query, int? topK, Guid? sourceId,
+            string? mode, string? sourceType, string? pathPrefix, string? indexedAfter,
+            string? language, int? windowSize, string? limitMode, int? autocutSensitivity,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(query))
@@ -33,17 +35,26 @@ public static class SearchEndpoints
                         SourceType = sourceType,
                         PathPrefix = pathPrefix,
                         IndexedAfter = indexedAfter,
-                        Language = language
+                        Language = language,
+                        WindowSize = windowSize,
+                        LimitMode = limitMode,
+                        AutocutSensitivity = autocutSensitivity
                     }, out var filter, out var error))
                 return Results.BadRequest(new { error });
 
             var k = topK is null or <= 0 ? DefaultTopK : Math.Min(topK.Value, MaxTopK);
             var results = await svc.SearchAsync(query, k, sourceId, searchMode.Value, filter, ct: ct);
-            return Results.Ok(new SearchResponse { Results = results });
+            return Results.Ok(new SearchResponse
+            {
+                Results = results,
+                TotalMatches = results.Count,
+                LimitModeApplied = filter.EffectiveLimitMode(config)
+            });
         });
 
         // SPEC-20260923-retrieval-quality §5: POST variant accepting a filters object.
-        group.MapPost("/", async (ISearchService svc, SearchRequest request, CancellationToken ct) =>
+        group.MapPost("/", async (
+            ISearchService svc, IConfiguration config, SearchRequest request, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.Query))
                 return Results.BadRequest(new { error = "query is required" });
@@ -57,7 +68,12 @@ public static class SearchEndpoints
 
             var k = request.TopK is null or <= 0 ? DefaultTopK : Math.Min(request.TopK.Value, MaxTopK);
             var results = await svc.SearchAsync(request.Query, k, request.SourceId, searchMode.Value, filter, ct: ct);
-            return Results.Ok(new SearchResponse { Results = results });
+            return Results.Ok(new SearchResponse
+            {
+                Results = results,
+                TotalMatches = results.Count,
+                LimitModeApplied = filter.EffectiveLimitMode(config)
+            });
         });
 
         return group;

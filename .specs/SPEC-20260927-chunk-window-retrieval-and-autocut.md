@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#270` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -144,10 +144,10 @@ Resposta MCP:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** um documento com 5 chunks (0 a 4) indexados **when** o chunk #2 é retornado com score 0.88 e `windowSize = 1` **then** os chunks #1, #2 e #3 são carregados e combinados em `expandedContent`.
-- [ ] **Given** os chunks #2 e #3 ambos retornados com alta pontuação pelo vetor **when** a expansão de janela $W=1$ roda para ambos **then** a união dos índices é $\{1, 2, 3, 4\}$ sem duplicações de texto.
-- [ ] **Given** uma lista de scores `[0.96, 0.94, 0.91, 0.40, 0.38, 0.20]` **when** `AutocutFilter.Apply(results, sensitivity: 1)` é executado **then** a lista é podada contendo exatamente os 3 primeiros itens.
-- [ ] **Given** `windowSize = 0` **when** a busca roda **then** nenhuma query adicional de vizinhos é despachada e o chunk original é preservado intacto.
+- [x] **Given** um documento com 5 chunks (0 a 4) indexados **when** o chunk #2 é retornado com score 0.88 e `windowSize = 1` **then** os chunks #1, #2 e #3 são carregados e combinados em `expandedContent`.
+- [x] **Given** os chunks #2 e #3 ambos retornados com alta pontuação pelo vetor **when** a expansão de janela $W=1$ roda para ambos **then** a união dos índices é $\{1, 2, 3, 4\}$ sem duplicações de texto.
+- [x] **Given** uma lista de scores `[0.96, 0.94, 0.91, 0.40, 0.38, 0.20]` **when** `AutocutFilter.Apply(results, sensitivity: 1)` é executado **then** a lista é podada contendo exatamente os 3 primeiros itens.
+- [x] **Given** `windowSize = 0` **when** a busca roda **then** nenhuma query adicional de vizinhos é despachada e o chunk original é preservado intacto.
 
 **Edge cases:**
 
@@ -159,12 +159,12 @@ Resposta MCP:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Examinar `KnowledgeChunkEntity.cs` e mapeamento de chunks na ingestão.
-- [ ] **T2 — Data Schema:** Garantir índice de `ChunkIndex` no DbContext e migração se necessário.
-- [ ] **T3 — Autocut:** Implementar `AutocutFilter.cs` com testes de corte de curva de distribuição.
-- [ ] **T4 — Window Expander:** Implementar `WindowContextExpander.cs` com merge contíguo de texto.
-- [ ] **T5 — Pipeline Integration:** Integrar no `HybridRetriever.cs` e `LlmAnswerSynthesisService.cs`.
-- [ ] **T6 — MCP & Tests:** Atualizar ferramentas MCP e validar testes unitários completos.
+- [x] **T1 — Discovery:** Examinar `KnowledgeChunkEntity.cs` e mapeamento de chunks na ingestão.
+- [x] **T2 — Data Schema:** Garantir índice de `ChunkIndex` no DbContext e migração se necessário.
+- [x] **T3 — Autocut:** Implementar `AutocutFilter.cs` com testes de corte de curva de distribuição.
+- [x] **T4 — Window Expander:** Implementar `WindowContextExpander.cs` com merge contíguo de texto.
+- [x] **T5 — Pipeline Integration:** Integrar no `HybridRetriever.cs` e `LlmAnswerSynthesisService.cs`.
+- [x] **T6 — MCP & Tests:** Atualizar ferramentas MCP e validar testes unitários completos.
 
 ## 8. Organization Guardrails
 
@@ -173,7 +173,7 @@ Resposta MCP:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-004) implementados.
-- [ ] Testes unitários do Autocut cobrindo diferentes distribuições de score (degrau único, declínio suave, cauda ruidosa).
-- [ ] Testes unitários do Window Expander cobrindo fronteiras (início, meio e fim de documento).
-- [ ] Integração no pipeline RAG sem quebra de testes prévios.
+- [x] Todos os requisitos (RF-001 a RF-004) implementados.
+- [x] Testes unitários do Autocut cobrindo diferentes distribuições de score (degrau único, declínio suave, cauda ruidosa).
+- [x] Testes unitários do Window Expander cobrindo fronteiras (início, meio e fim de documento).
+- [x] Integração no pipeline RAG sem quebra de testes prévios.

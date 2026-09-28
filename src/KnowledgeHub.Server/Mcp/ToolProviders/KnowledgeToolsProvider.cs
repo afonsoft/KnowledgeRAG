@@ -5,6 +5,7 @@ using KnowledgeHub.Server.Ingestion;
 using KnowledgeHub.Server.Services;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 
@@ -28,7 +29,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "language":{"type":"string","description":"BCP-47 language tag filter (matches document metadata when present)"},
           "expand":{"type":"string","enum":["off","multi","hyde","both"],"description":"Query expansion override (default: server config). multi rewrites N variants + fuses; hyde embeds a hypothetical doc on the vector arm; both combines them"},
           "contextExpand":{"type":"string","enum":["none","window","section"],"description":"Attach surrounding context to each hit: window=neighbouring chunks, section=whole parent section"},
-          "useGraph":{"type":"boolean","description":"Enable the knowledge-graph retrieval arm: entity linking + 1-hop evidence chunks (default: server config)"}
+          "useGraph":{"type":"boolean","description":"Enable the knowledge-graph retrieval arm: entity linking + 1-hop evidence chunks (default: server config)"},
+          "windowSize":{"type":"integer","description":"Neighbour window breadth for context expansion, 0-3 (default: server config). >0 implies contextExpand=window; 0 disables expansion"},
+          "limitMode":{"type":"string","enum":["fixed","autocut"],"description":"Result limit: fixed=topK, autocut=prunes the long tail at the score elbow (default: server config)"},
+          "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"}
         },"required":["query"],
         "examples":[{"query":"what is RAG?","topK":5,"mode":"hybrid"}]}
         """)!.AsObject();
@@ -46,7 +50,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "language":{"type":"string","description":"BCP-47 language tag filter (matches document metadata when present)"},
           "expand":{"type":"string","enum":["off","multi","hyde","both"],"description":"Query expansion override (default: server config). multi rewrites N variants + fuses; hyde embeds a hypothetical doc on the vector arm; both combines them"},
           "contextExpand":{"type":"string","enum":["none","window","section"],"description":"Attach surrounding context to each hit: window=neighbouring chunks, section=whole parent section"},
-          "useGraph":{"type":"boolean","description":"Enable the knowledge-graph retrieval arm: entity linking + 1-hop evidence chunks (default: server config)"}
+          "useGraph":{"type":"boolean","description":"Enable the knowledge-graph retrieval arm: entity linking + 1-hop evidence chunks (default: server config)"},
+          "windowSize":{"type":"integer","description":"Neighbour window breadth for context expansion, 0-3 (default: server config). >0 implies contextExpand=window; 0 disables expansion"},
+          "limitMode":{"type":"string","enum":["fixed","autocut"],"description":"Result limit: fixed=topK, autocut=prunes the long tail at the score elbow (default: server config)"},
+          "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"}
         },"required":["question"],
         "examples":[{"question":"How does synchronization work?","topK":5,"generate":true}]}
         """)!.AsObject();
@@ -120,6 +127,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                           (outcome.Grading.Grade == Search.RetrievalGrade.Weak ? " — suggestion: rephrase the query" : "") +
                           (outcome.Retried ? " — retried" : "") + "]\n"
                         : null;
+                    // SPEC-20260927-chunk-window-retrieval-and-autocut RF-003/RF-004:
+                    // surface the applied limit mode + final count so agents can
+                    // tell a pruned (autocut) answer set from a full topK.
+                    var limitCfg = ctx.Services!.GetRequiredService<IConfiguration>();
                     return await ToolResults.Structured(
                         grade + FormatHits(outcome.Results),
                         new
@@ -127,7 +138,9 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                             results = outcome.Results,
                             grade = retrieval.GradingEnabled
                                 ? outcome.Grading.Grade.ToString().ToLowerInvariant() : null,
-                            retried = outcome.Retried
+                            retried = outcome.Retried,
+                            totalMatches = outcome.Results.Count,
+                            limitModeApplied = filter.EffectiveLimitMode(limitCfg)
                         });
                 }
             },
@@ -206,7 +219,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             Language = ToolArgs.OptionalString(ctx, "language"),
             Expand = ToolArgs.OptionalString(ctx, "expand"),
             ContextExpand = ToolArgs.OptionalString(ctx, "contextExpand"),
-            UseGraph = ToolArgs.OptionalBool(ctx, "useGraph")
+            UseGraph = ToolArgs.OptionalBool(ctx, "useGraph"),
+            WindowSize = ToolArgs.OptionalIntOrNull(ctx, "windowSize"),
+            LimitMode = ToolArgs.OptionalString(ctx, "limitMode"),
+            AutocutSensitivity = ToolArgs.OptionalIntOrNull(ctx, "autocutSensitivity")
         };
         return Search.ResolvedSearchFilter.TryResolve(raw, out var filter, out var error)
             ? filter
