@@ -137,6 +137,10 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Ingestion.Connectors.UnstructuredApiClient>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.UnstructuredDocumentConnector>();
         services.AddHttpClient("unstructured");
+        // SPEC-20260927-git-repository-source-connector: read-only REST git
+        // connector (github/gitlab/gitea).
+        services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.GitRepositoryConnector>();
+        services.AddHttpClient("git");
         // SPEC-20260927-youtube-transcript-connector: YoutubeExplode adapter + connector.
         services.AddSingleton<Ingestion.Connectors.IYouTubeClient, Ingestion.Connectors.YouTubeClientAdapter>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.YouTubeConnector>();
