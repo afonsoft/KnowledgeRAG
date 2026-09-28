@@ -70,15 +70,16 @@ public sealed class ResilientChatClient : IChatClient
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
         var failures = new List<Exception>();
-        var i = 0;
-        // Lazily materializes each alternate only when reached.
-        foreach (var (client, name) in CandidateClients())
+        // Lazily materializes each alternate only when reached; the attempt
+        // index comes from the sequence itself (primary = 0).
+        foreach (var (client, name, attempt) in CandidateClients()
+                     .Select((c, idx) => (c.Client, c.Name, idx)))
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 var response = await client.GetResponseAsync(messages, options, cancellationToken);
-                if (i > 0)
+                if (attempt > 0)
                 {
                     response.AdditionalProperties ??= new AdditionalPropertiesDictionary();
                     response.AdditionalProperties["fallbackTriggered"] = true;
@@ -86,10 +87,10 @@ public sealed class ResilientChatClient : IChatClient
                     response.AdditionalProperties["fallbackProvider"] = name;
                     response.AdditionalProperties["fallbackReason"] =
                         FallbackErrorClassifier.ReasonFor(failures[^1]);
-                    response.AdditionalProperties["attemptNumber"] = i + 1;
+                    response.AdditionalProperties["attemptNumber"] = attempt + 1;
                     _logger.LogWarning(
                         "chat fallback: {Original} → {Fallback} after {Reason} (attempt {Attempt})",
-                        _primaryName, name, FallbackErrorClassifier.ReasonFor(failures[^1]), i + 1);
+                        _primaryName, name, FallbackErrorClassifier.ReasonFor(failures[^1]), attempt + 1);
                 }
                 return response;
             }
@@ -97,17 +98,16 @@ public sealed class ResilientChatClient : IChatClient
                                        || !cancellationToken.IsCancellationRequested)
             {
                 failures.Add(ex);
-                var decision = _policy.Evaluate(ex, "chat", i, cancellationToken);
+                var decision = _policy.Evaluate(ex, "chat", attempt, cancellationToken);
                 if (!decision.ShouldFallback)
                     break;
             }
-            i++;
         }
 
         // RF-004 edge case: every provider failed → aggregate the history;
         // a single failure rethrows unchanged (Observe/Disabled semantics).
-        if (failures.Count == 1)
-            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        if (failures is [var single])
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(single).Throw();
         throw new AggregateException(
             $"all {failures.Count} chat providers failed", failures);
     }
