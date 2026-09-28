@@ -141,6 +141,11 @@ public static class KnowledgeHubServiceCollectionExtensions
         // connector (github/gitlab/gitea).
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.GitRepositoryConnector>();
         services.AddHttpClient("git");
+        // SPEC-20260927-audio-transcription-connector: external transcription
+        // (AssemblyAI / OpenAI-whisper-compatible) — long-running uploads.
+        services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.AudioTranscriptionConnector>();
+        services.AddHttpClient("audio", c => c.Timeout = Timeout.InfiniteTimeSpan)
+            .SetHandlerLifetime(TimeSpan.FromMinutes(10));
         // SPEC-20260927-youtube-transcript-connector: YoutubeExplode adapter + connector.
         services.AddSingleton<Ingestion.Connectors.IYouTubeClient, Ingestion.Connectors.YouTubeClientAdapter>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.YouTubeConnector>();

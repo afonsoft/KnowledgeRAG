@@ -61,7 +61,8 @@ public sealed class ScheduledSyncBackgroundService(
                     || s.SourceType == SourceType.RssFeed
                     || s.SourceType == SourceType.YouTube
                     || s.SourceType == SourceType.UnstructuredDocument
-                    || s.SourceType == SourceType.GitRepository))
+                    || s.SourceType == SourceType.GitRepository
+                    || s.SourceType == SourceType.AudioTranscription))
             .Select(s => new { s.Id, s.SyncIntervalMinutes })
             .ToListAsync(ct);
 
