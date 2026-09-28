@@ -60,6 +60,11 @@ public sealed partial class AnswerService(
             && await SafeCache.GetStringAsync(cache, answerKey, logger, cancellationToken) is { } hit
             && DeserializeAnswer(hit) is { } cachedAnswer)
         {
+            // Cached answers still feed the quality sample — otherwise repeated
+            // queries would be invisible to the triad stats (Devin Review #367).
+            var cachedChunks = context.Select(c => c.ChunkText).ToList();
+            evaluationEnqueuer.TryEnqueue(
+                Guid.NewGuid().ToString("N"), question, cachedChunks, cachedAnswer.Answer ?? "");
             return cachedAnswer with { Cached = true, LatencyMs = sw.Elapsed.TotalMilliseconds };
         }
 
