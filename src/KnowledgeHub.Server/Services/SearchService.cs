@@ -103,7 +103,7 @@ public sealed class SearchService(
         string query, int topK, Guid? sourceId,
         SearchMode mode, ResolvedSearchFilter? filter,
         Auth.CallerScope scope, string? conversationContext,
-        DegradationState degraded, CancellationToken ct)
+        DegradationState degraded, CancellationToken ct, int relaxLevel = 0)
     {
         var activeSourceIds = sourceId is null
             ? await db.Sources.Where(s => s.IsActive).Select(s => s.Id).ToListAsync(ct)
@@ -164,7 +164,22 @@ public sealed class SearchService(
         var graphEnabled = filter?.UseGraph
             ?? configuration.GetValue("Search:Graph:Enabled", false);
 
-        if (mode == SearchMode.Semantic && expansionMode == "off" && !graphEnabled)
+        // SPEC-20260927-multiquery RF-001: caller-supplied sub-queries force the
+        // fused path — each becomes an extra vector+lexical arm under the same RRF.
+        var subQueries = filter?.SubQueries?
+            .Where(q => !string.IsNullOrWhiteSpace(q))
+            .Select(q => q.Trim())
+            .Take(4)
+            .ToList();
+        if (subQueries is { Count: > 0 })
+        {
+            KnowledgeHubMetrics.MultiQueryDispatched.Add(subQueries.Count);
+            Activity.Current?.SetTag("search.multiquery.count", subQueries.Count);
+            logger.LogInformation("MultiQueryDispatched count={Count}", subQueries.Count);
+        }
+
+        if (mode == SearchMode.Semantic && expansionMode == "off" && !graphEnabled
+            && subQueries is not { Count: > 0 })
         {
             var queryVector = await EmbedQueryAsync(effectiveQuery, ct);
             windowed = (await VectorSearchAsync(queryVector, fetchLimit, activeSourceIds, degraded, ct)).ToList();
@@ -173,7 +188,7 @@ public sealed class SearchService(
         {
             var (vectorLabels, vectorLists, lexicalLabels, lexicalLists) =
                 await ExpandAndSearchAsync(query, effectiveQuery, mode, expansionMode,
-                    window, activeSourceIds, degraded, ct);
+                    window, activeSourceIds, degraded, ct, subQueries);
 
             var graphArm = graphEnabled
                 ? await GraphRankedAsync(query, ct)
@@ -252,9 +267,116 @@ public sealed class SearchService(
             final = AutocutFilter.Apply(final, sensitivity, maxClamp);
         }
 
+        // SPEC-20260927-multiquery RF-002: hierarchical scope fallback — driven
+        // only from the strict level (relaxLevel==0); the loop owns the cascade.
+        var relaxAllowed = relaxLevel == 0
+            && (filter?.AllowRelaxation
+                ?? configuration.GetValue("Search:Relaxation:Enabled", true));
+        var minResults = Math.Max(0, configuration.GetValue("Search:Relaxation:MinResults", 1));
+        if (relaxAllowed && final.Count < minResults)
+            final = await ApplyRelaxationAsync(query, topK, sourceId, filter, mode,
+                scope, conversationContext, degraded, final.ToList(), minResults, ct);
+
         // SPEC-20260924-hierarchical-retrieval: post-selection context expansion
         // (neighbours / parent section) — never affects ranking.
         return await ApplyContextExpansionAsync(final, filter, ct);
+    }
+
+    private const double RelaxationPenalty = 0.85;
+
+    /// <summary>
+    /// SPEC-20260927-multiquery RF-002: cascades the scope until MinResults is
+    /// met — drop pathPrefix → sourceId→its SourceType → global (still bounded by
+    /// the caller's allowed-source scope). Relaxed hits merge with the strict
+    /// ones under a 0.85^level score penalty so strict matches keep precedence.
+    /// </summary>
+    private async Task<List<SearchResultItem>> ApplyRelaxationAsync(
+        string query, int topK, Guid? sourceId, ResolvedSearchFilter? filter,
+        SearchMode mode, Auth.CallerScope scope, string? conversationContext,
+        DegradationState degraded, List<SearchResultItem> strict,
+        int minResults, CancellationToken ct)
+    {
+        var merged = strict.ToList();
+        var seen = strict.Where(i => i.ChunkId is not null)
+            .Select(i => i.ChunkId!.Value).ToHashSet();
+        var curSourceId = sourceId;
+        var curFilter = filter;
+
+        for (var level = 1; level <= 3 && merged.Count < minResults; level++)
+        {
+            var next = await NextScopeAsync(curSourceId, curFilter, ct);
+            if (next is null)
+                break;
+            curSourceId = next.Value.SourceId;
+            curFilter = next.Value.Filter;
+
+            var hits = await ExecuteAsync(query, topK, curSourceId, mode, curFilter,
+                scope, conversationContext, degraded, ct, relaxLevel: level);
+            var penalty = Math.Pow(RelaxationPenalty, level);
+            var added = 0;
+            foreach (var h in hits)
+            {
+                if (h.ChunkId is { } cid && !seen.Add(cid))
+                    continue;
+                merged.Add(h with
+                {
+                    IsRelaxed = true,
+                    RelaxedScope = next.Value.Description,
+                    Score = h.Score * penalty,
+                    ScoreBreakdown = h.ScoreBreakdown is { } b
+                        ? b with { Fused = b.Fused * penalty } : null
+                });
+                added++;
+            }
+            if (added == 0)
+                continue;
+
+            KnowledgeHubMetrics.FilterRelaxations.Add(1,
+                new KeyValuePair<string, object?>("level", level));
+            Activity.Current?.SetTag("search.relaxation.level", level);
+            logger.LogInformation(
+                "RetrievalFilterRelaxed level={Level} scope={Scope} added={Added}",
+                level, next.Value.Description, added);
+        }
+
+        return merged
+            .OrderByDescending(i => i.ScoreBreakdown?.Fused ?? i.Score)
+            .Take(topK)
+            .ToList();
+    }
+
+    /// <summary>Next scope in the relaxation cascade; null when fully relaxed.</summary>
+    private async Task<(Guid? SourceId, ResolvedSearchFilter? Filter, string Description)?>
+        NextScopeAsync(Guid? sourceId, ResolvedSearchFilter? filter, CancellationToken ct)
+    {
+        // Level 1: drop the tag-like restriction, keep the source.
+        if (filter?.PathPrefix is not null)
+        {
+            var f = filter with { PathPrefix = null };
+            return (sourceId, f, ResolvedSearchFilter.DescribeScope(sourceId, f));
+        }
+
+        // Level 2: drop the concrete source, keep its connector type.
+        if (sourceId is { } sid)
+        {
+            var type = await db.Sources.AsNoTracking()
+                .Where(s => s.Id == sid)
+                .Select(s => (SourceType?)s.SourceType)
+                .FirstOrDefaultAsync(ct);
+            var f = filter is null
+                ? new ResolvedSearchFilter(null, null, null, null, SourceType: type)
+                : filter with { SourceType = type };
+            return (null, f, ResolvedSearchFilter.DescribeScope(null, f));
+        }
+
+        // Level 3: drop the source-type restriction — global (still caller-scoped).
+        if (filter?.SourceType is not null)
+        {
+            var f = filter with { SourceType = null };
+            return (null, f, "global");
+        }
+
+        return null;
     }
 
     /// <summary>RF-002: re-orders the hydrated window by rerank score; any
@@ -499,7 +621,8 @@ public sealed class SearchService(
             string rawQuery, string effectiveQuery, SearchMode mode,
             string expansionMode, int window,
             IReadOnlyCollection<Guid> activeSourceIds,
-            DegradationState degraded, CancellationToken ct)
+            DegradationState degraded, CancellationToken ct,
+            IReadOnlyList<string>? subQueries = null)
     {
         IReadOnlyList<string> variants = [];
         string? hydeText = null;
@@ -539,6 +662,14 @@ public sealed class SearchService(
             case "both":
                 lexicalQueries.AddRange(variants.Select(v => (v, (string?)v)));
                 break;
+        }
+
+        // SPEC-20260927-multiquery RF-001: caller-supplied sub-queries ride both
+        // arms as extra ranked lists (label = the sub-query text), fused by RRF.
+        if (subQueries is { Count: > 0 })
+        {
+            vectorTexts.AddRange(subQueries.Select(q => (q, (string?)q)));
+            lexicalQueries.AddRange(subQueries.Select(q => (q, (string?)q)));
         }
 
         var vectorLists = new List<IReadOnlyList<Guid>>();

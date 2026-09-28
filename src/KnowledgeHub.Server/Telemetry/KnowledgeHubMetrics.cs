@@ -73,6 +73,16 @@ public sealed class KnowledgeHubMetrics : IMcpRequestMetrics
     public static readonly Counter<long> SearchCandidatesDropped =
         Meter.CreateCounter<long>("knowledgehub.search.candidates_dropped");
 
+    /// <summary>Hierarchical filter relaxations (SPEC-20260927 RF-002).
+    /// Tags: level (1=drop tag/prefix, 2=source→type, 3=global).</summary>
+    public static readonly Counter<long> FilterRelaxations =
+        Meter.CreateCounter<long>("knowledgehub.search.filter_relaxations");
+
+    /// <summary>Caller-supplied sub-queries dispatched per search
+    /// (SPEC-20260927 RF-001). No tags — count is the signal.</summary>
+    public static readonly Counter<long> MultiQueryDispatched =
+        Meter.CreateCounter<long>("knowledgehub.search.multiquery_dispatched");
+
     /// <inheritdoc />
     public void Record(string method, string sessionMode, bool succeeded)
     {

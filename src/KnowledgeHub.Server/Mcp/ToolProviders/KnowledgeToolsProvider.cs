@@ -32,7 +32,9 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "useGraph":{"type":"boolean","description":"Enable the knowledge-graph retrieval arm: entity linking + 1-hop evidence chunks (default: server config)"},
           "windowSize":{"type":"integer","description":"Neighbour window breadth for context expansion, 0-3 (default: server config). >0 implies contextExpand=window; 0 disables expansion"},
           "limitMode":{"type":"string","enum":["fixed","autocut"],"description":"Result limit: fixed=topK, autocut=prunes the long tail at the score elbow (default: server config)"},
-          "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"}
+          "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"},
+          "subQueries":{"type":"array","items":{"type":"string"},"description":"Extra query variants searched in parallel and fused via RRF (max 4) — for multi-faceted questions"},
+          "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"}
         },"required":["query"],
         "examples":[{"query":"what is RAG?","topK":5,"mode":"hybrid"}]}
         """)!.AsObject();
@@ -53,7 +55,9 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "useGraph":{"type":"boolean","description":"Enable the knowledge-graph retrieval arm: entity linking + 1-hop evidence chunks (default: server config)"},
           "windowSize":{"type":"integer","description":"Neighbour window breadth for context expansion, 0-3 (default: server config). >0 implies contextExpand=window; 0 disables expansion"},
           "limitMode":{"type":"string","enum":["fixed","autocut"],"description":"Result limit: fixed=topK, autocut=prunes the long tail at the score elbow (default: server config)"},
-          "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"}
+          "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"},
+          "subQueries":{"type":"array","items":{"type":"string"},"description":"Extra query variants searched in parallel and fused via RRF (max 4) — for multi-faceted questions"},
+          "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"}
         },"required":["question"],
         "examples":[{"question":"How does synchronization work?","topK":5,"generate":true}]}
         """)!.AsObject();
@@ -140,7 +144,12 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                                 ? outcome.Grading.Grade.ToString().ToLowerInvariant() : null,
                             retried = outcome.Retried,
                             totalMatches = outcome.Results.Count,
-                            limitModeApplied = filter.EffectiveLimitMode(limitCfg)
+                            limitModeApplied = filter.EffectiveLimitMode(limitCfg),
+                            // SPEC-20260927-multiquery RF-003: never relax silently.
+                            filterRelaxed = outcome.Results.Any(r => r.IsRelaxed),
+                            originalFilter = Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
+                            appliedFilter = outcome.Results.FirstOrDefault(r => r.IsRelaxed)?.RelaxedScope
+                                ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter)
                         });
                 }
             },
@@ -222,7 +231,9 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             UseGraph = ToolArgs.OptionalBool(ctx, "useGraph"),
             WindowSize = ToolArgs.OptionalIntOrNull(ctx, "windowSize"),
             LimitMode = ToolArgs.OptionalString(ctx, "limitMode"),
-            AutocutSensitivity = ToolArgs.OptionalIntOrNull(ctx, "autocutSensitivity")
+            AutocutSensitivity = ToolArgs.OptionalIntOrNull(ctx, "autocutSensitivity"),
+            SubQueries = ToolArgs.OptionalStringArray(ctx, "subQueries"),
+            AllowRelaxation = ToolArgs.OptionalBool(ctx, "allowRelaxation")
         };
         return Search.ResolvedSearchFilter.TryResolve(raw, out var filter, out var error)
             ? filter
@@ -247,22 +258,29 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         var answers = ctx.Services!.GetRequiredService<IAnswerService>();
         var generate = ToolArgs.OptionalBool(ctx, "generate") ?? answers.IsConfigured;
 
+        // SPEC-20260927-multiquery RF-003: when every piece of evidence came from
+        // a relaxed scope, the response must say so — never relax silently.
+        var relaxedWarning = results.Count > 0 && results.All(r => r.IsRelaxed)
+            ? "\n\n(evidence found outside the strict requested scope)"
+            : null;
+
         // SPEC-20260924-corrective-rag RF-003: insufficient evidence short-circuits
         // synthesis — honest abstention, no LLM call, weak citations attached.
         if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate)
             return await ToolResults.Structured(
                 retrieval.BuildAbstention(question, outcome).Answer
-                + (results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(results.Take(3).ToList()) : ""),
+                + (results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(results.Take(3).ToList()) : "")
+                + relaxedWarning,
                 retrieval.BuildAbstention(question, outcome));
 
         if (!generate)
-            return await ToolResults.Text(FormatAnswerContext(question, results));
+            return await ToolResults.Text(FormatAnswerContext(question, results) + relaxedWarning);
 
         if (!answers.IsConfigured)
         {
             // RF risk mitigation: generate requested but no provider — raw context + warning.
             return await ToolResults.Text(
-                FormatAnswerContext(question, results)
+                FormatAnswerContext(question, results) + relaxedWarning
                 + "\n\n(warning: no chat provider configured — returning raw context)");
         }
 
@@ -275,7 +293,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     : null,
                 Retried = outcome.Retried
             };
-            var text = new StringBuilder(answer.Answer);
+            var text = new StringBuilder(answer.Answer + relaxedWarning);
             if (answer.Citations.Count > 0)
             {
                 text.Append("\n\nCitations:");
