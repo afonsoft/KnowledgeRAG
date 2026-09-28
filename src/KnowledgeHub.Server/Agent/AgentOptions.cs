@@ -30,6 +30,10 @@ public sealed class AgentOptions
     /// </summary>
     public int MaxContextTokens { get; set; } = 8000;
 
+    /// <summary>Chain AST compaction + repair policy
+    /// (<c>Agent:ContextManagement</c>, SPEC-20260927-chain-ast-thread-compactor).</summary>
+    public McpEngine.Agents.ChainAst.ChainCompactionOptions ContextManagement { get; set; } = new();
+
     /// <summary>
     /// SSE event buffer capacity for <c>agent_chat</c> streaming
     /// (SPEC-20260923-agent-runtime-hardening RF-001): bounded with

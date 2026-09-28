@@ -253,6 +253,12 @@ public static class KnowledgeHubServiceCollectionExtensions
                 sp.GetRequiredService<Evaluation.IRagEvaluationEnqueuer>());
         });
 
+        // SPEC-20260927-chain-ast-thread-compactor: compaction/repair of the
+        // message projection sent to the LLM (transcript stays untouched).
+        services.AddSingleton<McpEngine.Agents.ChainAst.IChainCompactor>(sp =>
+            new McpEngine.Agents.ChainAst.ChainCompactor(
+                sp.GetRequiredService<IOptions<Agent.AgentOptions>>().Value.ContextManagement));
+
         // SPEC-20260914-agent-chat-loop: model→tools→model loop over the live catalog.
         services.AddOptions<Agent.AgentOptions>()
             .Configure<IConfiguration>((options, cfg) =>
@@ -264,7 +270,8 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
             sp.GetRequiredService<IOptions<Agent.AgentOptions>>().Value,
             sp.GetService<IMcpActivityFeed>(),
-            sp.GetRequiredService<ILogger<AgentService>>()));
+            sp.GetRequiredService<ILogger<AgentService>>(),
+            sp.GetService<McpEngine.Agents.ChainAst.IChainCompactor>()));
         services.AddScoped<IApprovalService>(sp => new ApprovalService(
             sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
             TimeSpan.FromMinutes(

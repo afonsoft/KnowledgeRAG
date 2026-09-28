@@ -29,7 +29,8 @@ public sealed class AgentService(
     KnowledgeHubDbContext db,
     AgentOptions options,
     IMcpActivityFeed? feed,
-    ILogger<AgentService> logger) : IAgentService
+    ILogger<AgentService> logger,
+    McpEngine.Agents.ChainAst.IChainCompactor? compactor = null) : IAgentService
 {
     private const string SystemPrompt =
         "You are the KnowledgeHub agent. Use the available tools to research the " +
@@ -511,6 +512,17 @@ public sealed class AgentService(
                     var llmSw = Stopwatch.StartNew();
                     try
                     {
+                        // SPEC-20260927-chain-ast-thread-compactor: repair
+                        // dangling tool calls and compact history before the
+                        // model sees it (never on the persisted transcript).
+                        if (compactor is not null)
+                        {
+                            var ast = McpEngine.Agents.ChainAst.ChainAstParser.Parse(
+                                loop.Messages, options.ContextManagement.AutoRepairBrokenToolCalls);
+                            ast = await compactor.CompactAsync(ast, cancellationToken);
+                            loop.Messages.Clear();
+                            loop.Messages.AddRange(ast.ToChatMessages());
+                        }
                         response = await GetModelResponseAsync(client, loop, sink, cancellationToken);
                     }
                     catch (Exception ex)
