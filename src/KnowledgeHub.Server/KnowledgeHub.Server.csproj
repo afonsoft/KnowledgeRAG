@@ -49,6 +49,14 @@
     <EnableUnsupportedPlatformTargetCheck>false</EnableUnsupportedPlatformTargetCheck>
   </PropertyGroup>
 
+  <!-- EF Core migrations are generated boilerplate — near-identical
+       snapshots/blocks across providers must not count as code duplication. -->
+  <ItemGroup>
+    <SonarQubeSetting Include="sonar.cpd.exclusions">
+      <Value>**/Migrations/**</Value>
+    </SonarQubeSetting>
+  </ItemGroup>
+
   <!-- SPEC-06: standalone single-file publish (dotnet publish -r <rid>). -->
   <PropertyGroup>
     <PublishSingleFile>true</PublishSingleFile>
