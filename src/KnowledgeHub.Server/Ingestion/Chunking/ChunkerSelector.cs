@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Generic;
 
 namespace KnowledgeHub.Server.Ingestion.Chunking;
@@ -43,43 +44,69 @@ public static class ChunkerSelector
         _ => MarkdownTextChunker.For(kind)
     };
 
-    /// <summary>Convenience: classify + chunk in one call.</summary>
+    /// <summary>Convenience: classify + chunk in one call. Documents whose text
+    /// contains table blocks route to the layout-aware chunker automatically
+    /// (SPEC-20260927-ragflow-vision-layout-chunking — auto selection).</summary>
     public static (ChunkKind Kind, IReadOnlyList<ChunkPiece> Pieces) Chunk(
         string? uriOrPath, string text, int maxTokens, int overlapTokens)
     {
         var kind = KindFor(uriOrPath);
-        return (kind, For(kind).Chunk(text, maxTokens, overlapTokens));
+        var chunker = kind is ChunkKind.Markdown or ChunkKind.Prose
+            && TableChunkSplitter.ContainsTable(text)
+                ? new VisionLayoutTextChunker(null, kind)
+                : For(kind);
+        return (kind, chunker.Chunk(text, maxTokens, overlapTokens));
     }
 
     /// <summary>
     /// SPEC-20260924-semantic-chunking RF-003: strategy-aware async entry point.
-    /// <paramref name="strategy"/> = auto|semantic — <c>semantic</c> embeds
-    /// sentences to find topic boundaries (prose/documents only; code/config
-    /// always stay structural). Any failure falls back to the structural
-    /// chunker for the classified kind — ingestion never aborts over chunking.
+    /// <paramref name="strategy"/> = auto|semantic|visionlayout — <c>semantic</c>
+    /// embeds sentences to find topic boundaries (prose/documents only; code/config
+    /// always stay structural). <c>visionlayout</c> forces the layout-aware chunker
+    /// (atomic tables, figure captions) and <c>auto</c> engages it whenever the
+    /// text contains table blocks (SPEC-20260927-ragflow-vision-layout-chunking).
+    /// Any failure falls back to the structural chunker for the classified kind —
+    /// ingestion never aborts over chunking.
     /// </summary>
     public static async Task<(ChunkKind Kind, IReadOnlyList<ChunkPiece> Pieces)> ChunkAsync(
         string? uriOrPath, string text, int maxTokens, int overlapTokens,
         Embeddings.IEmbeddingProvider embeddings, IConfiguration configuration,
-        string? strategy, ILogger logger, CancellationToken ct = default)
+        string? strategy, ILogger logger, CancellationToken ct = default,
+        IServiceProvider? services = null)
     {
         var kind = KindFor(uriOrPath);
         var effective = strategy
             ?? configuration.GetValue("Ingestion:Chunking:Strategy", "auto");
 
-        if (string.Equals(effective, "semantic", StringComparison.OrdinalIgnoreCase)
-            && kind is ChunkKind.Markdown or ChunkKind.Prose)
+        if (kind is ChunkKind.Markdown or ChunkKind.Prose)
         {
-            try
+            if (string.Equals(effective, "semantic", StringComparison.OrdinalIgnoreCase))
             {
-                var pieces = await new SemanticTextChunker(embeddings, configuration)
-                    .ChunkAsync(text, maxTokens, overlapTokens, ct);
-                return (kind, pieces);
+                try
+                {
+                    var pieces = await new SemanticTextChunker(embeddings, configuration)
+                        .ChunkAsync(text, maxTokens, overlapTokens, ct);
+                    return (kind, pieces);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                {
+                    logger.LogWarning(ex,
+                        "Semantic chunking failed for '{Uri}' — falling back to structural chunker", uriOrPath);
+                }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+
+            // SPEC-20260927-ragflow-vision-layout-chunking: explicit strategy or
+            // auto-detected table/layout-rich content → layout-aware chunker.
+            if (string.Equals(effective, "visionlayout", StringComparison.OrdinalIgnoreCase)
+                || (string.Equals(effective, "auto", StringComparison.OrdinalIgnoreCase)
+                    && TableChunkSplitter.ContainsTable(text)))
             {
-                logger.LogWarning(ex,
-                    "Semantic chunking failed for '{Uri}' — falling back to structural chunker", uriOrPath);
+                var chunker = new VisionLayoutTextChunker(
+                    configuration, kind,
+                    services?.GetService<Microsoft.Extensions.AI.IChatClient>(),
+                    services?.GetService<IHttpClientFactory>(), logger);
+                var pieces = await chunker.ChunkAsync(text, maxTokens, overlapTokens, ct);
+                return (kind, pieces);
             }
         }
 
@@ -92,7 +119,7 @@ public static class ChunkerSelector
     /// rules). Compared against <c>KnowledgeDocument.ChunkerVersion</c> — a
     /// mismatch re-chunks even content-identical docs.
     /// </summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     /// <summary>Hash of the chunking-relevant configuration — maxTokens, overlap,
     /// enrichment mode/min, per-source strategy.</summary>

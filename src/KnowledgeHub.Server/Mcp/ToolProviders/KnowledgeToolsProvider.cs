@@ -436,7 +436,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             embeddings, config,
             Ingestion.Chunking.ChunkerSelector.StrategyFor(target.ConfigurationJson),
             ctx.Services!.GetRequiredService<ILoggerFactory>()
-                .CreateLogger("KnowledgeHub.write_knowledge"), ct);
+                .CreateLogger("KnowledgeHub.write_knowledge"), ct, ctx.Services);
         var sanitizer = ctx.Services!.GetRequiredService<Security.IContentSanitizer>();
         var flagged = 0;
         var newChunks = pieces.Select((p, i) =>
@@ -452,6 +452,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                 ChunkKind = kind.ToString().ToLowerInvariant(),
                 SymbolPath = p.SymbolPath,
                 SectionPath = p.SectionPath,
+                MetadataJson = p.MetadataJson,
                 EnrichedText = Ingestion.ContextEnricher.Compose(
                     target.Name, title, p.SectionPath ?? p.SymbolPath, p.Text,
                     config.GetValue("Ingestion:ContextualEnrichment", "structural"),

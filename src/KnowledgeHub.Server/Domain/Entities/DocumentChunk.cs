@@ -28,6 +28,10 @@ public sealed class DocumentChunk
     /// <summary>SPEC-20260923-prompt-injection-guard RF-002: comma-separated
     /// suspicion flags from the content sanitizer; null = clean.</summary>
     public string? SuspicionFlags { get; set; }
+    /// <summary>SPEC-20260927-ragflow-vision-layout-chunking RF-003: structural
+    /// metadata emitted by the chunker (is_table, table_headers,
+    /// parent_section_title, is_figure); null for plain prose/code chunks.</summary>
+    public string? MetadataJson { get; set; }
 
     public KnowledgeDocument Document { get; set; } = null!;
 }

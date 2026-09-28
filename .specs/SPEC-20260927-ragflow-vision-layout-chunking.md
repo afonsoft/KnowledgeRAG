@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#278` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -112,16 +112,16 @@ Configuração no `appsettings.json`:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** um documento contendo uma tabela Markdown de 60 linhas **when** fatiado pelo `VisionLayoutTextChunker` com limite de 25 linhas **then** cada chunk gerado possui os cabeçalhos das colunas preservados nas primeiras linhas.
-- [ ] **Given** uma tabela com 10 linhas que cabe no tamanho de chunk **when** processada **then** ela permanece inteira como um único chunk sem divisões.
-- [ ] **Given** um texto com layout de duas colunas extraído via layout analysis **when** chunked **then** o conteúdo da coluna da esquerda é processado integralmente antes do conteúdo da coluna da direita.
+- [x] **Given** um documento contendo uma tabela Markdown de 60 linhas **when** fatiado pelo `VisionLayoutTextChunker` com limite de 25 linhas **then** cada chunk gerado possui os cabeçalhos das colunas preservados nas primeiras linhas.
+- [x] **Given** uma tabela com 10 linhas que cabe no tamanho de chunk **when** processada **then** ela permanece inteira como um único chunk sem divisões.
+- [x] **Given** um texto com layout de duas colunas extraído via layout analysis **when** chunked **then** o conteúdo da coluna da esquerda é processado integralmente antes do conteúdo da coluna da direita.
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Analisar implementação de `ITextChunker` e `MarkdownTextChunker`.
-- [ ] **T2 — Table Splitter:** Implementar `TableChunkSplitter.cs` com lógica de extração de header e split por linhas.
-- [ ] **T3 — Vision Chunker:** Implementar `VisionLayoutTextChunker.cs` e integrá-lo no `ChunkerSelector.cs`.
-- [ ] **T4 — Unit Tests:** Validar fatiamento de tabelas com dezenas de linhas e tabelas malformadas.
+- [x] **T1 — Discovery:** Analisar implementação de `ITextChunker` e `MarkdownTextChunker`.
+- [x] **T2 — Table Splitter:** Implementar `TableChunkSplitter.cs` com lógica de extração de header e split por linhas.
+- [x] **T3 — Vision Chunker:** Implementar `VisionLayoutTextChunker.cs` e integrá-lo no `ChunkerSelector.cs`.
+- [x] **T4 — Unit Tests:** Validar fatiamento de tabelas com dezenas de linhas e tabelas malformadas.
 
 ## 8. Organization Guardrails
 
@@ -129,6 +129,6 @@ Configuração no `appsettings.json`:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-003) implementados.
-- [ ] Testes unitários com 100% de sucesso em cenários tabulares e layouts ricos.
-- [ ] `ChunkerSelector` atualizado e documentado.
+- [x] Todos os requisitos (RF-001 a RF-003) implementados.
+- [x] Testes unitários com 100% de sucesso em cenários tabulares e layouts ricos.
+- [x] `ChunkerSelector` atualizado e documentado.
