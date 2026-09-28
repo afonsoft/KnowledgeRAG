@@ -195,15 +195,40 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<IServiceScopeFactory>(),
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<Settings.ApiKeyChatSettingsService>>()));
+        // SPEC-20260927-tool-and-model-resilience-fallback: policy engine +
+        // capability registry are singletons; the IChatClient decorator wraps
+        // the resolved primary when Mode != disabled and fallbacks exist.
+        services.AddOptions<Resilience.FallbackOptions>()
+            .Configure<IConfiguration>((options, cfg) =>
+                cfg.GetSection(Resilience.FallbackOptions.SectionName).Bind(options));
+        services.AddSingleton<Resilience.IFallbackPolicyEngine, Resilience.FallbackPolicyEngine>();
+        services.AddSingleton<Resilience.ToolCapabilityRegistry>();
         services.AddScoped<Microsoft.Extensions.AI.IChatClient>(sp =>
         {
             var http = sp.GetService<Microsoft.AspNetCore.Http.IHttpContextAccessor>()?.HttpContext;
             var keyIdValue = http?.User.FindFirst(Auth.ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
+            Microsoft.Extensions.AI.IChatClient? client;
+            string? primaryName;
             if (keyIdValue is not null && Guid.TryParse(keyIdValue, out var keyId))
             {
-                return sp.GetRequiredService<Settings.IApiKeyChatSettingsService>().GetClient(keyId)!;
+                var perKey = sp.GetRequiredService<Settings.IApiKeyChatSettingsService>();
+                client = perKey.GetClient(keyId);
+                primaryName = perKey.GetEffectiveOptions(keyId).Provider;
             }
-            return sp.GetRequiredService<Settings.IChatSettingsService>().GetClient()!;
+            else
+            {
+                var chat = sp.GetRequiredService<Settings.IChatSettingsService>();
+                client = chat.GetClient();
+                primaryName = chat.GetEffectiveOptions().Provider;
+            }
+            if (client is null)
+                return client!;
+            var fb = sp.GetRequiredService<IOptions<Resilience.FallbackOptions>>().Value;
+            return Resilience.ResilientChatClient.Wrap(
+                client, primaryName ?? "primary", fb.ChatFallbacks,
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<Resilience.IFallbackPolicyEngine>(),
+                sp.GetRequiredService<ILogger<Resilience.ResilientChatClient>>());
         });
         services.AddScoped<IAnswerService>(sp =>
         {

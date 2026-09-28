@@ -23,7 +23,7 @@ public abstract class HttpChatClient(HttpClient http, ChatProviderOptions option
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new ChatProviderException($"chat provider timed out after {Options.TimeoutSeconds}s");
+            throw new ChatProviderException($"chat provider timed out after {Options.TimeoutSeconds}s", isTimeout: true);
         }
         catch (HttpRequestException ex)
         {

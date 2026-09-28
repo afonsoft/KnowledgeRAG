@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#275` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -152,10 +152,10 @@ Resposta de Tool com auditoria de fallback:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** a configuração com `Mode = Enforce` e provedor secundário Ollama ativo **when** OpenAI retorna status 429 Too Many Requests **then** a chamada de chat é roteada com sucesso para Ollama e a resposta contém metadados de fallback.
-- [ ] **Given** a configuração com `Mode = Observe` **when** o provedor primário falha com status 503 **then** um log estruturado de aviso é registrado indicando o candidato sugerido e a exceção 503 é propagada.
-- [ ] **Given** uma falha de autenticação (HTTP 401) no provedor primário **when** a chamada é realizada **then** nenhum fallback é tentado e o erro 401 é retornado imediatamente.
-- [ ] **Given** um cancelamento de requisição pelo cliente via `CancellationToken` **when** o fallback está em andamento **then** a execução aborta imediatamente sem executar provedores terciários.
+- [x] **Given** a configuração com `Mode = Enforce` e provedor secundário Ollama ativo **when** OpenAI retorna status 429 Too Many Requests **then** a chamada de chat é roteada com sucesso para Ollama e a resposta contém metadados de fallback.
+- [x] **Given** a configuração com `Mode = Observe` **when** o provedor primário falha com status 503 **then** um log estruturado de aviso é registrado indicando o candidato sugerido e a exceção 503 é propagada.
+- [x] **Given** uma falha de autenticação (HTTP 401) no provedor primário **when** a chamada é realizada **then** nenhum fallback é tentado e o erro 401 é retornado imediatamente.
+- [x] **Given** um cancelamento de requisição pelo cliente via `CancellationToken` **when** o fallback está em andamento **then** a execução aborta imediatamente sem executar provedores terciários.
 
 **Edge cases:**
 
@@ -167,12 +167,12 @@ Resposta de Tool com auditoria de fallback:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Avaliar clientes de chat e injeção de dependências em `KnowledgeHub.Server`.
-- [ ] **T2 — Models & Options:** Implementar `FallbackOptions.cs` e `FallbackMode.cs`.
-- [ ] **T3 — Policy Engine:** Implementar `FallbackPolicyEngine.cs` com classificação de erros e verificação de orçamentos.
-- [ ] **T4 — Chat Decorator:** Implementar `ResilientChatClientDecorator.cs` integrando `IChatClient` do .NET 10.
-- [ ] **T5 — Tool Registry:** Implementar taxonomia de ferramentas em `ToolCapabilityRegistry.cs`.
-- [ ] **T6 — Tests:** Escrever testes cobrindo transições de modo (`Disabled`, `Observe`, `Enforce`), erros 429 e limites de timeout.
+- [x] **T1 — Discovery:** Avaliar clientes de chat e injeção de dependências em `KnowledgeHub.Server`.
+- [x] **T2 — Models & Options:** Implementar `FallbackOptions.cs` e `FallbackMode.cs`.
+- [x] **T3 — Policy Engine:** Implementar `FallbackPolicyEngine.cs` com classificação de erros e verificação de orçamentos.
+- [x] **T4 — Chat Decorator:** Implementar `ResilientChatClientDecorator.cs` integrando `IChatClient` do .NET 10.
+- [x] **T5 — Tool Registry:** Implementar taxonomia de ferramentas em `ToolCapabilityRegistry.cs`.
+- [x] **T6 — Tests:** Escrever testes cobrindo transições de modo (`Disabled`, `Observe`, `Enforce`), erros 429 e limites de timeout.
 
 ## 8. Organization Guardrails
 
@@ -181,7 +181,7 @@ Resposta de Tool com auditoria de fallback:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-004) implementados e verificados.
+- [x] Todos os requisitos (RF-001 a RF-004) implementados e verificados.
 - [ ] Testes unitários com simulação de erros HTTP (429, 503, 401) passando com 100% de sucesso.
 - [ ] Nenhuma regressão no comportamento padrão quando `Mode = Disabled`.
 - [ ] Métricas e logs Serilog estruturados sem vazamento de PII.
