@@ -151,6 +151,9 @@ public sealed class KnowledgeSourceService(
                 await secrets.RemoveAsync(Ingestion.Connectors.RestApiConnector.SecretKey(source.Id), ct);
             if (source.SourceType == SourceType.SqlDatabase)
                 await secrets.RemoveAsync(Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id), ct);
+            // SPEC-20260927-unstructured-document-parser-connector.
+            if (source.SourceType == SourceType.UnstructuredDocument)
+                await secrets.RemoveAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct);
             // SPEC-20260924-cloud-storage-connectors RF-006: purge cloud secrets + staging.
             if (source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage)
             {
@@ -243,6 +246,20 @@ public sealed class KnowledgeSourceService(
                 : null;
         }
 
+        // SPEC-20260927-unstructured-document-parser-connector: apiKey is
+        // optional (self-hosted endpoints work unauthenticated) — only a stale
+        // hasKey without a stored secret is rejected.
+        if (source.SourceType == SourceType.UnstructuredDocument)
+        {
+            var flagged = configuration["hasKey"] is JsonValue hv
+                && hv.TryGetValue<bool>(out var f) && f;
+            if (!flagged)
+                return null;
+            return await secrets.GetAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct) is null
+                ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
+                : null;
+        }
+
         if (source.SourceType is SourceType.AwsS3 or SourceType.OciStorage)
         {
             if (UsableSecret(configuration, "secretAccessKey"))
@@ -303,6 +320,9 @@ public sealed class KnowledgeSourceService(
             // to the encrypted store — config persists only hasKey.
             SourceType.RestApi => ("headers", Ingestion.Connectors.RestApiConnector.SecretKey(source.Id)),
             SourceType.SqlDatabase => ("connectionString", Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id)),
+            // SPEC-20260927-unstructured-document-parser-connector RF-001:
+            // apiKey is optional (self-hosted endpoints need none).
+            SourceType.UnstructuredDocument => ("apiKey", Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id)),
             _ => (null, null)
         };
         if (configKey is not null && secretKey is not null && configuration is not null)
