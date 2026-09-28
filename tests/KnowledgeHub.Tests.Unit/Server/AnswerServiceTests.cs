@@ -1,6 +1,6 @@
 using KnowledgeHub.Server.Chat;
-using KnowledgeHub.Server.Evaluation;
 using KnowledgeHub.Server.Services;
+using KnowledgeHub.Tests.Unit.Fakes;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Distributed;
@@ -207,13 +207,5 @@ public sealed class AnswerServiceTests
     private sealed class StubHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new();
-    }
-
-    private sealed class NoopRagEvaluationEnqueuer : IRagEvaluationEnqueuer
-    {
-        public static readonly NoopRagEvaluationEnqueuer Instance = new();
-        public System.Threading.Channels.ChannelReader<KnowledgeHub.Server.Evaluation.RagEvaluationTask> Reader { get; } =
-            System.Threading.Channels.Channel.CreateUnbounded<KnowledgeHub.Server.Evaluation.RagEvaluationTask>().Reader;
-        public bool TryEnqueue(string queryId, string question, IReadOnlyList<string> contextChunks, string answer) => false;
     }
 }
