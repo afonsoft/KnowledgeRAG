@@ -214,6 +214,44 @@
                                   ShowLabel="true" IsNullable="true" Min="1" Max="50" />
         </div>
     }
+    @if (Model.Type is SourceType.UnstructuredDocument)
+    {
+        <div class="col-12">
+            <BootstrapInput @bind-Value="Model.FolderPath" DisplayText="Pasta com documentos *"
+                            ShowLabel="true" PlaceHolder="/data/reports" />
+            <div class="form-text">
+                Diretório local não recursivo. Aceita .pdf .docx .pptx .xlsx .jpg .jpeg .png .tiff.
+            </div>
+        </div>
+        <div class="col-12">
+            <Textarea @bind-Value="Model.Files" DisplayText="Arquivos avulsos (um por linha, opcional)"
+                      ShowLabel="true" rows="2" PlaceHolder="/data/report.pdf&#10;/data/deck.pptx" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInput @bind-Value="Model.ApiUrl" DisplayText="Endpoint da API (opcional)"
+                            ShowLabel="true"
+                            PlaceHolder="https://api.unstructured.io/general/v0/general" />
+        </div>
+        <div class="col-12 col-md-6">
+            <Select @bind-Value="Model.Strategy" Items="UnstructuredStrategyItems"
+                    DisplayText="Estratégia de extração" ShowLabel="true" />
+        </div>
+        <div class="col-12 col-md-6">
+            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeMb" DisplayText="Máx. MB por arquivo (padrão 25)"
+                                  ShowLabel="true" IsNullable="true" Min="1" Max="100" />
+        </div>
+        <div class="col-12 col-md-6 d-flex align-items-end">
+            <Switch @bind-Value="Model.TableExtraction" DisplayText="Extrair tabelas (GFM)" ShowLabel="true" />
+        </div>
+        <div class="col-12">
+            <label class="form-label">
+                API Key @(Model.HasStoredKey ? "(armazenada — em branco mantém)" : "(opcional para endpoints locais)")
+            </label>
+            <BootstrapInput type="password" @bind-Value="Model.ApiKey"
+                            PlaceHolder="unstructured-api-key" />
+            <div class="form-text">Armazenada criptografada; nunca retornada pela API.</div>
+        </div>
+    }
     @if (Model.Type is SourceType.SqlDatabase)
     {
         <div class="col-12 col-md-6">
@@ -404,7 +442,7 @@
        chunking strategy for document-producing types. *@
     @if (Model.Type is SourceType.ObsidianVault or SourceType.DocumentFile or SourceType.WebPage
         or SourceType.Notion or SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage
-        or SourceType.GoogleDrive)
+        or SourceType.GoogleDrive or SourceType.UnstructuredDocument)
     {
         <div class="col-12 col-md-6">
             <Select @bind-Value="Model.Chunking" Items="ChunkingItems" DisplayText="Estratégia de chunking"
@@ -412,6 +450,7 @@
                     PlaceHolder="Auto" />
             <div class="form-text">
                 Semantic embedda sentenças e corta por mudança de assunto (mais lento na ingestão).
+                VisionLayout preserva tabelas como blocos atômicos com cabeçalho repetido.
             </div>
         </div>
     }
@@ -504,6 +543,10 @@
             SourceType.Notion
                 when string.IsNullOrEmpty(Model.NotionToken) && !Model.HasStoredKey
                 => "Integration token é obrigatório",
+            SourceType.UnstructuredDocument
+                when string.IsNullOrWhiteSpace(Model.FolderPath)
+                  && string.IsNullOrWhiteSpace(Model.Files)
+                => "Informe uma pasta ou ao menos um arquivo",
             SourceType.AwsS3 or SourceType.OciStorage
                 when string.IsNullOrWhiteSpace(Model.BucketName)
                   || string.IsNullOrWhiteSpace(Model.Region)
@@ -537,16 +580,21 @@
          "pageParam", "idColumn", "titleColumn", "contentColumns", "urlColumn",
          "maxRows", "commandTimeoutSeconds",
          "feedUrl", "maxItems", "fetchFullContent", "forceRefresh",
-         "urls", "language", "includeAutoCaptions", "includeTimestamps", "maxVideos"];
+         "urls", "language", "includeAutoCaptions", "includeTimestamps", "maxVideos",
+         "folderPath", "files", "apiUrl", "strategy", "coordinates", "tableExtraction"];
 
     private static readonly List<SelectedItem> TransportItems =
         [new("auto", "auto"), new("http", "http"), new("sse", "sse")];
 
     private static readonly List<SelectedItem> ChunkingItems =
-        [new("", "Auto (estrutural)"), new("semantic", "Semantic (por assunto)")];
+        [new("", "Auto (estrutural)"), new("semantic", "Semantic (por assunto)"),
+         new("visionlayout", "VisionLayout (tabelas/layout)")];
 
     private static readonly List<SelectedItem> SqlProviderItems =
         [new("sqlite", "SQLite"), new("postgres", "PostgreSQL")];
+
+    private static readonly List<SelectedItem> UnstructuredStrategyItems =
+        [new("auto", "auto"), new("hi_res", "hi_res"), new("ocr_only", "ocr_only"), new("fast", "fast")];
 
     /// <summary>
     /// Builds the JsonObject configuration payload: starts from the original
@@ -691,6 +739,29 @@
                     config[AzureCredentialClassifier.LooksLikeConnectionString(Model.SecretAccessKey)
                         ? "connectionString" : "accountKey"] = Model.SecretAccessKey;
                 break;
+            case SourceType.UnstructuredDocument:
+                // SPEC-20260927-unstructured-document-parser-connector.
+                if (!string.IsNullOrWhiteSpace(Model.FolderPath))
+                    config["folderPath"] = Model.FolderPath;
+                var files = ToJsonArray(Model.Files);
+                if (files.Count > 0)
+                    config["files"] = files;
+                if (!string.IsNullOrWhiteSpace(Model.ApiUrl))
+                    config["apiUrl"] = Model.ApiUrl;
+                if (!string.IsNullOrWhiteSpace(Model.Strategy) && Model.Strategy != "auto")
+                    config["strategy"] = Model.Strategy;
+                if (Model.Coordinates)
+                    config["coordinates"] = true;
+                if (!Model.TableExtraction)
+                    config["tableExtraction"] = false;
+                if (Model.MaxFileSizeMb is not null)
+                    config["maxFileSizeMb"] = Model.MaxFileSizeMb;
+                // Empty keeps the stored key; non-empty replaces it (server
+                // moves the value to the encrypted store — never persisted).
+                if (!string.IsNullOrEmpty(Model.ApiKey))
+                    config["apiKey"] = Model.ApiKey;
+                config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.ApiKey);
+                break;
             case SourceType.GoogleDrive:
                 config["sharedUrl"] = Model.SharedUrl;
                 // Empty keeps the stored key; non-empty replaces it (server
@@ -787,6 +858,13 @@
         public bool IncludeAutoCaptions { get; set; } = true;
         public bool IncludeTimestamps { get; set; }
         public int? MaxVideos { get; set; }
+        public string? FolderPath { get; set; }
+        public string? Files { get; set; }
+        public string? ApiUrl { get; set; }
+        public string Strategy { get; set; } = "auto";
+        public bool Coordinates { get; set; }
+        public bool TableExtraction { get; set; } = true;
+        public int? MaxFileSizeMb { get; set; }
 
         /// <summary>True when the source already has an API key in the
         /// encrypted store (McpProxy) — the value itself is never returned.</summary>
@@ -848,6 +926,16 @@
             SharedUrl = dto.Configuration?["sharedUrl"]?.GetValue<string>(),
             MaxFiles = dto.Configuration?["maxFiles"] is JsonValue mx
                 && mx.TryGetValue<int>(out var mxn) ? mxn : null,
+            FolderPath = dto.Configuration?["folderPath"]?.GetValue<string>(),
+            Files = ReadStringList(dto.Configuration, "files"),
+            ApiUrl = dto.Configuration?["apiUrl"]?.GetValue<string>(),
+            Strategy = dto.Configuration?["strategy"]?.GetValue<string>() is { Length: > 0 } st
+                ? st : "auto",
+            Coordinates = ReadBool(dto.Configuration, "coordinates"),
+            TableExtraction = dto.Configuration?["tableExtraction"] is JsonValue te
+                && te.TryGetValue<bool>(out var teb) ? teb : true,
+            MaxFileSizeMb = dto.Configuration?["maxFileSizeMb"] is JsonValue msm
+                && msm.TryGetValue<int>(out var msmn) ? msmn : null,
             FeedUrl = dto.Configuration?["feedUrl"]?.GetValue<string>(),
             MaxItems = dto.Configuration?["maxItems"] is JsonValue mi
                 && mi.TryGetValue<int>(out var min) ? min : null,
