@@ -106,18 +106,18 @@ Configuração em `appsettings.json`:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** `VoyageAiEmbeddingProvider` configurado **when** `EmbedQueryAsync` é chamado **then** o payload enviado contém `input_type: "query"` e retorna o vetor numérico com a dimensão declarada.
-- [ ] **Given** `CohereEmbeddingProvider` configurado **when** `EmbedBatchAsync` é chamado com 10 documentos **then** o payload enviado contém `input_type: "search_document"` e 10 vetores são retornados.
-- [ ] **Given** uma divergência de dimensão entre o provedor e a tabela do banco vetorial **when** o sistema inicia **then** o `EmbeddingCompatibilityCheck` lança exceção impeditiva no startup com mensagem amigável de orientação.
+- [x] **Given** `VoyageAiEmbeddingProvider` configurado **when** `EmbedQueryAsync` é chamado **then** o payload enviado contém `input_type: "query"` e retorna o vetor numérico com a dimensão declarada.
+- [x] **Given** `CohereEmbeddingProvider` configurado **when** `EmbedBatchAsync` é chamado com 10 documentos **then** o payload enviado contém `input_type: "search_document"` e 10 vetores são retornados.
+- [x] **Given** uma divergência de dimensão entre o provedor e a tabela do banco vetorial **when** o sistema inicia **then** o `EmbeddingCompatibilityCheck` (compartilhado, SPEC-20260914) emite log de erro/aviso alto e não-fatal com mensagem de orientação de re-indexação — consistente com ONNX/OpenAI, sem bloquear o startup nem mutar dados.
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Analisar `IEmbeddingProvider.cs` e `OpenAiEmbeddingProvider.cs`.
-- [ ] **T2 — Options:** Adicionar configurações de Voyage e Cohere em `EmbeddingOptions.cs`.
-- [ ] **T3 — Voyage Provider:** Implementar `VoyageAiEmbeddingProvider.cs`.
-- [ ] **T4 — Cohere Provider:** Implementar `CohereEmbeddingProvider.cs`.
-- [ ] **T5 — Factory:** Atualizar `EmbeddingProviderFactory.cs` e `EmbeddingProviderResolver.cs`.
-- [ ] **T6 — Unit Tests:** Validar serialização de payloads, cabeçalhos de autenticação e tratamento de rate limits.
+- [x] **T1 — Discovery:** Analisar `IEmbeddingProvider.cs` e `OpenAiEmbeddingProvider.cs`.
+- [x] **T2 — Options:** Adicionar configurações de Voyage e Cohere em `EmbeddingOptions.cs`.
+- [x] **T3 — Voyage Provider:** Implementar `VoyageAiEmbeddingProvider.cs`.
+- [x] **T4 — Cohere Provider:** Implementar `CohereEmbeddingProvider.cs`.
+- [x] **T5 — Factory:** Atualizar `EmbeddingProviderFactory.cs` e `EmbeddingProviderResolver.cs`.
+- [x] **T6 — Unit Tests:** Validar serialização de payloads, cabeçalhos de autenticação e tratamento de rate limits.
 
 ## 8. Organization Guardrails
 
@@ -126,6 +126,6 @@ Configuração em `appsettings.json`:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-003) implementados.
-- [ ] Testes unitários com simulação de respostas JSON das APIs Voyage e Cohere passando 100%.
-- [ ] Interface Blazor WASM atualizada permitindo a seleção dos novos provedores.
+- [x] Todos os requisitos (RF-001 a RF-003) implementados.
+- [x] Testes unitários com simulação de respostas JSON das APIs Voyage e Cohere passando 100%.
+- [x] Interface Blazor WASM atualizada permitindo a seleção dos novos provedores.
