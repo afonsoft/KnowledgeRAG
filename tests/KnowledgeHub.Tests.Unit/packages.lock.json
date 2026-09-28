@@ -1282,6 +1282,7 @@
         "type": "Project",
         "dependencies": {
           "KnowledgeHub.Shared": "[1.0.0, )",
+          "Microsoft.Extensions.AI.Abstractions": "[10.9.0, )",
           "ModelContextProtocol": "[2.2.0, )",
           "ModelContextProtocol.AspNetCore": "[2.2.0, )"
         }

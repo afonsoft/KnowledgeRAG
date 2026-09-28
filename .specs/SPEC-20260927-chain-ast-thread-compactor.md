@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#269` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -126,9 +126,9 @@ Configuração no `appsettings.json`:
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** uma lista de mensagens onde a IA solicitou tool call `call_123` e a sessão foi reiniciada sem a resposta **when** `ChainAstParser.Parse(messages, forceRepair: true)` é chamado **then** o AST contém um `BodyPair` reparado com mensagem de ferramenta sintética para `call_123` e status OK.
-- [ ] **Given** um histórico de conversa longo com 10 seções de perguntas e respostas acumulando 150KB **when** `ChainCompactor.CompactAsync(ast)` é executado **then** as 8 primeiras seções são sumarizadas em blocos condensados, as 2 últimas seções permanecem íntegras e o tamanho total é menor que 64KB.
-- [ ] **Given** um `ChainAST` construído **when** `ast.ToChatMessages()` é invocado **then** a sequência resultante de mensagens respeita perfeitamente a alternância exigida pelos provedores (`Human` -> `AI [tool_calls]` -> `Tool [responses]` -> `AI`).
+- [x] **Given** uma lista de mensagens onde a IA solicitou tool call `call_123` e a sessão foi reiniciada sem a resposta **when** `ChainAstParser.Parse(messages, forceRepair: true)` é chamado **then** o AST contém um `BodyPair` reparado com mensagem de ferramenta sintética para `call_123` e status OK.
+- [x] **Given** um histórico de conversa longo com 10 seções de perguntas e respostas acumulando 150KB **when** `ChainCompactor.CompactAsync(ast)` é executado **then** as 8 primeiras seções são sumarizadas em blocos condensados, as 2 últimas seções permanecem íntegras e o tamanho total é menor que 64KB.
+- [x] **Given** um `ChainAST` construído **when** `ast.ToChatMessages()` é invocado **then** a sequência resultante de mensagens respeita perfeitamente a alternância exigida pelos provedores (`Human` -> `AI [tool_calls]` -> `Tool [responses]` -> `AI`).
 
 **Edge cases:**
 
@@ -141,12 +141,12 @@ Configuração no `appsettings.json`:
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Revisar `AgentChatService` e classes de mensagem em `KnowledgeHub.McpEngine`.
-- [ ] **T2 — AST Model:** Implementar `ChainAst.cs` definindo nós de seção, headers, pares de corpo e enums de tipo.
-- [ ] **T3 — Parser & Repair:** Implementar `ChainAstParser.cs` e `ChainAstRepair.cs` com testes de regressão para pares órfãos.
-- [ ] **T4 — Compactor:** Implementar `ChainCompactor.cs` com lógica de truncamento seguro e sumarização estruturada.
-- [ ] **T5 — Integration:** Conectar o compactor ao pipeline de envio do `AgentChatService`.
-- [ ] **T6 — Validation:** Executar suite completa de unit tests e aferir estabilidade de chamadas de agente.
+- [x] **T1 — Discovery:** Revisar `AgentChatService` e classes de mensagem em `KnowledgeHub.McpEngine`.
+- [x] **T2 — AST Model:** Implementar `ChainAst.cs` definindo nós de seção, headers, pares de corpo e enums de tipo.
+- [x] **T3 — Parser & Repair:** Implementar `ChainAstParser.cs` e `ChainAstRepair.cs` com testes de regressão para pares órfãos.
+- [x] **T4 — Compactor:** Implementar `ChainCompactor.cs` com lógica de truncamento seguro e sumarização estruturada.
+- [x] **T5 — Integration:** Conectar o compactor ao pipeline de envio do `AgentChatService`.
+- [x] **T6 — Validation:** Executar suite completa de unit tests e aferir estabilidade de chamadas de agente.
 
 ## 8. Organization Guardrails
 
@@ -156,7 +156,7 @@ Configuração no `appsettings.json`:
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-004) implementados.
-- [ ] Critérios de aceitação validados com testes unitários cobrindo cenários normais e edge cases de tool calls quebradas.
-- [ ] Nenhuma quebra de build ou regressão nas ferramentas existentes de chat.
-- [ ] Logs livres de dados sensíveis e código alinhado às diretrizes de C# 12 / .NET 10.
+- [x] Todos os requisitos (RF-001 a RF-004) implementados.
+- [x] Critérios de aceitação validados com testes unitários cobrindo cenários normais e edge cases de tool calls quebradas.
+- [x] Nenhuma quebra de build ou regressão nas ferramentas existentes de chat.
+- [x] Logs livres de dados sensíveis e código alinhado às diretrizes de C# 12 / .NET 10.
