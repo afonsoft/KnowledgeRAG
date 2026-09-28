@@ -9,9 +9,9 @@ namespace KnowledgeHub.Server.Evaluation;
 /// </summary>
 public sealed class RagTriadEvaluator : IRagTriadEvaluator
 {
-    private static readonly Regex TokenRe = new(@"[a-z0-9]+(?:[./-][a-z0-9]+)*", RegexOptions.Compiled);
-    private static readonly Regex SentenceRe = new(@"[^.!?;]+[.!?;]?", RegexOptions.Compiled);
-    private static readonly Regex CitationRe = new(@"\[\d{1,3}\]", RegexOptions.Compiled);
+    private static readonly Regex TokenRe = new(@"[a-z0-9]+(?:[./-][a-z0-9]+)*", RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+    private static readonly Regex SentenceRe = new(@"[^.!?;]+[.!?;]?", RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
+    private static readonly Regex CitationRe = new(@"\[\d{1,3}\]", RegexOptions.Compiled, TimeSpan.FromMilliseconds(250));
     private const int MinTokenLen = 3;
     private const double MinClauseOverlap = 0.5;
 
