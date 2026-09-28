@@ -38,7 +38,7 @@ public sealed class OllamaChatClient : HttpChatClient
 
         var response = await Http.PostAsJsonAsync("api/chat", request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new ChatProviderException($"Ollama chat failed with HTTP {(int)response.StatusCode}");
+            throw new ChatProviderException($"Ollama chat failed with HTTP {(int)response.StatusCode}", (int)response.StatusCode);
 
         var payload = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken);
         var message = payload?.Message

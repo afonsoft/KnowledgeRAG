@@ -43,7 +43,7 @@ public sealed class OpenAiChatClient : HttpChatClient
 
         var response = await Http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new ChatProviderException($"OpenAI chat failed with HTTP {(int)response.StatusCode}");
+            throw new ChatProviderException($"OpenAI chat failed with HTTP {(int)response.StatusCode}", (int)response.StatusCode);
 
         var payload = await response.Content.ReadFromJsonAsync<OpenAiChatResponse>(cancellationToken);
         var message = payload?.Choices?.FirstOrDefault()?.Message
