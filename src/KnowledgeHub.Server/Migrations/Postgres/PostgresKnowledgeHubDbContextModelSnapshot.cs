@@ -449,6 +449,85 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.ToTable("EvalRuns");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.EvidenceReceipt", b =>
+                {
+                    b.Property<string>("ReceiptId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ApiKeyId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("ArtifactHashes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("InputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("KeyId")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("OutputHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ParentDigest")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ParentReceiptIds")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReceiptDigest")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Signature")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ThreadId")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTimeOffset>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ReceiptId");
+
+                    b.HasIndex("ReceiptDigest");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("Timestamp");
+
+                    b.ToTable("EvidenceReceipts");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.GraphSettings", b =>
                 {
                     b.Property<int>("Id")

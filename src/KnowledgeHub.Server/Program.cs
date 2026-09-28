@@ -397,6 +397,7 @@ app.MapToolsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimi
 app.MapSettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 app.MapApiKeySettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 app.MapEvalApi().RequireAuthorization(AuthPolicies.Operational);
+app.MapEvidenceApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 // CookieSession: the stats payload embeds flagged questions from every caller —
 // API keys must not enumerate other users' queries (Devin Review PR #367).
 app.MapRagEvaluationApi().RequireAuthorization(AuthPolicies.CookieSession);

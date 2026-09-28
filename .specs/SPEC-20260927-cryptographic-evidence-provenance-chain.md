@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/OpenCode-20260927-pentagi-rag-enhancements` |
 | Ticket | `#271` |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
@@ -169,10 +169,10 @@ tests/KnowledgeHub.Tests.Unit/Audit/EvidenceChainTests.cs            (create)
 
 ## 6. Acceptance Criteria
 
-- [ ] **Given** uma execução de `ask_knowledge` **when** a síntese é concluída **then** um recibo com `EventType = AnswerSynthesized` é persistido com os hashes exatos dos chunks retornados e amarrado ao recibo pai da busca.
-- [ ] **Given** um pacote de recibos íntegros **when** `EvidenceChainVerifier.VerifyChain(bundle)` é executado **then** o resultado é `IsValid = true` e zero erros são reportados.
-- [ ] **Given** um recibo cujo campo `OutputHash` ou `Timestamp` foi alterado manualmente no banco **when** o verificador roda **then** o resultado é `IsValid = false`, indicando `TamperingDetected` no nó específico.
-- [ ] **Given** a remoção de um recibo intermediário da cadeia **when** a verificação roda **then** o validador falha apontando `BrokenParentLink` na referência pai inexistente.
+- [x] **Given** uma execução de `ask_knowledge` **when** a síntese é concluída **then** um recibo com `EventType = AnswerSynthesized` é persistido com os hashes exatos dos chunks retornados e amarrado ao recibo pai da busca.
+- [x] **Given** um pacote de recibos íntegros **when** `EvidenceChainVerifier.VerifyChain(bundle)` é executado **then** o resultado é `IsValid = true` e zero erros são reportados.
+- [x] **Given** um recibo cujo campo `OutputHash` ou `Timestamp` foi alterado manualmente no banco **when** o verificador roda **then** o resultado é `IsValid = false`, indicando `TamperingDetected` no nó específico.
+- [x] **Given** a remoção de um recibo intermediário da cadeia **when** a verificação roda **then** o validador falha apontando `BrokenParentLink` na referência pai inexistente.
 
 **Edge cases:**
 
@@ -184,13 +184,13 @@ tests/KnowledgeHub.Tests.Unit/Audit/EvidenceChainTests.cs            (create)
 
 ## 7. Task Plan (agent execution)
 
-- [ ] **T1 — Discovery:** Revisar pipeline de síntese em `LlmAnswerSynthesisService.cs` e entidades EF Core.
-- [ ] **T2 — Canonical Serializer:** Implementar `CanonicalJsonSerializer.cs` garantindo ordenação estável de propriedades e ausência de formatação inconsistente.
-- [ ] **T3 — Receipt & Storage:** Criar `EvidenceReceiptEntity.cs` e registrá-la no `KnowledgeHubDbContext`.
-- [ ] **T4 — Chain Service:** Implementar `EvidenceChainService.cs` com cômputo de hashes SHA-256 e geração de assinaturas.
-- [ ] **T5 — Pipeline Hook:** Injetar a emissão de recibos nos fluxos de `AskKnowledgeTool` e `AgentChatService`.
-- [ ] **T6 — Export & Verifier:** Implementar `EvidenceChainVerifier.cs` e o endpoint `GET /api/v1/evidence/sessions/{sessionId}/bundle`.
-- [ ] **T7 — Unit & Tamper Tests:** Validar cenários de sucesso, adulteração de conteúdo, quebra de link e rotação de chaves.
+- [x] **T1 — Discovery:** Revisar pipeline de síntese em `LlmAnswerSynthesisService.cs` e entidades EF Core.
+- [x] **T2 — Canonical Serializer:** Implementar `CanonicalJsonSerializer.cs` garantindo ordenação estável de propriedades e ausência de formatação inconsistente.
+- [x] **T3 — Receipt & Storage:** Criar `EvidenceReceiptEntity.cs` e registrá-la no `KnowledgeHubDbContext`.
+- [x] **T4 — Chain Service:** Implementar `EvidenceChainService.cs` com cômputo de hashes SHA-256 e geração de assinaturas.
+- [x] **T5 — Pipeline Hook:** Injetar a emissão de recibos nos fluxos de `AskKnowledgeTool` e `AgentChatService`.
+- [x] **T6 — Export & Verifier:** Implementar `EvidenceChainVerifier.cs` e o endpoint `GET /api/v1/evidence/sessions/{sessionId}/bundle`.
+- [x] **T7 — Unit & Tamper Tests:** Validar cenários de sucesso, adulteração de conteúdo, quebra de link e rotação de chaves.
 
 ## 8. Organization Guardrails
 
@@ -199,7 +199,7 @@ tests/KnowledgeHub.Tests.Unit/Audit/EvidenceChainTests.cs            (create)
 
 ## 9. Definition of Done
 
-- [ ] Todos os requisitos (RF-001 a RF-004) implementados.
-- [ ] Testes unitários comprovando detecção de adulteração de hash com 100% de precisão.
-- [ ] Endpoint de exportação funcional e protegido por política de autenticação.
-- [ ] Zero impacto perceptível de latência na resposta de chat (> 95% do overhead de hashing < 2ms).
+- [x] Todos os requisitos (RF-001 a RF-004) implementados.
+- [x] Testes unitários comprovando detecção de adulteração de hash com 100% de precisão.
+- [x] Endpoint de exportação funcional e protegido por política de autenticação.
+- [x] Zero impacto perceptível de latência na resposta de chat (> 95% do overhead de hashing < 2ms).

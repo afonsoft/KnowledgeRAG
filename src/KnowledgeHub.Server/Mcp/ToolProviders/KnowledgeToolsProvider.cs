@@ -6,6 +6,7 @@ using KnowledgeHub.Server.Services;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 
@@ -293,6 +294,15 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     : null,
                 Retried = outcome.Retried
             };
+            // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002:
+            // QuerySubmitted → ChunksRetrieved → AnswerSynthesized receipts,
+            // keyed by the caller's API key (or "mcp" for cookie sessions).
+            var apiKeyId = CallerIdentity.TryGetApiKeyId(ctx)?.ToString("N");
+            await Audit.Evidence.EvidenceEmission.RecordAskAsync(
+                ctx.Services!.GetService<Audit.Evidence.IEvidenceChainService>(),
+                ctx.Services!.GetService<ILoggerFactory>()?.CreateLogger("EvidenceEmission"),
+                $"mcp:{apiKeyId ?? "session"}", apiKeyId,
+                question, results, answer.Answer ?? "", ct);
             var text = new StringBuilder(answer.Answer + relaxedWarning);
             if (answer.Citations.Count > 0)
             {
