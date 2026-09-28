@@ -34,6 +34,8 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<IngestionJob> IngestionJobs => Set<IngestionJob>();
     /// <summary>SPEC-20260926-mcp-sdk-alignment RF-004: durable MCP task handles.</summary>
     public DbSet<McpTask> McpTasks => Set<McpTask>();
+    /// <summary>SPEC-20260927-rag-evaluation-triad-metrics: persisted triad scores.</summary>
+    public DbSet<RagEvaluationEntity> RagEvaluations => Set<RagEvaluationEntity>();
 
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -272,6 +274,15 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.Property(t => t.Status).IsRequired().HasMaxLength(24);
             e.Property(t => t.StatusMessage).HasMaxLength(500);
             e.HasIndex(t => t.Status);
+        });
+
+        modelBuilder.Entity<RagEvaluationEntity>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.QueryId).IsRequired().HasMaxLength(120);
+            e.Property(r => r.Question).IsRequired().HasMaxLength(1000);
+            e.HasIndex(r => r.TimestampUtc);
+            e.HasIndex(r => r.FlaggedAsHallucination);
         });
     }
 }

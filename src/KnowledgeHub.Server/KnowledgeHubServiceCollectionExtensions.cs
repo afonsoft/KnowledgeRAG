@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.DataProtection;
 using KnowledgeHub.Server.BackgroundServices;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Embeddings;
+using KnowledgeHub.Server.Evaluation;
 using KnowledgeHub.Server.Ingestion;
 using KnowledgeHub.Server.Mcp;
 using KnowledgeHub.Server.Services;
@@ -48,10 +49,16 @@ public static class KnowledgeHubServiceCollectionExtensions
             services.AddDbContextPool<KnowledgeHubDbContext, PostgresKnowledgeHubDbContext>(
                 (sp, o) => o.UseNpgsql(catalog.PostgresConnectionString)
                     .ReplaceService<IModelCacheKeyFactory, ProviderAwareModelCacheKeyFactory>());
+            services.AddDbContextFactory<KnowledgeHubDbContext>((sp, o) =>
+                o.UseNpgsql(catalog.PostgresConnectionString)
+                    .ReplaceService<IModelCacheKeyFactory, ProviderAwareModelCacheKeyFactory>());
         }
         else
         {
             services.AddDbContextPool<KnowledgeHubDbContext>((sp, o) =>
+                o.UseSqlite($"Data Source={DatabasePath.Resolve(sp.GetRequiredService<IConfiguration>())}")
+                    .ReplaceService<IModelCacheKeyFactory, ProviderAwareModelCacheKeyFactory>());
+            services.AddDbContextFactory<KnowledgeHubDbContext>((sp, o) =>
                 o.UseSqlite($"Data Source={DatabasePath.Resolve(sp.GetRequiredService<IConfiguration>())}")
                     .ReplaceService<IModelCacheKeyFactory, ProviderAwareModelCacheKeyFactory>());
         }
@@ -59,6 +66,14 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddOptions<EmbeddingOptions>()
             .Configure<IConfiguration>((options, cfg) =>
                 cfg.GetSection(EmbeddingOptions.SectionName).Bind(options));
+
+        // SPEC-20260927-rag-evaluation-triad-metrics: RAG Quality Triad evaluator.
+        services.AddOptions<Evaluation.RagEvaluationOptions>()
+            .Configure<IConfiguration>((options, cfg) =>
+                cfg.GetSection(Evaluation.RagEvaluationOptions.SectionName).Bind(options));
+        services.AddSingleton<Evaluation.IRagTriadEvaluator, Evaluation.RagTriadEvaluator>();
+        services.AddSingleton<Evaluation.IRagEvaluationEnqueuer, Evaluation.RagEvaluationEnqueuer>();
+        services.AddHostedService<Evaluation.EvaluationWorker>();
 
         // SPEC-20260923-agent-runtime-hardening RF-004: standard resilience
         // pipeline (retry 3× exp+jitter on transient failures, per-attempt +
@@ -187,14 +202,16 @@ public static class KnowledgeHubServiceCollectionExtensions
                     sp.GetRequiredService<Settings.IApiKeyChatSettingsService>().GetEffectiveOptions(keyId),
                     sp.GetRequiredService<IDistributedCache>(),
                     sp.GetRequiredService<IConfiguration>(),
-                    sp.GetRequiredService<ILogger<AnswerService>>());
+                    sp.GetRequiredService<ILogger<AnswerService>>(),
+                    sp.GetRequiredService<Evaluation.IRagEvaluationEnqueuer>());
             }
             return new AnswerService(
                 sp.GetService<Microsoft.Extensions.AI.IChatClient>(),
                 sp.GetRequiredService<Settings.IChatSettingsService>().GetEffectiveOptions(),
                 sp.GetRequiredService<IDistributedCache>(),
                 sp.GetRequiredService<IConfiguration>(),
-                sp.GetRequiredService<ILogger<AnswerService>>());
+                sp.GetRequiredService<ILogger<AnswerService>>(),
+                sp.GetRequiredService<Evaluation.IRagEvaluationEnqueuer>());
         });
 
         // SPEC-20260914-agent-chat-loop: model→tools→model loop over the live catalog.

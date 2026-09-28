@@ -838,6 +838,49 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.ToTable("McpTasks");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.RagEvaluationEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("AnswerRelevance")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("ContextRelevance")
+                        .HasColumnType("double precision");
+
+                    b.Property<bool>("FlaggedAsHallucination")
+                        .HasColumnType("boolean");
+
+                    b.Property<double>("Groundedness")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("OverallScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("QueryId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("TimestampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FlaggedAsHallucination");
+
+                    b.HasIndex("TimestampUtc");
+
+                    b.ToTable("RagEvaluations");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.SecurityEvent", b =>
                 {
                     b.Property<Guid>("Id")

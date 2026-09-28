@@ -1,0 +1,113 @@
+@page "/rag-quality"
+@attribute [Authorize]
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<PageTitle>Qualidade RAG — Knowledge</PageTitle>
+
+<h3 class="mb-3">Qualidade RAG (Tríade Dourada)</h3>
+
+@if (_loading)
+{
+    <div class="text-muted">Carregando métricas…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger py-2">@_error</div>
+}
+else if (_stats is not null)
+{
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Avaliações (7d)</div>
+                <div class="h4 mb-0">@_stats.TotalEvaluations</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Context Relevance</div>
+                <div class="h4 mb-0">@_stats.AverageContextRelevance.ToString("F2")</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Groundedness</div>
+                <div class="h4 mb-0">@_stats.AverageGroundedness.ToString("F2")</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Answer Relevance</div>
+                <div class="h4 mb-0">@_stats.AverageAnswerRelevance.ToString("F2")</div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="alert alert-@(_stats.HallucinationRatePercent > 0 ? "warning" : "success") py-2">
+        Taxa de alucinação (7d): <strong>@_stats.HallucinationRatePercent.ToString("F1")%</strong>
+    </div>
+
+    <h5>Respostas sinalizadas recentes</h5>
+    @if (_stats.RecentFlaggedQueries.Count == 0)
+    {
+        <div class="text-muted">Nenhuma resposta sinalizada como alucinação no período.</div>
+    }
+    else
+    {
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Pergunta</th><th>Groundedness</th><th>Sinalizada em</th></tr></thead>
+            <tbody>
+            @foreach (var q in _stats.RecentFlaggedQueries)
+            {
+                <tr>
+                    <td>@q.Question</td>
+                    <td>@q.GroundednessScore.ToString("F2")</td>
+                    <td>@q.FlaggedAt.ToString("u")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private RagEvaluationStats? _stats;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _stats = await Http.GetFromJsonAsync<RagEvaluationStats>("/api/v1/evaluation/stats");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public class RagEvaluationStats
+    {
+        public string Period { get; set; } = "";
+        public int TotalEvaluations { get; set; }
+        public double AverageContextRelevance { get; set; }
+        public double AverageGroundedness { get; set; }
+        public double AverageAnswerRelevance { get; set; }
+        public double HallucinationRatePercent { get; set; }
+        public List<FlaggedQuery> RecentFlaggedQueries { get; set; } = new();
+    }
+
+    public class FlaggedQuery
+    {
+        public string Id { get; set; } = "";
+        public string Question { get; set; } = "";
+        public double GroundednessScore { get; set; }
+        public DateTimeOffset FlaggedAt { get; set; }
+    }
+}
