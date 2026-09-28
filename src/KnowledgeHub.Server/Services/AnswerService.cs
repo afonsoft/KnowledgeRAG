@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using KnowledgeHub.Server.Caching;
 using KnowledgeHub.Server.Chat;
+using KnowledgeHub.Server.Evaluation;
 using KnowledgeHub.Server.Telemetry;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.Extensions.AI;
@@ -18,7 +19,8 @@ public sealed partial class AnswerService(
     ChatProviderOptions options,
     IDistributedCache cache,
     IConfiguration configuration,
-    ILogger<AnswerService> logger) : IAnswerService
+    ILogger<AnswerService> logger,
+    IRagEvaluationEnqueuer evaluationEnqueuer) : IAnswerService
 {
     private const string NoMatchAnswer =
         "The knowledge base has no matching content for this question.";
@@ -109,6 +111,12 @@ public sealed partial class AnswerService(
         }
         logger.LogDebug("Answer synthesized in {LatencyMs} ms (model {Model}, {Citations} citations)",
             sw.Elapsed.TotalMilliseconds, response.ModelId ?? options.Model, citations.Count);
+
+        // SPEC-20260927-rag-evaluation-triad-metrics RF-001: sample this answer
+        // for background triad evaluation (no-op below SampleRate / when disabled).
+        var chunks = context.Select(c => c.ChunkText).ToList();
+        evaluationEnqueuer.TryEnqueue(Guid.NewGuid().ToString("N"), question, chunks, answer);
+
         return result;
     }
 
@@ -188,6 +196,11 @@ public sealed partial class AnswerService(
         var answer = string.Concat(streamed.OfType<TextContent>().Select(c => c.Text)).Trim();
         if (answer.Length == 0)
             throw new ChatProviderException("chat provider returned an empty answer");
+
+        // SPEC-20260927-rag-evaluation-triad-metrics RF-001: sample the streamed
+        // answer for background triad evaluation (no-op below SampleRate/disabled).
+        var chunks = context.Select(c => c.ChunkText).ToList();
+        evaluationEnqueuer.TryEnqueue(Guid.NewGuid().ToString("N"), question, chunks, answer);
 
         yield return new SseEvent("done",
             Result(answer, ExtractCitations(answer, context), model ?? options.Model, sw));

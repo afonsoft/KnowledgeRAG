@@ -8,6 +8,7 @@ using KnowledgeHub.Server.Chat;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Server.Embeddings;
+using KnowledgeHub.Server.Evaluation;
 using KnowledgeHub.Server.Graph;
 using KnowledgeHub.Server.Mcp;
 using KnowledgeHub.Server.Search;
@@ -204,7 +205,8 @@ public sealed class TelemetryTests
             new ChatProviderOptions { Provider = "ollama", Model = "m" },
             new MemoryDistributedCache(
                 Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions())),
-            new ConfigurationBuilder().Build(), NullLogger<AnswerService>.Instance);
+            new ConfigurationBuilder().Build(), NullLogger<AnswerService>.Instance,
+            NoopRagEvaluationEnqueuer.Instance);
 
         var activities = CollectActivities(() =>
             Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -361,5 +363,13 @@ public sealed class TelemetryTests
             Task.FromResult<IReadOnlyList<CatalogTool>>([tool]);
         public Task<IReadOnlyList<CatalogTool>> GetUnfilteredToolsAsync(IServiceProvider services, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<CatalogTool>>([tool]);
+    }
+
+    private sealed class NoopRagEvaluationEnqueuer : IRagEvaluationEnqueuer
+    {
+        public static readonly NoopRagEvaluationEnqueuer Instance = new();
+        public System.Threading.Channels.ChannelReader<KnowledgeHub.Server.Evaluation.RagEvaluationTask> Reader { get; } =
+            System.Threading.Channels.Channel.CreateUnbounded<KnowledgeHub.Server.Evaluation.RagEvaluationTask>().Reader;
+        public bool TryEnqueue(string queryId, string question, IReadOnlyList<string> contextChunks, string answer) => false;
     }
 }
