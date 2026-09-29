@@ -1,0 +1,193 @@
+using System.Diagnostics;
+using System.Net.Http.Headers;
+using System.Text.Json;
+using A2A;
+using KnowledgeHub.Server.Assistant;
+using KnowledgeHub.Server.Data;
+using KnowledgeHub.Server.Domain.Entities;
+using KnowledgeHub.Shared.Contracts;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+namespace KnowledgeHub.Server.Settings;
+
+/// <summary>
+/// Singleton backing /api/settings/assistant and invalidating the
+/// <see cref="IAssistantChatClientProvider"/> snapshot (SPEC-20260929-a2a-
+/// assistant-delegation RF-001). Store row overrides env; the API key lives in
+/// the secret store under <see cref="IntegrationProviders.Assistant"/>.
+/// </summary>
+public sealed class AssistantSettingsService(
+    IOptions<AssistantOptions> envOptions,
+    IIntegrationSecretStore secrets,
+    IServiceScopeFactory scopeFactory,
+    IHttpClientFactory httpFactory,
+    IAssistantChatClientProvider provider,
+    ILogger<AssistantSettingsService> logger)
+    : SingleRowSettingsStore<AssistantSettings>(scopeFactory), IAssistantSettingsService
+{
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
+    private static readonly string[] KnownSubtasks = ["rewrite", "grade", "expand", "summarize"];
+
+    protected override DbSet<AssistantSettings> Set(KnowledgeHubDbContext db) => db.AssistantSettings;
+
+    public async Task<AssistantSettingsDto> DescribeAsync(CancellationToken cancellationToken = default)
+    {
+        var env = envOptions.Value;
+        var row = await FindRowAsync(cancellationToken);
+        var info = await secrets.GetInfoAsync(IntegrationProviders.Assistant, cancellationToken);
+        var (hasKey, hint, keySource) = info is not null
+            ? (true, $"••••{info.KeyHint}", "store")
+            : !string.IsNullOrWhiteSpace(env.ApiKey)
+                ? (true, $"••••{(env.ApiKey.Length >= 4 ? env.ApiKey[^4..] : env.ApiKey)}", "env")
+                : (false, (string?)null, "none");
+
+        if (row is not null)
+            return new AssistantSettingsDto
+            {
+                Enabled = row.Enabled,
+                Mode = row.Mode,
+                Endpoint = row.Endpoint,
+                Model = row.Model,
+                Route = ParseRoute(row.RouteJson) ?? env.Route,
+                TimeoutSeconds = row.TimeoutSeconds,
+                HasApiKey = hasKey,
+                ApiKeyHint = hint,
+                ApiKeySource = keySource,
+                Source = "store",
+                UpdatedAt = row.UpdatedAt
+            };
+
+        return new AssistantSettingsDto
+        {
+            Enabled = env.Enabled,
+            Mode = env.Mode,
+            Endpoint = env.Endpoint,
+            Model = env.Model,
+            Route = env.Route,
+            TimeoutSeconds = env.TimeoutSeconds,
+            HasApiKey = hasKey,
+            ApiKeyHint = hint,
+            ApiKeySource = keySource,
+            Source = env.Enabled ? "env" : "none"
+        };
+    }
+
+    public async Task SaveAsync(SaveAssistantSettingsRequest request, CancellationToken cancellationToken = default)
+    {
+        var mode = request.Mode.Equals("remote", StringComparison.OrdinalIgnoreCase) ? "remote" : "local";
+        var route = request.Route is null
+            ? null
+            : JsonSerializer.Serialize(request.Route
+                .Where(r => KnownSubtasks.Contains(r, StringComparer.OrdinalIgnoreCase))
+                .Select(r => r.ToLowerInvariant())
+                .Distinct()
+                .ToArray());
+        var timeout = Math.Clamp(request.TimeoutSeconds ?? 15, 1, 300);
+
+        await UpsertAsync(async row =>
+        {
+            row.Enabled = request.Enabled;
+            row.Mode = mode;
+            row.Endpoint = request.Endpoint?.Trim() ?? "";
+            row.Model = request.Model?.Trim();
+            row.RouteJson = route;
+            row.TimeoutSeconds = timeout;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await Task.CompletedTask;
+        }, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(request.ApiKey))
+            await secrets.SetAsync(IntegrationProviders.Assistant, request.ApiKey.Trim(), cancellationToken);
+
+        provider.Invalidate();
+        logger.LogInformation("assistant settings saved (mode {Mode}, enabled {Enabled}, key {KeyAction})",
+            mode, request.Enabled, string.IsNullOrWhiteSpace(request.ApiKey) ? "kept" : "updated");
+    }
+
+    public async Task RemoveKeyAsync(CancellationToken cancellationToken = default)
+    {
+        await secrets.RemoveAsync(IntegrationProviders.Assistant, cancellationToken);
+        provider.Invalidate();
+        logger.LogInformation("assistant API key removed from store");
+    }
+
+    public async Task ClearAsync(CancellationToken cancellationToken = default)
+    {
+        await DeleteRowAsync(cancellationToken);
+        await secrets.RemoveAsync(IntegrationProviders.Assistant, cancellationToken);
+        provider.Invalidate();
+        logger.LogInformation("assistant settings cleared — falling back to env/config");
+    }
+
+    /// <summary>Tests connectivity: local mode probes GET {endpoint}/v1/models;
+    /// remote mode resolves the A2A Agent Card.</summary>
+    public async Task<TestChatConnectionResponse> TestAsync(
+        TestAssistantConnectionRequest request, CancellationToken cancellationToken = default)
+    {
+        var dto = await DescribeAsync(cancellationToken);
+        var mode = !string.IsNullOrWhiteSpace(request.Mode) ? request.Mode : dto.Mode;
+        var endpoint = !string.IsNullOrWhiteSpace(request.Endpoint) ? request.Endpoint.Trim() : dto.Endpoint;
+        var model = !string.IsNullOrWhiteSpace(request.Model) ? request.Model.Trim() : dto.Model;
+        var apiKey = !string.IsNullOrWhiteSpace(request.ApiKey)
+            ? request.ApiKey.Trim()
+            : await secrets.GetAsync(IntegrationProviders.Assistant, cancellationToken) ?? envOptions.Value.ApiKey;
+
+        if (string.IsNullOrWhiteSpace(endpoint))
+            return new TestChatConnectionResponse { Ok = false, LatencyMs = 0, Detail = "endpoint is required" };
+
+        var http = httpFactory.CreateClient("chat");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ProbeTimeout);
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            if (mode.Equals("remote", StringComparison.OrdinalIgnoreCase))
+            {
+                var resolver = new A2ACardResolver(new Uri(endpoint), http,
+                    "/.well-known/agent-card.json", logger);
+                var card = await resolver.GetAgentCardAsync(timeout.Token);
+                var ok = card.SupportedInterfaces.Count > 0;
+                return new TestChatConnectionResponse
+                {
+                    Ok = ok,
+                    LatencyMs = sw.ElapsedMilliseconds,
+                    Detail = ok ? $"agent '{card.Name}' — {card.SupportedInterfaces.Count} interface(s)" : "agent card has no interfaces"
+                };
+            }
+
+            using var probe = new HttpRequestMessage(HttpMethod.Get, $"{endpoint.TrimEnd('/')}/v1/models");
+            if (!string.IsNullOrEmpty(apiKey))
+                probe.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            using var response = await http.SendAsync(probe, timeout.Token);
+            return new TestChatConnectionResponse
+            {
+                Ok = response.IsSuccessStatusCode,
+                LatencyMs = sw.ElapsedMilliseconds,
+                Detail = response.IsSuccessStatusCode ? null : $"HTTP {(int)response.StatusCode}"
+            };
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new TestChatConnectionResponse { Ok = false, LatencyMs = sw.ElapsedMilliseconds, Detail = "timeout" };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or UriFormatException)
+        {
+            return new TestChatConnectionResponse { Ok = false, LatencyMs = sw.ElapsedMilliseconds, Detail = "connection failed" };
+        }
+    }
+
+    private static string[]? ParseRoute(string? json)
+    {
+        if (json is null)
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+}

@@ -108,6 +108,14 @@ public sealed class KnowledgeHubMetrics : IMcpRequestMetrics
     public static readonly Counter<long> A2ARequests =
         Meter.CreateCounter<long>("knowledgehub.a2a.requests");
 
+    /// <summary>Assistant sub-task calls, tagged subtask + outcome (ok|error).</summary>
+    public static readonly Counter<long> AssistantCalls =
+        Meter.CreateCounter<long>("knowledgehub.assistant.calls");
+
+    /// <summary>Assistant → main-model fallbacks, tagged subtask.</summary>
+    public static readonly Counter<long> AssistantFallbacks =
+        Meter.CreateCounter<long>("knowledgehub.assistant.fallbacks");
+
     /// <inheritdoc />
     public void Record(string method, string sessionMode, bool succeeded)
     {

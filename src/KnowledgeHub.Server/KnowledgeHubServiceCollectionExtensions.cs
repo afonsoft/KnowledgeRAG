@@ -206,6 +206,14 @@ public static class KnowledgeHubServiceCollectionExtensions
         // SPEC-20260928-resilience-tool-fallback-wiring RF-004: runtime-editable
         // fallback settings (persisted row overrides Resilience:Fallback config).
         services.AddSingleton<Settings.IResilienceSettingsService, Settings.ResilienceSettingsService>();
+        // SPEC-20260929-a2a-assistant-delegation RF-001/RF-002: low-cost assistant
+        // provider (local OpenAI-compatible or remote A2A agent) routed to cheap
+        // sub-tasks; snapshot invalidates on settings save — no restart.
+        services.AddOptions<Assistant.AssistantOptions>()
+            .Configure<IConfiguration>((options, cfg) =>
+                cfg.GetSection(Assistant.AssistantOptions.SectionName).Bind(options));
+        services.AddSingleton<Assistant.IAssistantChatClientProvider, Assistant.AssistantChatClientProvider>();
+        services.AddSingleton<Settings.IAssistantSettingsService, Settings.AssistantSettingsService>();
         services.AddScoped<Microsoft.Extensions.AI.IChatClient>(sp =>
         {
             var http = sp.GetService<Microsoft.AspNetCore.Http.IHttpContextAccessor>()?.HttpContext;

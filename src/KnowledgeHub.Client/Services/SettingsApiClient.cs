@@ -70,6 +70,40 @@ public sealed class SettingsApiClient(HttpClient http)
         return await ReadAsync<TestChatConnectionResponse>(response, ct);
     }
 
+    // SPEC-20260929-a2a-assistant-delegation RF-001: low-cost assistant provider.
+
+    /// <summary>Obtém a configuração efetiva do assistente (mascarada, sem a key).</summary>
+    public Task<AssistantSettingsDto?> GetAssistantAsync(CancellationToken ct = default) =>
+        http.GetFromJsonAsync<AssistantSettingsDto>("api/settings/assistant", ct);
+
+    /// <summary>Salva enabled/mode/endpoint/model/route do assistente; key em branco mantém a atual.</summary>
+    public async Task<ApiResult<object>> SaveAssistantAsync(SaveAssistantSettingsRequest request, CancellationToken ct = default)
+    {
+        var response = await http.PutAsJsonAsync("api/settings/assistant", request, ct);
+        return await ReadAsync<object>(response, ct);
+    }
+
+    /// <summary>Remove apenas a key do assistente armazenada.</summary>
+    public async Task<ApiResult<object>> RemoveAssistantKeyAsync(CancellationToken ct = default)
+    {
+        var response = await http.DeleteAsync("api/settings/assistant/apikey", ct);
+        return await ReadAsync<object>(response, ct);
+    }
+
+    /// <summary>Apaga a configuração persistida do assistente, voltando ao ambiente.</summary>
+    public async Task<ApiResult<object>> ClearAssistantAsync(CancellationToken ct = default)
+    {
+        var response = await http.DeleteAsync("api/settings/assistant", ct);
+        return await ReadAsync<object>(response, ct);
+    }
+
+    /// <summary>Testa a conexão (local: /v1/models; remote: resolve o Agent Card).</summary>
+    public async Task<ApiResult<TestChatConnectionResponse>> TestAssistantAsync(TestAssistantConnectionRequest request, CancellationToken ct = default)
+    {
+        var response = await http.PostAsJsonAsync("api/settings/assistant/test", request, ct);
+        return await ReadAsync<TestChatConnectionResponse>(response, ct);
+    }
+
     // SPEC-20260923-graph-settings-ui: GraphRAG switch + tuning knobs.
 
     /// <summary>Obtém a configuração efetiva do grafo (store → env/defaults).</summary>

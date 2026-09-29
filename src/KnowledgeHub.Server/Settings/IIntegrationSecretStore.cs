@@ -17,6 +17,11 @@ public static class IntegrationProviders
     /// never listed in the integrations grid.</summary>
     public const string Embeddings = "embeddings";
 
+    /// <summary>Assistant API key slug (SPEC-20260929-a2a-assistant-delegation) —
+    /// same treatment as <see cref="Chat"/>: managed by /api/settings/assistant,
+    /// never listed in the integrations grid.</summary>
+    public const string Assistant = "assistant";
+
     public static readonly IReadOnlyList<string> All = [Firecrawl, DeepWiki, Tavily, Context7];
 }
 
