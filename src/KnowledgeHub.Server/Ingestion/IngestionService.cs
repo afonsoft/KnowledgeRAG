@@ -32,6 +32,10 @@ public sealed class IngestionService(
     Caching.ICacheInvalidationBus? invalidationBus = null) : IIngestionService
 {
     private const long MaxFileBytes = 5 * 1024 * 1024;
+    /// <summary>SPEC-20260929 RF-003: the mass-delete gate only protects
+    /// populated indexes — sources with fewer indexed docs can legitimately
+    /// empty out, so below this count deletions proceed normally.</summary>
+    private const int MinMassDeleteDocs = 4;
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SourceLocks = new();
 
     public Task<SyncResultDto> SyncAsync(
@@ -259,11 +263,14 @@ public sealed class IngestionService(
 
             // Remove documents whose files disappeared from the vault.
             // SPEC-20260929 RF-003: mass-delete safety gate — an empty (or near-
-            // empty) enumeration on a populated index cannot prove absence; an
+            // empty) enumeration on a POPULATED index cannot prove absence; an
             // unreadable dir mounts as zero files and would wipe the index.
-            var enumeratedAll = seen.Count > 0 || existing.Count == 0;
-            var suspiciousDrop = existing.Count > 0 && seen.Count * 2 < existing.Count;
-            if (!enumeratedAll || suspiciousDrop)
+            // Small sources (below MinMassDeleteDocs) are exempt: deleting the
+            // only file of a 1–3 doc vault is a legitimate operation, not a
+            // wipe signature.
+            var massDeleteSuspicious =
+                existing.Count >= MinMassDeleteDocs && seen.Count * 2 < existing.Count;
+            if (massDeleteSuspicious)
             {
                 logger.LogWarning(
                     "Sync for source {SourceId}: enumeration returned {Seen} item(s) for {Existing} indexed documents — skipping deletions (possible unreadable folder)",
@@ -507,8 +514,10 @@ public sealed class IngestionService(
         }
 
         // SPEC-20260929 RF-003: same safety gate as the file path — a fetch that
-        // sees <50% of the indexed docs can't prove mass absence.
-        var fetchSuspiciousDrop = existing.Count > 0 && seen.Count * 2 < existing.Count;
+        // sees <50% of a populated index can't prove mass absence. Sources
+        // below MinMassDeleteDocs are exempt (small indexes legitimately empty).
+        var fetchSuspiciousDrop =
+            existing.Count >= MinMassDeleteDocs && seen.Count * 2 < existing.Count;
         if (fetchSuspiciousDrop && !fetch.Truncated)
         {
             logger.LogWarning(

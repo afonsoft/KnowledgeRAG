@@ -308,20 +308,31 @@ public sealed class ConnectorIntegrityTests : IDisposable
             IsActive = true
         };
         db.Sources.Add(source);
-        db.Documents.Add(new KnowledgeDocument
-        {
-            Id = Guid.NewGuid(),
-            KnowledgeSourceId = source.Id,
-            Title = "t",
-            UriReference = uri,
-            RawContent = content,
-            ContentHash = hash,
-            ChunkerVersion = ServerChunking.ChunkerSelector.CurrentVersion,
-            ChunkerConfigHash = chunkerConfigHash,
-            IndexedAt = DateTimeOffset.UtcNow
-        });
+        db.Documents.Add(MakeDoc(source.Id, uri, content, hash, chunkerConfigHash));
         await db.SaveChangesAsync();
         return source;
+    }
+
+    private static KnowledgeDocument MakeDoc(Guid sourceId, string uri, string content,
+        string hash, string chunkerConfigHash = "x") => new()
+    {
+        Id = Guid.NewGuid(),
+        KnowledgeSourceId = sourceId,
+        Title = "t",
+        UriReference = uri,
+        RawContent = content,
+        ContentHash = hash,
+        ChunkerVersion = ServerChunking.ChunkerSelector.CurrentVersion,
+        ChunkerConfigHash = chunkerConfigHash,
+        IndexedAt = DateTimeOffset.UtcNow
+    };
+
+    private async Task SeedDocAsync(Guid sourceId, string uri, string content, string hash)
+    {
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
+        db.Documents.Add(MakeDoc(sourceId, uri, content, hash));
+        await db.SaveChangesAsync();
     }
 
     private async Task<(List<KnowledgeDocument> docs, int chunks)> DumpDocs(Guid sourceId)
@@ -336,16 +347,35 @@ public sealed class ConnectorIntegrityTests : IDisposable
     [Fact]
     public async Task Sync_EmptyEnumeration_PopulatedIndex_SkipsDeletions()
     {
-        // SPEC-20260929 RF-003: a fetch that returns nothing for an index with
-        // docs cannot prove absence — deletions are skipped, docs survive.
+        // SPEC-20260929 RF-003: a fetch that returns nothing for a POPULATED
+        // index (≥ MinMassDeleteDocs = 4) cannot prove absence — deletions are
+        // skipped, docs survive. Small sources are exempt: a 1-doc vault
+        // legitimately empties out when its file is removed.
         var source = await SeedSourceWithDocAsync("s3://b/a.txt", "keep", "fp1");
+        for (var i = 1; i < 5; i++)
+            await SeedDocAsync(source.Id, $"s3://b/x{i}.txt", "keep", $"fp{i}");
         var connector = new FakeConnector(SourceType.AwsS3,
             (_, _) => new FetchResult([], []));
 
         await NewIngestion(connector).SyncAsync(source.Id);
 
         var (docs, _) = await DumpDocs(source.Id);
-        Assert.Single(docs); // mass-delete gate: nothing was removed
+        Assert.Equal(5, docs.Count); // mass-delete gate: nothing was removed
+    }
+
+    [Fact]
+    public async Task Sync_EmptyEnumeration_SmallIndex_AllowsDelete()
+    {
+        // RF-003 threshold: below MinMassDeleteDocs a total emptying is a
+        // legitimate delete-all, not an unreadable-mount signature.
+        var source = await SeedSourceWithDocAsync("s3://b/only.txt", "gone", "fp1");
+        var connector = new FakeConnector(SourceType.AwsS3,
+            (_, _) => new FetchResult([], []));
+
+        await NewIngestion(connector).SyncAsync(source.Id);
+
+        var (docs, _) = await DumpDocs(source.Id);
+        Assert.Empty(docs);
     }
 
     [Fact]
