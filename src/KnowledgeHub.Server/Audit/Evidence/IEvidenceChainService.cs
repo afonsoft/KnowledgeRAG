@@ -30,4 +30,9 @@ public interface IEvidenceChainService
     /// <summary>Recomputes digests + verifies signatures of stored receipts —
     /// used by the bundle endpoint to report integrity on export.</summary>
     string KeyId { get; }
+
+    /// <summary>SPEC-20260929 RF-003: full verification with the instance
+    /// signing key — the export path must re-verify, not trust stored
+    /// digests.</summary>
+    Task<EvidenceVerification> VerifyAsync(string sessionId, CancellationToken ct);
 }

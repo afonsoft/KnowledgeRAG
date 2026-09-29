@@ -19,10 +19,23 @@ public static class EvidenceEndpoints
         group.MapGet("/sessions/{sessionId}/bundle", async (
             string sessionId,
             IEvidenceChainService evidence,
+            HttpContext http,
             CancellationToken ct) =>
         {
             var receipts = await evidence.GetSessionReceiptsAsync(sessionId, ct);
-            var verification = EvidenceChainVerifier.Verify(receipts);
+
+            // SPEC-20260929 RF-002: an aft_* caller may only export sessions it
+            // produced — every receipt must carry its ApiKeyId (cookie-owned
+            // sessions are equally off-limits to API keys).
+            if (http.RequestServices.GetService<Auth.ICallerScopeProvider>() is { } scopeProvider
+                && (await scopeProvider.GetAsync(ct)).ApiKeyId is { } callerKey
+                && receipts.Any(r => !string.Equals(r.ApiKeyId,
+                    callerKey.ToString("N"), StringComparison.OrdinalIgnoreCase)))
+                return Results.Forbid();
+
+            // SPEC-20260929 RF-003: integrity is re-verified with the instance
+            // key — never trusted from stored digests alone.
+            var verification = await evidence.VerifyAsync(sessionId, ct);
 
             return Results.Ok(new
             {

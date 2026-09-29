@@ -26,12 +26,32 @@ public sealed class EvidenceChainService(
 
     private byte[]? _key;
 
+    /// <summary>SPEC-20260929 RF-001: appends are serialized per session —
+    /// two concurrent writes can never read the same parent / interleave
+    /// digests. Locks are per sessionId (cheap, lazily created).</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>
+        _sessionLocks = new(StringComparer.Ordinal);
+
     public static string Sha256Hex(string? payload) =>
         Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(payload ?? "")))
             .ToLowerInvariant();
 
     public async Task<EvidenceReceipt> AppendAsync(EvidenceEvent ev, CancellationToken ct)
+    {
+        var gate = _sessionLocks.GetOrAdd(ev.SessionId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            return await AppendCoreAsync(ev, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<EvidenceReceipt> AppendCoreAsync(EvidenceEvent ev, CancellationToken ct)
     {
         var receipt = new EvidenceReceipt
         {
@@ -74,10 +94,18 @@ public sealed class EvidenceChainService(
 
     public async Task<IReadOnlyList<EvidenceReceipt>> GetSessionReceiptsAsync(
         string sessionId, CancellationToken ct) =>
-        await db.EvidenceReceipts
+        // Sorted in memory — SQLite cannot translate DateTimeOffset ORDER BY.
+        (await db.EvidenceReceipts.AsNoTracking()
             .Where(r => r.SessionId == sessionId)
-            .OrderBy(r => r.Timestamp).ThenBy(r => r.ReceiptId)
-            .ToListAsync(ct);
+            .ToListAsync(ct))
+        .OrderBy(r => r.Timestamp).ThenBy(r => r.ReceiptId)
+        .ToList();
+
+    /// <inheritdoc/>
+    public async Task<EvidenceVerification> VerifyAsync(string sessionId, CancellationToken ct) =>
+        EvidenceChainVerifier.Verify(
+            await GetSessionReceiptsAsync(sessionId, ct),
+            await LoadOrCreateKeyAsync(ct));
 
     /// <summary>Canonical digest over the signed fields (signature excluded).</summary>
     public static string ComputeDigest(EvidenceReceipt r)
