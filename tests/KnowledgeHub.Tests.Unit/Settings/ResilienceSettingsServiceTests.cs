@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using KnowledgeHub.Tests.Unit.Server;
 
 namespace KnowledgeHub.Tests.Unit.Settings;
 
@@ -39,10 +40,21 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
         _conn.Dispose();
     }
 
+    private readonly McpProxySourceServiceTests.FakeSecretStore _secrets = new();
+
     private ResilienceSettingsService Sut(FallbackOptions? env = null) => new(
         Options.Create(env ?? new FallbackOptions()),
         _provider.GetRequiredService<IServiceScopeFactory>(),
+        _secrets,
+        new FakeNotifier(),
         NullLogger<ResilienceSettingsService>.Instance);
+
+    private sealed class FakeNotifier : KnowledgeHub.Server.Mcp.IToolCatalogChangeNotifier
+    {
+        public long Version { get; private set; }
+        public Task NotifyToolsChangedAsync(CancellationToken ct = default)
+        { Version++; return Task.CompletedTask; }
+    }
 
     private static readonly SaveResilienceSettingsRequest StoreRequest = new()
     {
@@ -129,6 +141,71 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Save_NeverPersistsPlaintextKey()
+    {
+        // SPEC-20260929 RF-001: apiKey moves to the secret store — the row
+        // JSON carries only hasKey.
+        var sut = Sut();
+        await sut.SaveAsync(StoreRequest);
+
+        using var scope = _provider.CreateScope();
+        var row = await scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>()
+            .ResilienceSettings.SingleAsync();
+        Assert.DoesNotContain("sekret", row.ChatFallbacksJson!);
+        Assert.Contains("\"hasKey\":true", row.ChatFallbacksJson);
+        Assert.Equal("sekret", _secrets.Store["resilience:fallback:0"]);
+    }
+
+    [Fact]
+    public async Task Save_OmittedProvider_PreservesPrevious()
+    {
+        // SPEC-20260929 RF-002: UI rows without provider keep the stored
+        // provider — an Ollama alternate must not silently become OpenAI.
+        var sut = Sut();
+        await sut.SaveAsync(StoreRequest); // provider: ollama
+        await sut.SaveAsync(new SaveResilienceSettingsRequest
+        {
+            Mode = "observe",
+            MaxFallbackAttempts = 1,
+            ChatFallbacks =
+            [
+                new ChatFallbackOptionDto { Endpoint = "http://h:11434", Model = "llama3" }
+            ]
+        });
+
+        Assert.Equal("ollama", sut.GetEffective().ChatFallbacks[0].Provider);
+    }
+
+    [Fact]
+    public async Task LegacyPlaintextRow_MigratesToSecretStore()
+    {
+        // SPEC-20260929 RF-001: rows written by the old format are migrated on
+        // first load — key lands in the store, JSON stripped.
+        using (var scope = _provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
+            db.ResilienceSettings.Add(new ResilienceSettings
+            {
+                Id = 1,
+                Mode = "enforce",
+                MaxFallbackAttempts = 2,
+                ChatFallbacksJson = """[{"provider":"openai","endpoint":"https://api.openai.com","model":"gpt-4o","apiKey":"sk-legacy"}]""",
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sut = Sut();
+        Assert.Equal("sk-legacy", sut.GetEffective().ChatFallbacks[0].ApiKey);
+
+        using var verify = _provider.CreateScope();
+        var row = await verify.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>()
+            .ResilienceSettings.SingleAsync();
+        Assert.DoesNotContain("sk-legacy", row.ChatFallbacksJson);
+        Assert.Equal("sk-legacy", _secrets.Store["resilience:fallback:0"]);
+    }
+
+    [Fact]
     public async Task Invalidate_ReloadsFromStore()
     {
         var sut = Sut();
@@ -139,7 +216,8 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
         var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
         db.ResilienceSettings.Add(new ResilienceSettings
         {
-            Mode = "enforce", MaxFallbackAttempts = 5
+            Mode = "enforce",
+            MaxFallbackAttempts = 5
         });
         await db.SaveChangesAsync();
 
@@ -162,7 +240,8 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
         var sut = Sut(env);
         await sut.SaveAsync(new SaveResilienceSettingsRequest
         {
-            Mode = "observe", MaxFallbackAttempts = 1,
+            Mode = "observe",
+            MaxFallbackAttempts = 1,
             ToolCapabilities = null // not provided → null JSON → inherit
         });
         Assert.Equal(["tavily"], sut.GetEffective().ToolCapabilities["WebSearch"]);
