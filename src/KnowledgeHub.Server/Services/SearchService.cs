@@ -43,6 +43,10 @@ public sealed class SearchService(
     /// still returns the degraded result but never caches it.</summary>
     private sealed class DegradationState { public bool Any; }
 
+    /// <summary>Strip CR/LF from caller-supplied values before logging.</summary>
+    private static string? ForLog(string? value) =>
+        value?.Replace('\r', ' ').Replace('\n', ' ');
+
     public async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
         string query, int topK, Guid? sourceId = null,
         SearchMode mode = SearchMode.Hybrid, ResolvedSearchFilter? filter = null,
@@ -318,7 +322,9 @@ public sealed class SearchService(
         var curFilter = filter;
         var relaxed = new List<SearchResultItem>();
 
-        for (var level = 1; level <= 3 && merged.Count < minResults; level++)
+        // Stop cascading as soon as strict+relaxed hits satisfy MinResults —
+        // wider scopes than needed would dilute the response with off-scope hits.
+        for (var level = 1; level <= 3 && merged.Count + relaxed.Count < minResults; level++)
         {
             var next = await NextScopeAsync(curSourceId, curFilter, ct);
             if (next is null)
@@ -643,6 +649,9 @@ public sealed class SearchService(
                 spent += context.Length;
                 docSpent += context.Length;
                 addedChunks += expanded.Count;
+                // Claim the emitted neighbours so overlapping windows of later
+                // hits don't repeat the same passage (and don't double-spend).
+                hitChunkIndexes.UnionWith(expanded);
                 result[pos] = item with { Context = context, ExpandedChunkIndices = expanded };
             }
         }
@@ -729,7 +738,9 @@ public sealed class SearchService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
-                    logger.LogWarning(ex, "Search arm failed (label {Label}) — continuing", t.Label ?? "primary");
+                    logger.LogWarning(ex, "Search arm failed (label {Label}) — continuing",
+                        ForLog(t.Label) ?? "primary");
+                    degraded.Any = true; // RF-005: never cache a result built on a failed arm
                     return (IReadOnlyList<Guid>)[];
                 }
             });
@@ -749,7 +760,9 @@ public sealed class SearchService(
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
-                    logger.LogWarning(ex, "Lexical arm failed (label {Label}) — continuing", q.Label ?? "primary");
+                    logger.LogWarning(ex, "Lexical arm failed (label {Label}) — continuing",
+                        ForLog(q.Label) ?? "primary");
+                    degraded.Any = true; // RF-005: never cache a result built on a failed arm
                     return (IReadOnlyList<Guid>)[];
                 }
             });
