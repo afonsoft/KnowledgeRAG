@@ -11,6 +11,7 @@ namespace KnowledgeHub.Tests.Unit.Server;
 /// Unit tests for SPEC-20260924-corrective-rag: heuristic grading, corrective
 /// retry, and structural abstention.
 /// </summary>
+[Collection("SearchTelemetry")]
 public sealed class CorrectiveRetrievalTests
 {
     // -------------------------------------------------------------------------
