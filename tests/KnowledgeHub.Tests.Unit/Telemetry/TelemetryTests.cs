@@ -10,6 +10,7 @@ using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Server.Embeddings;
 using KnowledgeHub.Server.Graph;
 using KnowledgeHub.Server.Mcp;
+using KnowledgeHub.Server.Mcp.Bridge;
 using KnowledgeHub.Server.Search;
 using KnowledgeHub.Server.Services;
 using KnowledgeHub.Server.Telemetry;
@@ -259,6 +260,77 @@ public sealed class TelemetryTests
             Assert.Contains(key, TelemetryTags.AllowedMetricKeys));
         Assert.All(activities.SelectMany(a => a.TagObjects.Select(t => t.Key)), key =>
             Assert.Contains(key, TelemetryTags.AllowedActivityKeys));
+    }
+
+    // SPEC-20260928-observability-followups AC-2/AC-3: the new arms emit
+    // spans + counters — temporal graph query (mode tag) and live-action
+    // bridge execution (tool/outcome tags).
+    [Fact]
+    public async Task TemporalGraphQuery_EmitsSpanAndCounter()
+    {
+        await using var conn = new SqliteConnection("Data Source=:memory:");
+        await conn.OpenAsync();
+        var options = new DbContextOptionsBuilder<KnowledgeHubDbContext>().UseSqlite(conn).Options;
+        await using var db = new KnowledgeHubDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var retriever = new TemporalGraphRetriever(db,
+            new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
+            new SqliteKnowledgeGraphStore(db, NullLogger<SqliteKnowledgeGraphStore>.Instance),
+            NullLogger<TemporalGraphRetriever>.Instance);
+
+        var metrics = CollectMetrics(() =>
+            retriever.SearchEpisodeContextAsync(Guid.NewGuid().ToString("N"))
+                .GetAwaiter().GetResult());
+        var activities = CollectActivities(() =>
+            retriever.SearchEpisodeContextAsync(Guid.NewGuid().ToString("N"))
+                .GetAwaiter().GetResult());
+
+        Assert.Contains(metrics, m =>
+            m.Instrument == "knowledgehub.graph.temporal_queries"
+            && m.Tags.TryGetValue("mode", out var mode)
+            && (mode as string) == "episode");
+        Assert.Single(activities, a =>
+            a.OperationName == "search.temporal_graph"
+            && a.TagObjects.Any(t => t.Key == "mode" && (t.Value as string) == "episode"));
+    }
+
+    [Fact]
+    public async Task LiveActions_EmitsSpanAndExecutionCounter()
+    {
+        var tool = new CatalogTool
+        {
+            Name = "tavily_search",
+            Description = "t",
+            InputSchema = JsonNode.Parse(
+                """{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}""")!.AsObject(),
+            ReadOnly = true,
+            Handler = (_, _) => new ValueTask<CallToolResult>(new CallToolResult
+            {
+                IsError = false,
+                Content = [new TextContentBlock { Text = "live-data" }]
+            })
+        };
+        var hit = new SearchResultItem
+        {
+            ChunkText = "cheque <!-- mcp-tool: tavily_search query=\"cotação\" --> agora",
+            DocumentTitle = "d", SourceName = "s", SourceId = Guid.NewGuid(),
+            Score = 0.9, UriReference = "u", ChunkId = Guid.NewGuid()
+        };
+        var ctx = new ToolCallContext { Services = null! };
+
+        var metrics = CollectMetrics(() =>
+            McpDynamicRagActionBridge.ExecuteAsync("q", [hit], [tool], ctx, 3, CancellationToken.None)
+                .GetAwaiter().GetResult());
+        var activities = CollectActivities(() =>
+            McpDynamicRagActionBridge.ExecuteAsync("q", [hit], [tool], ctx, 3, CancellationToken.None)
+                .GetAwaiter().GetResult());
+
+        Assert.Contains(metrics, m =>
+            m.Instrument == "knowledgehub.live_tool.executions"
+            && (m.Tags.TryGetValue("tool", out var tn) && (tn as string) == "tavily_search")
+            && (m.Tags.TryGetValue("outcome", out var oc) && (oc as string) == "success"));
+        Assert.Single(activities, a => a.OperationName == "search.live_actions");
     }
 
     [Fact]

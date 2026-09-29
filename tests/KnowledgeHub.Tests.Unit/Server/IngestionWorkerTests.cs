@@ -100,6 +100,40 @@ public sealed class IngestionWorkerTests : IDisposable
         Assert.NotNull(row.FinishedAt);
     }
 
+    // SPEC-20260928-observability-followups RF-001/AC-1: a job left "queued" by
+    // a previous process must be marked failed AND publish its terminal event —
+    // the progress feed must not leave the job stuck open in the UI.
+    [Fact]
+    public async Task OrphanSweep_PublishesTerminalEvent()
+    {
+        var sourceId = await SeedSourceAsync();
+        var jobId = Guid.NewGuid();
+        await using (var scope = _provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
+            db.IngestionJobs.Add(new IngestionJob
+            {
+                Id = jobId, SourceId = sourceId, Kind = "sync", Status = "queued"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var terminal = WaitTerminalForAsync(sourceId);
+        using var worker = CreateWorker();
+        await worker.StartAsync(CancellationToken.None);
+
+        var evt = await terminal.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("failed", evt.Status);
+        Assert.Equal(jobId, evt.JobId);
+
+        await using var verify = _provider.CreateAsyncScope();
+        var row = await verify.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>()
+            .IngestionJobs.FindAsync(jobId);
+        Assert.Equal("failed", row!.Status);
+        Assert.Equal("interrupted by restart", row.Error);
+        Assert.NotNull(row.FinishedAt);
+    }
+
     [Fact]
     public async Task CancelledBeforeDequeue_IsSkippedAndLoopContinues()
     {

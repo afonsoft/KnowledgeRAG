@@ -37,12 +37,37 @@ public sealed class TemporalGraphRetriever(
     /// <summary>Upper bound for edge scans feeding one response.</summary>
     private const int EdgeScanCap = 400;
 
+    /// <summary>SPEC-20260928-observability-followups RF-002/RF-003: every mode
+    /// emits a <c>search.temporal_graph</c> span (tag <c>mode</c>) + a
+    /// <c>graph.temporal_queries</c> counter; failures mark the span Error.</summary>
+    private async Task<TemporalSearchResult> TrackAsync(string mode, Func<Task<TemporalSearchResult>> work)
+    {
+        Telemetry.KnowledgeHubMetrics.TemporalGraphQueries.Add(1,
+            new KeyValuePair<string, object?>("mode", mode));
+        using var span = Telemetry.KnowledgeHubActivity.Start("search.temporal_graph");
+        span?.SetTag("mode", mode);
+        try
+        {
+            return await work();
+        }
+        catch (Exception ex)
+        {
+            Telemetry.KnowledgeHubActivity.Fail(span, ex);
+            throw;
+        }
+    }
+
     /// <summary>Facts whose <c>ObservedAt</c> falls inside [start, end].
     /// When the query links to known entities the window is intersected with
     /// their neighbourhoods; otherwise the window is browsed directly.</summary>
-    public async Task<TemporalSearchResult> SearchTemporalWindowAsync(
+    public Task<TemporalSearchResult> SearchTemporalWindowAsync(
         string query, DateTime? start, DateTime? end,
-        int maxResults = 15, CancellationToken ct = default)
+        int maxResults = 15, CancellationToken ct = default) =>
+        TrackAsync("window", () => SearchTemporalWindowCoreAsync(query, start, end, maxResults, ct));
+
+    private async Task<TemporalSearchResult> SearchTemporalWindowCoreAsync(
+        string query, DateTime? start, DateTime? end,
+        int maxResults, CancellationToken ct)
     {
         if (start is not null && end is not null && start > end)
             throw new ArgumentException(
@@ -106,15 +131,22 @@ public sealed class TemporalGraphRetriever(
         string query, TimeSpan window, int maxResults = 10, CancellationToken ct = default)
     {
         var cutoff = DateTime.UtcNow - window;
-        return SearchTemporalWindowAsync(query, cutoff, null, maxResults, ct);
+        // Own mode tag — calls Core directly so one call = one span/counter.
+        return TrackAsync("recent",
+            () => SearchTemporalWindowCoreAsync(query, cutoff, null, maxResults, ct));
     }
 
     /// <summary>Multi-hop relationship exploration around an entity — BFS over
     /// currently-valid edges in BOTH directions (Graphiti-style), default
     /// depth 2, hard-capped at <see cref="MaxDepth"/>.</summary>
-    public async Task<TemporalSearchResult> SearchEntityRelationshipsAsync(
+    public Task<TemporalSearchResult> SearchEntityRelationshipsAsync(
         string entity, int depth = DefaultDepth, int maxResults = 15,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        TrackAsync("relationships",
+            () => SearchEntityRelationshipsCoreAsync(entity, depth, maxResults, ct));
+
+    private async Task<TemporalSearchResult> SearchEntityRelationshipsCoreAsync(
+        string entity, int depth, int maxResults, CancellationToken ct)
     {
         var root = await store.FindNodeAsync(entity, ct)
             ?? throw new ArgumentException($"unknown entity '{entity}'", nameof(entity));
@@ -163,9 +195,14 @@ public sealed class TemporalGraphRetriever(
 
     /// <summary>Cluster-diversified neighbourhood of an entity (RF-004):
     /// 2-hop candidates spread across label/type clusters.</summary>
-    public async Task<TemporalSearchResult> SearchDiverseResultsAsync(
+    public Task<TemporalSearchResult> SearchDiverseResultsAsync(
         string entity, string diversityLevel = "medium", int maxResults = 10,
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        TrackAsync("diverse",
+            () => SearchDiverseResultsCoreAsync(entity, diversityLevel, maxResults, ct));
+
+    private async Task<TemporalSearchResult> SearchDiverseResultsCoreAsync(
+        string entity, string diversityLevel, int maxResults, CancellationToken ct)
     {
         if (!DiversityRanker.IsValidLevel(diversityLevel))
             throw new ArgumentException(
@@ -173,8 +210,8 @@ public sealed class TemporalGraphRetriever(
                 string.Join(", ", DiversityRanker.Levels),
                 nameof(diversityLevel));
 
-        var sub = await SearchEntityRelationshipsAsync(
-            entity, DefaultDepth, maxResults: 100, ct);
+        var sub = await SearchEntityRelationshipsCoreAsync(
+            entity, DefaultDepth, 100, ct);
         var selected = DiversityRanker.Select(sub.Nodes, diversityLevel, maxResults);
         var keep = selected.Select(n => n.Id).ToHashSet();
         var edges = sub.Edges
@@ -186,8 +223,13 @@ public sealed class TemporalGraphRetriever(
 
     /// <summary>All facts attributed to one episode (ingestion run / agent
     /// session) — newest first, capped.</summary>
-    public async Task<TemporalSearchResult> SearchEpisodeContextAsync(
-        string episodeId, int maxResults = 10, CancellationToken ct = default)
+    public Task<TemporalSearchResult> SearchEpisodeContextAsync(
+        string episodeId, int maxResults = 10, CancellationToken ct = default) =>
+        TrackAsync("episode",
+            () => SearchEpisodeContextCoreAsync(episodeId, maxResults, ct));
+
+    private async Task<TemporalSearchResult> SearchEpisodeContextCoreAsync(
+        string episodeId, int maxResults, CancellationToken ct)
     {
         if (!Guid.TryParse(episodeId?.Trim(), out var id))
             throw new ArgumentException(
