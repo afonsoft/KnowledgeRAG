@@ -22,6 +22,7 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // Covers SPEC-20260926-cache-coherence-and-ttl: striped locks, L1 on L2 write
 // failure, remote cache-clear dropping tracked L2 keys, and degraded vector-arm
 // results never entering the search cache.
+[Collection("SearchTelemetry")]
 public sealed class CacheCoherenceTests
 {
     // ---- RF-002: striped locks ----

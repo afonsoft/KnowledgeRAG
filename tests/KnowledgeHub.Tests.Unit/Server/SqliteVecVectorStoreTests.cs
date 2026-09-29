@@ -10,6 +10,7 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // Covers SPEC-20260917-sqlite-vec-search: native vec0 KNN must return the same
 // hits as the in-process cosine provider (CA-001/CA-003), respect the same
 // model/source filters, and fail clearly on dimension mismatch.
+[Collection("SearchTelemetry")]
 public class SqliteVecVectorStoreTests
 {
     private const string Model = "test-model";

@@ -47,7 +47,17 @@ public static class EvidenceChainVerifier
                     "canonical digest mismatch — body fields were altered"));
 
             // 2. Signature check (skipped only when the key is unavailable).
-            if (hmacKey is not null && r.Signature.StartsWith("hmac-sha256:", StringComparison.Ordinal))
+            // SPEC-20260929 RF-005: an unrecognized scheme is a violation —
+            // swapping the prefix must not smuggle an unsigned receipt.
+            if (r.Signature is null
+                || !r.Signature.StartsWith("hmac-sha256:", StringComparison.Ordinal))
+            {
+                if (hmacKey is not null)
+                    violations.Add(new EvidenceViolation(r.ReceiptId,
+                        "UnknownSignatureScheme",
+                        "signature is missing or uses an unknown scheme"));
+            }
+            else if (hmacKey is not null)
             {
                 using var hmac = new HMACSHA256(hmacKey);
                 var expected = Convert.ToHexString(

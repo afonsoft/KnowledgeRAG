@@ -25,6 +25,7 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // Covers SPEC-20260926-ops-and-ui-polish: log-level restore/generation,
 // session transitions in monitor activity, agent ToolCall caller, eval
 // retrieval-latency percentiles and honest vec0 diagnostics.
+[Collection("SearchTelemetry")]
 public sealed class OpsUiPolishTests
 {
     // ---- LogLevelControl ----

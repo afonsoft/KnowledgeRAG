@@ -146,6 +146,8 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
         string? token, bool acceptRaw, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (repo.AllowPrivateHosts)
+            request.Options.Set(Security.EgressPolicyHandler.AllowPrivateHostsKey, true);
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("KnowledgeHub", "1.0"));
         if (acceptRaw)
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.raw"));

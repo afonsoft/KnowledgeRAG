@@ -245,6 +245,10 @@ public sealed class KnowledgeSourceService(
                 && hv.TryGetValue<bool>(out var flagged) && flagged;
             if (!hasHeaders)
                 return null;
+            // SPEC-20260929 RF-001: an inline key in the same request is
+            // write-through — persist happens after validation, so accept it.
+            if (UsableSecret(configuration, "headers"))
+                return null;
             return await secrets.GetAsync(Ingestion.Connectors.RestApiConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'headers' marked as stored (hasKey) but no stored headers for this source"
                 : null;
@@ -257,7 +261,7 @@ public sealed class KnowledgeSourceService(
         {
             var flagged = configuration["hasKey"] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged)
+            if (!flagged || UsableSecret(configuration, "apiKey"))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
@@ -269,7 +273,7 @@ public sealed class KnowledgeSourceService(
         {
             var flagged = configuration["hasKey"] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged)
+            if (!flagged || UsableSecret(configuration, "token"))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'token' marked as stored (hasKey) but no stored PAT for this source"
@@ -281,7 +285,7 @@ public sealed class KnowledgeSourceService(
         {
             var flagged = configuration["hasKey"] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged)
+            if (!flagged || UsableSecret(configuration, "apiKey"))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
