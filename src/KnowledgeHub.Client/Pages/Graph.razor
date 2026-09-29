@@ -1,0 +1,211 @@
+@page "/graph"
+@attribute [Authorize]
+@inject GraphApiClient Api
+@inject ToastService Toast
+
+<PageTitle>Grafo — Knowledge</PageTitle>
+
+@* SPEC-20260928-graph-timeline-viewer RF-002: visualizador tabular do grafo
+   temporal/episódico — filtro de janela (presets + range), badges de episódio,
+   expansão de arestas por nó, toggle de histórico. *@
+
+<h3 class="mb-3">Grafo de conhecimento</h3>
+
+<div class="border rounded p-3 mb-3">
+    <div class="row g-2 align-items-end">
+        <div class="col-6 col-md-2">
+            <label class="form-label">Janela</label>
+            <Select @bind-Value="_preset">
+                <Options>
+                    <SelectOption Text="Tudo" Value="" />
+                    <SelectOption Text="Última hora" Value="1h" />
+                    <SelectOption Text="Últimas 6h" Value="6h" />
+                    <SelectOption Text="Últimas 24h" Value="24h" />
+                    <SelectOption Text="Últimos 7 dias" Value="7d" />
+                </Options>
+            </Select>
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">De</label>
+            <input type="datetime-local" class="form-control form-control-sm" @bind="_from" />
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">Até</label>
+            <input type="datetime-local" class="form-control form-control-sm" @bind="_to" />
+        </div>
+        <div class="col-6 col-md-2">
+            <Switch @bind-Value="_includeHistorical" DisplayText="Histórico" ShowLabel="true" />
+        </div>
+        <div class="col-6 col-md-2">
+            <Button Color="Color.Primary" Icon="fa-solid fa-filter" Text="Filtrar"
+                    IsAsync="true" OnClick="ReloadAsync" />
+        </div>
+    </div>
+</div>
+
+@if (_nodes is null)
+{
+    <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> Carregando grafo…</div>
+}
+else if (_nodes.Count == 0)
+{
+    <div class="text-center text-muted p-5 border rounded">
+        <i class="fa-solid fa-diagram-project fa-2x mb-2 d-block"></i>
+        Nenhuma entidade no grafo. Registre uma fonte em
+        <NavLink href="sources">Fontes</NavLink> e sincronize — a extração de
+        entidades roda durante a ingestão quando <code>"graph": true</code>.
+    </div>
+}
+else
+{
+    <table class="table table-sm align-middle">
+        <thead>
+            <tr>
+                <th>Entidade</th><th>Tipo</th><th>Observado</th>
+                <th>Vigência</th><th>Episódio</th><th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var n in _nodes)
+            {
+                <tr class="@(_expanded == n.Id ? "table-active" : "")">
+                    <td>
+                        <strong>@n.Name</strong>
+                        @foreach (var l in n.Labels)
+                        {
+                            <Badge Color="Color.Secondary" class="ms-1">@l</Badge>
+                        }
+                    </td>
+                    <td class="small">@n.Type</td>
+                    <td class="small">@n.ObservedAt.ToString("dd/MM HH:mm")</td>
+                    <td class="small">
+                        @n.ValidFrom.ToString("dd/MM")
+                        → @(n.ValidTo?.ToString("dd/MM") ?? "vigente")
+                    </td>
+                    <td>
+                        @if (n.EpisodeId is not null)
+                        {
+                            <Badge Color="Color.Info" TooltipText="@(n.EpisodeSummary ?? n.EpisodeId)">
+                                @(n.EpisodeSummary ?? n.EpisodeId[..8])
+                            </Badge>
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
+                    <td>
+                        <Button Size="Size.ExtraSmall" Color="Color.Secondary"
+                                Icon="@(_expanded == n.Id ? "fa-solid fa-chevron-up" : "fa-solid fa-chevron-down")"
+                                TooltipText="Arestas" IsAsync="true"
+                                OnClick="() => ToggleEdgesAsync(n.Id)" />
+                    </td>
+                </tr>
+                @if (_expanded == n.Id)
+                {
+                    <tr>
+                        <td colspan="6" class="bg-light">
+                            @if (_edges is null)
+                            {
+                                <div class="text-muted small"><i class="fa-solid fa-spinner fa-spin"></i> Carregando arestas…</div>
+                            }
+                            else if (_edges.Count == 0)
+                            {
+                                <div class="text-muted small">Nenhuma aresta vigente para este nó.</div>
+                            }
+                            else
+                            {
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        @foreach (var e in _edges)
+                                        {
+                                            <tr>
+                                                <td class="small">@e.FromName</td>
+                                                <td><Badge Color="Color.Secondary">@e.Kind</Badge></td>
+                                                <td class="small">@e.ToName</td>
+                                                <td class="small text-muted">
+                                                    w=@e.Weight.ToString("F1") · @e.ObservedAt.ToString("dd/MM HH:mm")
+                                                    @if (e.ValidTo is not null)
+                                                    {
+                                                        <Badge Color="Color.Warning" class="ms-1">superseded</Badge>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<GraphNodeDto>? _nodes;
+    private List<GraphEdgeDto>? _edges;
+    private string? _expanded;
+    private string _preset = "";
+    private DateTime? _from;
+    private DateTime? _to;
+    private bool _includeHistorical;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    /// <summary>Recarrega a lista de nós — preset gera o range [now−preset, now];
+    /// campos De/Até explícitos vencem o preset.</summary>
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            var (from, to) = EffectiveRange();
+            _nodes = from is not null || to is not null
+                ? await Api.TimelineAsync(from, to, 200, _includeHistorical)
+                : (await Api.NodesAsync(0, 200, _includeHistorical))?.Nodes.ToList();
+            _expanded = null;
+            _edges = null;
+        }
+        catch (Exception ex)
+        {
+            await Toast.Error("Erro", $"Falha ao carregar o grafo: {ex.Message}");
+        }
+    }
+
+    private (DateTime? From, DateTime? To) EffectiveRange()
+    {
+        if (_from is not null || _to is not null)
+            return (_from, _to);
+        var now = DateTime.UtcNow;
+        return _preset switch
+        {
+            "1h" => (now.AddHours(-1), (DateTime?)null),
+            "6h" => (now.AddHours(-6), (DateTime?)null),
+            "24h" => (now.AddHours(-24), (DateTime?)null),
+            "7d" => (now.AddDays(-7), (DateTime?)null),
+            _ => (null, null)
+        };
+    }
+
+    /// <summary>Expande/recolhe o painel de arestas do nó.</summary>
+    private async Task ToggleEdgesAsync(string id)
+    {
+        if (_expanded == id)
+        {
+            _expanded = null;
+            _edges = null;
+            return;
+        }
+        _expanded = id;
+        _edges = null;
+        try
+        {
+            _edges = await Api.EdgesAsync(id, _includeHistorical);
+        }
+        catch (Exception ex)
+        {
+            await Toast.Error("Erro", $"Falha ao carregar arestas: {ex.Message}");
+        }
+    }
+}
