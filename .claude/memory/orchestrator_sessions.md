@@ -137,3 +137,32 @@ pipeline NETSDK1098 é prioridade alta); redeploy p/ :5550; prod smoke
 - Incidentes: NU1403 (ILLink re-publish → lockfile regen); rate limit no
   upload de 222 assets soltos → motivou o fix de archives.
 - Final: main f282c43, 0 PRs, prod healthy :5550, backlog zerado.
+
+## 2026-09-29 — Epic #383 (gap-analysis follow-ups, 5 slices)
+
+- Gap-analysis 2026-09-28: 12 candidatos → 7 confirmados → 5 SPECs Draft aprovados
+  ("Sim, aprovar todos"); Epic #383 + issues #384–#388 criadas; PR #389 (SPECs)
+  mergeada `b4c678f`.
+- S1 #384 docs-sync: README/CLAUDE/API(en+pt)/INSTALL(en+pt) sincronizados com a
+  wave 2026-09-27 (conectores YouTube/Git/Unstructured/Audio, 5 tools temporais,
+  evidence bundle, live-actions, knobs Resilience/Agent/Search) + AD-0015.
+  PR #390 mergeada.
+- S2 #385 resilience tool-fallback: ResilientToolInvoker decora handlers read-only
+  em DynamicToolCatalog.GetToolsAsync (candidatos do catalog scope-filtered —
+  nunca cruza CallerScope); ToolErrorClassifier para IsError; engine.EvaluateReason;
+  ResilienceSettings single-row + migrations duplas + /api/settings/resilience +
+  aba "Resiliência" no Settings; counter tool.fallbacks. PR #391.
+- S3 #386 graph timeline viewer: /graph (grid de nós, edges por nó, presets
+  1h/6h/24h/7d + range, includeHistorical, badges de episódio) + REST
+  /api/graph/{nodes,nodes/{id}/edges,episodes,timeline} CookieSession + 6 testes
+  de integração. PR #392.
+- S4 #387 test reliability + coverage gate: CollectActivities escopado por TraceId
+  do root de teste (fim do flake de spans paralelos); step "Coverage Gate" no
+  ci-build-test.yml — COVERAGE_MIN=20 (ratchet; medido 20.6% em main — o target
+  80% é aspiracional, debt registrado). PR #393.
+- S5 #388 observability: FailOrphanedJobsAsync publica evento terminal por job;
+  spans search.temporal_graph{mode}/search.live_actions/evidence.emit/verify;
+  counters graph.temporal_queries, live_tool.executions, evidence.records;
+  TelemetryTags allowlist estendida. PR #394.
+- Erros resolvidos: wrap do catálogo quebrava Assert.Same do cache → cache de
+  wrapped por version; init-only DTOs vs @bind → FallbackRow mutável.

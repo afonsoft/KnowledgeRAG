@@ -402,92 +402,80 @@ else
 }
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-12">
-            <Card>
-                <HeaderTemplate>
-                    <div class="d-flex justify-content-between gap-2 align-items-center">
-                        <span>Fallback policy</span>
-                        @if (_resilience.Source == "store")
-                        {
-                            <Badge Color="Color.Success">configurada</Badge>
-                        }
-                        else
-                        {
-                            <Badge Color="Color.Info">ambiente</Badge>
-                        }
-                    </div>
-                </HeaderTemplate>
-                <BodyTemplate>
-                    <div class="row g-2 mb-3">
-                        <div class="col-12 col-md-4">
-                            <label class="form-label">Modo</label>
-                            <Select @bind-Value="_resForm.Mode">
-                                <Options>
-                                    <SelectOption Text="disabled — propaga a falha" Value="disabled" />
-                                    <SelectOption Text="observe — só classifica e loga" Value="observe" />
-                                    <SelectOption Text="enforce — executa o fallback" Value="enforce" />
-                                </Options>
-                            </Select>
-                        </div>
-                        <div class="col-12 col-md-4">
-                            <label class="form-label">Max alternates por request</label>
-                            <input type="number" class="form-control font-monospace" min="1" max="5"
-                                   @bind="_resForm.MaxFallbackAttempts" />
-                            <small class="text-muted">Budget de tentativas após o primário (1–5)</small>
-                        </div>
-                    </div>
-
-                    <h6 class="mt-2">Alternates de chat (ordem importa)</h6>
-                    @foreach (var (fb, i) in _resForm.ChatFallbacks.Select((f, i) => (f, i)))
-                    {
-                        <div class="row g-2 mb-2 align-items-center">
-                            <div class="col-12 col-md-4">
-                                <input class="form-control form-control-sm font-monospace" placeholder="endpoint"
-                                       @bind="fb.Endpoint" />
-                            </div>
-                            <div class="col-12 col-md-3">
-                                <input class="form-control form-control-sm font-monospace" placeholder="model"
-                                       @bind="fb.Model" />
-                            </div>
-                            <div class="col-12 col-md-4">
-                                <input type="password" class="form-control form-control-sm font-monospace"
-                                       placeholder="apiKey (vazio mantém o salvo)" @bind="fb.ApiKey" />
-                            </div>
-                            <div class="col-12 col-md-1">
-                                <Button Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash"
-                                        OnClick="() => RemoveFallbackAsync(i)" />
-                            </div>
-                        </div>
-                    }
-                    <Button Size="Size.Small" Color="Color.Secondary" Icon="fa-solid fa-plus"
-                            Text="Adicionar alternate" OnClick="AddFallback" />
-
-                    <h6 class="mt-3">Capacidades de tools (cadeia de provedores)</h6>
-                    <small class="text-muted d-block mb-2">
-                        Uma linha por capacidade: <code>Nome=prov1,prov2,…</code>. Em falha transitória de
-                        <code>prov1_*</code>, a tool equivalente do próximo provedor responde.
-                    </small>
-                    <textarea class="form-control font-monospace" rows="4"
-                              @bind="_resForm.CapabilitiesText"
-                              placeholder="WebSearch=tavily,firecrawl,duckduckgo&#10;DeepDocLookup=deepwiki,context7,internal_fts"></textarea>
-
-                    <div class="d-flex gap-2 flex-wrap kh-icon-btns mt-3">
-                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
-                                IsAsync="true" IsDisabled="_resForm.Saving"
-                                OnClick="SaveResilienceAsync" />
-                        @if (_resilience.Source == "store")
-                        {
-                            <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
-                                              Text="Restaurar ambiente" Title="Restaurar ambiente"
-                                              Content="A configuração salva será removida; Resilience:Fallback volta a valer."
-                                              OnConfirm="ClearResilienceAsync" />
-                        }
-                    </div>
-                </BodyTemplate>
-            </Card>
+    <section class="border rounded p-3 mb-4">
+        <div class="d-flex justify-content-between gap-2 align-items-center mb-3">
+            <strong>Fallback policy</strong>
+            <Badge Color="@(_resilience.Source == "store" ? Color.Success : Color.Info)">
+                @(_resilience.Source == "store" ? "configurada" : "ambiente")
+            </Badge>
         </div>
-    </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-12 col-md-4">
+                <label class="form-label">Modo</label>
+                <Select @bind-Value="_resForm.Mode">
+                    <Options>
+                        <SelectOption Text="disabled — propaga a falha" Value="disabled" />
+                        <SelectOption Text="observe — só classifica e loga" Value="observe" />
+                        <SelectOption Text="enforce — executa o fallback" Value="enforce" />
+                    </Options>
+                </Select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label">Max alternates por request</label>
+                <input type="number" class="form-control font-monospace" min="1" max="5"
+                       @bind="_resForm.MaxFallbackAttempts" />
+                <small class="text-muted">Budget de tentativas após o primário (1–5)</small>
+            </div>
+        </div>
+
+        <h6 class="mt-2">Alternates de chat (ordem importa)</h6>
+        @foreach (var (fb, i) in _resForm.ChatFallbacks.Select((f, i) => (f, i)))
+        {
+            <div class="row g-2 mb-2 align-items-center">
+                <div class="col-12 col-md-4">
+                    <input class="form-control form-control-sm font-monospace" placeholder="endpoint"
+                           @bind="fb.Endpoint" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <input class="form-control form-control-sm font-monospace" placeholder="model"
+                           @bind="fb.Model" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <input type="password" class="form-control form-control-sm font-monospace"
+                           placeholder="apiKey (vazio mantém o salvo)" @bind="fb.ApiKey" />
+                </div>
+                <div class="col-12 col-md-1">
+                    <Button Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash"
+                            OnClick="() => RemoveFallbackAsync(i)" />
+                </div>
+            </div>
+        }
+        <Button Size="Size.Small" Color="Color.Secondary" Icon="fa-solid fa-plus"
+                Text="Adicionar alternate" OnClick="AddFallback" />
+
+        <h6 class="mt-3">Capacidades de tools (cadeia de provedores)</h6>
+        <small class="text-muted d-block mb-2">
+            Uma linha por capacidade: <code>Nome=prov1,prov2,…</code>. Em falha transitória de
+            <code>prov1_*</code>, a tool equivalente do próximo provedor responde.
+        </small>
+        <textarea class="form-control font-monospace" rows="4"
+                  @bind="_resForm.CapabilitiesText"
+                  placeholder="WebSearch=tavily,firecrawl,duckduckgo&#10;DeepDocLookup=deepwiki,context7,internal_fts"></textarea>
+
+        <div class="d-flex gap-2 flex-wrap kh-icon-btns mt-3">
+            <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                    IsAsync="true" IsDisabled="_resForm.Saving"
+                    OnClick="SaveResilienceAsync" />
+            @if (_resilience.Source == "store")
+            {
+                <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
+                                  Text="Restaurar ambiente" Title="Restaurar ambiente"
+                                  Content="A configuração salva será removida; Resilience:Fallback volta a valer."
+                                  OnConfirm="ClearResilienceAsync" />
+            }
+        </div>
+    </section>
 }
     </TabItem>
     <TabItem Text="Integrações" Icon="fa-solid fa-plug">
