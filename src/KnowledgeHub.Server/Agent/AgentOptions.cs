@@ -54,6 +54,15 @@ public sealed class AgentOptions
     /// <summary>Hard cap on chained live-tool executions per ask (RF-003).</summary>
     public int MaxChainedDynamicCalls { get; set; } = 3;
 
+    /// <summary>
+    /// SPEC-20260929-live-actions-bridge-hardening RF-001: trust boundary.
+    /// <c>&lt;!-- mcp-tool: --&gt;</c> markers inside <em>indexed document
+    /// chunks</em> are untrusted content — an ingested document could plant
+    /// one to fire external tools (prompt injection). Off by default; direct
+    /// tool mentions in the user's own question are always honoured.
+    /// </summary>
+    public bool AllowDocumentMarkers { get; set; }
+
     public sealed class QueryContextOptions
     {
         /// <summary>Pass the conversation snapshot to retrieval tools.</summary>

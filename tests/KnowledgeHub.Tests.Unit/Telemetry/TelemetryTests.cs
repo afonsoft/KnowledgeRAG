@@ -323,10 +323,12 @@ public sealed class TelemetryTests
         var ctx = new ToolCallContext { Services = null! };
 
         var metrics = CollectMetrics(() =>
-            McpDynamicRagActionBridge.ExecuteAsync("q", [hit], [tool], ctx, 3, CancellationToken.None)
+            McpDynamicRagActionBridge.ExecuteAsync("q", [hit], [tool], ctx, 3,
+                allowDocumentMarkers: true, CancellationToken.None)
                 .GetAwaiter().GetResult());
         var activities = CollectActivities(() =>
-            McpDynamicRagActionBridge.ExecuteAsync("q", [hit], [tool], ctx, 3, CancellationToken.None)
+            McpDynamicRagActionBridge.ExecuteAsync("q", [hit], [tool], ctx, 3,
+                allowDocumentMarkers: true, CancellationToken.None)
                 .GetAwaiter().GetResult());
 
         Assert.Contains(metrics, m =>

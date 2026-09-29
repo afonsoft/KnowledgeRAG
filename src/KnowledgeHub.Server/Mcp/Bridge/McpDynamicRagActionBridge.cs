@@ -30,10 +30,11 @@ public static class McpDynamicRagActionBridge
         IReadOnlyList<CatalogTool> visibleTools,
         ToolCallContext ctx,
         int maxCalls,
+        bool allowDocumentMarkers,
         CancellationToken ct)
     {
         var nominations = ToolActionAnnotationDetector.Detect(
-            question, results, visibleTools, maxCalls);
+            question, results, visibleTools, maxCalls, allowDocumentMarkers);
         if (nominations.Count == 0)
             return [];
 
@@ -82,7 +83,7 @@ public static class McpDynamicRagActionBridge
                     result.IsError == true ? "error" : "success"));
 
             var text = string.Join("\n",
-                result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+                result.Content.Select(SummarizeBlock));
             executions.Add(new LiveToolExecution
             {
                 ToolName = tool.Name,
@@ -96,13 +97,49 @@ public static class McpDynamicRagActionBridge
         return executions;
     }
 
-    /// <summary>Args for an arg-less nomination: the tool's single required
-    /// string param must be a query-shaped name — otherwise skip.</summary>
+    /// <summary>
+    /// Textual preview of a result block — non-text payloads (images, embedded
+    /// resources, resource links) surface as placeholders so they are visible
+    /// in the answer instead of silently dropped
+    /// (SPEC-20260929-live-actions-bridge-hardening RF-006).
+    /// </summary>
+    private static string SummarizeBlock(ContentBlock block) => block switch
+    {
+        TextContentBlock t => t.Text,
+        ImageContentBlock i => $"[image: {i.MimeType ?? "unknown"}]",
+        AudioContentBlock a => $"[audio: {a.MimeType ?? "unknown"}]",
+        EmbeddedResourceBlock e => $"[embedded resource: {e.Resource.Uri}]",
+        ResourceLinkBlock r => $"[resource: {r.Name} ({r.Uri})]",
+        _ => $"[{block.GetType().Name}]"
+    };
+
+    /// <summary>Args for a nomination. Marker-supplied args are used verbatim
+    /// but every required parameter must be present and non-empty — a partial
+    /// marker like <c>query=""</c> never dispatches a meaningless call
+    /// (SPEC-20260929-live-actions-bridge-hardening RF-006). For an arg-less
+    /// nomination: the tool's single required string param must be a
+    /// query-shaped name — otherwise skip.</summary>
     private static IDictionary<string, JsonElement>? ResolveArgs(
         ToolActionAnnotation nomination, CatalogTool tool, string question)
     {
         if (nomination.Args.Count > 0)
-            return new Dictionary<string, JsonElement>(nomination.Args);
+        {
+            var markerArgs = new Dictionary<string, JsonElement>(nomination.Args);
+            if (tool.InputSchema.TryGetPropertyValue("required", out var markerReq)
+                && markerReq is JsonArray requiredParams)
+            {
+                foreach (var param in requiredParams)
+                {
+                    if (param?.GetValue<string>() is not { } name)
+                        continue;
+                    if (!markerArgs.TryGetValue(name, out var value)
+                        || (value.ValueKind == JsonValueKind.String
+                            && string.IsNullOrWhiteSpace(value.GetString())))
+                        return null;
+                }
+            }
+            return markerArgs;
+        }
 
         if (tool.InputSchema.TryGetPropertyValue("required", out var req)
             && req is JsonArray { Count: 1 } arr
