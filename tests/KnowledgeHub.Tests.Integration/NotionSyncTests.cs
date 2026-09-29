@@ -23,7 +23,8 @@ public class NotionSyncTests : IClassFixture<NotionSyncTests.Fixture>
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = DbPath
+                    ["Database:Path"] = DbPath,
+                    ["Security:Egress:AllowPrivateNetworks"] = "true" // local fake API targets
                 }));
         }
     }

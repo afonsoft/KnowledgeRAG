@@ -34,7 +34,7 @@ public sealed class WebPageConnector(
         if (!allowPrivate)
             await GuardPublicAsync(start, cancellationToken);
 
-        var robots = await FetchRobotsAsync(start, cancellationToken);
+        var robots = await FetchRobotsAsync(start, allowPrivate, cancellationToken);
 
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<(Uri Uri, int Depth)>();
@@ -61,7 +61,10 @@ public sealed class WebPageConnector(
             string? html = null;
             try
             {
-                using var response = await client.GetAsync(page, cancellationToken);
+                using var pageRequest = new HttpRequestMessage(HttpMethod.Get, page);
+                if (allowPrivate)
+                    pageRequest.Options.Set(Security.EgressPolicyHandler.AllowPrivateHostsKey, true);
+                using var response = await client.SendAsync(pageRequest, cancellationToken);
                 if (response.IsSuccessStatusCode
                     && response.Content.Headers.ContentType?.MediaType == "text/html")
                     html = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -129,13 +132,16 @@ public sealed class WebPageConnector(
                 || (b[0] == 192 && b[1] == 168)
                 || (b[0] == 169 && b[1] == 254)));
 
-    private async Task<RobotsPolicy> FetchRobotsAsync(Uri start, CancellationToken ct)
+    private async Task<RobotsPolicy> FetchRobotsAsync(Uri start, bool allowPrivate, CancellationToken ct)
     {
         try
         {
             var client = httpClientFactory.CreateClient("webpage");
             var robotsUri = new Uri($"{start.Scheme}://{start.Authority}/robots.txt");
-            using var response = await client.GetAsync(robotsUri, ct);
+            using var request = new HttpRequestMessage(HttpMethod.Get, robotsUri);
+            if (allowPrivate)
+                request.Options.Set(Security.EgressPolicyHandler.AllowPrivateHostsKey, true);
+            using var response = await client.SendAsync(request, ct);
             return response.IsSuccessStatusCode
                 ? RobotsPolicy.Parse(await response.Content.ReadAsStringAsync(ct))
                 : RobotsPolicy.AllowAll;
