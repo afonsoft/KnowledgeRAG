@@ -26,7 +26,7 @@ public sealed class TemporalGraphRetrieverTests
         var store = new SqliteKnowledgeGraphStore(db, NullLogger<SqliteKnowledgeGraphStore>.Instance);
         var linker = new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance);
         var retriever = new TemporalGraphRetriever(
-            db, linker, store, new UnrestrictedScope(),
+            db, linker, new UnrestrictedScope(),
             NullLogger<TemporalGraphRetriever>.Instance);
         return (conn, db, retriever, store);
     }
@@ -91,8 +91,7 @@ public sealed class TemporalGraphRetrieverTests
     private static TemporalGraphRetriever ScopedRetriever(
         KnowledgeHubDbContext db, IKnowledgeGraphStore store, params Guid[] allowed) =>
         new(db, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            store, new ScopedTo(allowed),
-            NullLogger<TemporalGraphRetriever>.Instance);
+            new ScopedTo(allowed), NullLogger<TemporalGraphRetriever>.Instance);
 
     [Fact]
     public async Task ScopedCaller_NeverSeesForeignSourceFacts()

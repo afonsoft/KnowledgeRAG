@@ -24,7 +24,6 @@ public sealed record TemporalSearchResult(
 public sealed class TemporalGraphRetriever(
     KnowledgeHubDbContext db,
     GraphEntityLinker linker,
-    IKnowledgeGraphStore store,
     Auth.ICallerScopeProvider scopeProvider,
     ILogger<TemporalGraphRetriever> logger)
 {
@@ -82,6 +81,42 @@ public sealed class TemporalGraphRetriever(
             .ToHashSet();
     }
 
+    /// <summary>Linker overfetch: resolve more candidates than needed so
+    /// scope-filtering restricted entities can't crowd every allowed one out
+    /// of the working set (devin-review #402).</summary>
+    private const int MaxLinkCandidates = 24;
+
+    /// <summary>Resolves an entity by name among scope-ALLOWED candidates —
+    /// a restricted homonym must not shadow an allowed twin with the same
+    /// normalized name (devin-review #402).</summary>
+    private async Task<KgNode?> FindAllowedNodeAsync(
+        string entity, HashSet<Guid>? allowedNodes, CancellationToken ct)
+    {
+        var normalized = EntityResolver.Normalize(entity);
+        var candidates = await db.KgNodes.AsNoTracking()
+            .Where(n => n.NormalizedName == normalized && n.ValidTo == null)
+            .OrderBy(n => n.Type)
+            .ToListAsync(ct);
+        var node = allowedNodes is null
+            ? candidates.FirstOrDefault()
+            : candidates.FirstOrDefault(n => allowedNodes.Contains(n.Id));
+        if (node is not null)
+            return node;
+
+        var aliasIds = await db.KgAliases.AsNoTracking()
+            .Where(a => a.AliasNormalized == normalized)
+            .Select(a => a.KgNodeId)
+            .ToListAsync(ct);
+        if (aliasIds.Count == 0)
+            return null;
+        var aliasNodes = await db.KgNodes.AsNoTracking()
+            .Where(n => aliasIds.Contains(n.Id) && n.ValidTo == null)
+            .ToListAsync(ct);
+        return allowedNodes is null
+            ? aliasNodes.FirstOrDefault()
+            : aliasNodes.FirstOrDefault(n => allowedNodes.Contains(n.Id));
+    }
+
     /// <summary>Facts whose <c>ObservedAt</c> falls inside [start, end].
     /// When the query links to known entities the window is intersected with
     /// their neighbourhoods; otherwise the window is browsed directly.</summary>
@@ -104,11 +139,19 @@ public sealed class TemporalGraphRetriever(
         var scope = await scopeProvider.GetAsync(ct);
         var allowedNodes = await AllowedNodeIdsAsync(scope, ct);
 
-        var linked = string.IsNullOrWhiteSpace(query)
+        var linkedRaw = string.IsNullOrWhiteSpace(query)
             ? []
-            : (await linker.LinkAsync(query, maxEntities: 8, ct))
-              .Where(id => allowedNodes is null || allowedNodes.Contains(id))
-              .ToList();
+            : await linker.LinkAsync(query, maxEntities: MaxLinkCandidates, ct);
+        var linked = linkedRaw
+            .Where(id => allowedNodes is null || allowedNodes.Contains(id))
+            .Take(8)
+            .ToList();
+        // RF-006: a non-empty query whose every linked entity is scope-filtered
+        // must NOT fall through to an unfiltered window scan — that would
+        // return facts unrelated to the query. Empty result is the honest
+        // answer (devin-review #402).
+        if (!string.IsNullOrWhiteSpace(query) && linkedRaw.Count > 0 && linked.Count == 0)
+            return new TemporalSearchResult([], [], null, start, end, false);
 
         // Temporal queries are history-aware: superseded rows (ValidTo set)
         // remain retrievable by their observation time — ValidTo is surfaced
@@ -186,9 +229,9 @@ public sealed class TemporalGraphRetriever(
         var scope = await scopeProvider.GetAsync(ct);
         var allowedNodes = await AllowedNodeIdsAsync(scope, ct);
 
-        var root = await store.FindNodeAsync(entity, ct);
+        var root = await FindAllowedNodeAsync(entity, allowedNodes, ct);
         // RF-006: a restricted entity is indistinguishable from an unknown one.
-        if (root is null || (allowedNodes is not null && !allowedNodes.Contains(root.Id)))
+        if (root is null)
             throw new ArgumentException($"unknown entity '{entity}'", nameof(entity));
         depth = Math.Clamp(depth, 1, MaxDepth);
         maxResults = Math.Clamp(maxResults, 1, 100);
@@ -289,8 +332,13 @@ public sealed class TemporalGraphRetriever(
             && !allowed.Contains(epSource))
             return new TemporalSearchResult([], [], null, null, null, false);
 
+        // RF-006: an episode with a null KnowledgeSourceId (agent session)
+        // passes the episode-level check — its NODES still carry source
+        // provenance and must respect the caller's scope (devin-review #402).
+        var allowedNodes = await AllowedNodeIdsAsync(scope, ct);
         var nodes = await db.KgNodes.AsNoTracking()
-            .Where(n => n.EpisodeId == id)
+            .Where(n => n.EpisodeId == id
+                && (allowedNodes == null || allowedNodes.Contains(n.Id)))
             .OrderByDescending(n => n.ObservedAt)
             .Take(maxResults + 1)
             .ToListAsync(ct);

@@ -276,7 +276,6 @@ public sealed class TelemetryTests
 
         var retriever = new TemporalGraphRetriever(db,
             new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            new SqliteKnowledgeGraphStore(db, NullLogger<SqliteKnowledgeGraphStore>.Instance),
             new UnrestrictedScope(), NullLogger<TemporalGraphRetriever>.Instance);
 
         var metrics = CollectMetrics(() =>
