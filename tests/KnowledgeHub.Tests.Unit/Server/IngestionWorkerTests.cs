@@ -113,7 +113,10 @@ public sealed class IngestionWorkerTests : IDisposable
             var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
             db.IngestionJobs.Add(new IngestionJob
             {
-                Id = jobId, SourceId = sourceId, Kind = "sync", Status = "queued"
+                Id = jobId,
+                SourceId = sourceId,
+                Kind = "sync",
+                Status = "queued"
             });
             await db.SaveChangesAsync();
         }

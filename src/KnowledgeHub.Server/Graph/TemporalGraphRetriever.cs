@@ -25,6 +25,7 @@ public sealed class TemporalGraphRetriever(
     KnowledgeHubDbContext db,
     GraphEntityLinker linker,
     IKnowledgeGraphStore store,
+    Auth.ICallerScopeProvider scopeProvider,
     ILogger<TemporalGraphRetriever> logger)
 {
     /// <summary>Defensive response ceiling for MCP payloads (RF-005).</summary>
@@ -57,6 +58,30 @@ public sealed class TemporalGraphRetriever(
         }
     }
 
+    /// <summary>SPEC-20260929 RF-006: node ids a caller may see — reachable via
+    /// an edge whose KnowledgeSourceId is allowed, or produced by an episode of
+    /// an allowed source. Null = unrestricted caller.</summary>
+    private async Task<HashSet<Guid>?> AllowedNodeIdsAsync(
+        Auth.CallerScope scope, CancellationToken ct)
+    {
+        if (scope.AllowedSourceIds is not { } allowed)
+            return null;
+        if (allowed.Count == 0)
+            return []; // deny-all scope — never a missing-filter fallback
+        var viaEdges = db.KgEdges.AsNoTracking()
+            .Where(e => allowed.Contains(e.KnowledgeSourceId))
+            .Select(e => e.FromNodeId)
+            .Concat(db.KgEdges.AsNoTracking()
+                .Where(e => allowed.Contains(e.KnowledgeSourceId))
+                .Select(e => e.ToNodeId));
+        var viaEpisodes = db.KgNodes.AsNoTracking()
+            .Where(n => n.Episode != null && n.Episode.KnowledgeSourceId != null
+                && allowed.Contains(n.Episode.KnowledgeSourceId.Value))
+            .Select(n => n.Id);
+        return (await viaEdges.Concat(viaEpisodes).Distinct().ToListAsync(ct))
+            .ToHashSet();
+    }
+
     /// <summary>Facts whose <c>ObservedAt</c> falls inside [start, end].
     /// When the query links to known entities the window is intersected with
     /// their neighbourhoods; otherwise the window is browsed directly.</summary>
@@ -74,14 +99,23 @@ public sealed class TemporalGraphRetriever(
                 $"start '{start:O}' must precede end '{end:O}'", nameof(start));
         maxResults = Math.Clamp(maxResults, 1, 100);
 
+        // SPEC-20260929 RF-006: scope resolved once — edges and nodes are
+        // filtered before they ever leave this service.
+        var scope = await scopeProvider.GetAsync(ct);
+        var allowedNodes = await AllowedNodeIdsAsync(scope, ct);
+
         var linked = string.IsNullOrWhiteSpace(query)
             ? []
-            : await linker.LinkAsync(query, maxEntities: 8, ct);
+            : (await linker.LinkAsync(query, maxEntities: 8, ct))
+              .Where(id => allowedNodes is null || allowedNodes.Contains(id))
+              .ToList();
 
         // Temporal queries are history-aware: superseded rows (ValidTo set)
         // remain retrievable by their observation time — ValidTo is surfaced
         // in the payload so callers can tell current facts from history.
         IQueryable<KgEdge> edgesQuery = db.KgEdges.AsNoTracking();
+        if (scope.AllowedSourceIds is { } allowed)
+            edgesQuery = edgesQuery.Where(e => allowed.Contains(e.KnowledgeSourceId));
         if (start is not null)
             edgesQuery = edgesQuery.Where(e => e.ObservedAt >= start);
         if (end is not null)
@@ -106,7 +140,8 @@ public sealed class TemporalGraphRetriever(
         var nodes = nodeIds.Count == 0
             ? await db.KgNodes.AsNoTracking()
                 .Where(n => (start == null || n.ObservedAt >= start)
-                    && (end == null || n.ObservedAt <= end))
+                    && (end == null || n.ObservedAt <= end)
+                    && (allowedNodes == null || allowedNodes.Contains(n.Id)))
                 .OrderByDescending(n => n.ObservedAt)
                 .Take(maxResults)
                 .ToListAsync(ct)
@@ -148,8 +183,13 @@ public sealed class TemporalGraphRetriever(
     private async Task<TemporalSearchResult> SearchEntityRelationshipsCoreAsync(
         string entity, int depth, int maxResults, CancellationToken ct)
     {
-        var root = await store.FindNodeAsync(entity, ct)
-            ?? throw new ArgumentException($"unknown entity '{entity}'", nameof(entity));
+        var scope = await scopeProvider.GetAsync(ct);
+        var allowedNodes = await AllowedNodeIdsAsync(scope, ct);
+
+        var root = await store.FindNodeAsync(entity, ct);
+        // RF-006: a restricted entity is indistinguishable from an unknown one.
+        if (root is null || (allowedNodes is not null && !allowedNodes.Contains(root.Id)))
+            throw new ArgumentException($"unknown entity '{entity}'", nameof(entity));
         depth = Math.Clamp(depth, 1, MaxDepth);
         maxResults = Math.Clamp(maxResults, 1, 100);
 
@@ -162,6 +202,8 @@ public sealed class TemporalGraphRetriever(
         {
             var batch = await db.KgEdges.AsNoTracking()
                 .Where(e => e.ValidTo == null
+                    && (scope.AllowedSourceIds == null
+                        || scope.AllowedSourceIds.Contains(e.KnowledgeSourceId))
                     && (frontier.Contains(e.FromNodeId) || frontier.Contains(e.ToNodeId)))
                 .OrderByDescending(e => e.ObservedAt)
                 .Take(EdgeScanCap - edges.Count + 1)
@@ -236,8 +278,17 @@ public sealed class TemporalGraphRetriever(
                 $"invalid episodeId '{episodeId}' — expected a GUID", nameof(episodeId));
         maxResults = Math.Clamp(maxResults, 1, 100);
 
+        var scope = await scopeProvider.GetAsync(ct);
         var episode = await db.KgEpisodes.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, ct);
+
+        // RF-006: an episode of a restricted source returns nothing —
+        // existence stays indistinguishable from "no such episode".
+        if (episode?.KnowledgeSourceId is { } epSource
+            && scope.AllowedSourceIds is { } allowed
+            && !allowed.Contains(epSource))
+            return new TemporalSearchResult([], [], null, null, null, false);
+
         var nodes = await db.KgNodes.AsNoTracking()
             .Where(n => n.EpisodeId == id)
             .OrderByDescending(n => n.ObservedAt)
@@ -248,7 +299,9 @@ public sealed class TemporalGraphRetriever(
             nodes.RemoveRange(maxResults, nodes.Count - maxResults);
 
         var edges = await db.KgEdges.AsNoTracking()
-            .Where(e => e.EpisodeId == id)
+            .Where(e => e.EpisodeId == id
+                && (scope.AllowedSourceIds == null
+                    || scope.AllowedSourceIds.Contains(e.KnowledgeSourceId)))
             .OrderByDescending(e => e.ObservedAt)
             .Take(EdgeScanCap)
             .ToListAsync(ct);

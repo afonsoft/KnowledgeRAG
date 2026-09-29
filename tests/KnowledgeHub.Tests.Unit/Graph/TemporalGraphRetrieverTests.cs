@@ -26,8 +26,15 @@ public sealed class TemporalGraphRetrieverTests
         var store = new SqliteKnowledgeGraphStore(db, NullLogger<SqliteKnowledgeGraphStore>.Instance);
         var linker = new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance);
         var retriever = new TemporalGraphRetriever(
-            db, linker, store, NullLogger<TemporalGraphRetriever>.Instance);
+            db, linker, store, new UnrestrictedScope(),
+            NullLogger<TemporalGraphRetriever>.Instance);
         return (conn, db, retriever, store);
+    }
+
+    private sealed class UnrestrictedScope : KnowledgeHub.Server.Auth.ICallerScopeProvider
+    {
+        public Task<KnowledgeHub.Server.Auth.CallerScope> GetAsync(CancellationToken ct) =>
+            Task.FromResult(KnowledgeHub.Server.Auth.CallerScope.Unrestricted);
     }
 
     private static KgNode Node(string name, string type = "service", DateTime? observed = null) =>
@@ -70,6 +77,52 @@ public sealed class TemporalGraphRetrieverTests
         db.Sources.Add(source);
         db.Documents.Add(doc);
         return doc;
+    }
+
+    // ---- CallerScope (SPEC-20260929 RF-006) -------------------------------
+
+    private sealed class ScopedTo(Guid[] allowed) : KnowledgeHub.Server.Auth.ICallerScopeProvider
+    {
+        public Task<KnowledgeHub.Server.Auth.CallerScope> GetAsync(CancellationToken ct) =>
+            Task.FromResult(new KnowledgeHub.Server.Auth.CallerScope(
+                null, allowed.ToHashSet(), null));
+    }
+
+    private static TemporalGraphRetriever ScopedRetriever(
+        KnowledgeHubDbContext db, IKnowledgeGraphStore store, params Guid[] allowed) =>
+        new(db, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
+            store, new ScopedTo(allowed),
+            NullLogger<TemporalGraphRetriever>.Instance);
+
+    [Fact]
+    public async Task ScopedCaller_NeverSeesForeignSourceFacts()
+    {
+        // AC-3: caller scoped to sourceA gets nothing from sourceB — edges,
+        // node browsing, entity lookup, episode listing all filtered.
+        var (conn, db, _, store) = await SeedAsync();
+        await using var _ = conn;
+        var docA = Doc(db, out var sourceA);
+        var docB = Doc(db, out var sourceB);
+        var a = Node("alpha");
+        var b = Node("beta");
+        db.KgNodes.AddRange(a, b);
+        db.KgEdges.Add(Edge(a, b, docB, sourceB.Id)); // fact lives in source B
+        var episode = new KgEpisode { Kind = "ingestion", KnowledgeSourceId = sourceB.Id };
+        db.KgEpisodes.Add(episode);
+        await db.SaveChangesAsync();
+
+        var scoped = ScopedRetriever(db, store, sourceA.Id);
+
+        var window = await scoped.SearchTemporalWindowAsync("", null, null, 15);
+        Assert.Empty(window.Nodes);
+        Assert.Empty(window.Edges);
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => scoped.SearchEntityRelationshipsAsync("beta"));
+
+        var ep = await scoped.SearchEpisodeContextAsync(episode.Id.ToString());
+        Assert.Empty(ep.Nodes);
+        Assert.Null(ep.Episode);
     }
 
     // ---- Temporal window ---------------------------------------------------
