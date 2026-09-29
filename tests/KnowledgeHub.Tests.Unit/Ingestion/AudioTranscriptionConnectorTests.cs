@@ -14,14 +14,14 @@ namespace KnowledgeHub.Tests.Unit.Ingestion;
 // sha256 incremental skip, per-file fault tolerance and auth/HTTP failures.
 public sealed class AudioTranscriptionConnectorTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), $"aud-{Guid.NewGuid():N}");
+    private readonly string _dir = Path.Join(Path.GetTempPath(), $"aud-{Guid.NewGuid():N}");
 
     public AudioTranscriptionConnectorTests() => Directory.CreateDirectory(_dir);
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
     private string WriteAudio(string name, string content = "RIFF-fake")
     {
-        var p = Path.Combine(_dir, name);
+        var p = Path.Join(_dir, name);
         File.WriteAllText(p, content);
         return p;
     }
@@ -119,7 +119,7 @@ public sealed class AudioTranscriptionConnectorTests : IDisposable
     [Fact]
     public async Task UnchangedFile_SkipsUpload()
     {
-        var file = WriteAudio("reuniao.mp3");
+        WriteAudio("reuniao.mp3");
         var api = new FakeApi();
         var sut = Sut(api);
         var source = Source(new { folderPath = _dir });

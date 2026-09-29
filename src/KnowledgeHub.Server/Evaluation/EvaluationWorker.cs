@@ -36,7 +36,7 @@ public sealed class EvaluationWorker(
                 {
                     throw;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     logger.LogError(ex, "RAG evaluation failed for query {QueryId}", task.QueryId);
                 }

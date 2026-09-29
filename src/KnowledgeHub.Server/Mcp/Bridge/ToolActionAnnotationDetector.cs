@@ -79,15 +79,11 @@ public static class ToolActionAnnotationDetector
         if (!string.IsNullOrWhiteSpace(question) && annotations.Count < maxNominations)
         {
             var q = question;
-            foreach (var name in byName.Keys.OrderByDescending(k => k.Length))
+            foreach (var name in byName.Keys.OrderByDescending(k => k.Length)
+                .Where(n => Mentions(q, n)))
             {
                 if (annotations.Count >= maxNominations || !seen.Add(name))
                     continue;
-                if (!Mentions(q, name))
-                {
-                    seen.Remove(name);
-                    continue;
-                }
                 annotations.Add(new ToolActionAnnotation(
                     name, new Dictionary<string, JsonElement>(),
                     ToolActionOrigin.Question, null));

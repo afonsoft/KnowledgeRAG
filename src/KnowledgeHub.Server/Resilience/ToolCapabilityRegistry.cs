@@ -91,14 +91,10 @@ public sealed class ToolCapabilityRegistry
         if (idx < 0)
             return [];
 
-        var resolved = new List<string>();
-        foreach (var candidate in providers.Skip(idx + 1))
-        {
-            var tool = ResolveToolName(candidate, availableToolNames);
-            if (tool is not null)
-                resolved.Add(tool);
-        }
-        return resolved;
+        return providers.Skip(idx + 1)
+            .Select(candidate => ResolveToolName(candidate, availableToolNames))
+            .OfType<string>()
+            .ToList();
     }
 
     /// <summary>Provider → concrete tool name: preferred map, exact name,

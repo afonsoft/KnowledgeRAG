@@ -314,10 +314,8 @@ public sealed class SearchService(
                 scope, conversationContext, degraded, ct, relaxLevel: level);
             var penalty = Math.Pow(RelaxationPenalty, level);
             var added = 0;
-            foreach (var h in hits)
+            foreach (var h in hits.Where(h => h.ChunkId is null || seen.Add(h.ChunkId.Value)))
             {
-                if (h.ChunkId is { } cid && !seen.Add(cid))
-                    continue;
                 merged.Add(h with
                 {
                     IsRelaxed = true,
@@ -650,17 +648,17 @@ public sealed class SearchService(
         switch (expansionMode)
         {
             case "multi":
-                vectorTexts.AddRange(variants.Select(v => (v, (string?)v)));
-                lexicalQueries.AddRange(variants.Select(v => (v, (string?)v)));
+                vectorTexts.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
+                lexicalQueries.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
                 break;
             case "hyde" or "both" when hydeText is not null:
                 vectorTexts.Clear();
                 vectorTexts.Add((hydeText, "hyde"));
                 if (expansionMode == "both")
-                    lexicalQueries.AddRange(variants.Select(v => (v, (string?)v)));
+                    lexicalQueries.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
                 break;
             case "both":
-                lexicalQueries.AddRange(variants.Select(v => (v, (string?)v)));
+                lexicalQueries.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
                 break;
         }
 
@@ -668,8 +666,8 @@ public sealed class SearchService(
         // arms as extra ranked lists (label = the sub-query text), fused by RRF.
         if (subQueries is { Count: > 0 })
         {
-            vectorTexts.AddRange(subQueries.Select(q => (q, (string?)q)));
-            lexicalQueries.AddRange(subQueries.Select(q => (q, (string?)q)));
+            vectorTexts.AddRange(subQueries.Select<string, (string, string?)>(q => (q, q)));
+            lexicalQueries.AddRange(subQueries.Select<string, (string, string?)>(q => (q, q)));
         }
 
         var vectorLists = new List<IReadOnlyList<Guid>>();

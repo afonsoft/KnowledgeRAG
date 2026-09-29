@@ -194,7 +194,8 @@ public sealed class SqlDatabaseConnector(
             {
                 await using var _ = transaction;
                 try { await transaction.RollbackAsync(ct); }
-                catch { /* read-only tx — nothing to roll back anyway */ }
+                catch (Exception ex) when (ex is InvalidOperationException or System.Data.Common.DbException)
+                { /* read-only tx — nothing to roll back anyway */ }
             }
         }
 
@@ -211,7 +212,7 @@ public sealed class SqlDatabaseConnector(
     {
         var builder = new SqliteConnectionStringBuilder(raw);
         if (!string.IsNullOrEmpty(builder.DataSource) && !Path.IsPathRooted(builder.DataSource))
-            builder.DataSource = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, builder.DataSource));
+            builder.DataSource = Path.GetFullPath(builder.DataSource, AppContext.BaseDirectory);
 
         var hasExplicitMode = System.Text.RegularExpressions.Regex.IsMatch(
             raw, @"(^|;)\s*Mode\s*=", System.Text.RegularExpressions.RegexOptions.IgnoreCase);

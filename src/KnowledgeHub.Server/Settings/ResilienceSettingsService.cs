@@ -110,7 +110,7 @@ public sealed class ResilienceSettingsService(
 
         Invalidate();
         logger.LogInformation("resilience settings saved (mode {Mode}, maxAttempts {Max})",
-            request.Mode, request.MaxFallbackAttempts);
+            ForLog(request.Mode), request.MaxFallbackAttempts);
     }
 
     /// <inheritdoc/>
@@ -123,4 +123,9 @@ public sealed class ResilienceSettingsService(
 
     private static T? Deserialize<T>(string? json) =>
         string.IsNullOrWhiteSpace(json) ? default : JsonSerializer.Deserialize<T>(json, JsonOptions);
+
+    /// <summary>Strip CR/LF before logging caller-supplied text (CodeQL
+    /// cs/log-forging) — prevents forged log lines.</summary>
+    private static string ForLog(string? value) =>
+        (value ?? "").Replace('\r', ' ').Replace('\n', ' ');
 }

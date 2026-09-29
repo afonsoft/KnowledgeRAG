@@ -84,11 +84,9 @@ public sealed class ChainAST
     /// <summary>Byte estimate over text-bearing content (UTF-8).</summary>
     public int EstimateBytes()
     {
-        var total = 0;
-        foreach (var m in ToChatMessages())
-            foreach (var c in m.Contents)
-                if (c is TextContent t && t.Text is { } txt)
-                    total += System.Text.Encoding.UTF8.GetByteCount(txt);
-        return total;
+        return ToChatMessages()
+            .SelectMany(m => m.Contents)
+            .OfType<TextContent>()
+            .Sum(t => t.Text is null ? 0 : System.Text.Encoding.UTF8.GetByteCount(t.Text));
     }
 }

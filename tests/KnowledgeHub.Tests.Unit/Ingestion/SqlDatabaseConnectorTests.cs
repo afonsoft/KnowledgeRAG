@@ -17,7 +17,7 @@ public class SqlDatabaseConnectorTests : IDisposable
 
     public SqlDatabaseConnectorTests()
     {
-        _dbPath = Path.Combine(Path.GetTempPath(), $"kh-sqltest-{Guid.NewGuid():N}.db");
+        _dbPath = Path.Join(Path.GetTempPath(), $"kh-sqltest-{Guid.NewGuid():N}.db");
         using var connection = new SqliteConnection($"Data Source={_dbPath}");
         connection.Open();
         Exec(connection, "CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT, body TEXT, url TEXT)");
@@ -35,7 +35,8 @@ public class SqlDatabaseConnectorTests : IDisposable
 
     public void Dispose()
     {
-        try { SqliteConnection.ClearAllPools(); File.Delete(_dbPath); } catch { /* best effort */ }
+        try { SqliteConnection.ClearAllPools(); File.Delete(_dbPath); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
     }
 
     private sealed class FakeSecrets(string? connectionString) : IIntegrationSecretStore
@@ -223,7 +224,7 @@ public class SqlDatabaseConnectorTests : IDisposable
     [Fact]
     public async Task ConnectionFailure_SanitizedMessage_NoConnStringEcho()
     {
-        var missing = Path.Combine(Path.GetTempPath(), $"kh-missing-{Guid.NewGuid():N}.db");
+        var missing = Path.Join(Path.GetTempPath(), $"kh-missing-{Guid.NewGuid():N}.db");
         var cs = $"Data Source={missing};Mode=ReadOnly";
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -257,7 +258,7 @@ public class SqlDatabaseConnectorTests : IDisposable
         Assert.DoesNotContain("Mode=ReadOnly", explicitMode, StringComparison.OrdinalIgnoreCase);
 
         var relative = SqlDatabaseConnector.PrepareSqliteConnectionString("Data Source=notes.db");
-        var resolved = Path.Combine(AppContext.BaseDirectory, "notes.db");
+        var resolved = Path.Join(AppContext.BaseDirectory, "notes.db");
         Assert.Contains(resolved, relative, StringComparison.OrdinalIgnoreCase);
     }
 }

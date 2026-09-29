@@ -19,7 +19,7 @@ public class RagEvaluationStatsApiTests
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-ragstats-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-ragstats-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -33,7 +33,8 @@ public class RagEvaluationStatsApiTests
         public override async ValueTask DisposeAsync()
         {
             await base.DisposeAsync();
-            try { File.Delete(DbPath); } catch { /* best effort */ }
+            try { File.Delete(DbPath); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
         }
     }
 

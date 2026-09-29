@@ -121,11 +121,11 @@ public sealed class AudioTranscriptionConnector(
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var folder = config.String("folderPath");
         if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
-            foreach (var f in Directory.EnumerateFiles(folder))
-                if (SupportedExtensions.Contains(Path.GetExtension(f)) && seen.Add(f))
-                    yield return f;
-        foreach (var f in config.StringArray("files"))
-            if (SupportedExtensions.Contains(Path.GetExtension(f)) && File.Exists(f) && seen.Add(f))
+            foreach (var f in Directory.EnumerateFiles(folder)
+                .Where(f => SupportedExtensions.Contains(Path.GetExtension(f)) && seen.Add(f)))
                 yield return f;
+        foreach (var f in config.StringArray("files")
+            .Where(f => SupportedExtensions.Contains(Path.GetExtension(f)) && File.Exists(f) && seen.Add(f)))
+            yield return f;
     }
 }

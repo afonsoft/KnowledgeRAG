@@ -71,10 +71,11 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
     /// the CallId/function name are untouched so pairing survives.</summary>
     private void TruncateToolResults(ChatMessage toolMessage)
     {
-        foreach (var result in toolMessage.Contents.OfType<FunctionResultContent>())
+        foreach (var result in toolMessage.Contents
+            .OfType<FunctionResultContent>()
+            .Where(r => r.Result is string))
         {
-            if (result.Result is not string text)
-                continue;
+            var text = (string)result.Result!;
             var bytes = Encoding.UTF8.GetByteCount(text);
             if (bytes <= options.MaxBodyPairBytes)
                 continue;

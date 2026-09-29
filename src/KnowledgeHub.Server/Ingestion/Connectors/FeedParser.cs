@@ -27,7 +27,7 @@ public static partial class FeedParser
         {
             doc = XDocument.Parse(xml, LoadOptions.None);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             throw new FeedParseException("XML inválido — não é um feed RSS 2.0 ou Atom válido", ex);
         }

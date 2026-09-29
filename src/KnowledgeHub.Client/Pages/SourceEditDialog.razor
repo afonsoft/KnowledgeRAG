@@ -1130,8 +1130,8 @@
             Strategy = dto.Configuration?["strategy"]?.GetValue<string>() is { Length: > 0 } st
                 ? st : "auto",
             Coordinates = ReadBool(dto.Configuration, "coordinates"),
-            TableExtraction = dto.Configuration?["tableExtraction"] is JsonValue te
-                && te.TryGetValue<bool>(out var teb) ? teb : true,
+            TableExtraction = dto.Configuration?["tableExtraction"] is not JsonValue te
+                || !te.TryGetValue<bool>(out var teb) || teb,
             MaxFileSizeMb = dto.Configuration?["maxFileSizeMb"] is JsonValue msm
                 && msm.TryGetValue<int>(out var msmn) ? msmn : null,
             GitProvider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } gp
@@ -1149,10 +1149,10 @@
             AllowPrivateHosts = ReadBool(dto.Configuration, "allowPrivateHosts"),
             AudioProvider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } ap
                 ? ap : "assemblyai",
-            EnableSpeakerDiarization = dto.Configuration?["enableSpeakerDiarization"] is JsonValue sd
-                && sd.TryGetValue<bool>(out var sdb) ? sdb : true,
-            EnableAutoChapters = dto.Configuration?["enableAutoChapters"] is JsonValue ac
-                && ac.TryGetValue<bool>(out var acb) ? acb : true,
+            EnableSpeakerDiarization = dto.Configuration?["enableSpeakerDiarization"] is not JsonValue sd
+                || !sd.TryGetValue<bool>(out var sdb) || sdb,
+            EnableAutoChapters = dto.Configuration?["enableAutoChapters"] is not JsonValue ac
+                || !ac.TryGetValue<bool>(out var acb) || acb,
             TimeoutMinutes = dto.Configuration?["timeoutMinutes"] is JsonValue tm
                 && tm.TryGetValue<int>(out var tmn) ? tmn : null,
             FeedUrl = dto.Configuration?["feedUrl"]?.GetValue<string>(),
@@ -1162,8 +1162,8 @@
             ForceRefresh = ReadBool(dto.Configuration, "forceRefresh"),
             Urls = ReadStringList(dto.Configuration, "urls"),
             Language = dto.Configuration?["language"]?.GetValue<string>(),
-            IncludeAutoCaptions = dto.Configuration?.TryGetPropertyValue("includeAutoCaptions", out _) ?? false
-                ? ReadBool(dto.Configuration, "includeAutoCaptions") : true,
+            IncludeAutoCaptions = dto.Configuration?.TryGetPropertyValue("includeAutoCaptions", out _) != true
+                || ReadBool(dto.Configuration, "includeAutoCaptions"),
             IncludeTimestamps = ReadBool(dto.Configuration, "includeTimestamps"),
             MaxVideos = dto.Configuration?["maxVideos"] is JsonValue mv
                 && mv.TryGetValue<int>(out var mvn) ? mvn : null,

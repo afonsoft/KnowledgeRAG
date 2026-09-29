@@ -259,7 +259,6 @@ public sealed class TemporalGraphRetrieverTests
     {
         var (conn, db, retriever, _) = await SeedAsync();
         await using var _ = conn;
-        var doc = Doc(db, out var source);
         var root = Node("root entity");
         db.KgNodes.Add(root);
         await db.SaveChangesAsync();

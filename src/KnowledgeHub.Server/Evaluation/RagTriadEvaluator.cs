@@ -51,10 +51,7 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
         var sentences = Sentences(string.Join(" ", chunks ?? []));
         if (sentences.Count == 0) return 0.0;
 
-        var relevant = 0;
-        foreach (var s in sentences)
-            if (TokenSet(s).Overlaps(qTokens))
-                relevant++;
+        var relevant = sentences.Count(s => TokenSet(s).Overlaps(qTokens));
         return Clamp((double)relevant / sentences.Count);
     }
 
@@ -107,12 +104,9 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
     {
         var set = new HashSet<string>();
         if (string.IsNullOrWhiteSpace(text)) return set;
-        foreach (Match m in TokenRe.Matches(text.ToLowerInvariant()))
-        {
-            var t = m.Value;
-            if (t.Any(char.IsDigit) || t.Length >= MinTokenLen)
-                set.Add(t);
-        }
+        set.UnionWith(TokenRe.Matches(text.ToLowerInvariant())
+            .Select(m => m.Value)
+            .Where(t => t.Any(char.IsDigit) || t.Length >= MinTokenLen));
         return set;
     }
 
@@ -120,11 +114,9 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
     {
         var list = new List<string>();
         if (string.IsNullOrWhiteSpace(text)) return list;
-        foreach (Match m in SentenceRe.Matches(text))
-        {
-            var s = m.Value.Trim();
-            if (s.Length > 0) list.Add(s);
-        }
+        list.AddRange(SentenceRe.Matches(text)
+            .Select(m => m.Value.Trim())
+            .Where(s => s.Length > 0));
         return list;
     }
 

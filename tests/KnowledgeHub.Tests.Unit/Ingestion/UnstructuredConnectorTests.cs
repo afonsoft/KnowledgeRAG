@@ -14,14 +14,14 @@ namespace KnowledgeHub.Tests.Unit.Ingestion;
 // sync, auth failure semantics and per-file fault tolerance.
 public sealed class UnstructuredConnectorTests : IDisposable
 {
-    private readonly string _dir = Path.Combine(Path.GetTempPath(), $"unst-{Guid.NewGuid():N}");
+    private readonly string _dir = Path.Join(Path.GetTempPath(), $"unst-{Guid.NewGuid():N}");
 
     public UnstructuredConnectorTests() => Directory.CreateDirectory(_dir);
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
     private string WriteFile(string name, string content = "x")
     {
-        var p = Path.Combine(_dir, name);
+        var p = Path.Join(_dir, name);
         File.WriteAllText(p, content);
         return p;
     }
@@ -102,7 +102,7 @@ public sealed class UnstructuredConnectorTests : IDisposable
     public async Task TableElements_RenderAsGfm()
     {
         // AC-1: HTML table from the API → valid GFM pipes/dashes.
-        var file = WriteFile("report.pdf");
+        WriteFile("report.pdf");
         var api = new FakeApi
         {
             Handler = _ => new HttpResponseMessage(HttpStatusCode.OK)
@@ -125,7 +125,7 @@ public sealed class UnstructuredConnectorTests : IDisposable
     [Fact]
     public async Task ImageExtension_ForcesOcrStrategy()
     {
-        var file = WriteFile("scan.png");
+        WriteFile("scan.png");
         var api = new FakeApi();
 
         await Sut(api).FetchAsync(Source(new { folderPath = _dir, strategy = "auto" }), CancellationToken.None);
@@ -148,7 +148,7 @@ public sealed class UnstructuredConnectorTests : IDisposable
     public async Task UnchangedFingerprint_SkipsHttpCall()
     {
         // AC-3: identical file hash + strategy → stub doc, zero API traffic.
-        var file = WriteFile("fixed.pdf", "same-bytes");
+        WriteFile("fixed.pdf", "same-bytes");
         var api = new FakeApi();
         var connector = Sut(api);
         var source = Source(new { folderPath = _dir });

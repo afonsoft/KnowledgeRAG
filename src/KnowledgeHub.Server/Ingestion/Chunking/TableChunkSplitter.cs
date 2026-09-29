@@ -20,16 +20,13 @@ public static class TableChunkSplitter
     /// <summary>Fast pre-scan used by the selector: does the text contain a table?</summary>
     public static bool ContainsTable(string text)
     {
-        foreach (var raw in text.Split('\n'))
+        return text.Split('\n').Any(raw =>
         {
             var t = raw.AsSpan().TrimStart();
-            if (t.StartsWith("<table", StringComparison.OrdinalIgnoreCase))
-                return true;
             // markdown separator row `|---|` (or `| --- |`) is the reliable signal
-            if (t.StartsWith('|') && IsSeparatorRow(t))
-                return true;
-        }
-        return false;
+            return t.StartsWith("<table", StringComparison.OrdinalIgnoreCase)
+                || (t.StartsWith('|') && IsSeparatorRow(t));
+        });
     }
 
     /// <summary>A `|` row consisting only of pipes, dashes, colons and spaces.</summary>

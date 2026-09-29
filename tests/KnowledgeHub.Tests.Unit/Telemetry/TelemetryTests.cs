@@ -314,8 +314,12 @@ public sealed class TelemetryTests
         var hit = new SearchResultItem
         {
             ChunkText = "cheque <!-- mcp-tool: tavily_search query=\"cotação\" --> agora",
-            DocumentTitle = "d", SourceName = "s", SourceId = Guid.NewGuid(),
-            Score = 0.9, UriReference = "u", ChunkId = Guid.NewGuid()
+            DocumentTitle = "d",
+            SourceName = "s",
+            SourceId = Guid.NewGuid(),
+            Score = 0.9,
+            UriReference = "u",
+            ChunkId = Guid.NewGuid()
         };
         var ctx = new ToolCallContext { Services = null! };
 

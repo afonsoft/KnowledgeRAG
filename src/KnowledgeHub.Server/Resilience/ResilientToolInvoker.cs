@@ -118,9 +118,10 @@ public static class ResilientToolInvoker
         string current,
         out CatalogTool next)
     {
-        foreach (var name in registry.CandidateToolNames(current, available))
+        foreach (var name in registry.CandidateToolNames(current, available)
+            .Where(n => !visited.Contains(n)))
         {
-            if (visited.Contains(name) || !catalog.TryGetValue(name, out var candidate))
+            if (!catalog.TryGetValue(name, out var candidate))
                 continue;
             if (!candidate.ReadOnly)
                 continue; // never substitute a write-capable tool

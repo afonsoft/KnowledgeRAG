@@ -142,7 +142,7 @@ public sealed class ResilientChatClient : IChatClient
                 {
                     built = _builder(_fallbackOptions[i]);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _logger.LogWarning(ex,
                         "chat fallback provider {Provider} failed to build — skipped",

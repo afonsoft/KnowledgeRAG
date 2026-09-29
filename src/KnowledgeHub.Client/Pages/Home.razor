@@ -113,9 +113,9 @@
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", LlmConfigPrompt);
             await Toast.Success("Copiado!", "Prompt para o LLM copiado para a área de transferência.");
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await Toast.Warning("Atenção", "Não foi possível acessar a área de transferência.");
+            await Toast.Warning("Atenção", $"Não foi possível acessar a área de transferência: {ex.Message}");
         }
     }
 }

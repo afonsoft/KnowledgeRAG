@@ -29,8 +29,18 @@ public sealed class EvidenceChainTests
             Task.FromResult(Store.Remove(provider));
     }
 
-    private static async Task<(KnowledgeHubDbContext Db, EvidenceChainService Service, MemSecrets Secrets, SqliteConnection Conn)>
-        CreateAsync()
+    private sealed record Env(
+        KnowledgeHubDbContext Db, EvidenceChainService Service,
+        MemSecrets Secrets, SqliteConnection Conn) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            await Db.DisposeAsync();
+            await Conn.DisposeAsync();
+        }
+    }
+
+    private static async Task<Env> CreateAsync()
     {
         var conn = new SqliteConnection("Data Source=:memory:");
         await conn.OpenAsync();
@@ -39,7 +49,7 @@ public sealed class EvidenceChainTests
         var db = new KnowledgeHubDbContext(options);
         await db.Database.EnsureCreatedAsync();
         var secrets = new MemSecrets();
-        return (db, new EvidenceChainService(db, secrets,
+        return new Env(db, new EvidenceChainService(db, secrets,
             NullLogger<EvidenceChainService>.Instance), secrets, conn);
     }
 
@@ -59,7 +69,9 @@ public sealed class EvidenceChainTests
     [Fact]
     public async Task AppendChain_LinksParentsAndSigns()
     {
-        var (_, svc, secrets, _) = await CreateAsync();
+        await using var env = await CreateAsync();
+        var svc = env.Service;
+        var secrets = env.Secrets;
         var q = await svc.AppendAsync(new EvidenceEvent("s1", null, "k1",
             "QuerySubmitted", "User", "what?", ""), CancellationToken.None);
         var c = await svc.AppendAsync(new EvidenceEvent("s1", null, "k1",
@@ -84,7 +96,9 @@ public sealed class EvidenceChainTests
     [Fact]
     public async Task Verify_IntactChainIsValid()
     {
-        var (_, svc, secrets, _) = await CreateAsync();
+        await using var env = await CreateAsync();
+        var svc = env.Service;
+        var secrets = env.Secrets;
         var q = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
             "QuerySubmitted", "User", "q", ""), CancellationToken.None);
         var c = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
@@ -102,7 +116,8 @@ public sealed class EvidenceChainTests
     [Fact]
     public async Task Verify_TamperedReceiptDetected()
     {
-        var (_, svc, _, _) = await CreateAsync();
+        await using var env = await CreateAsync();
+        var svc = env.Service;
         var q = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
             "QuerySubmitted", "User", "q", ""), CancellationToken.None);
         var a = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
@@ -120,7 +135,8 @@ public sealed class EvidenceChainTests
     [Fact]
     public async Task Verify_MissingParentDetected()
     {
-        var (_, svc, _, _) = await CreateAsync();
+        await using var env = await CreateAsync();
+        var svc = env.Service;
         var q = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
             "QuerySubmitted", "User", "q", ""), CancellationToken.None);
         var c = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
@@ -146,7 +162,9 @@ public sealed class EvidenceChainTests
     [Fact]
     public async Task Verify_BadSignatureDetected()
     {
-        var (_, svc, secrets, _) = await CreateAsync();
+        await using var env = await CreateAsync();
+        var svc = env.Service;
+        var secrets = env.Secrets;
         var r = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
             "QuerySubmitted", "User", "q", ""), CancellationToken.None);
         r.Signature = $"hmac-sha256:{new string('f', 64)}";

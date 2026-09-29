@@ -26,7 +26,7 @@ public class GraphApiTests : IClassFixture<GraphApiTests.Fixture>
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-graphapi-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-graphapi-{Guid.NewGuid():N}.db"),
                     ["Graph:Enabled"] = "true"
                 }));
     }
