@@ -46,6 +46,7 @@ public static class ResilientToolInvoker
             var available = catalog.Keys.ToList();
             var visited = new HashSet<string>(StringComparer.Ordinal) { tool.Name };
             var current = tool;
+            var currentArgs = ctx.Arguments;
             var attempt = 0;
 
             while (true)
@@ -54,14 +55,16 @@ public static class ResilientToolInvoker
                 CallToolResult result;
                 try
                 {
-                    result = await current.Handler(ctx, ct);
+                    result = await current.Handler(
+                        ctx with { Arguments = currentArgs }, ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException
                                            || !ct.IsCancellationRequested)
                 {
                     var decision = engine.Evaluate(ex, "tools", attempt, ct);
                     if (!decision.ShouldFallback
-                        || !TryNext(registry, catalog, available, visited, current.Name, out var next))
+                        || !TryNext(registry, catalog, available, visited,
+                            current.Name, ctx.Arguments, out var next, out var mappedArgs))
                         throw;
 
                     KnowledgeHubMetrics.ToolFallbacks.Add(1,
@@ -75,6 +78,7 @@ public static class ResilientToolInvoker
                         current.Name, next.Name, decision.Reason, attempt + 1);
                     visited.Add(next.Name);
                     current = next;
+                    currentArgs = mappedArgs;
                     attempt++;
                     continue;
                 }
@@ -89,7 +93,8 @@ public static class ResilientToolInvoker
                 var reason = ToolErrorClassifier.ReasonFor(text);
                 var decision2 = engine.EvaluateReason(reason, "tools", attempt, ct);
                 if (!decision2.ShouldFallback
-                    || !TryNext(registry, catalog, available, visited, current.Name, out var next2))
+                    || !TryNext(registry, catalog, available, visited,
+                        current.Name, ctx.Arguments, out var next2, out var mappedArgs2))
                     return result;
 
                 KnowledgeHubMetrics.ToolFallbacks.Add(1,
@@ -103,20 +108,24 @@ public static class ResilientToolInvoker
                     current.Name, next2.Name, reason, attempt + 1);
                 visited.Add(next2.Name);
                 current = next2;
+                currentArgs = mappedArgs2;
                 attempt++;
             }
         };
 
     /// <summary>Picks the next same-capability tool that is visible to this
-    /// caller (present in the scope-filtered catalog), read-only, and not
-    /// already tried in this chain.</summary>
+    /// caller (present in the scope-filtered catalog), read-only, not already
+    /// tried, and whose required args the caller's arguments can satisfy
+    /// (SPEC-20260929 RF-003 — never hand another tool a foreign arg shape).</summary>
     private static bool TryNext(
         ToolCapabilityRegistry registry,
         IReadOnlyDictionary<string, CatalogTool> catalog,
         IReadOnlyCollection<string> available,
         HashSet<string> visited,
         string current,
-        out CatalogTool next)
+        IDictionary<string, System.Text.Json.JsonElement>? originalArgs,
+        out CatalogTool next,
+        out IDictionary<string, System.Text.Json.JsonElement>? mappedArgs)
     {
         foreach (var name in registry.CandidateToolNames(current, available)
             .Where(n => !visited.Contains(n)))
@@ -125,11 +134,74 @@ public static class ResilientToolInvoker
                 continue;
             if (!candidate.ReadOnly)
                 continue; // never substitute a write-capable tool
+            if (!MapArgs(candidate, originalArgs, out mappedArgs))
+                continue; // schema-incompatible — args would be meaningless
             next = candidate;
             return true;
         }
         next = default!;
+        mappedArgs = null;
         return false;
+    }
+
+    /// <summary>RF-003: the substitute is viable only when every required
+    /// schema property is present in the original args with a compatible JSON
+    /// type; undeclared extras are dropped from the mapped set.</summary>
+    internal static bool MapArgs(
+        CatalogTool candidate,
+        IDictionary<string, System.Text.Json.JsonElement>? args,
+        out IDictionary<string, System.Text.Json.JsonElement>? mapped)
+    {
+        mapped = null;
+        var schema = candidate.InputSchema;
+        var required = schema["required"]?.AsArray()
+            .Select(n => n?.GetValue<string>())
+            .OfType<string>()
+            .ToHashSet(StringComparer.Ordinal) ?? [];
+        var props = schema["properties"] as System.Text.Json.Nodes.JsonObject;
+
+        if (args is null || args.Count == 0)
+        {
+            if (required.Count > 0)
+                return false; // substitute needs args the caller never sent
+            mapped = null;
+            return true;
+        }
+
+        var mappedDict = new Dictionary<string, System.Text.Json.JsonElement>(StringComparer.Ordinal);
+        foreach (var (key, value) in args)
+        {
+            if (props is null || props[key] is not System.Text.Json.Nodes.JsonObject prop)
+            {
+                if (required.Contains(key))
+                    return false; // required arg but schema declares no shape for it
+                continue; // undeclared extra — dropped, not forwarded
+            }
+            var declaredType = prop["type"]?.GetValue<string>();
+            var compatible = declaredType switch
+            {
+                null => true,
+                "string" => value.ValueKind is System.Text.Json.JsonValueKind.String,
+                "integer" or "number" => value.ValueKind is System.Text.Json.JsonValueKind.Number,
+                "boolean" => value.ValueKind is System.Text.Json.JsonValueKind.True
+                             or System.Text.Json.JsonValueKind.False,
+                "array" => value.ValueKind is System.Text.Json.JsonValueKind.Array,
+                "object" => value.ValueKind is System.Text.Json.JsonValueKind.Object,
+                _ => true // unknown/nullable type unions — let the tool decide
+            };
+            if (!compatible)
+            {
+                if (required.Contains(key))
+                    return false;
+                continue;
+            }
+            mappedDict[key] = value;
+        }
+
+        if (required.Any(r => !mappedDict.ContainsKey(r)))
+            return false;
+        mapped = mappedDict;
+        return true;
     }
 
     private static string? ExtractText(CallToolResult result) =>

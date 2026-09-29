@@ -8,7 +8,9 @@ namespace KnowledgeHub.Server.Mcp.Bridge;
 /// Detects live-action nominations in retrieved chunks and in the question
 /// itself (SPEC-20260927-mcp-dynamic-rag-action-bridge RF-001):
 /// explicit <c>&lt;!-- mcp-tool: name key="value" --&gt;</c> markers embedded in
-/// indexed documents, and direct tool-name mentions in the question.
+/// indexed documents (opt-in — untrusted content, see RF-001 of
+/// SPEC-20260929-live-actions-bridge-hardening), and direct tool-name
+/// mentions in the question.
 /// Deterministic — no LLM call, so it is cheap and unit-testable.
 /// </summary>
 public static class ToolActionAnnotationDetector
@@ -39,11 +41,18 @@ public static class ToolActionAnnotationDetector
     /// <summary>Only nominations resolvable against this set are returned —
     /// the caller-visible catalog is already caller-scope filtered, which is
     /// what enforces the "same security scope" guardrail.</summary>
+    /// <param name="allowDocumentMarkers">SPEC-20260929-live-actions-bridge-
+    /// hardening RF-001: trust boundary — <c>mcp-tool</c> markers embedded in
+    /// <em>indexed document chunks</em> are untrusted content (a stored
+    /// document could plant one to fire external tools) and are ignored
+    /// unless the operator opted in. Direct tool mentions in the user's own
+    /// question are always honoured.</param>
     public static IReadOnlyList<ToolActionAnnotation> Detect(
         string? question,
         IReadOnlyList<SearchResultItem> results,
         IReadOnlyList<CatalogTool> visibleTools,
-        int maxNominations)
+        int maxNominations,
+        bool allowDocumentMarkers = false)
     {
         var byName = visibleTools
             .Where(t => t.ReadOnly && !NeverLiveTools.Contains(t.Name)
@@ -55,23 +64,27 @@ public static class ToolActionAnnotationDetector
         var annotations = new List<ToolActionAnnotation>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
-        // 1) Explicit markers inside retrieved chunks — highest precedence.
-        foreach (var hit in results)
+        // 1) Explicit markers inside retrieved chunks — highest precedence,
+        // but gated: chunk text is untrusted indexed content.
+        if (allowDocumentMarkers)
         {
-            if (annotations.Count >= maxNominations)
-                break;
-            if (hit.SuspicionFlags is not null)
-                continue; // never execute instructions inside flagged content
-            foreach (Match m in MarkerPattern.Matches(hit.ChunkText))
+            foreach (var hit in results)
             {
                 if (annotations.Count >= maxNominations)
                     break;
-                var name = m.Groups["name"].Value;
-                if (!byName.ContainsKey(name) || !seen.Add(name))
-                    continue;
-                annotations.Add(new ToolActionAnnotation(
-                    name, ParseArgs(m.Groups["args"].Value),
-                    ToolActionOrigin.Marker, hit.ChunkId));
+                if (hit.SuspicionFlags is not null)
+                    continue; // never execute instructions inside flagged content
+                foreach (Match m in MarkerPattern.Matches(hit.ChunkText))
+                {
+                    if (annotations.Count >= maxNominations)
+                        break;
+                    var name = m.Groups["name"].Value;
+                    if (!byName.ContainsKey(name) || !seen.Add(name))
+                        continue;
+                    annotations.Add(new ToolActionAnnotation(
+                        name, ParseArgs(m.Groups["args"].Value),
+                        ToolActionOrigin.Marker, hit.ChunkId));
+                }
             }
         }
 

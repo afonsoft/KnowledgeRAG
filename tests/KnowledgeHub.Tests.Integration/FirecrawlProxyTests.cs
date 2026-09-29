@@ -16,7 +16,8 @@ public class FirecrawlProxyEnabledTests : IClassFixture<FirecrawlProxyEnabledTes
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-fc-{Guid.NewGuid():N}.db"),
-                    ["Firecrawl:Enabled"] = "true"
+                    ["Firecrawl:Enabled"] = "true",
+                    ["Security:Egress:AllowPrivateNetworks"] = "true" // local fake API targets
                 }));
     }
 

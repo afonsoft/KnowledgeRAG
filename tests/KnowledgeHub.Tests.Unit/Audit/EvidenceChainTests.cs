@@ -158,7 +158,63 @@ public sealed class EvidenceChainTests
         Assert.True(v.IsValid);
     }
 
-    // Edge: bad signature rejected when key is supplied.
+    [Fact]
+    public async Task ConcurrentAppends_SameSession_ChainVerifies()
+    {
+        // SPEC-20260929 RF-001: 20 parallel appends must serialize — every
+        // chained parent resolves and signatures hold.
+        var (_, svc, secrets, _) = await CreateAsync();
+        var session = Guid.NewGuid().ToString("N");
+        EvidenceReceipt? last = null;
+
+        // Parallel bursts chain through the *same* parent variable — the
+        // per-session gate must keep ordering sane.
+        for (var wave = 0; wave < 4; wave++)
+        {
+            var parents = last is null ? null : new List<EvidenceReceipt> { last };
+            var results = await Task.WhenAll(Enumerable.Range(0, 5).Select(i =>
+                svc.AppendAsync(new EvidenceEvent(session, null, null,
+                    "ToolExecuted", "McpTool", $"w{wave}i{i}", "ok",
+                    Parents: parents), CancellationToken.None)));
+            last = results[^1];
+        }
+
+        var receipts = await svc.GetSessionReceiptsAsync(session, CancellationToken.None);
+        Assert.Equal(20, receipts.Count);
+        var key = Convert.FromHexString(secrets.Store[EvidenceChainService.SecretSlot]);
+        var v = EvidenceChainVerifier.Verify(receipts, key);
+        Assert.True(v.IsValid, string.Join(";", v.Violations.Select(x => x.Detail)));
+    }
+
+    [Fact]
+    public async Task Verify_UnknownSignatureScheme_Violates()
+    {
+        // SPEC-20260929 RF-005: a swapped scheme prefix is a violation, never
+        // a silent skip.
+        var (_, svc, secrets, _) = await CreateAsync();
+        var r = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
+            "QuerySubmitted", "User", "q", ""), CancellationToken.None);
+        r.Signature = $"none:{r.Signature![12..]}";
+        var key = Convert.FromHexString(secrets.Store[EvidenceChainService.SecretSlot]);
+        var v = EvidenceChainVerifier.Verify([r], key);
+        Assert.False(v.IsValid);
+        Assert.Contains(v.Violations, x => x.Code == "UnknownSignatureScheme");
+    }
+
+    [Fact]
+    public async Task VerifyAsync_RevalidatesWithInstanceKey()
+    {
+        // SPEC-20260929 RF-003: tampering detected through the service API.
+        var (db, svc, _, _) = await CreateAsync();
+        var r = await svc.AppendAsync(new EvidenceEvent("s1", null, null,
+            "QuerySubmitted", "User", "q", ""), CancellationToken.None);
+        r.OutputHash = EvidenceChainService.Sha256Hex("tampered");
+        await db.SaveChangesAsync();
+        var v = await svc.VerifyAsync("s1", CancellationToken.None);
+        Assert.False(v.IsValid);
+    }
+
+    // Edge: bad signature rejected when key is supplied.    // Edge: bad signature rejected when key is supplied.
     [Fact]
     public async Task Verify_BadSignatureDetected()
     {

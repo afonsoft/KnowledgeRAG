@@ -118,9 +118,16 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
         var source = await CreateAndSyncVault($"filt-{Guid.NewGuid():N}");
 
         var other = Guid.NewGuid();
+        // SPEC-20260929 RF-005: an unmatched strict scope now flows into the
+        // relaxation cascade — pin allowRelaxation=false to assert the strict
+        // contract, and verify relaxed hits are flagged when allowed.
         var filtered = await _client.GetFromJsonAsync<SearchResponse>(
-            $"/api/search?query={shared}&topK=5&mode=lexical&sourceId={other}");
+            $"/api/search?query={shared}&topK=5&mode=lexical&sourceId={other}&allowRelaxation=false");
         Assert.Empty(filtered!.Results);
+
+        var relaxed = await _client.GetFromJsonAsync<SearchResponse>(
+            $"/api/search?query={shared}&topK=5&mode=lexical&sourceId={other}&allowRelaxation=true");
+        Assert.All(relaxed!.Results, r => Assert.True(r.IsRelaxed));
 
         var matched = await _client.GetFromJsonAsync<SearchResponse>(
             $"/api/search?query={shared}&topK=5&mode=lexical&sourceId={source.Id}");

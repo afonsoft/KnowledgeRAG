@@ -6,6 +6,7 @@ namespace KnowledgeHub.Tests.Unit.Ingestion;
 
 // Covers SPEC-20260919-notion-connector RF-002: pagination, throttle,
 // Retry-After on 429, error mapping, auth headers.
+[Collection("SearchTelemetry")]
 public class NotionApiClientTests
 {
     private sealed record SentRequest(

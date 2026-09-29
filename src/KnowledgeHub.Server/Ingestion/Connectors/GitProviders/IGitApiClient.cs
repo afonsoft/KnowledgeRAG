@@ -2,7 +2,8 @@ namespace KnowledgeHub.Server.Ingestion.Connectors.GitProviders;
 
 /// <summary>A resolved git remote: provider family + API base + coordinates.</summary>
 public sealed record GitRepositoryRef(
-    string Provider, string ApiBase, string Owner, string Name, string Branch);
+    string Provider, string ApiBase, string Owner, string Name, string Branch,
+    bool AllowPrivateHosts = false);
 
 /// <summary>One file entry discovered via the repository tree API.</summary>
 public sealed record GitTreeEntry(string Path, long Size, string BlobSha);
