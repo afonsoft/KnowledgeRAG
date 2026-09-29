@@ -53,7 +53,7 @@ public sealed partial class AnswerService(
         var answerKey = cacheEnabled
             ? CacheKeys.Answer(
                 options.Model ?? "unknown", question,
-                context.Select(c => c.ChunkId),
+                context.Select(CacheKeys.AnswerIdentityPart),
                 await IndexVersionToken.GetAsync(cache, logger, cancellationToken))
             : null;
         if (answerKey is not null

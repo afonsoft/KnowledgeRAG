@@ -89,4 +89,30 @@ public sealed class AutocutFilterTests
 
         Assert.Equal(2, AutocutFilter.Apply(items, 1).Count);
     }
+    [Fact]
+    public void RerankedList_UsesRerankScore_NotFused()
+    {
+        // SPEC-20260929 RF-002: after reranking, the score curve is Rerank —
+        // autocut must read it, not the stale Fused values.
+        var fusedHighThenFlat = new[]
+        {
+            (fused: 0.9, rerank: 0.9), (fused: 0.9, rerank: 0.9), (fused: 0.1, rerank: 0.1)
+        };
+        var items = fusedHighThenFlat.Select(t => new SearchResultItem
+        {
+            ChunkText = "t",
+            DocumentTitle = "d",
+            SourceName = "s",
+            SourceId = Guid.NewGuid(),
+            Score = t.fused,
+            UriReference = "u",
+            ScoreBreakdown = new SearchScoreBreakdown { Fused = t.fused, Rerank = t.rerank }
+        }).ToList();
+
+        var kept = AutocutFilter.Apply(items, sensitivity: 1);
+
+        Assert.Equal(2, kept.Count); // elbow on the RERANK curve after item 2
+        Assert.Equal(0.9, AutocutFilter.EffectiveScore(kept[0]));
+    }
 }
+
