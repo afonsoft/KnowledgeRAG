@@ -81,14 +81,23 @@ public sealed class ChainAST
         return flat;
     }
 
-    /// <summary>Byte estimate over text-bearing content (UTF-8).</summary>
+    /// <summary>Byte estimate over text-bearing content (UTF-8).
+    /// SPEC-20260929 RF-002: tool results count too — a 100KB
+    /// <see cref="FunctionResultContent"/> must trip the compaction gate.</summary>
     public int EstimateBytes()
     {
         var total = 0;
         foreach (var m in ToChatMessages())
             foreach (var c in m.Contents)
+            {
                 if (c is TextContent t && t.Text is { } txt)
                     total += System.Text.Encoding.UTF8.GetByteCount(txt);
+                else if (c is FunctionResultContent r && r.Result is string rs)
+                    total += System.Text.Encoding.UTF8.GetByteCount(rs);
+                else if (c is FunctionResultContent rj && rj.Result is not null)
+                    total += System.Text.Encoding.UTF8.GetByteCount(
+                        System.Text.Json.JsonSerializer.Serialize(rj.Result));
+            }
         return total;
     }
 }
