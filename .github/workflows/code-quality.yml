@@ -107,10 +107,13 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
+          # EF migrations are dotnet-ef scaffold output — boilerplate deltas
+          # between providers look like duplication to the quality gate.
           dotnet sonarscanner begin \
             /k:"afonsoft_LangGraph-UI" \
             /o:"afonsoft" \
             /d:sonar.token="$SONAR_TOKEN" \
-            /d:sonar.host.url="https://sonarcloud.io"
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.cpd.exclusions="**/Migrations/**"
           dotnet build KnowledgeHub.slnx --configuration Release
           dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
