@@ -55,3 +55,16 @@ Ordem sugerida (deps): docs-sync ∥ test-reliability ∥ observability independ
 ## 5. Gate
 
 Aguardando aprovação antes de Issues/execução (apresentado ao usuário em pt-BR).
+
+## 2026-09-29 — Review-comments corpus (PRs #369–#394)
+
+Segunda onda: análise dos comentários `devin-ai-integration`/`github-advanced-security`/`sonarqubecloud` nos 20 PRs mais recentes. ~256 comentários → ~90 findings acionáveis → **10 SPECs Draft** em `.specs/SPEC-20260929-*` (PR #395).
+
+Destaques confirmados em código antes de escrever:
+- `ResilienceSettings.ChatFallbacksJson` → `ApiKey` em claro (S2 PR #391).
+- `TemporalGraphRetriever` sem `CallerScope`/`SourceId` — facts vazam entre fontes.
+- Expansão de janela ignora `SuspicionFlags` — flagged chunk volta ao prompt.
+- `Provider ?? "openai"` no SaveAsync corrompe alternates Ollama (S2 bug).
+
+SonarQube: PRs anteriores todos "Quality Gate Passed"; só #391 falhou (duplication 3.1% > 3%) — resolvido com `.sonarcloud.properties` cpd.exclusions de Migrations.
+Coverage gate (#393) já dogfoodou: PR #391 falhou com 19.95% < 20% → testes do ResilienceSettingsService adicionados.
