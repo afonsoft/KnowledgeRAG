@@ -385,6 +385,99 @@ else
     </div>
 }
     </TabItem>
+    <TabItem Text="Resiliência" Icon="fa-solid fa-shield-halved">
+
+<p class="text-muted">
+    Política de fallback para providers de chat e tools MCP
+    (<code>Resilience:Fallback</code>). Em falhas transitórias (429/5xx/timeout),
+    uma chamada pode ser atendida por um candidato equivalente da mesma
+    capacidade — nunca cruza permissão ou escopo do caller.
+    <code>observe</code> classifica e loga sem trocar; <code>enforce</code> executa
+    a troca dentro do budget.
+</p>
+
+@if (_resilience is null)
+{
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando política de fallback…</div>
+}
+else
+{
+    <section class="border rounded p-3 mb-4">
+        <div class="d-flex justify-content-between gap-2 align-items-center mb-3">
+            <strong>Fallback policy</strong>
+            <Badge Color="@(_resilience.Source == "store" ? Color.Success : Color.Info)">
+                @(_resilience.Source == "store" ? "configurada" : "ambiente")
+            </Badge>
+        </div>
+
+        <div class="row g-2 mb-3">
+            <div class="col-12 col-md-4">
+                <label class="form-label">Modo</label>
+                <Select @bind-Value="_resForm.Mode">
+                    <Options>
+                        <SelectOption Text="disabled — propaga a falha" Value="disabled" />
+                        <SelectOption Text="observe — só classifica e loga" Value="observe" />
+                        <SelectOption Text="enforce — executa o fallback" Value="enforce" />
+                    </Options>
+                </Select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label">Max alternates por request</label>
+                <input type="number" class="form-control font-monospace" min="1" max="5"
+                       @bind="_resForm.MaxFallbackAttempts" />
+                <small class="text-muted">Budget de tentativas após o primário (1–5)</small>
+            </div>
+        </div>
+
+        <h6 class="mt-2">Alternates de chat (ordem importa)</h6>
+        @foreach (var (fb, i) in _resForm.ChatFallbacks.Select((f, i) => (f, i)))
+        {
+            <div class="row g-2 mb-2 align-items-center">
+                <div class="col-12 col-md-4">
+                    <input class="form-control form-control-sm font-monospace" placeholder="endpoint"
+                           @bind="fb.Endpoint" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <input class="form-control form-control-sm font-monospace" placeholder="model"
+                           @bind="fb.Model" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <input type="password" class="form-control form-control-sm font-monospace"
+                           placeholder="apiKey (vazio mantém o salvo)" @bind="fb.ApiKey" />
+                </div>
+                <div class="col-12 col-md-1">
+                    <Button Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash"
+                            OnClick="() => RemoveFallbackAsync(i)" />
+                </div>
+            </div>
+        }
+        <Button Size="Size.Small" Color="Color.Secondary" Icon="fa-solid fa-plus"
+                Text="Adicionar alternate" OnClick="AddFallback" />
+
+        <h6 class="mt-3">Capacidades de tools (cadeia de provedores)</h6>
+        <small class="text-muted d-block mb-2">
+            Uma linha por capacidade: <code>Nome=prov1,prov2,…</code>. Em falha transitória de
+            <code>prov1_*</code>, a tool equivalente do próximo provedor responde.
+        </small>
+        <textarea class="form-control font-monospace" rows="4"
+                  @bind="_resForm.CapabilitiesText"
+                  placeholder="WebSearch=tavily,firecrawl,duckduckgo&#10;DeepDocLookup=deepwiki,context7,internal_fts"></textarea>
+
+        <div class="d-flex gap-2 flex-wrap kh-icon-btns mt-3">
+            <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                    IsAsync="true" IsDisabled="_resForm.Saving"
+                    OnClick="SaveResilienceAsync" />
+            @if (_resilience.Source == "store")
+            {
+                <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
+                                  Text="Restaurar ambiente" Title="Restaurar ambiente"
+                                  Content="A configuração salva será removida; Resilience:Fallback volta a valer."
+                                  OnConfirm="ClearResilienceAsync" />
+            }
+        </div>
+    </section>
+}
+    </TabItem>
     <TabItem Text="Integrações" Icon="fa-solid fa-plug">
 
 <p class="text-muted">
@@ -762,6 +855,8 @@ else
     private readonly ChatFormState _chatForm = new();
     private GraphSettingsDto? _graph;
     private readonly GraphFormState _graphForm = new();
+    private ResilienceSettingsDto? _resilience;
+    private readonly ResilienceFormState _resForm = new();
     private CacheStatsDto? _cache;
     private DatabaseStatsDto? _dbStats;
     private EmbeddingSettingsDto? _embeddings;
@@ -795,6 +890,24 @@ else
         public bool Saving { get; set; }
     }
 
+    private sealed class ResilienceFormState
+    {
+        public string Mode { get; set; } = "disabled";
+        public int MaxFallbackAttempts { get; set; } = 2;
+        public List<FallbackRow> ChatFallbacks { get; set; } = [];
+        /// <summary>Uma capacidade por linha: <c>Nome=prov1,prov2,…</c>.</summary>
+        public string CapabilitiesText { get; set; } = "";
+        public bool Saving { get; set; }
+    }
+
+    /// <summary>Linha mutável de alternate de chat — o DTO é init-only.</summary>
+    private sealed class FallbackRow
+    {
+        public string? Endpoint { get; set; }
+        public string? Model { get; set; }
+        public string? ApiKey { get; set; }
+    }
+
     private sealed class EmbFormState
     {
         public string Provider { get; set; } = "deterministic";
@@ -814,6 +927,7 @@ else
         await ReloadAsync();
         await ReloadChatAsync();
         await ReloadGraphAsync();
+        await ReloadResilienceAsync();
         await ReloadCacheAsync();
         await ReloadLogLevelAsync();
         await ReloadDatabaseAsync();
@@ -1172,6 +1286,108 @@ else
         await Toast.Success("Restaurada", "Configuração do grafo voltou às variáveis de ambiente.");
         await ReloadGraphAsync();
     }
+
+    /// <summary>Recarrega a política efetiva de fallback e preenche o formulário.</summary>
+    private async Task ReloadResilienceAsync()
+    {
+        try
+        {
+            _resilience = await Api.GetResilienceAsync();
+            _resForm.Mode = _resilience?.Mode ?? "disabled";
+            _resForm.MaxFallbackAttempts = _resilience?.MaxFallbackAttempts ?? 2;
+            _resForm.ChatFallbacks = (_resilience?.ChatFallbacks ?? [])
+                .Select(f => new FallbackRow
+                {
+                    Endpoint = f.Endpoint,
+                    Model = f.Model,
+                    ApiKey = f.ApiKey
+                }).ToList();
+            _resForm.CapabilitiesText = _resilience is null
+                ? ""
+                : string.Join('\n', _resilience.ToolCapabilities
+                    .Select(kv => $"{kv.Key}={string.Join(',', kv.Value)}"));
+        }
+        catch (Exception ex)
+        {
+            _resilience = null;
+            await Toast.Error("Erro", $"Falha ao carregar a política de fallback: {ex.Message}");
+        }
+    }
+
+    /// <summary>Valida e salva a política de fallback; efeito imediato sem restart.</summary>
+    private async Task SaveResilienceAsync()
+    {
+        var caps = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in _resForm.CapabilitiesText.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = raw.Trim();
+            var eq = line.IndexOf('=');
+            if (eq < 0)
+            {
+                await Toast.Error("Erro", $"Linha inválida nas capacidades: '{line}' — use Nome=prov1,prov2");
+                return;
+            }
+            var name = line[..eq].Trim();
+            var providers = line[(eq + 1)..]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+            if (name.Length == 0 || providers.Count == 0)
+            {
+                await Toast.Error("Erro", $"Capacidade '{line}' precisa de nome e ao menos um provedor");
+                return;
+            }
+            caps[name] = providers;
+        }
+
+        _resForm.Saving = true;
+        try
+        {
+            var result = await Api.SaveResilienceAsync(new SaveResilienceSettingsRequest
+            {
+                Mode = _resForm.Mode,
+                MaxFallbackAttempts = _resForm.MaxFallbackAttempts,
+                ChatFallbacks = _resForm.ChatFallbacks
+                    .Select(f => new ChatFallbackOptionDto
+                    {
+                        // "***"/vazio = mantém a key salva — merge server-side.
+                        Endpoint = f.Endpoint, Model = f.Model, ApiKey = f.ApiKey
+                    }).ToList(),
+                ToolCapabilities = caps
+            });
+            if (!result.IsSuccess)
+            {
+                await Toast.Error("Erro", result.Error ?? "Falha ao salvar a política");
+                return;
+            }
+            await Toast.Success("Salva", "Política de fallback aplicada — já está em vigor.");
+            await ReloadResilienceAsync();
+        }
+        finally
+        {
+            _resForm.Saving = false;
+        }
+    }
+
+    /// <summary>Apaga a política persistida, restaurando Resilience:Fallback das variáveis.</summary>
+    private async Task ClearResilienceAsync()
+    {
+        var result = await Api.ClearResilienceAsync();
+        if (!result.IsSuccess)
+        {
+            await Toast.Error("Erro", result.Error ?? "Falha ao restaurar o ambiente");
+            return;
+        }
+        await Toast.Success("Restaurada", "Política de fallback voltou às variáveis de ambiente.");
+        await ReloadResilienceAsync();
+    }
+
+    /// <summary>Adiciona uma linha de alternate de chat ao formulário.</summary>
+    private void AddFallback() =>
+        _resForm.ChatFallbacks.Add(new FallbackRow());
+
+    /// <summary>Remove a linha de alternate de chat do formulário.</summary>
+    private void RemoveFallbackAsync(int index) =>
+        _resForm.ChatFallbacks.RemoveAt(index);
 
     /// <summary>Remove a key de chat armazenada e recarrega o card.</summary>
     private async Task RemoveChatKeyAsync()

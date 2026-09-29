@@ -1044,6 +1044,36 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.ToTable("RagEvaluations");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ResilienceSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChatFallbacksJson")
+                        .HasColumnType("text");
+
+                    b.Property<int>("MaxFallbackAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ToolCapabilitiesJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ResilienceSettings");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.SecurityEvent", b =>
                 {
                     b.Property<Guid>("Id")

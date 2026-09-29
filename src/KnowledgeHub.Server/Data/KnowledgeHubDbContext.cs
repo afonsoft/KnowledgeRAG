@@ -34,6 +34,8 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     /// <summary>SPEC-20260927-temporal-episodic-knowledge-graph: episode registry.</summary>
     public DbSet<KgEpisode> KgEpisodes => Set<KgEpisode>();
     public DbSet<IngestionJob> IngestionJobs => Set<IngestionJob>();
+    /// <summary>SPEC-20260928-resilience-tool-fallback-wiring: single-row fallback overrides.</summary>
+    public DbSet<ResilienceSettings> ResilienceSettings => Set<ResilienceSettings>();
     /// <summary>SPEC-20260926-mcp-sdk-alignment RF-004: durable MCP task handles.</summary>
     public DbSet<McpTask> McpTasks => Set<McpTask>();
     /// <summary>SPEC-20260927-rag-evaluation-triad-metrics: persisted triad scores.</summary>
@@ -202,6 +204,12 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
         modelBuilder.Entity<GraphSettings>(e =>
         {
             e.HasKey(s => s.Id);
+        });
+
+        modelBuilder.Entity<ResilienceSettings>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Mode).HasMaxLength(20);
         });
 
         modelBuilder.Entity<ApiKeyChatSettings>(e =>

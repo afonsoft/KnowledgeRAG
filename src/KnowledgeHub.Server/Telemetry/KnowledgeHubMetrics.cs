@@ -83,6 +83,11 @@ public sealed class KnowledgeHubMetrics : IMcpRequestMetrics
     public static readonly Counter<long> MultiQueryDispatched =
         Meter.CreateCounter<long>("knowledgehub.search.multiquery_dispatched");
 
+    /// <summary>Tool-call fallback transitions (SPEC-20260928 RF-003).
+    /// Tags: capability, from, to, trigger (exception|isError).</summary>
+    public static readonly Counter<long> ToolFallbacks =
+        Meter.CreateCounter<long>("knowledgehub.tool.fallbacks");
+
     /// <summary>Temporal/episodic graph queries (SPEC-20260928 RF-003).
     /// Tag: mode (window|recent|relationships|diverse|episode).</summary>
     public static readonly Counter<long> TemporalGraphQueries =
