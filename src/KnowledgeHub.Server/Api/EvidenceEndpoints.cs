@@ -25,17 +25,23 @@ public static class EvidenceEndpoints
             var receipts = await evidence.GetSessionReceiptsAsync(sessionId, ct);
 
             // SPEC-20260929 RF-002: an aft_* caller may only export sessions it
-            // produced — every receipt must carry its ApiKeyId (cookie-owned
-            // sessions are equally off-limits to API keys).
-            if (http.RequestServices.GetService<Auth.ICallerScopeProvider>() is { } scopeProvider
-                && (await scopeProvider.GetAsync(ct)).ApiKeyId is { } callerKey
-                && receipts.Any(r => !string.Equals(r.ApiKeyId,
-                    callerKey.ToString("N"), StringComparison.OrdinalIgnoreCase)))
-                return Results.Forbid();
+            // produced — every receipt must carry its ApiKeyId. Cookie callers
+            // are refused outright: the shared "mcp:session" bucket carries no
+            // per-user attribution, so no cookie-scoped ownership can be proven.
+            var scope = http.RequestServices.GetService<Auth.ICallerScopeProvider>() is { } sp
+                ? await sp.GetAsync(ct) : null;
+            if (scope is { } s)
+            {
+                if (s.ApiKeyId is null)
+                    return Results.Forbid();
+                if (receipts.Any(r => !string.Equals(r.ApiKeyId,
+                        s.ApiKeyId.Value.ToString("N"), StringComparison.OrdinalIgnoreCase)))
+                    return Results.Forbid();
+            }
 
             // SPEC-20260929 RF-003: integrity is re-verified with the instance
-            // key — never trusted from stored digests alone.
-            var verification = await evidence.VerifyAsync(sessionId, ct);
+            // key — over exactly the exported snapshot, not a fresh re-read.
+            var verification = await evidence.VerifyReceiptsAsync(receipts, ct);
 
             return Results.Ok(new
             {

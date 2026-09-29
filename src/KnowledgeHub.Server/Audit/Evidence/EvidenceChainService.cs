@@ -28,9 +28,13 @@ public sealed class EvidenceChainService(
 
     /// <summary>SPEC-20260929 RF-001: appends are serialized per session —
     /// two concurrent writes can never read the same parent / interleave
-    /// digests. Locks are per sessionId (cheap, lazily created).</summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>
-        _sessionLocks = new(StringComparer.Ordinal);
+    /// digests. Fixed striped locks (sessionId hash → slot): a per-session
+    /// dictionary would grow unbounded with the process lifetime.</summary>
+    private static readonly SemaphoreSlim[] _sessionLocks =
+        Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
+    private static SemaphoreSlim LockFor(string sessionId) =>
+        _sessionLocks[Math.Abs(sessionId.GetHashCode(StringComparison.Ordinal)) % _sessionLocks.Length];
 
     public static string Sha256Hex(string? payload) =>
         Convert.ToHexString(
@@ -39,7 +43,7 @@ public sealed class EvidenceChainService(
 
     public async Task<EvidenceReceipt> AppendAsync(EvidenceEvent ev, CancellationToken ct)
     {
-        var gate = _sessionLocks.GetOrAdd(ev.SessionId, _ => new SemaphoreSlim(1, 1));
+        var gate = LockFor(ev.SessionId);
         await gate.WaitAsync(ct);
         try
         {
@@ -107,6 +111,13 @@ public sealed class EvidenceChainService(
             await GetSessionReceiptsAsync(sessionId, ct),
             await LoadOrCreateKeyAsync(ct));
 
+    /// <inheritdoc/>
+    public async Task<EvidenceVerification> VerifyReceiptsAsync(
+        IReadOnlyList<EvidenceReceipt> receipts, CancellationToken ct) =>
+        // Verifies exactly the caller's snapshot — a receipt appended between
+        // the export read and this check can't invalidate the reported set.
+        EvidenceChainVerifier.Verify(receipts, await LoadOrCreateKeyAsync(ct));
+
     /// <summary>Canonical digest over the signed fields (signature excluded).</summary>
     public static string ComputeDigest(EvidenceReceipt r)
     {
@@ -147,8 +158,17 @@ public sealed class EvidenceChainService(
         var stored = await secrets.GetAsync(SecretSlot, ct);
         if (stored is { Length: > 0 })
             return Convert.FromHexString(stored);
+
+        // No stored key — generate one, but only proceed when the store can
+        // read it back. Proceeding with an unverifiable key (store flapped)
+        // would sign receipts nobody can verify later and silently rotate
+        // away the previous key (devin-review #401).
         var key = RandomNumberGenerator.GetBytes(32);
         await secrets.SetAsync(SecretSlot, Convert.ToHexString(key), ct);
+        if (await secrets.GetAsync(SecretSlot, ct) is not { Length: > 0 } roundTrip
+            || !string.Equals(roundTrip, Convert.ToHexString(key), StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "evidence: secret store did not persist the signing key — refusing to sign with an unverifiable key");
         logger.LogInformation("evidence: instance signing key generated (keyId={KeyId})", KeyId);
         return key;
     }
