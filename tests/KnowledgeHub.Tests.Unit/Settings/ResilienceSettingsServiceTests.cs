@@ -153,7 +153,8 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
             .ResilienceSettings.SingleAsync();
         Assert.DoesNotContain("sekret", row.ChatFallbacksJson!);
         Assert.Contains("\"hasKey\":true", row.ChatFallbacksJson);
-        Assert.Equal("sekret", _secrets.Store["resilience:fallback:0"]);
+        var slot = Assert.Single(_secrets.Store, kv => kv.Key.StartsWith("resilience:fallback:"));
+        Assert.Equal("sekret", slot.Value);
     }
 
     [Fact]
@@ -202,7 +203,96 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
         var row = await verify.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>()
             .ResilienceSettings.SingleAsync();
         Assert.DoesNotContain("sk-legacy", row.ChatFallbacksJson);
-        Assert.Equal("sk-legacy", _secrets.Store["resilience:fallback:0"]);
+        var slot = Assert.Single(_secrets.Store, kv => kv.Key.StartsWith("resilience:fallback:"));
+        Assert.Equal("sk-legacy", slot.Value);
+    }
+
+    [Fact]
+    public async Task MaskedSave_BeforeFirstRead_KeepsLegacyPlaintextKey()
+    {
+        // Devin-review #398: PUT landing before any snapshot load must migrate
+        // the legacy plaintext key first — the masked "***" save would
+        // otherwise overwrite the only copy while the vault is empty.
+        using (var scope = _provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
+            db.ResilienceSettings.Add(new ResilienceSettings
+            {
+                Id = 1,
+                Mode = "enforce",
+                MaxFallbackAttempts = 2,
+                ChatFallbacksJson = """[{"provider":"openai","endpoint":"https://api.openai.com","model":"gpt-4o","apiKey":"sk-legacy"}]""",
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sut = Sut();
+        await sut.SaveAsync(new SaveResilienceSettingsRequest
+        {
+            Mode = "enforce",
+            MaxFallbackAttempts = 2,
+            ChatFallbacks =
+            [
+                new ChatFallbackOptionDto
+                {
+                    Provider = "openai", Endpoint = "https://api.openai.com",
+                    Model = "gpt-4o", ApiKey = "***"
+                }
+            ]
+        });
+
+        Assert.Equal("sk-legacy", sut.GetEffective().ChatFallbacks[0].ApiKey);
+    }
+
+    [Fact]
+    public async Task ReorderedAlternates_KeepTheirOwnKeys()
+    {
+        // Devin-review #398: secrets bind to provider|endpoint|model — a
+        // reorder must never hand provider A's key to provider B's endpoint.
+        var sut = Sut();
+        await sut.SaveAsync(new SaveResilienceSettingsRequest
+        {
+            Mode = "enforce",
+            MaxFallbackAttempts = 2,
+            ChatFallbacks =
+            [
+                new ChatFallbackOptionDto
+                {
+                    Provider = "openai", Endpoint = "https://api.openai.com",
+                    Model = "gpt-4o", ApiKey = "sk-openai"
+                },
+                new ChatFallbackOptionDto
+                {
+                    Provider = "ollama", Endpoint = "http://h:11434",
+                    Model = "llama3", ApiKey = "sk-ollama"
+                }
+            ]
+        });
+
+        // Same entries, reversed order, masked keys.
+        await sut.SaveAsync(new SaveResilienceSettingsRequest
+        {
+            Mode = "enforce",
+            MaxFallbackAttempts = 2,
+            ChatFallbacks =
+            [
+                new ChatFallbackOptionDto
+                {
+                    Provider = "ollama", Endpoint = "http://h:11434",
+                    Model = "llama3", ApiKey = "***"
+                },
+                new ChatFallbackOptionDto
+                {
+                    Provider = "openai", Endpoint = "https://api.openai.com",
+                    Model = "gpt-4o", ApiKey = "***"
+                }
+            ]
+        });
+
+        var effective = sut.GetEffective();
+        Assert.Equal("sk-ollama", effective.ChatFallbacks[0].ApiKey);
+        Assert.Equal("sk-openai", effective.ChatFallbacks[1].ApiKey);
     }
 
     [Fact]
