@@ -369,9 +369,9 @@ public class PerKeyIntegrationSecretTests
     private sealed class FakeApiKeySettings(string? secret) : IApiKeyChatSettingsService
     {
         public int IntegrationLookups;
-        public List<(string Provider, string Key)> Saved = [];
-        public List<string> Removed = [];
-        public List<(string? Endpoint, string? Model, string? ApiKey)> SavedChat = [];
+        public readonly List<(string Provider, string Key)> Saved = [];
+        public readonly List<string> Removed = [];
+        public readonly List<(string? Endpoint, string? Model, string? ApiKey)> SavedChat = [];
 
         public ChatProviderOptions GetEffectiveOptions(Guid apiKeyId) => new();
         public IChatClient? GetClient(Guid apiKeyId) => null;

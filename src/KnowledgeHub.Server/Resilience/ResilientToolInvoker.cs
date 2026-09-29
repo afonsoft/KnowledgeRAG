@@ -127,9 +127,10 @@ public static class ResilientToolInvoker
         out CatalogTool next,
         out IDictionary<string, System.Text.Json.JsonElement>? mappedArgs)
     {
-        foreach (var name in registry.CandidateToolNames(current, available))
+        foreach (var name in registry.CandidateToolNames(current, available)
+            .Where(n => !visited.Contains(n)))
         {
-            if (visited.Contains(name) || !catalog.TryGetValue(name, out var candidate))
+            if (!catalog.TryGetValue(name, out var candidate))
                 continue;
             if (!candidate.ReadOnly)
                 continue; // never substitute a write-capable tool

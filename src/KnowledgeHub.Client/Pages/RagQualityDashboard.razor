@@ -82,7 +82,7 @@ else if (_stats is not null)
         {
             _stats = await Http.GetFromJsonAsync<RagEvaluationStats>("/api/v1/evaluation/stats");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _error = ex.Message;
         }

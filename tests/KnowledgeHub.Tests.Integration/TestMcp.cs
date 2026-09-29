@@ -192,6 +192,8 @@ public sealed class TestMcp2026 : IAsyncDisposable
         return new TestMcp2026(http, JsonSerializer.SerializeToNode(clientCapabilities)!);
     }
 
+    /// <summary>Sends one JSON-RPC request over the 2026-07-28 Streamable-HTTP
+    /// session and returns the result payload.</summary>
     /// <param name="name">Value for the required <c>Mcp-Name</c> header — tool
     /// name for tools/call, taskId for tasks/*.</param>
     public async Task<JsonElement> SendAsync(string method, string name, object? parameters = null)

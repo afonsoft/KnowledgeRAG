@@ -71,10 +71,9 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
         if (!doc.RootElement.TryGetProperty("tree", out var tree))
             return [];
         var entries = new List<GitTreeEntry>();
-        foreach (var e in tree.EnumerateArray())
+        foreach (var e in tree.EnumerateArray().Where(e =>
+            !e.TryGetProperty("type", out var type) || type.GetString() == "blob"))
         {
-            if (e.TryGetProperty("type", out var type) && type.GetString() != "blob")
-                continue;
             var path = e.TryGetProperty("path", out var p) ? p.GetString() : null;
             if (string.IsNullOrEmpty(path))
                 continue;

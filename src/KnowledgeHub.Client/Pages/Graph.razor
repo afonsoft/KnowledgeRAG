@@ -167,7 +167,7 @@ else
             _expanded = null;
             _edges = null;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await Toast.Error("Erro", $"Falha ao carregar o grafo: {ex.Message}");
         }
@@ -180,10 +180,10 @@ else
         var now = DateTime.UtcNow;
         return _preset switch
         {
-            "1h" => (now.AddHours(-1), (DateTime?)null),
-            "6h" => (now.AddHours(-6), (DateTime?)null),
-            "24h" => (now.AddHours(-24), (DateTime?)null),
-            "7d" => (now.AddDays(-7), (DateTime?)null),
+            "1h" => (now.AddHours(-1), null),
+            "6h" => (now.AddHours(-6), null),
+            "24h" => (now.AddHours(-24), null),
+            "7d" => (now.AddDays(-7), null),
             _ => (null, null)
         };
     }
@@ -203,7 +203,7 @@ else
         {
             _edges = await Api.EdgesAsync(id, _includeHistorical);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             await Toast.Error("Erro", $"Falha ao carregar arestas: {ex.Message}");
         }

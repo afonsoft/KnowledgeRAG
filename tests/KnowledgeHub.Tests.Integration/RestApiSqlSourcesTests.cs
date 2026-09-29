@@ -17,7 +17,7 @@ public class RestApiSqlSourcesTests : IClassFixture<RestApiSqlSourcesTests.Fixtu
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-restapisql-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-restapisql-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -39,12 +39,14 @@ public class RestApiSqlSourcesTests : IClassFixture<RestApiSqlSourcesTests.Fixtu
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Hits++;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            // caller (HttpClient pipeline) owns and disposes the response
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(
                     $$"""{"items":[{"id":"a","title":"Alpha","body":"{{Marker}}"}]}""",
                     System.Text.Encoding.UTF8, "application/json")
-            });
+            };
+            return Task.FromResult(response);
         }
     }
 
@@ -62,7 +64,7 @@ public class RestApiSqlSourcesTests : IClassFixture<RestApiSqlSourcesTests.Fixtu
                 .ConfigurePrimaryHttpMessageHandler(() => _fake);
         }));
         _client = TestAuth.Login(restFactory);
-        _sqlitePath = Path.Combine(Path.GetTempPath(), $"kh-sqlsrc-{Guid.NewGuid():N}.db");
+        _sqlitePath = Path.Join(Path.GetTempPath(), $"kh-sqlsrc-{Guid.NewGuid():N}.db");
         using (var connection = new SqliteConnection($"Data Source={_sqlitePath}"))
         {
             connection.Open();
@@ -76,7 +78,8 @@ public class RestApiSqlSourcesTests : IClassFixture<RestApiSqlSourcesTests.Fixtu
 
     public void Dispose()
     {
-        try { File.Delete(_sqlitePath); } catch { /* best effort */ }
+        try { File.Delete(_sqlitePath); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* best effort */ }
     }
 
     private async Task<HttpResponseMessage> PostSourceAsync(object configuration, string type)

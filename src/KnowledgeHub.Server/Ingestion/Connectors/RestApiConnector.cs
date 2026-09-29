@@ -113,13 +113,11 @@ public sealed class RestApiConnector(
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
                 throw new JsonException("not an object");
             var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var property in doc.RootElement.EnumerateObject())
-            {
-                if (property.Value.ValueKind == JsonValueKind.String
-                    && property.Name.Length > 0
-                    && property.Value.GetString() is { Length: > 0 } value)
-                    headers[property.Name] = value;
-            }
+            foreach (var property in doc.RootElement.EnumerateObject()
+                .Where(p => p.Name.Length > 0
+                    && p.Value.ValueKind == JsonValueKind.String
+                    && p.Value.GetString() is { Length: > 0 }))
+                headers[property.Name] = property.Value.GetString()!;
             return headers;
         }
         catch (JsonException ex)
@@ -293,10 +291,9 @@ public sealed class RestApiConnector(
             return item.ValueKind == JsonValueKind.String ? item.GetString() ?? "" : item.GetRawText();
 
         var lines = new List<string>();
-        foreach (var property in item.EnumerateObject())
+        foreach (var property in item.EnumerateObject()
+            .Where(p => p.Value.ValueKind != JsonValueKind.Null))
         {
-            if (property.Value.ValueKind == JsonValueKind.Null)
-                continue;
             lines.Add(property.Value.ValueKind == JsonValueKind.String
                 ? $"{property.Name}: {property.Value.GetString()}"
                 : $"{property.Name}: {property.Value.GetRawText()}");

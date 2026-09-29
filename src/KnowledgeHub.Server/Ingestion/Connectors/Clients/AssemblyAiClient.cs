@@ -79,7 +79,7 @@ public sealed class AssemblyAiClient(
                     return Parse(job!);
                 case "error":
                     throw new InvalidOperationException(
-                        $"audio: AssemblyAI job failed — {job?["error"]?.GetValue<string>() ?? "unknown"}");
+                        $"audio: AssemblyAI job failed — {job!["error"]?.GetValue<string>() ?? "unknown"}");
                 case null:
                     throw new InvalidOperationException("audio: poll response missing status");
             }

@@ -36,7 +36,11 @@ public sealed class EvaluationWorker(
                 {
                     throw;
                 }
-                catch (Exception ex)
+                // An isolated OperationCanceledException (per-task timeout, not
+                // shutdown) must be logged and swallowed — letting it escape
+                // kills the reader loop and every queued evaluation after it.
+                catch (Exception ex) when (ex is not OperationCanceledException
+                    || !stoppingToken.IsCancellationRequested)
                 {
                     logger.LogError(ex, "RAG evaluation failed for query {QueryId}", task.QueryId);
                 }

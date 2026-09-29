@@ -1307,7 +1307,7 @@ else
                 : string.Join('\n', _resilience.ToolCapabilities
                     .Select(kv => $"{kv.Key}={string.Join(',', kv.Value)}"));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _resilience = null;
             await Toast.Error("Erro", $"Falha ao carregar a política de fallback: {ex.Message}");

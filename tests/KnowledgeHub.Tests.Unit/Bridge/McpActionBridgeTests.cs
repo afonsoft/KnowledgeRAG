@@ -105,7 +105,7 @@ public sealed class McpActionBridgeTests
             .Select(i => Hit($"<!-- mcp-tool: tool_{i} -->"))
             .ToList();
         var tools = Enumerable.Range(0, 5)
-            .Select(i => (CatalogTool)Tool($"tool_{i}")).ToList();
+            .Select(i => Tool($"tool_{i}")).ToList();
 
         var found = ToolActionAnnotationDetector.Detect(null, hits, tools, 2, allowDocumentMarkers: true);
         Assert.Equal(2, found.Count);
@@ -201,7 +201,7 @@ public sealed class McpActionBridgeTests
         var hits = Enumerable.Range(0, 5)
             .Select(i => Hit($"<!-- mcp-tool: t{i} -->")).ToList();
         var tools = Enumerable.Range(0, 5)
-            .Select(i => (CatalogTool)Tool($"t{i}", handler: Counting)).ToList();
+            .Select(i => Tool($"t{i}", handler: Counting)).ToList();
 
         var exec = await McpDynamicRagActionBridge.ExecuteAsync(
             "", hits, tools, Ctx(), maxCalls: 3,

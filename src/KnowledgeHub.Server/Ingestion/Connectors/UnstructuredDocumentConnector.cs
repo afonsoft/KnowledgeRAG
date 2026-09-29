@@ -145,9 +145,8 @@ public sealed class UnstructuredDocumentConnector(
         if (!string.IsNullOrWhiteSpace(folderPath) && Directory.Exists(folderPath))
             paths.AddRange(Directory.EnumerateFiles(folderPath)
                 .Where(f => SupportedExtensions.Contains(Path.GetExtension(f))));
-        foreach (var f in files)
-            if (File.Exists(f) && SupportedExtensions.Contains(Path.GetExtension(f)))
-                paths.Add(f);
+        paths.AddRange(files
+            .Where(f => File.Exists(f) && SupportedExtensions.Contains(Path.GetExtension(f))));
         return paths.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToList();
     }
 }

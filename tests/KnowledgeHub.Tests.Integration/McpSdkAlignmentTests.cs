@@ -18,7 +18,7 @@ public class McpSdkAlignmentTests : IClassFixture<McpSdkAlignmentTests.Fixture>
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-sdk-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-sdk-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -253,9 +253,9 @@ public class McpSdkAlignmentTests : IClassFixture<McpSdkAlignmentTests.Fixture>
 
     private async Task SeedSourceAsync(string token)
     {
-        var dir = Path.Combine(Path.GetTempPath(), $"sdk-{Guid.NewGuid():N}");
+        var dir = Path.Join(Path.GetTempPath(), $"sdk-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
-        await File.WriteAllTextAsync(Path.Combine(dir, "doc.txt"), $"contents about {token}");
+        await File.WriteAllTextAsync(Path.Join(dir, "doc.txt"), $"contents about {token}");
         var response = await _admin.PostAsJsonAsync("/api/sources", new
         {
             name = $"sdk-{Guid.NewGuid():N}",
