@@ -154,11 +154,17 @@ Configure the Knowledge Hub MCP server in your environment to access organizatio
 - Cursor / Devin / Generic:
   Add an HTTP MCP server with URL "http://<host>:5000/mcp" and header "Authorization: Bearer aft_YOUR_KEY".
 
-3. Recommended Tool Usage:
+3. Onboarding Protocol (required on the first session):
+- First use ask_question to ask about the repository, consulting the
+  documentation with read_wiki_contents before assuming business rules.
+- When you finish each task, record what was done with write_note.
+- When you need to create persistent knowledge or memory, use write_knowledge.
+
+4. Recommended Tool Usage:
 - search_knowledge(query, topK): Run semantic and hybrid queries across vaults and documents before writing code.
 - ask_knowledge(question, topK): Ask questions to receive answers synthesized from indexed evidence with citations.
 - find_dependencies / analyze_impact: Inspect entity graphs (GraphRAG) when assessing architectural impact.
-- read_document / write_note: Read from or persist notes into the connected Obsidian vault.
+- read_document / write_note / write_knowledge: Read documents and persist notes or knowledge into the connected Obsidian vault.
 - set_chat_settings / set_api_key_settings: Configure custom chat models or integration API keys for your session.
 ```
 
@@ -227,7 +233,10 @@ Configure the Knowledge Hub MCP server in your environment to access organizatio
     "Fallback": {                              // Resilience:Fallback — provider/tool fallback policy engine
       "Mode": "disabled",                      // disabled | observe | enforce
       "MaxFallbackAttempts": 2,
-      "ChatFallbacks": [],                     // [{ "endpoint", "model", "apiKey" }] ordered alternates
+      "ChatFallbacks": [                       // ordered alternates; apiKey write-only (stored encrypted)
+        { "provider": "openai", "endpoint": "https://api.openai.com/v1", "model": "gpt-4o-mini", "apiKey": "sk-..." },
+        { "provider": "ollama", "endpoint": "http://localhost:11434", "model": "llama3.2" }
+      ],
       "ToolCapabilities": {                    // capability → ordered equivalent providers
         "WebSearch": ["tavily", "firecrawl", "duckduckgo"],
         "DeepDocLookup": ["deepwiki", "context7", "internal_fts"]
@@ -405,12 +414,16 @@ dotnet format KnowledgeHub.slnx --verify-no-changes  # formatting gate
 
 | Metric | Value |
 |---|---|
-| **Total tests** | 961 (716 unit + 245 integration) |
+| **Total tests** | 1416 (1121 unit + 295 integration) |
 | **Pass rate** | 100% |
-| **Line coverage** | 78% (23 961 / 30 697 coverable lines) |
-| **Branch coverage** | 58.1% (5 192 / 8 934 branches) |
-| **Method coverage** | 79.8% (1 752 / 2 194 methods) |
-| **Counts/coverage date** | tests 2026-09-26 · coverage 2026-09-24 |
+| **Line coverage** | ratcheted baseline — `.ci/coverage-baseline.txt` (CI fails under it, auto-bumps on `main`) |
+| **Counts/coverage date** | tests 2026-09-29 |
+
+### Definition of Done
+
+- SPEC status `Approved` → implementation slices land via PRs (`feature/Devin-*`) with all required checks green (build, unit, integration, WASM validation, Docker, CodeQL, SonarCloud, Qodana, Snyk, GitGuardian).
+- SPEC status flips to `Done` only after the PR merges and `Status`/`Ticket` fields are updated in `.specs/`.
+- Coverage is a ratchet — a PR may not lower `.ci/coverage-baseline.txt`; add tests instead of lowering the floor.
 
 CI gates: Build (0 warnings), Unit Tests, Integration Tests (SQLite), Blazor WASM Client Validation, Docker Image Build, Code Quality (SonarQube), Security Scan, `dotnet format --verify-no-changes` (0 files changed of 371).
 

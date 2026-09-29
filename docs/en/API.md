@@ -98,6 +98,25 @@ All `/api/*` endpoints require authentication (cookie session or `Authorization:
 
 Responses may carry `suggestedActions` (search — tool calls the model can issue next turn), `expandedChunkIndices`/`windowExpanded`, and filter-relaxation fields `isRelaxed`/`relaxedScope`/`appliedFilter`/`originalFilter`/`filterRelaxed` when `Search:Relaxation` drops a filter level.
 
+### Graph — MCP tools
+
+| Tool | Args | Purpose |
+|---|---|---|
+| `search_graph_temporal` | `query`, `timeStart`/`timeEnd` (RFC3339), `topK` | Time-windowed entity/edge retrieval over `ObservedAt`/`ValidFrom`/`ValidTo` |
+| `search_graph_recent` | `query`, `window` (`1h`/`6h`/`24h`/`7d`), `topK` | Recent-window graph retrieval |
+| `search_graph_relationships` | `entity`, `depth` | 2-hop relationship expansion |
+| `search_graph_diverse` | `query`, `diversity` (low/med/high) | Cluster-diversified graph results |
+| `search_graph_episode` | `episodeId` | Retrieval scoped to one ingestion episode (`KgEpisode`) |
+
+### Graph — REST endpoints
+
+| Route | Purpose |
+|---|---|
+| `GET /api/graph/nodes` | Node listing/filtering for the `/graph` viewer |
+| `GET /api/graph/nodes/{id}/edges` | Edges of a node (evidence per edge) |
+| `GET /api/graph/episodes` | Ingestion episodes (`KgEpisode`) |
+| `GET /api/graph/timeline` | Temporal timeline for the viewer presets (1h/6h/24h/7d) |
+
 ## Other
 
 | Route | Purpose |

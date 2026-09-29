@@ -98,6 +98,25 @@ Todos os endpoints `/api/*` exigem autenticação (sessão por cookie ou `Author
 
 Respostas podem carregar `suggestedActions` (search — tool calls que o modelo pode emitir no turno seguinte), `expandedChunkIndices`/`windowExpanded` e os campos de relaxamento `isRelaxed`/`relaxedScope`/`appliedFilter`/`originalFilter`/`filterRelaxed` quando `Search:Relaxation` derruba um nível de filtro.
 
+### Grafo — tools MCP
+
+| Tool | Args | Propósito |
+|---|---|---|
+| `search_graph_temporal` | `query`, `timeStart`/`timeEnd` (RFC3339), `topK` | Retrieval de entidades/arestas por janela temporal sobre `ObservedAt`/`ValidFrom`/`ValidTo` |
+| `search_graph_recent` | `query`, `window` (`1h`/`6h`/`24h`/`7d`), `topK` | Retrieval de grafo por janela recente |
+| `search_graph_relationships` | `entity`, `depth` | Expansão de relacionamentos em 2 hops |
+| `search_graph_diverse` | `query`, `diversity` (low/med/high) | Resultados de grafo diversificados por cluster |
+| `search_graph_episode` | `episodeId` | Retrieval escopado a um episódio de ingestão (`KgEpisode`) |
+
+### Grafo — endpoints REST
+
+| Rota | Propósito |
+|---|---|
+| `GET /api/graph/nodes` | Listagem/filtro de nós para o viewer `/graph` |
+| `GET /api/graph/nodes/{id}/edges` | Arestas de um nó (evidência por aresta) |
+| `GET /api/graph/episodes` | Episódios de ingestão (`KgEpisode`) |
+| `GET /api/graph/timeline` | Timeline temporal para os presets do viewer (1h/6h/24h/7d) |
+
 ## Outros
 
 | Rota | Propósito |
