@@ -116,7 +116,7 @@ public sealed class ResilienceSettingsService(
             // still the version we parsed — a concurrent SaveAsync must not be
             // overwritten by this stale write-back.
             var scrubbedJson = array.ToJsonString();
-            await using var scope = scopeFactory.CreateAsyncScope();
+            await using var scope = ScopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
             var current = await db.ResilienceSettings.FirstOrDefaultAsync(r => r.Id == row.Id);
             if (current is not null && current.ChatFallbacksJson == row.ChatFallbacksJson)

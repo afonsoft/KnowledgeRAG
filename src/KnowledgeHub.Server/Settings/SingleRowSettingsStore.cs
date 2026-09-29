@@ -13,6 +13,10 @@ namespace KnowledgeHub.Server.Settings;
 public abstract class SingleRowSettingsStore<T>(IServiceScopeFactory scopeFactory)
     where T : class, ISingleRowSettings, new()
 {
+    /// <summary>Scope factory — exposed for derived stores that need their
+    /// own scope (e.g. compare-and-swap write-backs outside UpsertAsync).</summary>
+    protected IServiceScopeFactory ScopeFactory => scopeFactory;
+
     /// <summary>DbSet accessor — implemented per concrete store.</summary>
     protected abstract DbSet<T> Set(KnowledgeHubDbContext db);
 

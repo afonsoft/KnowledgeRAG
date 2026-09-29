@@ -416,6 +416,13 @@ public sealed class TelemetryTests
         public Task<IReadOnlyList<EvidenceReceipt>> GetSessionReceiptsAsync(
             string sessionId, CancellationToken ct) =>
             throw new InvalidOperationException("store down");
+        public Task<KnowledgeHub.Server.Audit.Evidence.EvidenceVerification> VerifyAsync(
+            string sessionId, CancellationToken ct) =>
+            throw new InvalidOperationException("store down");
+        public Task<KnowledgeHub.Server.Audit.Evidence.EvidenceVerification> VerifyReceiptsAsync(
+            IReadOnlyList<KnowledgeHub.Server.Domain.Entities.EvidenceReceipt> receipts,
+            CancellationToken ct) =>
+            throw new InvalidOperationException("store down");
     }
 
     [Fact]
