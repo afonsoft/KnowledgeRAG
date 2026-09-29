@@ -5,6 +5,36 @@ context — see `.agents/skills/orchestrator/SKILL.md` Phase 8.
 
 ---
 
+## Session — 2026-09-28 (orchestrator reconcile)
+
+**Scope**: Resume orchestrator após a fila pentagi/Verba (#262–#281) —
+reconciliação de issues abertas vs. código mergeado + Phase 7 final check.
+
+**Decisions**:
+- Fila aprovada 100% entregue: #263/#264/#262/#280/#281 já fechadas;
+  #269–#279 estavam abertas com label `todo` apesar de mergeadas — fechadas
+  com comentário pt-BR citando PR+commit e label `todo`→`done`.
+- SPECs: 15× SPEC-20260927 = Done; stale `In implementation` em
+  SPEC-20260926-pgvector-live-tests corrigido → `Done` (PR #237 `f228428`).
+- `orchestrator_stats.md` estava congelado em 2026-09-19 — session block,
+  Pending Tasks (TASK-024/025 stale), Backlog 8–13 e Metrics resincronizados.
+- Framework afonsoft/skills up-to-date (`9958c42` = origin/main, fetch limpo).
+- Branch `feature/Devin-20260928-temporal-episodic-graph` é tree-idêntica a
+  origin/main (trabalho todo mergeado via squash); reconcile commitado em
+  `feature/Devin-20260928-orchestrator-reconcile`.
+
+**Delivered**: 11 issues fechadas (#269–#279) com evidência de merge;
+SPEC status fix + stats sync em branch dedicada (PR pendente).
+
+**Remaining**: PR do reconcile; `dotnet format --verify-no-changes` gate;
+deletar branches mergeadas (temporal-episodic-graph e antigas).
+
+**Lessons**:
+- Squash-merge de stack faz `git log --grep='#N'` casar todas as issues do
+  corpo — confirmar merge por `gh pr view --json mergeCommit` + ls-tree.
+- Issues fechadas não voltam o label contract sozinhas — reconciliar
+  `todo`→`done` explicitamente no fechamento.
+
 ## Session — 2026-09-19
 
 **Scope**: SPEC-20260918-mcp-v2-hybrid-transport (#126) — MCP SDK v2 hybrid

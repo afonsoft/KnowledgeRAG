@@ -8,7 +8,7 @@
 | Tipo | `Infra` (tests) |
 | Stack | `xUnit`, `Testcontainers`, `pgvector/pgvector`, Npgsql 10 |
 | Repository | `afonsoft/LangGraph-UI` |
-| Status | `In implementation` |
+| Status | `Done` — entregue via PR #237 (`f228428`) |
 | Ticket | `#233` — https://github.com/afonsoft/LangGraph-UI/issues/233 |
 | Origem | gap-analysis 2026-09-26 — `PostgresVectorStore` sem nenhum teste que abra conexão real |
 

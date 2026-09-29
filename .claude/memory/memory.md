@@ -1,11 +1,12 @@
 # Short-term memory — session state (overwritten each session, ≤100 lines)
 
-- **Last verified commit on `main`**: `3ea3202` (PR #363 — SPEC approval sync).
-- **Baseline**: build 0 warnings · 801 unit + 283 integration verdes (local) · `dotnet format --verify-no-changes` limpo.
+- **Last verified commit on `main`**: `a14b72b` (PR #378 — temporal episodic KG; stack completa #269–#279).
+- **Baseline**: build 0 warnings · 1043 unit + 288 integration verdes (local, 2026-09-28).
 - **Done (2026-09-27, sessão pentagi/Verba → execução)**: análise comparativa pentagi+Verba → 13 SPECs aprovadas (#269–#281) + issues conectadas; **#263 implementada** (RestApi + SqlDatabase connectors) — SqlQueryGuard (SELECT-only, keywords fora de literais/comentários), JsonPathResolver (dot-path), RestApiConnector (paginação pageParam/maxPages, headers no secret store `restapi:{id}`), SqlDatabaseConnector (sqlite `Mode=ReadOnly`/postgres `READ ONLY` tx, connstring no secret store `sql:{id}`, maxRows/Truncated), RequiredKeys[SqlDatabase]=["provider","query"], auto-sync whitelist, UI completa no SourceEditDialog; 79 novos testes (48 guard/resolver + 16 restapi + 15 sql + 11 integration − repoint de 1 obsoleto para McpProxy).
-- **Ordem de execução aprovada**: #263→#264→#262 | #280→#270→#273→#281 | #278→#276→#272→#277 | #269→#275→#274 | #271→#279 (dependências: #263→#279; #278→#276; #269→#279; #270+#273→#271).
+- **Ordem de execução aprovada**: #263→#264→#262 | #280→#270→#273→#281 | #278→#276→#272→#277 | #269→#275→#274 | #271→#279 — **fila 100% entregue** (PRs #364–#381 mergeadas em main).
 - **Blockers**: nenhum.
-- **Next**: executar #264 (RSS/Atom) e #262 (YouTube) — fase 1 restante; depois fase 2 (#280 Voyage/Cohere → #270 Window/Autocut → #273 Multi-query/Relaxation → #281 Tríade).
+- **Reconcile 2026-09-28**: issues #269–#279 estavam abertas com label `todo` apesar de mergeadas — fechadas via orchestrator com evidência (PR+commit) e label `done`. SPEC-20260926-pgvector-live-tests sincronizada → Done (PR #237). Stats/sessions atualizados na branch `feature/Devin-20260928-orchestrator-reconcile`.
+- **Next**: fila vazia — aguardar nova direção do usuário (gap-analysis ou nova Epic).
 
 ## Session summary (2026-09-27 — pentagi/Verba analysis + #263 implementation)
 
