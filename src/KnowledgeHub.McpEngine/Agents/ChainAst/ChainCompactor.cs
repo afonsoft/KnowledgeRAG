@@ -42,10 +42,13 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
         if (fold > 0)
         {
             // SPEC-20260929 RF-001: system/developer messages are pinned —
-            // hoisted into the folded section's headers, never summarized away.
+            // hoisted into the folded section's headers, never summarized
+            // away. The parser parks every non-User role in Headers (incl.
+            // future "developer" roles), so pin everything that isn't the
+            // user's own prompt — instruction headers must survive.
             var pinned = ast.Sections.Take(fold)
                 .SelectMany(s => s.Headers)
-                .Where(h => h.Role == ChatRole.System)
+                .Where(h => h.Role != ChatRole.User)
                 .ToList();
 
             var summary = BuildSummary(ast.Sections.Take(fold));
@@ -72,35 +75,57 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
             ast.Sections.Insert(0, folded);
         }
 
-        // SPEC-20260929 RF-004: a single oversized tool result in a kept
-        // section can still blow the budget — truncate across ALL sections
-        // when the fold wasn't enough (CallId preserved).
-        if (ast.EstimateBytes() > options.MaxTotalHistoryBytes)
+        // SPEC-20260929 RF-004: several individually-fine results can still
+        // overshoot the total budget — tighten the per-item cap progressively
+        // until the history fits (or nothing shrinkable remains).
+        var cap = options.MaxBodyPairBytes;
+        while (ast.EstimateBytes() > options.MaxTotalHistoryBytes && cap > 256)
+        {
+            cap /= 2;
             foreach (var s in ast.Sections)
                 foreach (var pair in s.Body)
                     foreach (var msg in pair.ToolMessages)
-                        TruncateToolResults(msg);
+                        TruncateToolResults(msg, cap);
+        }
 
         return Task.FromResult(ast);
     }
 
-    /// <summary>Cuts oversized text payloads inside tool-result contents —
-    /// the CallId/function name are untouched so pairing survives.</summary>
-    private void TruncateToolResults(ChatMessage toolMessage)
+    /// <summary>Cuts oversized payloads inside tool-result contents —
+    /// string results are truncated directly; structured results are
+    /// serialized, truncated and replaced by the (marked) text so they
+    /// can't slip past the budget un-measured. CallId is untouched so
+    /// call/result pairing survives.</summary>
+    private void TruncateToolResults(ChatMessage toolMessage, int? capOverride = null)
     {
+        var cap = capOverride ?? options.MaxBodyPairBytes;
         foreach (var result in toolMessage.Contents.OfType<FunctionResultContent>())
         {
             if (result.Result is not string text)
+            {
+                if (result.Result is null)
+                    continue;
+                var json = System.Text.Json.JsonSerializer.Serialize(result.Result);
+                if (Encoding.UTF8.GetByteCount(json) <= cap)
+                    continue;
+                result.Result = CutToBytes(json, cap)
+                    + $"\n…[truncated structured→{cap}B]";
                 continue;
+            }
             var bytes = Encoding.UTF8.GetByteCount(text);
-            if (bytes <= options.MaxBodyPairBytes)
+            if (bytes <= cap)
                 continue;
-            // Byte-safe truncation (avoid splitting a surrogate/UTF-8 seq).
-            var chars = Math.Max(0, options.MaxBodyPairBytes / 4);
-            result.Result = text.Length <= chars
-                ? text
-                : text[..chars] + $"\n…[truncated {bytes}B→{options.MaxBodyPairBytes}B]";
+            result.Result = CutToBytes(text, cap)
+                + $"\n…[truncated {bytes}B→{cap}B]";
         }
+    }
+
+    /// <summary>Character-bounded cut approximating a byte cap (avoids
+    /// splitting a surrogate/UTF-8 sequence).</summary>
+    private static string CutToBytes(string text, int byteCap)
+    {
+        var chars = Math.Max(0, byteCap / 4);
+        return text.Length <= chars ? text : text[..chars];
     }
 
     /// <summary>Condenses folded sections: user prompt, tool names used and
@@ -134,7 +159,16 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
         }
         var text = sb.ToString();
         return text.Length <= 2048 ? text : text[..2048] + "…";
-        static string Trim(string s) =>
-            s.Length <= 300 ? s.ReplaceLineEndings(" ") : s[..300].ReplaceLineEndings(" ") + "…";
+
+        // SPEC-20260929 RF-005: collapse EVERY line-breaking character — not
+        // just CRLF — so quoted tool output can never forge a fresh
+        // "answered:"/"user asked:" line inside the summarized block.
+        static string Trim(string s)
+        {
+            var flat = string.Concat(s.Select(ch =>
+                ch is '\r' or '\n' or '\v' or '\f' or '\u0085'
+                or '\u2028' or '\u2029' ? ' ' : ch));
+            return flat.Length <= 300 ? flat : flat[..300] + "…";
+        }
     }
 }
