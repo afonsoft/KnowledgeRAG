@@ -81,6 +81,8 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 ### Recomendações para Agentes
 
 - **Grounding First**: Sempre consulte `search_knowledge` antes de supor regras de negócio ou duplicar classes utilitárias já existentes no repositório.
+- **Onboarding do repositório**: Na primeira sessão, pergunte sobre o repositório com `ask_question` consultando a documentação via `read_wiki_contents` antes de implementar.
+- **Registro de trabalho**: Sempre registre o que foi feito com `write_note`; quando precisar criar conhecimento ou memória persistente, use `write_knowledge`.
 - **Análise de Impacto**: Execute `analyze_impact` antes de refatorar contratos ou tipos compartilhados em `KnowledgeHub.Shared`.
 - **Segurança**: Nunca realize commit ou emita em logs chaves `aft_*`, credenciais ou segredos presentes em `.env`.
 

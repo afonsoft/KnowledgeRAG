@@ -68,11 +68,17 @@ Aceito em `/mcp`, `/mcp/sse`, `/api/*` e `/hubs/mcp` (clients SignalR que não p
 | Página web | `WebPage` | Fetch + extração para markdown |
 | Arquivo de documento | `DocumentFile` | Arquivos enviados (md/txt/pdf/docx/…) |
 | Notion | `Notion` | REST read-only, token criptografado, incremental via `last_edited_time` |
-| REST API / SQL | `RestApi` / `SqlDatabase` | Ingestão orientada a query |
+| REST API | `RestApi` | Endpoint `GET` JSON; `itemsPath` dot-path + mapeamento de campos (`titleField`/`contentFields`/`idField`/`urlField`), paginação `pageParam`; headers criptografados (`restapi:{id}`) |
+| Banco SQL | `SqlDatabase` | `sqlite` / `postgres`; guard SELECT-only (sem keywords de escrita fora de literais/comentários), SQLite `Mode=ReadOnly`, Postgres transação `READ ONLY`; connection string criptografada (`sql:{id}`); `maxRows`/`Truncated` |
+| RSS / Atom | `RssFeed` | RSS 2.0 + Atom 1.0; sync incremental por fingerprint `guid`; `fetchFullContent` opcional (baixa a página linkada); `forceRefresh` reprocessa tudo |
 | AWS S3 | `AwsS3` | Staging de bucket, sync incremental por ETag |
 | Azure Files | `AzureFiles` | Crawl de share com staging incremental |
 | OCI Object Storage | `OciStorage` | Endpoint S3-compatível, mesmo modelo de staging |
 | Google Drive | `GoogleDrive` | Links compartilhados de pasta/arquivo |
+| YouTube | `YouTube` | Transcrições de vídeo/canal (`urls`), auto-captions + timestamps, `maxVideos`, `language` |
+| Repositório Git | `GitRepository` | GitHub/GitLab/Gitea REST read-only (`repoUrl`, `branch`, `path`, `includePatterns`/`excludePatterns`); fast-path por commit-SHA + fingerprint por blob; PAT opcional `git:{id}`; SSRF guard (`allowPrivateHosts` opt-in) |
+| Documento Unstructured | `UnstructuredDocument` | Pasta/arquivos parseados via Unstructured API (`apiUrl`, `strategy` — `auto`/`fast`/OCR forçado para imagens, `pdf_infer_table_structure`); chave opcional `unstructured:{id}` |
+| Áudio / reuniões | `AudioTranscription` | AssemblyAI ou Whisper self-hosted (`provider`, `endpoint`, `language`, capítulos + diarization); chave opcional `audio:{id}` |
 | Proxy MCP | `McpProxy` | Somente catálogo — passthrough de `tools/list` upstream, não ingerível |
 
 O sync roda numa **fila assíncrona persistida**: `POST /sources/{id}/sync` retorna `202 + jobId` (contadores por documento, `cancel`, `?wait=true` para o contrato síncrono legado); `POST /sources/{id}/reindex` força re-chunk/re-embed, opcionalmente seletivo por versão do chunker. Conectores de cloud fazem staging local dos objetos e fazem diff por ETag; seus secrets ficam no integration-secret store. O chunking é structure-aware (markdown/código/config) e cada fonte pode optar por **chunking semântico** (fronteiras por breakpoints de embeddings) via `{"chunking":"semantic"}` no dialog da fonte.
@@ -96,6 +102,9 @@ integrações mudam, e sessões ativas recebem `tools/list_changed`.
 | `query_{source_slug}` | Busca semântica escopada — uma tool por fonte ativa |
 | `find_dependencies` / `find_dependents` | Travessia GraphRAG outbound/inbound com evidência por aresta (chunk + doc + fonte) |
 | `find_path` / `analyze_impact` | Caminho mais curto entre entidades; blast radius de 1 hop com documentos de suporte |
+| `search_graph_temporal` / `search_graph_recent` | GraphRAG temporal — janela por `timeStart`/`timeEnd` (RFC3339) ou recente (`1h`/`6h`/`24h`/`7d`) sobre `ObservedAt`/`ValidFrom`/`ValidTo` |
+| `search_graph_relationships` / `search_graph_diverse` | Expansão de relacionamentos em 2 hops; resultados diversificados por cluster (low/med/high) |
+| `search_graph_episode` | Retrieval escopado a um episódio de ingestão (`KgEpisode`) |
 | `ask_question`, `read_wiki_structure`, `read_wiki_contents` | Proxy upstream DeepWiki |
 | `firecrawl_*` | Upstream Firecrawl (scrape, search, crawl, map…) |
 | `tavily_*` | Upstream Tavily (search, extract, map, crawl, research) |
@@ -104,6 +113,15 @@ integrações mudam, e sessões ativas recebem `tools/list_changed`.
 
 Integrações podem ser ligadas/desligadas em **Settings → Integrações** —
 um provider desligado some do catálogo sem reiniciar.
+
+`search_knowledge`/`ask_knowledge` também aceitam `subQueries` (≤4 variantes de
+query em paralelo fundidas via RRF), `windowSize` + `limitMode`/`autocutSensitivity`
+(expansão por janela de vizinhos e poda autocut do tail no cotovelo do score) e
+relaxamento hierárquico de filtros (`Search:Relaxation`). `ask_knowledge` suporta
+`enableLiveActions` — Action-Augmented RAG: chunks com markers `mcp-tool` ou a
+própria pergunta disparam chamadas live de tools MCP fundidas na resposta como
+citações `[Live Tool]`; `search_knowledge` retorna `suggestedActions` para as
+mesmas tools como candidatos de follow-up. Tabela completa: `docs/pt/API.md`.
 
 ## Conectando Agentes de IA (Prompt para o LLM)
 
@@ -138,11 +156,17 @@ Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de
 - Cursor / Devin / Genérico:
   Adicione o servidor MCP HTTP com URL "http://<host>:5000/mcp" e cabeçalho "Authorization: Bearer aft_SUA_CHAVE".
 
-3. Recomendações de Uso das Ferramentas:
+3. Protocolo de Onboarding (obrigatório na primeira sessão):
+- Primeiro use ask_question para perguntar sobre o repositório, consultando a
+  documentação com read_wiki_contents antes de assumir regras de negócio.
+- Ao concluir cada tarefa, registre o que foi feito com write_note.
+- Quando precisar criar conhecimento ou memória persistente, use write_knowledge.
+
+4. Recomendações de Uso das Ferramentas:
 - search_knowledge(query, topK): Execute buscas semânticas e híbridas (BM25 + vetorial) para obter contexto antes de implementar código.
 - ask_knowledge(question, topK): Faça perguntas conceituais para obter respostas sintetizadas e fundamentadas com citações.
 - find_dependencies / analyze_impact: Avalie o grafo de entidades e dependências (GraphRAG) ao planejar refatorações.
-- read_document / write_note: Acesse ou registre notas no cofre Obsidian conectado.
+- read_document / write_note / write_knowledge: Acesse documentos e registre notas ou conhecimento no cofre Obsidian conectado.
 - set_chat_settings / set_api_key_settings: Configure seu modelo de chat ou chaves de integração upstream se desejar overrides para sua sessão.
 ```
 
@@ -188,7 +212,36 @@ Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de
   "Search": {
     "Lexical": { "Enabled": true },            // perna FTS5 do retrieval híbrido
     "QueryRewrite": { "Enabled": false, "LexicalToo": false },
-    "Rerank": { "Enabled": false, "MaxCandidates": 50 }
+    "Rerank": { "Enabled": false, "MaxCandidates": 50 },
+    "LimitMode": "autocut",                    // fixed | autocut — poda o tail do score no cotovelo
+    "Autocut": { "Sensitivity": 1, "MaxClamp": 20 },
+    "Expansion": { "WindowThresholdPercent": 80 }, // gate de score do windowExpand (% do top normalizado)
+    "Relaxation": { "Enabled": true, "MinResults": 1 } // queda hierárquica de filtro: pathPrefix → sourceId → global
+  },
+  "Agent": {
+    "EnableDynamicActionBridge": true,         // ask_knowledge executa tools MCP live (markers mcp-tool)
+    "MaxChainedDynamicCalls": 3,
+    "ContextManagement": {                     // ChainAst repair + compactação de histórico no agent_chat
+      "EnableChainCompaction": true,
+      "MaxTotalHistoryBytes": 65536,
+      "MaxBodyPairBytes": 16384,
+      "KeepMinLastSections": 2,
+      "AutoRepairBrokenToolCalls": true
+    }
+  },
+  "Resilience": {
+    "Fallback": {                              // Resilience:Fallback — motor de fallback provider/tool
+      "Mode": "disabled",                      // disabled | observe | enforce
+      "MaxFallbackAttempts": 2,
+      "ChatFallbacks": [                       // alternates ordenados; apiKey write-only (criptografada)
+        { "provider": "openai", "endpoint": "https://api.openai.com/v1", "model": "gpt-4o-mini", "apiKey": "sk-..." },
+        { "provider": "ollama", "endpoint": "http://localhost:11434", "model": "llama3.2" }
+      ],
+      "ToolCapabilities": {                    // capacidade → providers equivalentes ordenados
+        "WebSearch": ["tavily", "firecrawl", "duckduckgo"],
+        "DeepDocLookup": ["deepwiki", "context7", "internal_fts"]
+      }
+    }
   },
   "RateLimiting": {                            // por partição: api key → usuário → IP
     "Enabled": true,

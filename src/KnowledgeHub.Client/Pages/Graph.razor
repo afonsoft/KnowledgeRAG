@@ -14,7 +14,9 @@
 <div class="border rounded p-3 mb-3">
     <div class="row g-2 align-items-end">
         <div class="col-6 col-md-2">
-            <label class="form-label">Janela</label>
+            <label class="form-label" title="Preset filtra por ObservedAt (quando o fato foi observado/ingerido): a janela é [agora−preset, agora]. 'Tudo' não filtra; 'De/Até' explícitos vencem o preset.">
+                Janela <i class="fa-solid fa-circle-info text-muted small"></i>
+            </label>
             <Select @bind-Value="_preset">
                 <Options>
                     <SelectOption Text="Tudo" Value="" />
