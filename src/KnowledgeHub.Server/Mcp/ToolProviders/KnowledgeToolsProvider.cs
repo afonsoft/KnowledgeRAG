@@ -60,7 +60,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"},
           "subQueries":{"type":"array","items":{"type":"string"},"description":"Extra query variants searched in parallel and fused via RRF (max 4) — for multi-faceted questions"},
           "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"},
-          "enableLiveActions":{"type":"boolean","description":"Action-Augmented RAG: execute live MCP tools nominated by retrieved chunks (mcp-tool markers) or the question itself, then fuse outputs with document citations (default: server config)"}
+          "enableLiveActions":{"type":"boolean","description":"Action-Augmented RAG: execute live MCP tools nominated by the question itself — or by retrieved-chunk markers when the server opts in (Agent:AllowDocumentMarkers) — then fuse outputs with document citations (default: server config)"}
         },"required":["question"],
         "examples":[{"question":"How does synchronization work?","topK":5,"generate":true}]}
         """)!.AsObject();
@@ -150,10 +150,24 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                             query, outcome.Results,
                             await ctx.Services!.GetRequiredService<IDynamicToolCatalog>()
                                 .GetToolsAsync(ctx.Services!, ct),
-                            Math.Clamp(bridgeOptions.MaxChainedDynamicCalls, 0, 3))
+                            Math.Clamp(bridgeOptions.MaxChainedDynamicCalls, 0, 3),
+                            bridgeOptions.AllowDocumentMarkers)
                         : [];
+                    // SPEC-20260929-live-actions-bridge-hardening RF-004: the
+                    // agent loop only sees the text portion of tool results —
+                    // surface nominations there so the model can invoke the
+                    // suggested tool on the next iteration.
+                    var suggestedLine = suggested.Count == 0 ? null
+                        : "\n\nSuggested live actions: "
+                          + string.Join(", ", suggested.Select(a => a.Args.Count == 0
+                              ? a.ToolName
+                              : $"{a.ToolName}({string.Join(", ", a.Args.Select(kv => kv.Key))})"))
+                          + " — invoke as tool calls if they help answer the request";
+                    // Suggestions lead the text — CatalogToolAIFunction truncates
+                    // long results from the end, and appended suggestions were
+                    // being cut off when hits filled the budget (devin-review).
                     return await ToolResults.Structured(
-                        grade + FormatHits(outcome.Results),
+                        grade + suggestedLine + FormatHits(outcome.Results),
                         new
                         {
                             results = outcome.Results,
@@ -298,7 +312,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             var visible = await catalog.GetToolsAsync(ctx.Services!, ct);
             liveExecutions = await Bridge.McpDynamicRagActionBridge.ExecuteAsync(
                 question, results, visible, ctx,
-                Math.Clamp(agentOptions.MaxChainedDynamicCalls, 0, 3), ct);
+                Math.Clamp(agentOptions.MaxChainedDynamicCalls, 0, 3),
+                agentOptions.AllowDocumentMarkers, ct);
             var liveContext = Bridge.HybridCitationFormatter.AsContextItems(liveExecutions);
             if (liveContext.Count > 0)
                 results = [.. results, .. liveContext];
@@ -314,9 +329,15 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             ? "\n\n(evidence found outside the strict requested scope)"
             : null;
 
+        // SPEC-20260929-live-actions-bridge-hardening RF-005: live tool output
+        // IS evidence — an "insufficient" document grade must not discard it.
+        // Abstain only when there is no live context to synthesize from.
+        var hasLiveEvidence = liveExecutions.Any(e =>
+            !e.IsError && !string.IsNullOrWhiteSpace(e.OutputPreview));
+
         // SPEC-20260924-corrective-rag RF-003: insufficient evidence short-circuits
         // synthesis — honest abstention, no LLM call, weak citations attached.
-        if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate)
+        if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate && !hasLiveEvidence)
             return await ToolResults.Structured(
                 retrieval.BuildAbstention(question, outcome).Answer
                 + (results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(results.Take(3).ToList()) : "")
@@ -341,13 +362,30 @@ public sealed class KnowledgeToolsProvider : IToolProvider
 
         try
         {
-            var answer = (await answers.AnswerAsync(question, results, ct)) with
+            var rawAnswer = await answers.AnswerAsync(question, results, ct);
+            var answer = rawAnswer with
             {
                 RetrievalGrade = retrieval.GradingEnabled
                     ? outcome.Grading.Grade.ToString().ToLowerInvariant()
                     : null,
                 Retried = outcome.Retried,
-                LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions
+                LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions,
+                // SPEC-20260929-live-actions-bridge-hardening RF-007: when the
+                // answer rests on live data alone (no document citations),
+                // expose the executions as pseudo-citations so consumers can
+                // still see what grounded the response. Failed executions are
+                // not evidence — they never become citations (devin-review
+                // #402/#413).
+                Citations = rawAnswer.Citations.Count == 0 && liveExecutions.Any(e => !e.IsError)
+                    ? liveExecutions.Where(e => !e.IsError).Select((e, i) => new CitationDto
+                    {
+                        Index = i + 1,
+                        Source = "live-mcp",
+                        Title = $"[Live Tool: {e.ToolName}]",
+                        Uri = $"live://tool/{e.ToolName}",
+                        Score = 1.0
+                    }).ToList()
+                    : rawAnswer.Citations
             };
             // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002:
             // QuerySubmitted → ChunksRetrieved → AnswerSynthesized receipts,
