@@ -37,6 +37,10 @@ public static class McpDynamicRagActionBridge
         if (nominations.Count == 0)
             return [];
 
+        // SPEC-20260928-observability-followups RF-002/RF-003: one span per
+        // bridge run + a counter per execution (tool, outcome).
+        using var span = Telemetry.KnowledgeHubActivity.Start("search.live_actions");
+        span?.SetTag("nominations", nominations.Count);
         var byName = visibleTools.ToDictionary(t => t.Name, StringComparer.Ordinal);
         var executions = new List<LiveToolExecution>();
 
@@ -64,12 +68,18 @@ public static class McpDynamicRagActionBridge
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                Telemetry.KnowledgeHubActivity.Fail(span, ex);
                 result = new CallToolResult
                 {
                     Content = [new TextContentBlock { Text = $"ERROR: {ex.Message}" }],
                     IsError = true
                 };
             }
+
+            Telemetry.KnowledgeHubMetrics.LiveToolExecutions.Add(1,
+                new KeyValuePair<string, object?>("tool", tool.Name),
+                new KeyValuePair<string, object?>("outcome",
+                    result.IsError == true ? "error" : "success"));
 
             var text = string.Join("\n",
                 result.Content.OfType<TextContentBlock>().Select(b => b.Text));

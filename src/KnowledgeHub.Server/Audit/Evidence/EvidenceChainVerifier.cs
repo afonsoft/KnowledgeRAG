@@ -30,6 +30,9 @@ public static class EvidenceChainVerifier
     public static EvidenceVerification Verify(
         IReadOnlyList<EvidenceReceipt> receipts, byte[]? hmacKey = null)
     {
+        // SPEC-20260928-observability-followups RF-002: span per verification pass.
+        using var span = Telemetry.KnowledgeHubActivity.Start("evidence.verify");
+        span?.SetTag("receipts", receipts.Count);
         var violations = new List<EvidenceViolation>();
         var byId = receipts.ToDictionary(r => r.ReceiptId);
         var seen = new HashSet<string>();

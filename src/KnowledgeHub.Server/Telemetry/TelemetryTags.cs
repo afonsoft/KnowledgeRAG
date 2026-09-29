@@ -11,7 +11,9 @@ public static class TelemetryTags
     public static readonly IReadOnlySet<string> AllowedMetricKeys = new HashSet<string>
     {
         "mode", "cache_hit", "provider", "model", "store", "kind", "tool",
-        "status", "region", "method", "session_mode", "succeeded", "reason"
+        "status", "region", "method", "session_mode", "succeeded", "reason",
+        // SPEC-20260928: resilience fallback + observability follow-ups.
+        "capability", "from", "to", "trigger", "outcome", "event_type"
     };
 
     /// <summary>Activity attribute keys — the complete allowlist.</summary>
@@ -23,7 +25,9 @@ public static class TelemetryTags
         "search.diversity.removed", "search.grade", "search.retried",
         "search.expansion.mode", "search.expansion.variants",
         "search.expansion.cached", "search.expansion.chunks",
-        "search.graph.hits"
+        "search.graph.hits",
+        // SPEC-20260928-observability-followups: temporal/live-action/evidence spans.
+        "mode", "nominations", "receipts", "kind"
     };
 
     /// <summary>Cache region names derived from key prefixes — bounded set.</summary>

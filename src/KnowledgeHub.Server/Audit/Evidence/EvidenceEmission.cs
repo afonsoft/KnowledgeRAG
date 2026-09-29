@@ -21,6 +21,10 @@ public static class EvidenceEmission
     {
         if (evidence is null)
             return null;
+        // SPEC-20260928-observability-followups RF-002: span per emission chain
+        // (QuerySubmitted → ChunksRetrieved → AnswerSynthesized).
+        using var span = Telemetry.KnowledgeHubActivity.Start("evidence.emit");
+        span?.SetTag("kind", "ask");
         try
         {
             var query = await evidence.AppendAsync(
@@ -54,6 +58,8 @@ public static class EvidenceEmission
     {
         if (evidence is null)
             return null;
+        using var span = Telemetry.KnowledgeHubActivity.Start("evidence.emit");
+        span?.SetTag("kind", "tool");
         try
         {
             return await evidence.AppendAsync(
