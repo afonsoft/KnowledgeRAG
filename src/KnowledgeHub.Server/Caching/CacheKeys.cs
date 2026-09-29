@@ -25,10 +25,14 @@ public static class CacheKeys
         $"search:v3:{mode}:{topK}:{sourceId?.ToString("N") ?? "all"}:{Sha256(filterFingerprint)}:{scopeFingerprint}:{Sha256(query)}:v{indexVersion}";
 
     /// <summary>SPEC-20260923-agent-runtime-hardening RF-003: answer cache key.
-    /// The ordered chunk-id list fingerprints the retrieval (filters, topK,
-    /// source scope) exactly; indexVersion invalidates on every sync.</summary>
-    public static string Answer(string model, string question, IEnumerable<Guid?> chunkIds, string indexVersion) =>
-        $"ans:{model}:{Sha256(question)}:{Sha256(string.Join(',', chunkIds))}:v{indexVersion}";
+    /// The ordered context fingerprints (chunk ids for indexed content,
+    /// content hashes for id-less items such as live-tool outputs) identify
+    /// the retrieval exactly; indexVersion invalidates on every sync.
+    /// SPEC-20260929-live-actions-bridge-hardening RF-003: live executions
+    /// carry no chunk id — their content hash includes the fresh output, so
+    /// a cached answer is never reused after new live data arrives.</summary>
+    public static string Answer(string model, string question, IEnumerable<string> contextFingerprints, string indexVersion) =>
+        $"ans:{model}:{Sha256(question)}:{Sha256(string.Join(',', contextFingerprints))}:v{indexVersion}";
 
     /// <summary>SPEC-20260924-redis-cache-and-tool-caching: tool invocation cache key.
     /// Hashes tool name + arguments + indexVersion so ingestion bumps invalidate tool results.</summary>
