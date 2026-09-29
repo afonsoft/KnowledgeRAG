@@ -53,10 +53,13 @@
 - SPEC #274 (stacked sobre #271): `KgNode`/`KgEdge` += `ObservedAt`/`ValidFrom`/`ValidTo`/`EpisodeId` (+`Labels`/`Weight`/`PropertiesJson`) como **DateTime** (UTC) — DateTimeOffset não traduz ORDER BY nem `>=` lifted no SQLite (mesma lição do fix #367). Novo `KgEpisode` + `GraphEpisodeService` (episódio por run de ingestão). Store: re-observação bumpa `ObservedAt`, (from,to,kind) com nova evidência → `ValidTo` na anterior (historicização); reads filtram `ValidTo==null`; busca temporal é history-aware. `TemporalDateParser` (RFC3339 + 3 formatos, UTC default; whitelist 1h/6h/24h/7d), `DiversityRanker` (low=5/med=2/high=1 por cluster), `TemporalGraphRetriever` (window/recent/relationships 2-hop/diverse/episode), `TemporalGraphFormatter` (cap 8KB → condensa), `TemporalGraphToolsProvider` (5 tools MCP). 1025u+286i verdes. UI de timeline NÃO existe — débito documentado (SPEC pedia "atualizar visualizador" que não há).
 - SPEC #279 (stacked sobre #274): `Mcp/Bridge/` — `ToolActionAnnotationDetector` (markers `<!-- mcp-tool: name k="v" -->` em chunks + menção direta do nome no question; NeverLiveTools exclui meta/RAG + só read-only; chunks flagged ignorados), `McpDynamicRagActionBridge.ExecuteAsync` (args do marker verbatim; argless só preenche se schema tem required único query/question/input/prompt — nunca inventa; cap MaxChainedDynamicCalls≤3; erros capturados como IsError), `HybridCitationFormatter` (`[Live Tool: name @ ts]` + context items sintéticos `live-mcp`/`live://tool/x` p/ AnswerService). `AskResponse.LiveToolExecutions` (novo, Shared). `ask_knowledge` += `enableLiveActions`; `search_knowledge` += `suggestedActions` (loop unificado do agent_chat — modelo chama no turno seguinte). `Agent:EnableDynamicActionBridge|MaxChainedDynamicCalls` defaults true/3. Guardrail: catálogo já chega scope-filtered via `catalog.GetToolsAsync`. 1038u + format verdes.
 
-## Session summary (2026-09-29 — gap-analysis Epic #383)
+## Session summary (2026-09-29 — A2A Epic em andamento)
 
-- Reconciliação concluída (sessão anterior): 11 issues #269–#279 fechadas com evidência; PR #382 mergeada.
-- Gap-analysis: 7 gaps confirmados → 5 SPECs aprovados → Epic #383 + #384–#388.
-- S1 #384 docs-sync mergeada (PR #390). S2–S5 abertas: #391 resilience wiring, #392 graph viewer, #393 coverage gate+flake fix, #394 observability.
-- Achado: cobertura real medida 20.6% (não 80%) — ratchet COVERAGE_MIN=20; investimento em testes é debt futuro.
-- enforce_admins=false permanece inconclusivo (carried, decisão do dono).
+- Epic #396 concluída (10/10 slices) + deploy local ok. Epic A2A em execução.
+- **Estado do trabalho (worktree limpo — tudo commitado/pushado)**:
+  - Branch atual: `feature/Devin-20260930-a2a-assistant`.
+  - PR #421 (a2a-server #419): Agent Card `/.well-known/agent-card.json`, `/a2a` JSON-RPC+HTTP+JSON (Operational + llm rate limit), `KnowledgeHubA2AAgent` → `IDynamicToolCatalog` (4 skills), TaskUpdater, evidência, métricas; 5 testes integration verdes; fix S2583 pushado — **aguardando re-check do SonarCloud**.
+  - PR #422 (a2a-assistant #420, stacked em #421): `/api/settings/assistant`, `AssistantSettings`+migration, `IAssistantChatClientProvider.ForSubtask` (rewrite/grade/expand/summarize), `AssistantFallbackChatClient` timeout→main, `A2AChatClient` modo remote, tab "Assistente (A2A)"; 8u+6i testes; suite unit 1129 verde.
+- **Lições A2A SDK 1.0.0-preview2**: `messageId` required; role wire `ROLE_USER`; `FailAsync` precisa de `SubmitAsync` antes; `A2ACardResolver(uri,http,"/.well-known/agent-card.json",logger)`; `SendMessageResponse.PayloadCase` Task|Message.
+- **Pendências**: suite integration completa (interrompida), merge #421→#422 (ordem), SPECs → Done, docs README/API para `/a2a` + `/api/settings/assistant`, write_note/write_knowledge via MCP.
+- Formato: `dotnet format` gate local — ConnectorIntegrityTests.cs tem whitespace debt pre-existente na main (não meu diff).
