@@ -128,6 +128,14 @@ public sealed class GitRepositoryConnector(
             try
             {
                 var text = await api.GetFileTextAsync(repo, e.Path, token, cancellationToken);
+                // SPEC-20260929 RF-007: GitLab tree entries carry Size=0 — the
+                // pre-download gate can't fire; enforce the limit on content.
+                if (e.Size <= 0 && System.Text.Encoding.UTF8.GetByteCount(text) > maxBytes)
+                {
+                    oversized++;
+                    warnings.Add($"{e.Path}: skipped — over maxFileSizeBytes (post-download check)");
+                    continue;
+                }
                 documents.Add(new RawDocument(uri, Path.GetFileName(e.Path), text, fingerprint));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -158,7 +166,9 @@ public sealed class GitRepositoryConnector(
             var segs = u.AbsolutePath.Trim('/').Split('/');
             if (segs.Length < 2)
                 throw new InvalidOperationException("repoUrl must look like https://host/owner/name");
-            owner ??= segs[^2];
+            // SPEC-20260929 RF-007: GitLab subgroups — owner is every segment
+            // before the repo (group/sub/...), not just the parent.
+            owner ??= string.Join('/', segs[..^1]);
             name ??= segs[^1].TrimEnd('/');
             if (name!.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
                 name = name[..^4];

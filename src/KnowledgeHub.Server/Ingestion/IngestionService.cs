@@ -258,13 +258,28 @@ public sealed class IngestionService(
             }
 
             // Remove documents whose files disappeared from the vault.
-            foreach (var (uri, doc) in existing)
+            // SPEC-20260929 RF-003: mass-delete safety gate — an empty (or near-
+            // empty) enumeration on a populated index cannot prove absence; an
+            // unreadable dir mounts as zero files and would wipe the index.
+            var enumeratedAll = seen.Count > 0 || existing.Count == 0;
+            var suspiciousDrop = existing.Count > 0 && seen.Count * 2 < existing.Count;
+            if (!enumeratedAll || suspiciousDrop)
             {
-                if (seen.Contains(uri))
-                    continue;
-                await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
-                db.Documents.Remove(doc);
-                removed++;
+                logger.LogWarning(
+                    "Sync for source {SourceId}: enumeration returned {Seen} item(s) for {Existing} indexed documents — skipping deletions (possible unreadable folder)",
+                    source.Id, seen.Count, existing.Count);
+                warnings.Add($"deletion skipped: enumeration returned {seen.Count} of {existing.Count} indexed documents — verify the path is accessible");
+            }
+            else
+            {
+                foreach (var (uri, doc) in existing)
+                {
+                    if (seen.Contains(uri))
+                        continue;
+                    await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
+                    db.Documents.Remove(doc);
+                    removed++;
+                }
             }
 
             source.LastSyncAt = DateTimeOffset.UtcNow;
@@ -491,10 +506,21 @@ public sealed class IngestionService(
             options?.Progress?.Report(new SyncProgress(processed, skipped, failed, chunksCreated));
         }
 
+        // SPEC-20260929 RF-003: same safety gate as the file path — a fetch that
+        // sees <50% of the indexed docs can't prove mass absence.
+        var fetchSuspiciousDrop = existing.Count > 0 && seen.Count * 2 < existing.Count;
+        if (fetchSuspiciousDrop && !fetch.Truncated)
+        {
+            logger.LogWarning(
+                "Fetch sync for source {SourceId}: listing returned {Seen} item(s) for {Existing} indexed documents — skipping deletions",
+                source.Id, seen.Count, existing.Count);
+            warnings.Add($"deletion skipped: listing returned {seen.Count} of {existing.Count} indexed documents");
+        }
+
         foreach (var (uri, doc) in existing)
         {
             // RF-002: a truncated listing cannot prove absence — keep everything.
-            if (seen.Contains(uri) || fetch.Truncated)
+            if (seen.Contains(uri) || fetch.Truncated || fetchSuspiciousDrop)
                 continue;
             await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
             db.Documents.Remove(doc);

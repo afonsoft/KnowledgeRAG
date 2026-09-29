@@ -88,14 +88,14 @@ public static class KnowledgeHubServiceCollectionExtensions
                 // Sampling window must be ≥ 2× the attempt timeout.
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(4);
             });
-        services.AddHttpClient("webpage", c => c.Timeout = Timeout.InfiniteTimeSpan)
+        services.AddHttpClient("webpage", c => c.Timeout = Timeout.InfiniteTimeSpan).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()))
             .AddStandardResilienceHandler(o =>
             {
                 o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
                 o.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(2);
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(2);
             });
-        services.AddHttpClient("notion", c => c.Timeout = Timeout.InfiniteTimeSpan)
+        services.AddHttpClient("notion", c => c.Timeout = Timeout.InfiniteTimeSpan).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()))
             .AddStandardResilienceHandler(o =>
             {
                 o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
@@ -103,7 +103,7 @@ public static class KnowledgeHubServiceCollectionExtensions
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(2);
             });
         // MCP upstream proxies (SPEC-20260917) share the same policy.
-        services.AddHttpClient("mcp-upstream", c => c.Timeout = Timeout.InfiniteTimeSpan)
+        services.AddHttpClient("mcp-upstream", c => c.Timeout = Timeout.InfiniteTimeSpan).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()))
             .AddStandardResilienceHandler(o =>
             {
                 o.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
@@ -122,8 +122,8 @@ public static class KnowledgeHubServiceCollectionExtensions
 
         // SPEC-20260927-restapi-sqldatabase-connectors RF-001/RF-007: named
         // "restapi" client (30 s) + connector registry entries.
-        services.AddHttpClient("restapi", c => c.Timeout = TimeSpan.FromSeconds(30));
-        services.AddHttpClient("feed", c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient("restapi", c => c.Timeout = TimeSpan.FromSeconds(30)).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+        services.AddHttpClient("feed", c => c.Timeout = TimeSpan.FromSeconds(30)).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
 
         // SPEC-20260914-webpage-docfile-connectors: connector registry.
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.WebPageConnector>();
@@ -136,16 +136,16 @@ public static class KnowledgeHubServiceCollectionExtensions
         // endpoint (Unstructured.io/Upstage-compatible) for PDF/Office/images.
         services.AddSingleton<Ingestion.Connectors.UnstructuredApiClient>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.UnstructuredDocumentConnector>();
-        services.AddHttpClient("unstructured");
+        services.AddHttpClient("unstructured").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
         // SPEC-20260927-git-repository-source-connector: read-only REST git
         // connector (github/gitlab/gitea).
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.GitRepositoryConnector>();
-        services.AddHttpClient("git");
+        services.AddHttpClient("git").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
         // SPEC-20260927-audio-transcription-connector: external transcription
         // (AssemblyAI / OpenAI-whisper-compatible) — long-running uploads.
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.AudioTranscriptionConnector>();
         services.AddHttpClient("audio", c => c.Timeout = Timeout.InfiniteTimeSpan)
-            .SetHandlerLifetime(TimeSpan.FromMinutes(10));
+            .SetHandlerLifetime(TimeSpan.FromMinutes(10)).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
         // SPEC-20260927-youtube-transcript-connector: YoutubeExplode adapter + connector.
         services.AddSingleton<Ingestion.Connectors.IYouTubeClient, Ingestion.Connectors.YouTubeClientAdapter>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.YouTubeConnector>();

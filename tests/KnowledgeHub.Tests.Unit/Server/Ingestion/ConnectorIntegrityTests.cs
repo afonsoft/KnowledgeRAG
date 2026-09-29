@@ -334,6 +334,21 @@ public sealed class ConnectorIntegrityTests : IDisposable
     }
 
     [Fact]
+    public async Task Sync_EmptyEnumeration_PopulatedIndex_SkipsDeletions()
+    {
+        // SPEC-20260929 RF-003: a fetch that returns nothing for an index with
+        // docs cannot prove absence — deletions are skipped, docs survive.
+        var source = await SeedSourceWithDocAsync("s3://b/a.txt", "keep", "fp1");
+        var connector = new FakeConnector(SourceType.AwsS3,
+            (_, _) => new FetchResult([], []));
+
+        await NewIngestion(connector).SyncAsync(source.Id);
+
+        var (docs, _) = await DumpDocs(source.Id);
+        Assert.Single(docs); // mass-delete gate: nothing was removed
+    }
+
+    [Fact]
     public async Task Sync_FailedUris_AreNotDeleted()
     {
         var source = await SeedSourceWithDocAsync("s3://b/gone.txt", "keep me", "fp1");
