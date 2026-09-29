@@ -77,6 +77,8 @@ Todos os endpoints `/api/*` exigem autenticação (sessão por cookie ou `Author
 | `GET /api/security/events` | auditoria de flags de prompt-injection (só metadados — nunca conteúdo bruto) |
 | `POST /api/eval/run` · `GET /api/eval/runs` · `GET /api/eval/runs/{id}` | harness de eval de retrieval (Recall@K/P@K/MRR/faithfulness, latências p50/p95/p99) — request aceita `baseline` (nome) e `gate` (regras `[{metric,direction,threshold}]`), report traz `gateResult` + `topRegressions` |
 | `GET/POST /api/eval/baselines` | lista baselines nomeados; `POST {name, runId}` promove um run |
+| `GET /api/v1/evaluation/stats` | stats da tríade de qualidade RAG — médias de context relevance, groundedness e answer relevance, taxa de alucinação e queries flagged recentes (últimos 7 dias); alimenta o dashboard `/rag-quality` |
+| `GET /api/v1/evidence/sessions/{sessionId}/bundle` | bundle de evidências à prova de adulteração da sessão — cadeia append-only `EvidenceReceipt` assinada com HMAC-SHA256 (secret `evidence:master`); policy Operational |
 
 ### Args das tools search/ask
 
@@ -88,6 +90,13 @@ Todos os endpoints `/api/*` exigem autenticação (sessão por cookie ou `Author
 | `expand` | `off` (default) · `multi` (N rewrites fundidos via RRF) · `hyde` (doc hipotético no braço vetorial) · `both` |
 | `contextExpand` | `none` · `window` (chunks vizinhos) · `section` (seção-pai) — anexa `context` a cada hit sem mudar o ranking |
 | `useGraph` | bool — ativa o braço de knowledge graph (entity linking + evidência de 1 hop) |
+| `subQueries` | string[] ≤4 — variantes de query buscadas em paralelo e fundidas via RRF (multi-query); blanks filtrados |
+| `windowSize` | int 0–3 — expansão por janela de chunks vizinhos; `>0` implica `contextExpand=window`; hits abaixo de 80% do score normalizado do topo não expandem (`Search:Expansion:WindowThresholdPercent`) |
+| `limitMode` | `fixed` (topK clássico) · `autocut` (default `Search:LimitMode` — poda a cauda longa no N-ésimo corte abrupto de score) |
+| `autocutSensitivity` | int 1–3 — sensibilidade do autocut (N-ésimo corte), limitada por `Search:Autocut:MaxClamp` |
+| `enableLiveActions` | bool — só `ask_knowledge`: Action-Augmented RAG executa tools MCP live indicadas pelos chunks (`<!-- mcp-tool: -->` markers) ou pela pergunta; saídas fundem como citações `[Live Tool]` e `liveToolExecutions` |
+
+Respostas podem carregar `suggestedActions` (search — tool calls que o modelo pode emitir no turno seguinte), `expandedChunkIndices`/`windowExpanded` e os campos de relaxamento `isRelaxed`/`relaxedScope`/`appliedFilter`/`originalFilter`/`filterRelaxed` quando `Search:Relaxation` derruba um nível de filtro.
 
 ## Outros
 

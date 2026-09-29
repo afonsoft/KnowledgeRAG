@@ -50,6 +50,11 @@ Produz um binário autocontido de ~120 MB — sem runtime .NET. O instalador cri
 | Tuning pgvector | `VectorStore:Postgres:*` | `StorageType` vector\|halfvec (pgvector ≥0.7 + `AllowStorageMigration`), `IterativeScan` (≥0.8), `Hnsw*`, pool — ver README §Configuração |
 | Tuning de cache | `Cache:RegionTtlMinutes`, `Cache:L1*` | TTLs por região + L1 em processo à frente do Redis (invalidação via pub/sub `kh:invalidate`) — ver README §Configuração |
 | Nível de log em runtime | `GET/PUT /api/settings/log-level` | `LoggingLevelSwitch` com `minutes` opcional (0–120) |
+| Voyage AI / Cohere | `Embeddings:Provider=voyage\|cohere` + `Embeddings:Voyage|Cohere:{ApiKey,Model}` | Providers hospedados de embeddings (sub-seção vence; `ApiKey`/`Model`/`Dimensions` top-level são o fallback, ex.: UI de settings) |
+| Resilience fallback | `Resilience:Fallback` | `Mode` `disabled`\|`observe`\|`enforce`, `MaxFallbackAttempts`, `ChatFallbacks[]` (alternates ordenados `{endpoint,model,apiKey}`), mapa `ToolCapabilities` (`WebSearch`/`DeepDocLookup`) |
+| Agent loop | `Agent:*` | `EnableDynamicActionBridge` (tools MCP live dentro do `ask_knowledge`), `MaxChainedDynamicCalls` (default 3), `ContextManagement:*` (compactação ChainAst + repair de tool calls órfãs) |
+| Tuning de retrieval | `Search:*` | `LimitMode` `fixed`\|`autocut`, `Autocut:Sensitivity`/`MaxClamp`, `Expansion:WindowThresholdPercent`, `Relaxation:Enabled`/`MinResults` |
+| Secrets por conector | `restapi:{id}` · `sql:{id}` · `git:{id}` · `unstructured:{id}` · `audio:{id}` | Secrets por source no integration-secret store (headers, connstring, PAT, API keys) — nunca em `configuration` |
 
 ## Provider de banco unificado (catálogo + vector store)
 

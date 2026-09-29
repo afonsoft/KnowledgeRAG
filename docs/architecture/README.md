@@ -22,6 +22,7 @@ Architecture deliverables for KnowledgeHub. Source of truth for decisions:
 | [AD-0012](AD-0012-hybrid-cache-l1l2-invalidation.md) | Hybrid L1/L2 cache, per-region TTLs, `kh:invalidate` pub/sub |
 | [AD-0013](AD-0013-env-composed-postgres-vector-store.md) | `.env`-composed `POSTGRES_*` connection string for external/host pgvector |
 | [AD-0014](AD-0014-unified-database-provider.md) | Single backend for catalog EF + vector store — `Database:Provider` auto/postgres/sqlite |
+| [AD-0015](AD-0015-agentic-rag-resilience-evidence-temporal.md) | Agentic-RAG wave — resilience fallback, HMAC evidence chain, temporal/episodic KG, action bridge, ChainAst compaction |
 
 ## Diagrams
 

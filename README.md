@@ -73,6 +73,10 @@ Accepted on `/mcp`, `/mcp/sse`, `/api/*` and `/hubs/mcp` (SignalR clients that c
 | Azure Files | `AzureFiles` | Share crawl with staged incremental sync |
 | OCI Object Storage | `OciStorage` | S3-compatible endpoint, same staging model |
 | Google Drive | `GoogleDrive` | Shared folder/file links |
+| YouTube | `YouTube` | Video/channel transcripts (`urls`), auto-captions + timestamps, `maxVideos`, `language` |
+| Git repository | `GitRepository` | GitHub/GitLab/Gitea REST read-only (`repoUrl`, `branch`, `path`, `includePatterns`/`excludePatterns`); commit-SHA fast-path + per-blob fingerprint; optional PAT `git:{id}`; SSRF guard (`allowPrivateHosts` opt-in) |
+| Unstructured document | `UnstructuredDocument` | Folder/files parsed via Unstructured API (`apiUrl`, `strategy` — `auto`/`fast`/OCR forced for images, `pdf_infer_table_structure`); optional key `unstructured:{id}` |
+| Audio / meetings | `AudioTranscription` | AssemblyAI or self-hosted Whisper (`provider`, `endpoint`, `language`, chapters + speaker diarization); optional key `audio:{id}` |
 | MCP proxy | `McpProxy` | Catalog-only — upstream `tools/list` passthrough, not ingestible |
 
 Sync runs on a **persisted async queue**: `POST /sources/{id}/sync` returns `202 + jobId` (per-document counters, `cancel`, `?wait=true` for the legacy synchronous contract); `POST /sources/{id}/reindex` forces re-chunk/re-embed, optionally selective by chunker version. Cloud connectors stage objects locally and diff by ETag; their secrets live in the integration-secret store. Chunking is structure-aware (markdown/code/config) and each source can opt into **semantic chunking** (embedding-breakpoint boundaries) via `{"chunking":"semantic"}` in the source dialog.
@@ -96,6 +100,9 @@ integrations change, and live sessions get `tools/list_changed`.
 | `query_{source_slug}` | Scoped semantic search — one tool per active source |
 | `find_dependencies` / `find_dependents` | GraphRAG outbound/inbound traversal with evidence per edge (chunk + doc + source) |
 | `find_path` / `analyze_impact` | Shortest entity path; 1-hop blast radius with backing documents |
+| `search_graph_temporal` / `search_graph_recent` | Temporal GraphRAG — time-windowed (`timeStart`/`timeEnd` RFC3339) or recent-window (`1h`/`6h`/`24h`/`7d`) entity/edge retrieval over `ObservedAt`/`ValidFrom`/`ValidTo` |
+| `search_graph_relationships` / `search_graph_diverse` | 2-hop relationship expansion; cluster-diversified results (low/med/high) |
+| `search_graph_episode` | Retrieval scoped to a single ingestion episode (`KgEpisode`) |
 | `ask_question`, `read_wiki_structure`, `read_wiki_contents` | DeepWiki upstream proxy |
 | `firecrawl_*` | Firecrawl upstream (scrape, search, crawl, map…) |
 | `tavily_*` | Tavily upstream (search, extract, map, crawl, research) |
@@ -104,6 +111,15 @@ integrations change, and live sessions get `tools/list_changed`.
 
 Integrations can be toggled at **Settings → Integrações** — a disabled
 provider drops its tools from the catalog without a restart.
+
+`search_knowledge`/`ask_knowledge` also accept `subQueries` (≤4 parallel query
+variants fused via RRF), `windowSize` + `limitMode`/`autocutSensitivity`
+(neighbour-window expansion and autocut tail pruning at the score elbow), and
+hierarchical filter relaxation (`Search:Relaxation`). `ask_knowledge` supports
+`enableLiveActions` — Action-Augmented RAG: chunks carrying `mcp-tool` markers
+or the question itself trigger live MCP tool calls fused into the answer as
+`[Live Tool]` citations; `search_knowledge` returns `suggestedActions` for the
+same tools as follow-up candidates. Full arg table: `docs/en/API.md`.
 
 ## Connecting AI Agents (LLM Prompt)
 
@@ -152,7 +168,9 @@ Configure the Knowledge Hub MCP server in your environment to access organizatio
 {
   "Database": { "Path": "knowledgehub.db" },   // or KnowledgeHub:DatabasePath
   "Embeddings": {
-    "Provider": "deterministic",               // deterministic | ollama | openai | onnx
+    "Provider": "deterministic",               // deterministic | ollama | openai | onnx | voyage | cohere
+    "Voyage": {},                              // Embeddings:Voyage:{ApiKey,Model} — wins over top-level
+    "Cohere": {},                              // Embeddings:Cohere:{ApiKey,Model} — wins over top-level
     "Endpoint": "http://localhost:11434",
     "ApiKey": "",
     "Model": "nomic-embed-text",
@@ -188,7 +206,33 @@ Configure the Knowledge Hub MCP server in your environment to access organizatio
   "Search": {
     "Lexical": { "Enabled": true },            // FTS5 leg of hybrid retrieval
     "QueryRewrite": { "Enabled": false, "LexicalToo": false },
-    "Rerank": { "Enabled": false, "MaxCandidates": 50 }
+    "Rerank": { "Enabled": false, "MaxCandidates": 50 },
+    "LimitMode": "autocut",                    // fixed | autocut — prune the score-tail at the elbow
+    "Autocut": { "Sensitivity": 1, "MaxClamp": 20 },
+    "Expansion": { "WindowThresholdPercent": 80 }, // windowExpand score gate (of top normalized score)
+    "Relaxation": { "Enabled": true, "MinResults": 1 } // hierarchical filter drop: pathPrefix → sourceId → global
+  },
+  "Agent": {
+    "EnableDynamicActionBridge": true,         // ask_knowledge executes live MCP tools (mcp-tool markers)
+    "MaxChainedDynamicCalls": 3,
+    "ContextManagement": {                     // ChainAst repair + history compaction in agent_chat
+      "EnableChainCompaction": true,
+      "MaxTotalHistoryBytes": 65536,
+      "MaxBodyPairBytes": 16384,
+      "KeepMinLastSections": 2,
+      "AutoRepairBrokenToolCalls": true
+    }
+  },
+  "Resilience": {
+    "Fallback": {                              // Resilience:Fallback — provider/tool fallback policy engine
+      "Mode": "disabled",                      // disabled | observe | enforce
+      "MaxFallbackAttempts": 2,
+      "ChatFallbacks": [],                     // [{ "endpoint", "model", "apiKey" }] ordered alternates
+      "ToolCapabilities": {                    // capability → ordered equivalent providers
+        "WebSearch": ["tavily", "firecrawl", "duckduckgo"],
+        "DeepDocLookup": ["deepwiki", "context7", "internal_fts"]
+      }
+    }
   },
   "RateLimiting": {                            // per-partition: api key → user → IP
     "Enabled": true,

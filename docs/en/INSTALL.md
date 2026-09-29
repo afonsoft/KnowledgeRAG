@@ -50,6 +50,11 @@ Produces a ~120 MB self-contained binary — no .NET runtime required. The insta
 | pgvector tuning | `VectorStore:Postgres:*` | `StorageType` vector\|halfvec (pgvector ≥0.7 + `AllowStorageMigration`), `IterativeScan` (≥0.8), `Hnsw*`, pool sizes — see README §Configuration |
 | Cache tuning | `Cache:RegionTtlMinutes`, `Cache:L1*` | Per-region TTLs + in-process L1 in front of Redis (invalidation via `kh:invalidate` pub/sub) — see README §Configuration |
 | Runtime log level | `GET/PUT /api/settings/log-level` | `LoggingLevelSwitch` with optional `minutes` (0–120) |
+| Voyage AI / Cohere | `Embeddings:Provider=voyage\|cohere` + `Embeddings:Voyage|Cohere:{ApiKey,Model}` | Hosted embedding providers (sub-section wins; top-level `ApiKey`/`Model`/`Dimensions` are the fallback, e.g. settings UI) |
+| Resilience fallback | `Resilience:Fallback` | `Mode` `disabled`\|`observe`\|`enforce`, `MaxFallbackAttempts`, `ChatFallbacks[]` (ordered `{endpoint,model,apiKey}` alternates), `ToolCapabilities` map (`WebSearch`/`DeepDocLookup`) |
+| Agent loop | `Agent:*` | `EnableDynamicActionBridge` (live MCP tools inside `ask_knowledge`), `MaxChainedDynamicCalls` (default 3), `ContextManagement:*` (ChainAst compaction + orphan tool-call repair) |
+| Retrieval tuning | `Search:*` | `LimitMode` `fixed`\|`autocut`, `Autocut:Sensitivity`/`MaxClamp`, `Expansion:WindowThresholdPercent`, `Relaxation:Enabled`/`MinResults` |
+| Connector secrets | `restapi:{id}` · `sql:{id}` · `git:{id}` · `unstructured:{id}` · `audio:{id}` | Per-source secrets in the integration-secret store (headers, connstring, PAT, API keys) — never in `configuration` |
 
 ## Unified database provider (catalog + vector store)
 

@@ -77,6 +77,8 @@ All `/api/*` endpoints require authentication (cookie session or `Authorization:
 | `GET /api/security/events` | prompt-injection flag audit (metadata only — never raw content) |
 | `POST /api/eval/run` · `GET /api/eval/runs` · `GET /api/eval/runs/{id}` | retrieval eval harness (Recall@K/P@K/MRR/faithfulness, p50/p95/p99 latency) — request accepts `baseline` (name) and `gate` (rules `[{metric,direction,threshold}]`), report carries `gateResult` + `topRegressions` |
 | `GET/POST /api/eval/baselines` | list named baselines; `POST {name, runId}` promotes a run |
+| `GET /api/v1/evaluation/stats` | RAG quality triad stats — context relevance, groundedness, answer relevance averages, hallucination rate and recent flagged queries (last 7 days); backs the `/rag-quality` dashboard |
+| `GET /api/v1/evidence/sessions/{sessionId}/bundle` | tamper-evident evidence bundle for a session — append-only `EvidenceReceipt` chain signed with HMAC-SHA256 (`evidence:master` secret); Operational policy |
 
 ### Search/ask tool args
 
@@ -88,6 +90,13 @@ All `/api/*` endpoints require authentication (cookie session or `Authorization:
 | `expand` | `off` (default) · `multi` (N query rewrites fused via RRF) · `hyde` (hypothetical doc on the vector arm) · `both` |
 | `contextExpand` | `none` · `window` (neighbouring chunks) · `section` (parent section) — attaches `context` to each hit without changing ranking |
 | `useGraph` | bool — enables the knowledge-graph retrieval arm (entity linking + 1-hop evidence) |
+| `subQueries` | string[] ≤4 — extra query variants searched in parallel and fused via RRF (multi-query); blanks filtered |
+| `windowSize` | int 0–3 — neighbour-chunk window expansion; `>0` implies `contextExpand=window`; hits below 80% of the top normalized score don't expand (`Search:Expansion:WindowThresholdPercent`) |
+| `limitMode` | `fixed` (classic topK) · `autocut` (default `Search:LimitMode` — prunes the long tail at the N-th abrupt score drop) |
+| `autocutSensitivity` | int 1–3 — autocut sensitivity (N-th drop), clamped by `Search:Autocut:MaxClamp` |
+| `enableLiveActions` | bool — `ask_knowledge` only: Action-Augmented RAG executes live MCP tools nominated by retrieved chunks (`<!-- mcp-tool: -->` markers) or the question; outputs fuse as `[Live Tool]` citations and `liveToolExecutions` |
+
+Responses may carry `suggestedActions` (search — tool calls the model can issue next turn), `expandedChunkIndices`/`windowExpanded`, and filter-relaxation fields `isRelaxed`/`relaxedScope`/`appliedFilter`/`originalFilter`/`filterRelaxed` when `Search:Relaxation` drops a filter level.
 
 ## Other
 
