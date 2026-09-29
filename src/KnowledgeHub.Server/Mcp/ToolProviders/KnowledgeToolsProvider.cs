@@ -161,8 +161,11 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                               ? a.ToolName
                               : $"{a.ToolName}({string.Join(", ", a.Args.Select(kv => kv.Key))})"))
                           + " — invoke as tool calls if they help answer the request";
+                    // Suggestions lead the text — CatalogToolAIFunction truncates
+                    // long results from the end, and appended suggestions were
+                    // being cut off when hits filled the budget (devin-review).
                     return await ToolResults.Structured(
-                        grade + FormatHits(outcome.Results) + suggestedLine,
+                        grade + suggestedLine + FormatHits(outcome.Results),
                         new
                         {
                             results = outcome.Results,
@@ -318,9 +321,15 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             ? "\n\n(evidence found outside the strict requested scope)"
             : null;
 
+        // SPEC-20260929-live-actions-bridge-hardening RF-005: live tool output
+        // IS evidence — an "insufficient" document grade must not discard it.
+        // Abstain only when there is no live context to synthesize from.
+        var hasLiveEvidence = liveExecutions.Any(e =>
+            !e.IsError && !string.IsNullOrWhiteSpace(e.OutputPreview));
+
         // SPEC-20260924-corrective-rag RF-003: insufficient evidence short-circuits
         // synthesis — honest abstention, no LLM call, weak citations attached.
-        if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate)
+        if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate && !hasLiveEvidence)
             return await ToolResults.Structured(
                 retrieval.BuildAbstention(question, outcome).Answer
                 + (results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(results.Take(3).ToList()) : "")
@@ -356,13 +365,15 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                 // SPEC-20260929-live-actions-bridge-hardening RF-007: when the
                 // answer rests on live data alone (no document citations),
                 // expose the executions as pseudo-citations so consumers can
-                // still see what grounded the response.
-                Citations = rawAnswer.Citations.Count == 0 && liveExecutions.Count > 0
-                    ? liveExecutions.Select((e, i) => new CitationDto
+                // still see what grounded the response. Failed executions are
+                // not evidence — they never become citations (devin-review
+                // #402/#413).
+                Citations = rawAnswer.Citations.Count == 0 && liveExecutions.Any(e => !e.IsError)
+                    ? liveExecutions.Where(e => !e.IsError).Select((e, i) => new CitationDto
                     {
                         Index = i + 1,
                         Source = "live-mcp",
-                        Title = $"[Live Tool: {e.ToolName}]" + (e.IsError ? " (error)" : ""),
+                        Title = $"[Live Tool: {e.ToolName}]",
                         Uri = $"live://tool/{e.ToolName}",
                         Score = 1.0
                     }).ToList()
