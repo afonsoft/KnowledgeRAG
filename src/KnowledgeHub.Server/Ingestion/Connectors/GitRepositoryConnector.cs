@@ -101,7 +101,15 @@ public sealed class GitRepositoryConnector(
                 continue;
             if (!includeMatchers.Any(m => m(path)) || excludeMatchers.Any(m => m(path)))
                 continue;
-            if (e.Size > maxBytes) { oversized++; continue; }
+            // RF-007: an oversized-but-present file must enter FailedUris —
+            // otherwise reconciliation treats the URI as deleted and drops the
+            // already-indexed document even though the remote file exists.
+            if (e.Size > maxBytes)
+            {
+                oversized++;
+                failed.Add($"git://{repo.Provider}/{repo.Owner}/{repo.Name}@{repo.Branch}:{e.Path}");
+                continue;
+            }
             eligible.Add(e);
         }
         if (oversized > 0)
@@ -130,10 +138,12 @@ public sealed class GitRepositoryConnector(
                 var text = await api.GetFileTextAsync(repo, e.Path, token, cancellationToken);
                 // SPEC-20260929 RF-007: GitLab tree entries carry Size=0 — the
                 // pre-download gate can't fire; enforce the limit on content.
+                // FailedUris keeps the previously-indexed document alive.
                 if (e.Size <= 0 && System.Text.Encoding.UTF8.GetByteCount(text) > maxBytes)
                 {
                     oversized++;
                     warnings.Add($"{e.Path}: skipped — over maxFileSizeBytes (post-download check)");
+                    failed.Add(uri);
                     continue;
                 }
                 documents.Add(new RawDocument(uri, Path.GetFileName(e.Path), text, fingerprint));
@@ -220,6 +230,7 @@ public sealed class GitRepositoryConnector(
         }
 
         var branch = config.String("branch") is { Length: > 0 } b ? b : "main";
-        return new GitRepositoryRef(provider, apiBase.TrimEnd('/'), owner!, name!, branch);
+        return new GitRepositoryRef(provider, apiBase.TrimEnd('/'), owner!, name!, branch,
+            config.Bool("allowPrivateHosts"));
     }
 }

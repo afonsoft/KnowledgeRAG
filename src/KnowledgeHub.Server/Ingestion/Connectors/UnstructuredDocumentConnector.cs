@@ -70,10 +70,13 @@ public sealed class UnstructuredDocumentConnector(
             cancellationToken.ThrowIfCancellationRequested();
             var fileName = Path.GetFileName(path);
             // SPEC-20260929 RF-002: URI is the path relative to the configured
-            // root — homonymous files in different folders must not share a doc.
+            // root — homonymous files in different folders must not share a
+            // doc. Without folderPath, explicit `files` can point anywhere —
+            // hash the full path so same-name files keep distinct URIs.
             var relativePath = folderPath is { Length: > 0 } root
                 ? Path.GetRelativePath(root, path)
-                : fileName;
+                : $"{Convert.ToHexString(SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(path))))[..12]}/{fileName}";
             var uri = $"unstructured://{relativePath.Replace('\\', '/')}";
 
             try
