@@ -40,7 +40,8 @@ dotnet run --project src/KnowledgeHub.Server      # serve http://localhost:5000
 O Knowledge MCP Hub expõe um servidor MCP nativo para agentes de IA (Claude Code, OpenCode, Cursor, Devin, etc.). Detalhes completos em [`CLAUDE.md`](CLAUDE.md).
 
 - **Conexão**: Endpoint HTTP `/mcp` (Streamable HTTP) ou `/mcp/sse`. Header: `Authorization: Bearer aft_*` (gerar em `/api-keys`).
-- **Grounding First**: Consulte `search_knowledge` ou `ask_knowledge` antes de assumir regras de negócio, contratos ou criar artefatos duplicados.
+- **Grounding First**: Consulte `search_knowledge` ou `ask_knowledge` antes de assumir regras de negócio, contratos ou criar artefatos duplicados. Na primeira sessão, pergunte sobre o repositório com `ask_question` lendo a wiki via `read_wiki_contents`.
+- **Registro de trabalho**: Sempre registre o que foi feito com `write_note`; conhecimento/memória durável com `write_knowledge`.
 - **Impacto**: Utilize `find_dependencies` e `analyze_impact` para avaliar o impacto de alterações em componentes compartilhados.
 - **Isolamento de Sessão**: Utilize `set_chat_settings` (chat LLM) e `set_api_key_settings` (integrações upstream) para customizar a chave da sua sessão.
 - **Segurança**: Nunca exponha, printe ou commite chaves de autenticação `aft_*`.
