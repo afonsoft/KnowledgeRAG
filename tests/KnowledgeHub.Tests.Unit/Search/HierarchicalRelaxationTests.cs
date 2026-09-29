@@ -245,6 +245,45 @@ public sealed class HierarchicalRelaxationTests
         }
     }
 
+    [Fact]
+    public async Task DeniedSource_NeverRelaxes()
+    {
+        // SPEC-20260929 RF-005: caller scoped to B asks for A (denied+audited)
+        // — relaxation must NOT widen into B; empty result is the answer.
+        var (conn, db, sourceA, sourceB, chunkB) = await SeedAsync();
+        await using var _c = conn; await using var _d = db;
+        var search = NewSearchScopedTo(db, [new VectorHit(chunkB.Id, 0.9)],
+            new Dictionary<Guid, Guid> { [chunkB.Id] = sourceB.Id }, sourceB.Id);
+
+        var results = await search.SearchAsync("q", 5, sourceId: sourceA.Id,
+            mode: SearchMode.Semantic);
+
+        Assert.Empty(results); // denied source → no relaxed leak into allowed B
+    }
+
+    private static SearchService NewSearchScopedTo(KnowledgeHubDbContext db,
+        IReadOnlyList<VectorHit> hits, IReadOnlyDictionary<Guid, Guid> chunkSource,
+        params Guid[] allowedSources)
+    {
+        var cache = new MemoryDistributedCache(
+            Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
+        var emb = new StubEmbeddings();
+        return new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
+            new ScopedVectorStore(hits, chunkSource), new DisabledLexical(), cache,
+            new ConfigurationBuilder().Build(), new PassthroughRewriter(),
+            NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
+            NoOpReranker.Instance, new ScopedTo(allowedSources), FakeGraphSettings.Disabled,
+            NullLogger<SearchService>.Instance);
+    }
+
+    private sealed class ScopedTo(Guid[] allowedSources)
+        : KnowledgeHub.Server.Auth.ICallerScopeProvider
+    {
+        public Task<KnowledgeHub.Server.Auth.CallerScope> GetAsync(CancellationToken ct) =>
+            Task.FromResult(new KnowledgeHub.Server.Auth.CallerScope(
+                null, allowedSources.ToHashSet(), null));
+    }
+
     /// <summary>Routes by embedding vector[0] — the RoutedEmbeddings key encodes
     /// which query text produced the vector.</summary>
     private sealed class RoutedVectorStore(

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using KnowledgeHub.Shared.Contracts;
 
 namespace KnowledgeHub.Server.Caching;
 
@@ -26,9 +27,18 @@ public static class CacheKeys
 
     /// <summary>SPEC-20260923-agent-runtime-hardening RF-003: answer cache key.
     /// The ordered chunk-id list fingerprints the retrieval (filters, topK,
-    /// source scope) exactly; indexVersion invalidates on every sync.</summary>
-    public static string Answer(string model, string question, IEnumerable<Guid?> chunkIds, string indexVersion) =>
-        $"ans:{model}:{Sha256(question)}:{Sha256(string.Join(',', chunkIds))}:v{indexVersion}";
+    /// source scope) exactly; indexVersion invalidates on every sync.
+    /// SPEC-20260929 RF-003: each part also carries the expanded-context hash —
+    /// same chunkIds with a different windowSize/contextExpand produce a
+    /// different prompt, so they must not share the cached answer. Non-chunk
+    /// items (live tool context, ChunkId=null) hash their text.</summary>
+    public static string Answer(string model, string question, IEnumerable<string> identityParts, string indexVersion) =>
+        $"ans:{model}:{Sha256(question)}:{Sha256(string.Join(',', identityParts))}:v{indexVersion}";
+
+    /// <summary>Identity part for a context item feeding <see cref="Answer"/>.</summary>
+    public static string AnswerIdentityPart(SearchResultItem item) =>
+        (item.ChunkId?.ToString("N") ?? $"live:{Sha256(item.ChunkText)}")
+        + (item.Context is { Length: > 0 } c ? $":ctx:{Sha256(c)}" : "");
 
     /// <summary>SPEC-20260924-redis-cache-and-tool-caching: tool invocation cache key.
     /// Hashes tool name + arguments + indexVersion so ingestion bumps invalidate tool results.</summary>

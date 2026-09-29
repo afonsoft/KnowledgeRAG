@@ -43,6 +43,10 @@ public sealed class SearchService(
     /// still returns the degraded result but never caches it.</summary>
     private sealed class DegradationState { public bool Any; }
 
+    /// <summary>Strip CR/LF from caller-supplied values before logging.</summary>
+    private static string? ForLog(string? value) =>
+        value?.Replace('\r', ' ').Replace('\n', ' ');
+
     public async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
         string query, int topK, Guid? sourceId = null,
         SearchMode mode = SearchMode.Hybrid, ResolvedSearchFilter? filter = null,
@@ -213,27 +217,33 @@ public sealed class SearchService(
                     .Take(fetchLimit)
                     .ToList();
 
-            if (fused.Count == 0)
-                return [];
+            // SPEC-20260929 RF: an empty fused result must fall through to the
+            // relaxation path below — early return skips the scope cascade.
+            if (fused.Count > 0)
+            {
+                // ExpandedFrom: first list (in arm order) that surfaced the chunk.
+                var expandedFrom = new Dictionary<Guid, string>();
+                foreach (var (label, list) in vectorLabels.Zip(vectorLists).Concat(lexicalLabels.Zip(lexicalLists)))
+                    if (label is not null)
+                        foreach (var id in list)
+                            expandedFrom.TryAdd(id, label);
 
-            // ExpandedFrom: first list (in arm order) that surfaced the chunk.
-            var expandedFrom = new Dictionary<Guid, string>();
-            foreach (var (label, list) in vectorLabels.Zip(vectorLists).Concat(lexicalLabels.Zip(lexicalLists)))
-                if (label is not null)
-                    foreach (var id in list)
-                        expandedFrom.TryAdd(id, label);
-
-            breakdowns = fused.ToDictionary(
-                f => f.ChunkId,
-                f => new SearchScoreBreakdown
-                {
-                    VectorRank = f.VectorRank,
-                    LexicalRank = f.LexicalRank,
-                    Fused = f.Fused,
-                    GraphRank = f.GraphRank,
-                    ExpandedFrom = expandedFrom.GetValueOrDefault(f.ChunkId)
-                });
-            windowed = fused.Select(f => new VectorHit(f.ChunkId, f.Fused)).ToList();
+                breakdowns = fused.ToDictionary(
+                    f => f.ChunkId,
+                    f => new SearchScoreBreakdown
+                    {
+                        VectorRank = f.VectorRank,
+                        LexicalRank = f.LexicalRank,
+                        Fused = f.Fused,
+                        GraphRank = f.GraphRank,
+                        ExpandedFrom = expandedFrom.GetValueOrDefault(f.ChunkId)
+                    });
+                windowed = fused.Select(f => new VectorHit(f.ChunkId, f.Fused)).ToList();
+            }
+            else
+            {
+                windowed = [];
+            }
         }
 
         List<SearchResultItem> items;
@@ -257,7 +267,10 @@ public sealed class SearchService(
 
         // SPEC-20260927-chunk-window-retrieval-and-autocut RF-003: dynamic tail
         // pruning — the elbow in the score curve decides the count (≤topK).
-        var limitMode = filter?.EffectiveLimitMode(configuration) ?? "fixed";
+        // SPEC-20260929-search-scope-pipeline RF-001: unfiltered searches also
+        // honor the configured default — a null filter must not force "fixed".
+        var limitMode = filter?.EffectiveLimitMode(configuration)
+            ?? configuration.GetValue("Search:LimitMode", "fixed");
         if (limitMode == "autocut" && final.Count > 1)
         {
             var sensitivity = Math.Clamp(filter?.AutocutSensitivity
@@ -272,8 +285,14 @@ public sealed class SearchService(
         var relaxAllowed = relaxLevel == 0
             && (filter?.AllowRelaxation
                 ?? configuration.GetValue("Search:Relaxation:Enabled", true));
+        // SPEC-20260929 RF-005: a sourceId the caller is not authorized for was
+        // already denied+audited — relaxation must never widen a denied request
+        // into other sources, even ones inside the caller's scope.
+        var deniedSource = sourceId is { } s
+            && scope.AllowedSourceIds is { } callerAllowed
+            && !callerAllowed.Contains(s);
         var minResults = Math.Max(0, configuration.GetValue("Search:Relaxation:MinResults", 1));
-        if (relaxAllowed && final.Count < minResults)
+        if (relaxAllowed && !deniedSource && final.Count < minResults)
             final = await ApplyRelaxationAsync(query, topK, sourceId, filter, mode,
                 scope, conversationContext, degraded, final.ToList(), minResults, ct);
 
@@ -301,8 +320,11 @@ public sealed class SearchService(
             .Select(i => i.ChunkId!.Value).ToHashSet();
         var curSourceId = sourceId;
         var curFilter = filter;
+        var relaxed = new List<SearchResultItem>();
 
-        for (var level = 1; level <= 3 && merged.Count < minResults; level++)
+        // Stop cascading as soon as strict+relaxed hits satisfy MinResults —
+        // wider scopes than needed would dilute the response with off-scope hits.
+        for (var level = 1; level <= 3 && merged.Count + relaxed.Count < minResults; level++)
         {
             var next = await NextScopeAsync(curSourceId, curFilter, ct);
             if (next is null)
@@ -318,7 +340,7 @@ public sealed class SearchService(
             {
                 if (h.ChunkId is { } cid && !seen.Add(cid))
                     continue;
-                merged.Add(h with
+                relaxed.Add(h with
                 {
                     IsRelaxed = true,
                     RelaxedScope = next.Value.Description,
@@ -339,8 +361,10 @@ public sealed class SearchService(
                 level, next.Value.Description, added);
         }
 
+        // SPEC-20260929 RF-005: strict hits keep their lead — relaxed results are
+        // appended after (ordered among themselves), never re-sorted above them.
         return merged
-            .OrderByDescending(i => i.ScoreBreakdown?.Fused ?? i.Score)
+            .Concat(relaxed.OrderByDescending(i => i.ScoreBreakdown?.Fused ?? i.Score))
             .Take(topK)
             .ToList();
     }
@@ -517,6 +541,13 @@ public sealed class SearchService(
             configuration.GetValue("Search:Expansion:MaxParentTokens", 1500)) * 4;
         var budgetChars = Math.Max(400,
             configuration.GetValue("Search:Expansion:MaxTotalTokens", 6000)) * 4;
+        // SPEC-20260929 RF-007: per-document ceiling — several hits in one doc
+        // must not let expansion blow past the per-doc token budget.
+        var docBudgetChars = Math.Max(200,
+            configuration.GetValue("Search:Expansion:MaxDocTokens", 2000)) * 4;
+        // SPEC-20260929 RF-004: neighbours go through the same flagged filter —
+        // a suspicious chunk must not re-enter via window/section expansion.
+        var excludeFlagged = configuration.GetValue("Security:Injection:ExcludeFlagged", true);
 
         // RF-002: only high-relevance hits earn a window — score normalized by
         // the top hit so the gate works across RRF/cosine/bm25 scales.
@@ -545,7 +576,8 @@ public sealed class SearchService(
             // One indexed range query per document covers every hit's window.
             var neighbours = await db.Chunks.AsNoTracking()
                 .Where(c => c.KnowledgeDocumentId == docGroup.Key
-                    && c.ChunkIndex >= min && c.ChunkIndex <= max)
+                    && c.ChunkIndex >= min && c.ChunkIndex <= max
+                    && (!excludeFlagged || c.SuspicionFlags == null))
                 .OrderBy(c => c.ChunkIndex)
                 .Select(c => new { c.ChunkIndex, c.TextContent })
                 .ToListAsync(ct);
@@ -560,7 +592,8 @@ public sealed class SearchService(
                 if (paths.Count > 0)
                     sections = (await db.Chunks.AsNoTracking()
                         .Where(c => c.KnowledgeDocumentId == docGroup.Key
-                            && c.SectionPath != null && paths.Contains(c.SectionPath))
+                            && c.SectionPath != null && paths.Contains(c.SectionPath)
+                            && (!excludeFlagged || c.SuspicionFlags == null))
                         .OrderBy(c => c.ChunkIndex)
                         .Select(c => new { c.ChunkIndex, c.TextContent, c.SectionPath })
                         .ToListAsync(ct))
@@ -569,38 +602,56 @@ public sealed class SearchService(
                             g => g.Select(c => (Idx: c.ChunkIndex, Text: c.TextContent)).ToList());
             }
 
+            // RF-007: chunks already delivered as their own hits are excluded —
+            // overlapping windows must not duplicate passages in the context.
+            var hitChunkIndexes = indexes.ToHashSet();
+            var docSpent = 0;
+
             foreach (var (item, pos) in docGroup.OrderBy(t => t.Pos))
             {
                 var own = item.ChunkIndex!.Value;
-                IEnumerable<string> parts;
-                List<int> expanded;
+                var parts = new List<string>();
+                var expanded = new List<int>();
+
                 if (contextExpand == "section" && item.SectionPath is { } path
                     && sections is not null && sections.TryGetValue(path, out var sectionTexts))
                 {
-                    // Whole parent section minus the hit itself, capped.
-                    var picked = sectionTexts.Where(t => t.Text != item.ChunkText).ToList();
-                    var joined = string.Join("\n\n", picked.Select(t => t.Text));
-                    if (joined.Length > maxParentChars)
-                        joined = joined[..maxParentChars] + "…";
-                    parts = joined.Length > 0 ? [joined] : [];
-                    expanded = picked.Select(t => t.Idx).ToList();
+                    // Whole parent section minus the hits themselves, capped —
+                    // ExpandedChunkIndices only lists chunks fully delivered.
+                    var used = 0;
+                    foreach (var t in sectionTexts)
+                    {
+                        if (hitChunkIndexes.Contains(t.Idx) || t.Text == item.ChunkText)
+                            continue;
+                        if (used + t.Text.Length + 2 > maxParentChars)
+                            break;
+                        parts.Add(t.Text);
+                        expanded.Add(t.Idx);
+                        used += t.Text.Length + 2;
+                    }
                 }
                 else
                 {
                     var picked = neighbours
                         .Where(n => n.ChunkIndex != own
+                            && !hitChunkIndexes.Contains(n.ChunkIndex)
                             && n.ChunkIndex >= own - windowSize
                             && n.ChunkIndex <= own + windowSize)
                         .ToList();
-                    parts = picked.Select(n => n.TextContent);
-                    expanded = picked.Select(n => n.ChunkIndex).ToList();
+                    parts.AddRange(picked.Select(n => n.TextContent));
+                    expanded.AddRange(picked.Select(n => n.ChunkIndex));
                 }
 
                 var context = string.Join("\n\n", parts);
-                if (context.Length == 0 || spent + context.Length > budgetChars)
+                if (context.Length == 0 || spent + context.Length > budgetChars
+                    || docSpent + context.Length > docBudgetChars)
                     continue;
                 spent += context.Length;
+                docSpent += context.Length;
                 addedChunks += expanded.Count;
+                // Claim the emitted neighbours so overlapping windows of later
+                // hits don't repeat the same passage (and don't double-spend).
+                hitChunkIndexes.UnionWith(expanded);
                 result[pos] = item with { Context = context, ExpandedChunkIndices = expanded };
             }
         }
@@ -672,13 +723,27 @@ public sealed class SearchService(
             lexicalQueries.AddRange(subQueries.Select(q => (q, (string?)q)));
         }
 
+        // SPEC-20260929 RF-006: each arm is isolated — one failed sub-query
+        // returns an empty list for itself, the other arms still fuse.
         var vectorLists = new List<IReadOnlyList<Guid>>();
         var vectorLabels = new List<string?>();
         if (mode != SearchMode.Lexical)
         {
             var tasks = vectorTexts.Select(async t =>
-                (await VectorSearchAsync(await EmbedQueryAsync(t.Text, ct), window, activeSourceIds, degraded, ct))
-                    .Select(h => h.ChunkId).ToList() as IReadOnlyList<Guid>);
+            {
+                try
+                {
+                    return (await VectorSearchAsync(await EmbedQueryAsync(t.Text, ct), window, activeSourceIds, degraded, ct))
+                        .Select(h => h.ChunkId).ToList() as IReadOnlyList<Guid>;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                {
+                    logger.LogWarning(ex, "Search arm failed (label {Label}) — continuing",
+                        ForLog(t.Label) ?? "primary");
+                    degraded.Any = true; // RF-005: never cache a result built on a failed arm
+                    return (IReadOnlyList<Guid>)[];
+                }
+            });
             vectorLists.AddRange(await Task.WhenAll(tasks));
             vectorLabels.AddRange(vectorTexts.Select(t => t.Label));
         }
@@ -687,7 +752,20 @@ public sealed class SearchService(
         var lexicalLabels = new List<string?>();
         if (mode != SearchMode.Semantic)
         {
-            var tasks = lexicalQueries.Select(q => LexicalRankedAsync(q.Query, window, activeSourceIds, ct));
+            var tasks = lexicalQueries.Select(async q =>
+            {
+                try
+                {
+                    return await LexicalRankedAsync(q.Query, window, activeSourceIds, ct);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+                {
+                    logger.LogWarning(ex, "Lexical arm failed (label {Label}) — continuing",
+                        ForLog(q.Label) ?? "primary");
+                    degraded.Any = true; // RF-005: never cache a result built on a failed arm
+                    return (IReadOnlyList<Guid>)[];
+                }
+            });
             lexicalLists.AddRange(await Task.WhenAll(tasks));
             lexicalLabels.AddRange(lexicalQueries.Select(q => q.Label));
         }

@@ -16,6 +16,7 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // Covers SPEC-20260926-search-correctness-and-stream: concurrent arms on the
 // shared scoped connection (RF-001), retry grading pairing (RF-003) and
 // baseline dataset-hash verification (RF-004).
+[Collection("SearchTelemetry")]
 public sealed class SearchCorrectnessTests
 {
     private static (SqliteConnection conn, KnowledgeHubDbContext db) NewDb()

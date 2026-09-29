@@ -28,6 +28,7 @@ namespace KnowledgeHub.Tests.Unit.Server.Ingestion;
 // Covers SPEC-20260926-ingestion-connector-integrity: fetch contract carries
 // failures/truncation, unchanged stubs keep content, transient failure is not a
 // remote delete, queue-full recovers, source delete is ordered and busts cache.
+[Collection("SearchTelemetry")]
 public sealed class ConnectorIntegrityTests : IDisposable
 {
     private readonly SqliteConnection _conn;

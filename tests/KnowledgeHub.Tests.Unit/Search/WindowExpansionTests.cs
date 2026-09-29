@@ -133,6 +133,45 @@ public sealed class WindowExpansionTests
         Assert.Contains("chunk-1 text", item.Context);
     }
 
+    [Fact]
+    public async Task WindowExpansion_FlaggedNeighbour_NeverLeaks()
+    {
+        // SPEC-20260929 RF-004: a suspicious chunk adjacent to the hit must not
+        // re-enter the context via window expansion (ExcludeFlagged applies).
+        var (conn, db, chunks) = await SeedAsync(5);
+        await using var _c = conn; await using var _d = db;
+        chunks[3].SuspicionFlags = "injection";
+        await db.SaveChangesAsync();
+        var search = NewSearch(db, [new VectorHit(chunks[2].Id, 0.9)]);
+        var filter = new ResolvedSearchFilter(null, null, null, null, WindowSize: 1);
+
+        var results = await search.SearchAsync("q", 5, mode: SearchMode.Semantic, filter: filter);
+
+        var item = Assert.Single(results);
+        Assert.Equal([1], item.ExpandedChunkIndices); // only clean neighbour
+        Assert.Contains("chunk-1 text", item.Context);
+        Assert.DoesNotContain("chunk-3 text", item.Context!);
+    }
+
+    [Fact]
+    public async Task WindowExpansion_AdjacentHits_DoNotDuplicateEachOther()
+    {
+        // SPEC-20260929 RF-007: two neighbouring hits — each context must not
+        // embed the other hit's own chunk (already delivered as a result).
+        var (conn, db, chunks) = await SeedAsync(5);
+        await using var _c = conn; await using var _d = db;
+        var search = NewSearch(db,
+            [new VectorHit(chunks[2].Id, 0.95), new VectorHit(chunks[3].Id, 0.9)]);
+        var filter = new ResolvedSearchFilter(null, null, null, null, WindowSize: 1);
+
+        var results = await search.SearchAsync("q", 5, mode: SearchMode.Semantic, filter: filter);
+
+        var r2 = results.Single(r => r.ChunkId == chunks[2].Id);
+        var r3 = results.Single(r => r.ChunkId == chunks[3].Id);
+        Assert.DoesNotContain(3, r2.ExpandedChunkIndices!); // hit #3 not duplicated
+        Assert.DoesNotContain(2, r3.ExpandedChunkIndices!); // hit #2 not duplicated
+    }
+
     private sealed class StubEmbeddings : IEmbeddingProvider
     {
         public string ModelId => "fake:4";

@@ -15,6 +15,7 @@ namespace KnowledgeHub.Tests.Unit.Server;
 /// <summary>
 /// SPEC-20260925-pgvector-source-cascade + SPEC-20260925-log-sinks-and-redaction.
 /// </summary>
+[Collection("SearchTelemetry")]
 public sealed class SourceCascadeAndRedactionTests
 {
     private static async Task<KnowledgeHubDbContext> CreateDbAsync()
