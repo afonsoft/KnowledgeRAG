@@ -9,7 +9,7 @@
 | Stack | `CodeQL` — findings acumulados dos últimos 20 PRs |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-codeql-quality-debt` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | `github-advanced-security[bot]` code-scanning comments (PRs #369, #373, #374, #377, #378, #380, #381, #391, #392) |
 
 ## 1. User Story

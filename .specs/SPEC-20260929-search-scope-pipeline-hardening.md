@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — SearchService, AutocutFilter, expanders |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-search-scope-pipeline-hardening` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | Comentários `devin-ai-integration` em PRs #369, #370, #380, #381 |
 
 ## 1. User Story

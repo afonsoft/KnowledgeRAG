@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — ingestion feed, telemetry, coverage gate |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-observability-residual` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | Comentários `devin-ai-integration` em PRs #389, #393, #394 |
 
 ## 1. User Story

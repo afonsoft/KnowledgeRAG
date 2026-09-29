@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — EvidenceChainService/Verifier/Emission, HMAC |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-evidence-chain-integrity` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | Comentários `devin-ai-integration` no PR #377 |
 
 ## 1. User Story

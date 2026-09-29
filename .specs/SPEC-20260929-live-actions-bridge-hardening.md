@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — McpDynamicRagActionBridge, AnswerService, cache |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-live-actions-bridge-hardening` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | Comentários `devin-ai-integration` no PR #379 |
 
 ## 1. User Story

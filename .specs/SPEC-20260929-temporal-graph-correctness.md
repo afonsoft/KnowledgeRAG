@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — TemporalGraphRetriever, SqliteKnowledgeGraphStore, /graph |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-temporal-graph-correctness` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | Comentários `devin-ai-integration` em PRs #378, #389, #392 |
 
 ## 1. User Story

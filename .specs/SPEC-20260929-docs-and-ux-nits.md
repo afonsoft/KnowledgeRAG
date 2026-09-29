@@ -9,7 +9,7 @@
 | Stack | `Markdown`, Blazor Settings/Graph |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-docs-ux-nits` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | Comentários `devin-ai-integration` em PRs #382, #389, #390, #391, #392 |
 
 ## 1. User Story
