@@ -68,6 +68,24 @@ jobs:
       - name: Run Unit Tests
         run: dotnet test tests/KnowledgeHub.Tests.Unit/KnowledgeHub.Tests.Unit.csproj --configuration Release --verbosity minimal --logger "trx;LogFileName=unit-tests.trx" --collect:"XPlat Code Coverage"
 
+      # SPEC-20260928-test-reliability-and-coverage-gate RF-002: enforce the
+      # floor instead of collecting passively. Ratchet — never lower COVERAGE_MIN;
+      # raise it when coverage improves. Measured 2026-09-29: 20.6% (Blazor WASM
+      # client pulls the aggregate down; server projects are ~21–64%).
+      - name: Coverage Gate
+        env:
+          COVERAGE_MIN: "20"
+        run: |
+          XML=$(ls -t tests/KnowledgeHub.Tests.Unit/TestResults/*/coverage.cobertura.xml 2>/dev/null | head -1)
+          if [ -z "$XML" ]; then echo "::error::coverage.cobertura.xml not found"; exit 1; fi
+          RATE=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('$XML').getroot().get('line-rate'))*100, 2))")
+          echo "Line coverage: ${RATE}% (min ${COVERAGE_MIN}%)"
+          if python3 -c "import sys; sys.exit(0 if float('$RATE') >= float('$COVERAGE_MIN') else 1)"; then
+            echo "Coverage gate passed."
+          else
+            echo "::error::Coverage ${RATE}% < ${COVERAGE_MIN}%"; exit 1
+          fi
+
       - name: Upload Test Results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
         if: always()

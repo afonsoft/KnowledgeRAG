@@ -65,6 +65,10 @@ public sealed class EvidenceChainService(
 
         db.EvidenceReceipts.Add(receipt);
         await db.SaveChangesAsync(ct);
+        // SPEC-20260928-observability-followups RF-003: counter per appended
+        // receipt (tag: event_type — never payload content).
+        Telemetry.KnowledgeHubMetrics.EvidenceRecords.Add(1,
+            new KeyValuePair<string, object?>("event_type", ev.EventType));
         return receipt;
     }
 

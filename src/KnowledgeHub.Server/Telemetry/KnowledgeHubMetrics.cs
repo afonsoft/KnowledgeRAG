@@ -88,6 +88,21 @@ public sealed class KnowledgeHubMetrics : IMcpRequestMetrics
     public static readonly Counter<long> ToolFallbacks =
         Meter.CreateCounter<long>("knowledgehub.tool.fallbacks");
 
+    /// <summary>Temporal/episodic graph queries (SPEC-20260928 RF-003).
+    /// Tag: mode (window|recent|relationships|diverse|episode).</summary>
+    public static readonly Counter<long> TemporalGraphQueries =
+        Meter.CreateCounter<long>("knowledgehub.graph.temporal_queries");
+
+    /// <summary>Live MCP tool executions inside ask_knowledge
+    /// (SPEC-20260928 RF-003). Tags: tool, outcome (success|error).</summary>
+    public static readonly Counter<long> LiveToolExecutions =
+        Meter.CreateCounter<long>("knowledgehub.live_tool.executions");
+
+    /// <summary>Evidence receipts appended to the HMAC chain
+    /// (SPEC-20260928 RF-003). Tag: event_type.</summary>
+    public static readonly Counter<long> EvidenceRecords =
+        Meter.CreateCounter<long>("knowledgehub.evidence.records");
+
     /// <inheritdoc />
     public void Record(string method, string sessionMode, bool succeeded)
     {

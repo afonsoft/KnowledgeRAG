@@ -66,8 +66,16 @@ public sealed class IngestionWorker(
             }
             if (orphans.Count > 0)
             {
-                logger.LogWarning("Marked {Count} orphaned ingestion job(s) as failed", orphans.Count);
                 await db.SaveChangesAsync(ct);
+                // SPEC-20260928-observability-followups RF-001: persist first,
+                // then publish the terminal event per job — subscribers of the
+                // progress feed must see the sweep close the row.
+                foreach (var job in orphans)
+                    progressFeed.Publish(new IngestionProgressEvent(
+                        job.Id, job.SourceId, "failed",
+                        job.DocsProcessed, job.DocsSkipped, job.DocsFailed,
+                        job.ChunksCreated, job.FinishedAt!.Value));
+                logger.LogWarning("Marked {Count} orphaned ingestion job(s) as failed", orphans.Count);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
