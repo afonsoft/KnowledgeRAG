@@ -90,6 +90,26 @@ public sealed class SettingsApiClient(HttpClient http)
         return await ReadAsync<object>(response, ct);
     }
 
+    // SPEC-20260928-resilience-tool-fallback-wiring RF-004: fallback policy (mode/budget/alternates).
+
+    /// <summary>Obtém a configuração efetiva de resiliência (store → env/defaults).</summary>
+    public Task<ResilienceSettingsDto?> GetResilienceAsync(CancellationToken ct = default) =>
+        http.GetFromJsonAsync<ResilienceSettingsDto>("api/settings/resilience", ct);
+
+    /// <summary>Salva a política de fallback; efeito imediato, sem restart.</summary>
+    public async Task<ApiResult<object>> SaveResilienceAsync(SaveResilienceSettingsRequest request, CancellationToken ct = default)
+    {
+        var response = await http.PutAsJsonAsync("api/settings/resilience", request, ct);
+        return await ReadAsync<object>(response, ct);
+    }
+
+    /// <summary>Apaga a política persistida, voltando às chaves Resilience:Fallback.</summary>
+    public async Task<ApiResult<object>> ClearResilienceAsync(CancellationToken ct = default)
+    {
+        var response = await http.DeleteAsync("api/settings/resilience", ct);
+        return await ReadAsync<object>(response, ct);
+    }
+
     // SPEC-20260916-api-key-settings: per-API-key chat provider settings.
 
     /// <summary>Obtém a configuração efetiva de chat para uma API key específica.</summary>

@@ -304,6 +304,40 @@ public static class SettingsEndpoints
             return Results.NoContent();
         });
 
+        // SPEC-20260928-resilience-tool-fallback-wiring RF-004: fallback policy
+        // (mode/budget/alternates/capabilities), editable from /settings;
+        // effective immediately via the service's Invalidate() — no restart.
+        group.MapGet("/resilience", async (
+            Settings.IResilienceSettingsService resilience,
+            CancellationToken ct) =>
+            Results.Ok(await resilience.DescribeAsync(ct)));
+
+        group.MapPut("/resilience", async (
+            SaveResilienceSettingsRequest? body,
+            Settings.IResilienceSettingsService resilience,
+            CancellationToken ct) =>
+        {
+            if (body is null)
+                return Results.BadRequest(new { error = "body is required" });
+            if (body.Mode is not ("disabled" or "observe" or "enforce"))
+                return Results.BadRequest(new { error = "mode must be disabled|observe|enforce" });
+            if (body.MaxFallbackAttempts is < 1 or > 5)
+                return Results.BadRequest(new { error = "maxFallbackAttempts must be 1..5" });
+            if (body.ChatFallbacks is { Count: > 10 })
+                return Results.BadRequest(new { error = "chatFallbacks capped at 10" });
+
+            await resilience.SaveAsync(body, ct);
+            return Results.NoContent();
+        });
+
+        group.MapDelete("/resilience", async (
+            Settings.IResilienceSettingsService resilience,
+            CancellationToken ct) =>
+        {
+            await resilience.ClearAsync(ct);
+            return Results.NoContent();
+        });
+
         // SPEC-20260924-redis-cache-and-tool-caching RF-003/RF-004: Cache inspection and clear
         group.MapGet("/cache", async (
             Caching.ICacheManagerService cacheMgr,

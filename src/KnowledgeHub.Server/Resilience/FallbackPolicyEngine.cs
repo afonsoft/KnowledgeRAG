@@ -1,3 +1,4 @@
+using KnowledgeHub.Server.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -12,13 +13,22 @@ namespace KnowledgeHub.Server.Resilience;
 ///   attempt counter stays under <see cref="FallbackOptions.MaxFallbackAttempts"/>;
 ///   caller cancellation always wins (RF-004/AC-4).</item>
 /// </list>
+/// Options resolve per call through <see cref="IResilienceSettingsService"/> so
+/// /settings edits apply without restart (SPEC-20260928 RF-004).
 /// </summary>
 public sealed class FallbackPolicyEngine(
     IOptions<FallbackOptions> options,
-    ILogger<FallbackPolicyEngine> logger) : IFallbackPolicyEngine
+    ILogger<FallbackPolicyEngine> logger,
+    IResilienceSettingsService? settings = null) : IFallbackPolicyEngine
 {
-    public FallbackMode Mode { get; } = options.Value.ParseMode();
-    public int MaxAttempts { get; } = Math.Max(0, options.Value.MaxFallbackAttempts);
+    private readonly FallbackOptions _staticOptions = options.Value;
+
+    public FallbackMode Mode => Effective().ParseMode();
+    public int MaxAttempts => Math.Max(0, Effective().MaxFallbackAttempts);
+
+    /// <summary>Persisted override → configured options. The service is
+    /// optional so unit tests can inject bare options.</summary>
+    public FallbackOptions Effective() => settings?.GetEffective() ?? _staticOptions;
 
     public FallbackDecision Evaluate(
         Exception failure, string category, int attempt, CancellationToken ct)
@@ -37,6 +47,24 @@ public sealed class FallbackPolicyEngine(
         if (!FallbackErrorClassifier.IsTransient(failure))
             return new FallbackDecision(false, reason, Mode);
 
+        return WithinBudget(reason, category, attempt);
+    }
+
+    /// <inheritdoc/>
+    public FallbackDecision EvaluateReason(
+        string reason, string category, int attempt, CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested)
+            return new FallbackDecision(false, "CancelledByCaller", Mode);
+
+        if (Mode is FallbackMode.Disabled)
+            return new FallbackDecision(false, reason, Mode);
+
+        return WithinBudget(reason, category, attempt);
+    }
+
+    private FallbackDecision WithinBudget(string reason, string category, int attempt)
+    {
         if (Mode is FallbackMode.Observe)
         {
             logger.LogWarning(

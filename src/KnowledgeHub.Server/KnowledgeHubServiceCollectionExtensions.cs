@@ -203,6 +203,9 @@ public static class KnowledgeHubServiceCollectionExtensions
                 cfg.GetSection(Resilience.FallbackOptions.SectionName).Bind(options));
         services.AddSingleton<Resilience.IFallbackPolicyEngine, Resilience.FallbackPolicyEngine>();
         services.AddSingleton<Resilience.ToolCapabilityRegistry>();
+        // SPEC-20260928-resilience-tool-fallback-wiring RF-004: runtime-editable
+        // fallback settings (persisted row overrides Resilience:Fallback config).
+        services.AddSingleton<Settings.IResilienceSettingsService, Settings.ResilienceSettingsService>();
         services.AddScoped<Microsoft.Extensions.AI.IChatClient>(sp =>
         {
             var http = sp.GetService<Microsoft.AspNetCore.Http.IHttpContextAccessor>()?.HttpContext;
@@ -223,7 +226,7 @@ public static class KnowledgeHubServiceCollectionExtensions
             }
             if (client is null)
                 return client!;
-            var fb = sp.GetRequiredService<IOptions<Resilience.FallbackOptions>>().Value;
+            var fb = sp.GetRequiredService<Settings.IResilienceSettingsService>().GetEffective();
             return Resilience.ResilientChatClient.Wrap(
                 client, primaryName ?? "primary", fb.ChatFallbacks,
                 sp.GetRequiredService<IHttpClientFactory>(),

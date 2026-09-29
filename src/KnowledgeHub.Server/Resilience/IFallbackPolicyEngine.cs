@@ -22,4 +22,14 @@ public interface IFallbackPolicyEngine
     /// ("chat"/"embeddings"/"tools") should trigger the next candidate.</summary>
     FallbackDecision Evaluate(
         Exception failure, string category, int attempt, CancellationToken ct);
+
+    /// <summary>
+    /// Same policy check for failures that surface as a pre-classified reason
+    /// tag instead of an exception — tool calls that return
+    /// <c>IsError=true</c> results (SPEC-20260928-resilience-tool-fallback-wiring).
+    /// Callers must only pass transient-classified reasons; permanent/unknown
+    /// tool errors never reach this method.
+    /// </summary>
+    FallbackDecision EvaluateReason(
+        string reason, string category, int attempt, CancellationToken ct);
 }
