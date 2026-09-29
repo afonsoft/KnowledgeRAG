@@ -57,6 +57,14 @@ public sealed class McpMonitorClient(NavigationManager nav) : IAsyncDisposable
             _connection.On<McpMonitorEventDto>("Activity", e => Activity?.Invoke(e));
             _connection.On<IReadOnlyList<McpMonitorEventDto>>("Snapshot", s => Snapshot?.Invoke(s));
             _connection.On<IngestionProgressEventDto>("IngestionProgress", e => IngestionProgress?.Invoke(e));
+            // SPEC-20260929-observability-and-tests-residual RF-001: replay the
+            // per-job snapshot through the same event path as live progress.
+            _connection.On<List<IngestionProgressEventDto>>("IngestionProgressSnapshot",
+                list =>
+                {
+                    foreach (var e in list)
+                        IngestionProgress?.Invoke(e);
+                });
             _connection.Reconnecting += _ => { StateChanged?.Invoke(); return Task.CompletedTask; };
             _connection.Reconnected += _ => { StateChanged?.Invoke(); return Task.CompletedTask; };
             _connection.Closed += _ => { StateChanged?.Invoke(); return Task.CompletedTask; };

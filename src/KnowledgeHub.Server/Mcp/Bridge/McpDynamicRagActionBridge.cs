@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using KnowledgeHub.Shared.Contracts;
@@ -75,6 +76,12 @@ public static class McpDynamicRagActionBridge
                     IsError = true
                 };
             }
+
+            // SPEC-20260929-observability-and-tests-residual RF-002: a failed
+            // live call returns IsError in-band (no exception) — the span must
+            // still read as an error or failures look like successes.
+            if (result.IsError == true)
+                span?.SetStatus(ActivityStatusCode.Error, $"live tool {tool.Name} failed");
 
             Telemetry.KnowledgeHubMetrics.LiveToolExecutions.Add(1,
                 new KeyValuePair<string, object?>("tool", tool.Name),

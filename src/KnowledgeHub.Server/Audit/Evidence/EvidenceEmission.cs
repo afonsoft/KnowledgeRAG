@@ -43,6 +43,9 @@ public static class EvidenceEmission
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // SPEC-20260929-observability-and-tests-residual RF-003: swallowed
+            // emission failures still mark the span so they are observable.
+            Telemetry.KnowledgeHubActivity.Fail(span, ex);
             logger?.LogWarning(ex, "evidence emission failed for session {SessionId}", sessionId);
             return null;
         }
@@ -70,6 +73,7 @@ public static class EvidenceEmission
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            Telemetry.KnowledgeHubActivity.Fail(span, ex);
             logger?.LogWarning(ex, "evidence emission failed for tool {Tool}", toolName);
             return null;
         }

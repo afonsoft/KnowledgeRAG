@@ -139,7 +139,8 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
         var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
         db.ResilienceSettings.Add(new ResilienceSettings
         {
-            Mode = "enforce", MaxFallbackAttempts = 5
+            Mode = "enforce",
+            MaxFallbackAttempts = 5
         });
         await db.SaveChangesAsync();
 
@@ -162,7 +163,8 @@ public sealed class ResilienceSettingsServiceTests : IDisposable
         var sut = Sut(env);
         await sut.SaveAsync(new SaveResilienceSettingsRequest
         {
-            Mode = "observe", MaxFallbackAttempts = 1,
+            Mode = "observe",
+            MaxFallbackAttempts = 1,
             ToolCapabilities = null // not provided → null JSON → inherit
         });
         Assert.Equal(["tavily"], sut.GetEffective().ToolCapabilities["WebSearch"]);
