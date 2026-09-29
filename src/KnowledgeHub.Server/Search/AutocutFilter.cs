@@ -18,9 +18,12 @@ public static class AutocutFilter
     /// <summary>Hard safety ceiling for the number of results autocut may keep.</summary>
     public const int DefaultMaxClamp = 20;
 
-    /// <summary>Effective ranking score of a hydrated hit (fused RRF when present).</summary>
+    /// <summary>Effective ranking score of a hydrated hit — the score that
+    /// actually ordered the list: rerank when present, else fused RRF, else raw
+    /// (SPEC-20260929-search-scope-pipeline RF-002: autocut must read the curve
+    /// the caller sees, or the elbow lands on the wrong axis).</summary>
     public static double EffectiveScore(SearchResultItem item) =>
-        item.ScoreBreakdown?.Fused ?? item.Score;
+        item.ScoreBreakdown?.Rerank ?? item.ScoreBreakdown?.Fused ?? item.Score;
 
     /// <summary>
     /// Count of leading items to keep for a descending score list. Always ≥1 when

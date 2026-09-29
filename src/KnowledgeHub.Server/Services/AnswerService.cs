@@ -53,12 +53,7 @@ public sealed partial class AnswerService(
         var answerKey = cacheEnabled
             ? CacheKeys.Answer(
                 options.Model ?? "unknown", question,
-                // SPEC-20260929-live-actions-bridge-hardening RF-003: id-less
-                // context items (live-tool outputs) fingerprint by content —
-                // the preview embeds the execution timestamp, so fresh live
-                // data always produces a distinct key (no stale live answers).
-                context.Select(c => c.ChunkId?.ToString("N")
-                    ?? CacheKeys.Hash($"{c.SourceName}|{c.UriReference}|{c.ChunkText}")),
+                context.Select(CacheKeys.AnswerIdentityPart),
                 await IndexVersionToken.GetAsync(cache, logger, cancellationToken))
             : null;
         if (answerKey is not null

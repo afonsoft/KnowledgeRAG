@@ -159,7 +159,11 @@ public sealed class ChainAstTests
 
         Assert.True(result.EstimateBytes() <= 65536);
         var folded = result.Sections[0];
-        Assert.Empty(folded.Headers); // summary pair replaces headers' bodies
+        // SPEC-20260929 RF-001: system headers are pinned — hoisted into the
+        // folded section, never summarized away.
+        var sysHeader = Assert.Single(folded.Headers);
+        Assert.Equal(ChatRole.System, sysHeader.Role);
+        Assert.Equal("sys", sysHeader.Text);
         var pair = Assert.Single(folded.Body);
         Assert.Equal(BodyPairType.SummarizedSection, pair.Type);
         Assert.StartsWith("**summarized content:**", pair.AiMessage.Text);
@@ -196,7 +200,60 @@ public sealed class ChainAstTests
         Assert.True(ChainAstRepair.IsValid(ChainAstRepair.Repair(result)));
     }
 
-    // RF-004: folded reasoning emits a synthetic skip_thought_signature.
+    [Fact]
+    public async Task Compactor_KeptSection_OversizedToolResult_StillTruncates()
+    {
+        // SPEC-20260929 RF-004: a single giant tool result in a KEPT section
+        // must not blow the context — pass-3 truncation covers the tail.
+        var big = new string('y', 40_000);
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.System, "s"),
+            new(ChatRole.User, "q"),
+            Ai("calling", Call("c1")),
+            Tool(Result("c1", big)),
+            Ai("done")
+        };
+        var ast = ChainAstParser.Parse(messages);
+        var compactor = new ChainCompactor(new ChainCompactionOptions
+        {
+            MaxTotalHistoryBytes = 1024,
+            MaxBodyPairBytes = 4096,
+            KeepMinLastSections = 1
+        });
+        var result = await compactor.CompactAsync(ast);
+
+        var toolMsg = result.Sections[^1].Body[0].ToolMessages.Single();
+        var text = toolMsg.Contents.OfType<FunctionResultContent>().Single().Result!.ToString()!;
+        Assert.Contains("truncated", text); // oversized result cut, CallId kept
+        Assert.True(result.EstimateBytes() <= 8 * 1024);
+    }
+
+    [Fact]
+    public async Task Compactor_SystemPrompt_SurvivesFold()
+    {
+        // AC-1: after folding N sections the system prompt is still first and
+        // byte-identical.
+        var messages = new List<ChatMessage> { new(ChatRole.System, "PINNED-INSTRUCTIONS") };
+        for (var i = 0; i < 6; i++)
+        {
+            messages.Add(new ChatMessage(ChatRole.User, $"q{i} " + new string('z', 12000)));
+            messages.Add(Ai($"a{i}"));
+        }
+        var ast = ChainAstParser.Parse(messages);
+        var compactor = new ChainCompactor(new ChainCompactionOptions
+        {
+            MaxTotalHistoryBytes = 8192,
+            KeepMinLastSections = 1
+        });
+        var result = await compactor.CompactAsync(ast);
+
+        var flat = result.ToChatMessages();
+        Assert.Equal(ChatRole.System, flat[0].Role);
+        Assert.Equal("PINNED-INSTRUCTIONS", flat[0].Text);
+    }
+
+    // RF-004: folded reasoning emits a synthetic skip_thought_signature.    // RF-004: folded reasoning emits a synthetic skip_thought_signature.
     [Fact]
     public async Task Compactor_EmitsSkipThoughtSignature()
     {

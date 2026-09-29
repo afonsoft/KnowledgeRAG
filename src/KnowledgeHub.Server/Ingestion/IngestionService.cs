@@ -32,6 +32,10 @@ public sealed class IngestionService(
     Caching.ICacheInvalidationBus? invalidationBus = null) : IIngestionService
 {
     private const long MaxFileBytes = 5 * 1024 * 1024;
+    /// <summary>SPEC-20260929 RF-003: the mass-delete gate only protects
+    /// populated indexes — sources with fewer indexed docs can legitimately
+    /// empty out, so below this count deletions proceed normally.</summary>
+    private const int MinMassDeleteDocs = 4;
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SourceLocks = new();
 
     public Task<SyncResultDto> SyncAsync(
@@ -258,13 +262,31 @@ public sealed class IngestionService(
             }
 
             // Remove documents whose files disappeared from the vault.
-            foreach (var (uri, doc) in existing)
+            // SPEC-20260929 RF-003: mass-delete safety gate — an empty (or near-
+            // empty) enumeration on a POPULATED index cannot prove absence; an
+            // unreadable dir mounts as zero files and would wipe the index.
+            // Small sources (below MinMassDeleteDocs) are exempt: deleting the
+            // only file of a 1–3 doc vault is a legitimate operation, not a
+            // wipe signature.
+            var massDeleteSuspicious =
+                existing.Count >= MinMassDeleteDocs && seen.Count * 2 < existing.Count;
+            if (massDeleteSuspicious)
             {
-                if (seen.Contains(uri))
-                    continue;
-                await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
-                db.Documents.Remove(doc);
-                removed++;
+                logger.LogWarning(
+                    "Sync for source {SourceId}: enumeration returned {Seen} item(s) for {Existing} indexed documents — skipping deletions (possible unreadable folder)",
+                    source.Id, seen.Count, existing.Count);
+                warnings.Add($"deletion skipped: enumeration returned {seen.Count} of {existing.Count} indexed documents — verify the path is accessible");
+            }
+            else
+            {
+                foreach (var (uri, doc) in existing)
+                {
+                    if (seen.Contains(uri))
+                        continue;
+                    await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
+                    db.Documents.Remove(doc);
+                    removed++;
+                }
             }
 
             source.LastSyncAt = DateTimeOffset.UtcNow;
@@ -491,10 +513,23 @@ public sealed class IngestionService(
             options?.Progress?.Report(new SyncProgress(processed, skipped, failed, chunksCreated));
         }
 
+        // SPEC-20260929 RF-003: same safety gate as the file path — a fetch that
+        // sees <50% of a populated index can't prove mass absence. Sources
+        // below MinMassDeleteDocs are exempt (small indexes legitimately empty).
+        var fetchSuspiciousDrop =
+            existing.Count >= MinMassDeleteDocs && seen.Count * 2 < existing.Count;
+        if (fetchSuspiciousDrop && !fetch.Truncated)
+        {
+            logger.LogWarning(
+                "Fetch sync for source {SourceId}: listing returned {Seen} item(s) for {Existing} indexed documents — skipping deletions",
+                source.Id, seen.Count, existing.Count);
+            warnings.Add($"deletion skipped: listing returned {seen.Count} of {existing.Count} indexed documents");
+        }
+
         foreach (var (uri, doc) in existing)
         {
             // RF-002: a truncated listing cannot prove absence — keep everything.
-            if (seen.Contains(uri) || fetch.Truncated)
+            if (seen.Contains(uri) || fetch.Truncated || fetchSuspiciousDrop)
                 continue;
             await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
             db.Documents.Remove(doc);

@@ -26,6 +26,7 @@ using Xunit;
 namespace KnowledgeHub.Tests.Unit.Server;
 
 // Covers SPEC-20260926-review-backlog-remediation — fixes verified per RF.
+[Collection("SearchTelemetry")]
 public sealed class ReviewBacklogTests
 {
     private static (SqliteConnection, DbContextOptions<KnowledgeHubDbContext>) NewDb()

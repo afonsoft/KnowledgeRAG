@@ -85,7 +85,9 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             "sourceName":{"type":"string"},"sourceId":{"type":"string"},
             "score":{"type":"number"},"uriReference":{"type":"string"},
             "sourceType":{"type":"string"}},"required":["chunkText","documentTitle","sourceName","score","uriReference"]}},
-          "grade":{"type":"string"},"retried":{"type":"boolean"}},
+          "grade":{"type":"string"},"retried":{"type":"boolean"},
+          "totalMatches":{"type":"integer"},"limitModeApplied":{"type":"string"},
+          "warnings":{"type":"array","items":{"type":"string"}}},
          "required":["results"]}
         """)!.AsObject();
 
@@ -176,6 +178,12 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                             limitModeApplied = filter.EffectiveLimitMode(limitCfg),
                             // SPEC-20260927-multiquery RF-003: never relax silently.
                             filterRelaxed = outcome.Results.Any(r => r.IsRelaxed),
+                            // SPEC-20260929 RF-009: structured callers get the
+                            // warning field the text path appends inline.
+                            warnings = outcome.Results.All(r => r.IsRelaxed)
+                                && outcome.Results.Count > 0
+                                    ? (IReadOnlyList<string>)["evidence found outside the strict requested scope"]
+                                    : null,
                             originalFilter = Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
                             appliedFilter = outcome.Results.FirstOrDefault(r => r.IsRelaxed)?.RelaxedScope
                                 ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
@@ -631,9 +639,14 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                 + (r.Components is { Count: > 0 } comps
                     ? $" — components: {string.Join(", ", comps)}"
                     : "");
+            // SPEC-20260929 RF-008: when context expansion delivered a wider
+            // window, the non-generate path must surface it — not just the hit.
+            var body = r.Context is { Length: > 0 } ctx
+                ? r.ChunkText + "\n\n[expanded context]\n" + ctx
+                : r.ChunkText;
             sb.Append(Security.PromptBoundary.WrapChunk(
                       i++, $"{r.SourceName}/{r.UriReference}",
-                      header + "\n" + r.ChunkText,
+                      header + "\n" + body,
                       r.SuspicionFlags is not null))
               .Append("\n\n");
         }
