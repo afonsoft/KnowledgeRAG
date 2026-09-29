@@ -41,6 +41,13 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
         var fold = protectedFrom;
         if (fold > 0)
         {
+            // SPEC-20260929 RF-001: system/developer messages are pinned —
+            // hoisted into the folded section's headers, never summarized away.
+            var pinned = ast.Sections.Take(fold)
+                .SelectMany(s => s.Headers)
+                .Where(h => h.Role == ChatRole.System)
+                .ToList();
+
             var summary = BuildSummary(ast.Sections.Take(fold));
             var folded = new ChainSection
             {
@@ -54,6 +61,7 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
                     }
                 }
             };
+            folded.Headers.AddRange(pinned);
             // RF-004: reasoning was dropped with the folded sections — emit a
             // synthetic signature so providers that require thought retention
             // (Gemini/Claude thinking models) still accept the history.
@@ -63,6 +71,15 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
             ast.Sections.RemoveRange(0, fold);
             ast.Sections.Insert(0, folded);
         }
+
+        // SPEC-20260929 RF-004: a single oversized tool result in a kept
+        // section can still blow the budget — truncate across ALL sections
+        // when the fold wasn't enough (CallId preserved).
+        if (ast.EstimateBytes() > options.MaxTotalHistoryBytes)
+            foreach (var s in ast.Sections)
+                foreach (var pair in s.Body)
+                    foreach (var msg in pair.ToolMessages)
+                        TruncateToolResults(msg);
 
         return Task.FromResult(ast);
     }
@@ -103,6 +120,15 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
             var toolList = string.Join(", ", tools);
             if (toolList.Length > 0)
                 sb.Append("  tools used: ").AppendLine(toolList);
+            // SPEC-20260929 RF-005: tool payloads are quoted as `tool output`
+            // — never merged into assistant speech (prompt-injection hygiene).
+            var toolPreview = s.Body
+                .SelectMany(p => p.ToolMessages)
+                .SelectMany(m => m.Contents.OfType<FunctionResultContent>())
+                .Select(r => r.Result?.ToString())
+                .FirstOrDefault(t => !string.IsNullOrWhiteSpace(t));
+            if (toolPreview is not null)
+                sb.Append("  tool output: ").AppendLine(Trim(toolPreview));
             if (!string.IsNullOrWhiteSpace(answer))
                 sb.Append("  answered: ").AppendLine(Trim(answer));
         }
