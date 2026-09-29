@@ -7,10 +7,10 @@
 ## Session
 
 - **started_at**: `2026-09-13`
-- **current_phase**: `Phase 8` (Epic #128 — 5 SPECs Done; bug UI #134 resolvido; release v0.0.2 reparada; tag v.0.0.1 removida)
+- **current_phase**: `Phase 7` (reconciliação 2026-09-28 — issues #269–#279 fechadas com evidência de merge; SPEC pgvector-live-tests sincronizada; fila pentagi/Verba #262–#281 100% entregue)
 - **repository**: `afonsoft/LangGraph-UI`
-- **branch**: `main` (`958fdcb`) — protegida (PR + 5 status checks obrigatórios)
-- **last_updated**: `2026-09-19`
+- **branch**: `main` (`a14b72b`) — protegida (PR + 5 status checks obrigatórios)
+- **last_updated**: `2026-09-28`
 
 ---
 
@@ -52,14 +52,9 @@
 ### Pending Tasks
 
 ```yaml
-- id: TASK-024
-  desc: "Release repair v0.0.2 + delete malformed v.0.0.1 — aguarda merge PR #135 + confirmação destrutiva"
-  tier: T3
-  status: blocked_on_merge_and_confirmation
-- id: TASK-025
-  desc: "Merge PRs #135-#139 + redeploy prod :5550"
-  tier: T1
-  status: blocked_on_ci
+# Fila vazia — backlog zerado em 2026-09-19 (main f282c43) e reconciliado em
+# 2026-09-28: PRs #135–#142 mergeadas, release v0.0.2 reparada, fila
+# pentagi/Verba (#262–#281) 100% mergeada em main via PRs #364–#381.
 ```
 
 ### Completed Tasks
@@ -387,12 +382,12 @@
 | 5 | ~~`install.sh --systemd` verificação~~ — entregue SPEC-20260917-systemd-host-verify, PR #119 | gap-analysis-20260916 | T3 | done |
 | 6 | ~~SSE E2E autenticado~~ — entregue SPEC-20260918-sse-e2e-verify (?access_token=), PR #120 | gap-analysis-20260916 | T2 | done |
 | 7 | ~~Cleanup de branches mergeadas~~ — entregue via SPEC-20260917-merged-branch-cleanup (#93) | Phase 7 (2026-09-17) | T1 | done |
-| 8 | Release & Publish pipeline quebrada (NETSDK1098; releases sem assets; tag v.0.0.1 malformada) | SPEC-20260918-release-publish-singlefile | T3 | pr_open #135 |
-| 9 | install.sh --docker não propaga envs | SPEC-20260918-install-docker-env-passthrough | T2 | pr_open #137 |
-| 10 | CLAUDE.md feature drift (7 features entregues não citadas) | SPEC-20260918-claude-md-feature-sync | T1 | pr_open #138 |
-| 11 | orchestrator_stats/memory stale (este arquivo corrigido nesta sessão) | SPEC-20260918-orchestrator-state-sync | T1 | pr_open (este) |
-| 12 | compose override example sem bloco Chat__* | SPEC-20260918-compose-override-chat-example | T1 | pr_open #139 |
-| 13 | Botões sem texto/ícone (FontAwesome ausente) em Approvals/Chat | Issue #134 | T1 | pr_open #136 |
+| 8 | ~~Release & Publish pipeline quebrada~~ — PRs #135/#141/#142 mergeadas; v0.0.2 reparada | SPEC-20260918-release-publish-singlefile | T3 | done |
+| 9 | ~~install.sh --docker não propaga envs~~ — PR #137 mergeada | SPEC-20260918-install-docker-env-passthrough | T2 | done |
+| 10 | ~~CLAUDE.md feature drift~~ — PR #138 mergeada | SPEC-20260918-claude-md-feature-sync | T1 | done |
+| 11 | ~~orchestrator_stats/memory stale~~ — PR #140 mergeada; resincronizado 2026-09-28 | SPEC-20260918-orchestrator-state-sync | T1 | done |
+| 12 | ~~compose override example sem bloco Chat__*~~ — PR #139 mergeada | SPEC-20260918-compose-override-chat-example | T1 | done |
+| 13 | ~~Botões sem texto/ícone~~ — PR #136 mergeada; #134 fechada | Issue #134 | T1 | done |
 
 ---
 
@@ -404,9 +399,9 @@
 
 ## Metrics
 
-- **tasks_started**: `26`
-- **tasks_completed**: `20` (6 em PR review: #135–#139 + #136)
-- **tasks_blocked**: `1` (release repair v0.0.2 — aguarda merge #135 + confirmação destrutiva para v.0.0.1)
+- **tasks_started**: `45` (26 originais + 13 SPECs pentagi/Verba #269–#281 + 6 slices derivadas)
+- **tasks_completed**: `45`
+- **tasks_blocked**: `0`
 - **human_interventions**: `11`
 - **validation_failures**: `3` (compose empty env → TASK-010/PR #52; format gate red on main → TASK-011/PR #87; NU1403 ILLink re-publish → lockfile regen em #135)
-- **estimated_remaining_minutes**: `15`
+- **estimated_remaining_minutes**: `0`
