@@ -401,6 +401,9 @@ app.MapEvidenceApi().RequireAuthorization(AuthPolicies.Operational).RequireRateL
 // CookieSession: the stats payload embeds flagged questions from every caller —
 // API keys must not enumerate other users' queries (Devin Review PR #367).
 app.MapRagEvaluationApi().RequireAuthorization(AuthPolicies.CookieSession);
+// SPEC-20260928-graph-timeline-viewer RF-001: UI-only read surface over the
+// temporal/episodic knowledge graph — CookieSession like the RAG dashboard.
+app.MapGraphApi().RequireAuthorization(AuthPolicies.CookieSession);
 app.MapSecurityApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
 app.MapMcpInfoApi().RequireRateLimiting("general");
 // SPEC-20260923-observability-metrics RF-003: opt-in Prometheus scrape endpoint.
