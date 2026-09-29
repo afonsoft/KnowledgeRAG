@@ -69,8 +69,15 @@ public sealed class TelemetryTests
             ActivityStopped = activity => { lock (activities) activities.Add(activity); }
         };
         ActivitySource.AddActivityListener(listener);
+        // SPEC-20260928-test-reliability-and-coverage-gate RF-001: the listener
+        // is process-wide — scope collection to this test's trace tree or
+        // parallel tests' spans on the shared hub source leak into the list.
+        using var root = KnowledgeHubActivity.Source.StartActivity("test.scope");
         action();
-        return activities;
+        var traceId = root?.TraceId;
+        return traceId is null
+            ? []
+            : activities.Where(a => a.TraceId == traceId.Value).ToList();
     }
 
     [Fact]
