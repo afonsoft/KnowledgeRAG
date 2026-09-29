@@ -9,7 +9,8 @@
 | Stack | `.NET 10`, `A2A` (client), `Microsoft.Extensions.AI`, Settings UI Blazor |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-a2a-assistant` |
-| Status | `Draft` |
+| Status | `In Progress` |
+| Ticket | #420 |
 | Depends on | `SPEC-20260929-a2a-server-interop` (cliente A2A reutiliza o mesmo transporte) |
 
 ## 1. User Story

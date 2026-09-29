@@ -2,6 +2,24 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "A2A": {
+        "type": "Direct",
+        "requested": "[1.0.0-preview2, )",
+        "resolved": "1.0.0-preview2",
+        "contentHash": "sYFCdcwX/AdEoNSCCOWH8Upo+mmm82qDFXiwZqBBQoLhzQt4KCKvE8txmNaqGuNF8mSrfesSIuqf0rz7oPMl2Q==",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.4.1"
+        }
+      },
+      "A2A.AspNetCore": {
+        "type": "Direct",
+        "requested": "[1.0.0-preview2, )",
+        "resolved": "1.0.0-preview2",
+        "contentHash": "x7E3BqcRrEtOJA21gu77DU2EL5HhWlYUmHYqg9Vjxq0UkqxIniDU3VdoMaZsSP5ock+MJhzZfivmYO+04RORBg==",
+        "dependencies": {
+          "A2A": "1.0.0-preview2"
+        }
+      },
       "AWSSDK.S3": {
         "type": "Direct",
         "requested": "[4.0.103.4, )",

@@ -61,6 +61,23 @@
         "resolved": "3.1.4",
         "contentHash": "5mj99LvCqrq3CNi06xYdyIAXOEh+5b33F2nErCzI5zWiDdLHXiPXEWFSUAF8zlIv0ZWqjZNCwHTQeAPYbF3pCg=="
       },
+      "A2A": {
+        "type": "Transitive",
+        "resolved": "1.0.0-preview2",
+        "contentHash": "sYFCdcwX/AdEoNSCCOWH8Upo+mmm82qDFXiwZqBBQoLhzQt4KCKvE8txmNaqGuNF8mSrfesSIuqf0rz7oPMl2Q==",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "10.4.1",
+          "Microsoft.Extensions.Logging.Abstractions": "10.0.5"
+        }
+      },
+      "A2A.AspNetCore": {
+        "type": "Transitive",
+        "resolved": "1.0.0-preview2",
+        "contentHash": "x7E3BqcRrEtOJA21gu77DU2EL5HhWlYUmHYqg9Vjxq0UkqxIniDU3VdoMaZsSP5ock+MJhzZfivmYO+04RORBg==",
+        "dependencies": {
+          "A2A": "1.0.0-preview2"
+        }
+      },
       "AWSSDK.Core": {
         "type": "Transitive",
         "resolved": "4.0.102.6",
@@ -1236,6 +1253,8 @@
       "KnowledgeHub": {
         "type": "Project",
         "dependencies": {
+          "A2A": "[1.0.0-preview2, )",
+          "A2A.AspNetCore": "[1.0.0-preview2, )",
           "AWSSDK.S3": "[4.0.103.4, )",
           "Azure.Storage.Files.Shares": "[12.27.1, )",
           "DocumentFormat.OpenXml": "[3.3.0, )",

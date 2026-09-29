@@ -1,4 +1,6 @@
+using A2A.AspNetCore;
 using KnowledgeHub.McpEngine;
+using KnowledgeHub.Server.A2A;
 using KnowledgeHub.Server;
 using KnowledgeHub.Server.Mcp;
 using ModelContextProtocol.Extensions.Tasks;
@@ -180,6 +182,13 @@ static System.Threading.RateLimiting.RateLimitPartition<string> RateLimiting(
 }
 builder.Services.AddHostedService<McpActivityBroadcastService>();
 builder.Services.AddHostedService<IngestionProgressBroadcastService>();
+
+// SPEC-20260929-a2a-server-interop RF-001: KnowledgeHub as an A2A v1.0 agent.
+// Card URL uses A2A:BaseUrl when set (behind proxies); the well-known endpoint
+// rebuilds the card per-request with the actual scheme/host.
+builder.Services.AddA2AAgent<KnowledgeHub.Server.A2A.KnowledgeHubA2AAgent>(
+    KnowledgeHub.Server.A2A.A2AEndpointExtensions.BuildAgentCard(
+        new Uri(builder.Configuration["A2A:BaseUrl"] ?? "http://localhost:5000/")));
 
 // SPEC-20260914-auth-login: cookie session (browser SPA) + aft_* API keys
 // (non-browser MCP/API/hub clients). Secure=SameAsRequest keeps dev/test over
@@ -410,6 +419,8 @@ app.MapMcpInfoApi().RequireRateLimiting("general");
 if (app.Configuration.GetValue("Telemetry:Metrics:Prometheus", false))
     app.MapPrometheusScrapingEndpoint().RequireAuthorization(AuthPolicies.Operational);
 app.MapKnowledgeHubMcp().RequireAuthorization(AuthPolicies.Operational);
+// SPEC-20260929-a2a-server-interop RF-001: A2A surface (card + JSON-RPC + REST).
+app.MapA2AApi();
 app.MapHub<McpMonitorHub>("/hubs/mcp").RequireAuthorization(AuthPolicies.Operational);
 app.MapFallbackToFile("index.html");
 
