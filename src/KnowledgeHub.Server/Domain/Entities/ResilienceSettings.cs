@@ -5,7 +5,7 @@ namespace KnowledgeHub.Server.Domain.Entities;
 /// RF-004): fallback mode/budget/alternates editable from /settings without
 /// redeploy. Absent row → the Resilience:Fallback configuration keys apply.
 /// </summary>
-public sealed class ResilienceSettings
+public sealed class ResilienceSettings : Settings.ISingleRowSettings
 {
     /// <summary>Single-row table — the service always upserts row Id = 1.</summary>
     public int Id { get; set; }
