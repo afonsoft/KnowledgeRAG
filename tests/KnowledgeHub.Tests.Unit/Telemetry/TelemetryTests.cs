@@ -59,7 +59,10 @@ public sealed class TelemetryTests
         return samples;
     }
 
-    private static List<Activity> CollectActivities(Action action)
+    private static List<Activity> CollectActivities(Action action) =>
+        CollectActivities(action, out _);
+
+    private static List<Activity> CollectActivities(Action action, out ActivitySpanId rootSpanId)
     {
         var activities = new List<Activity>();
         using var listener = new ActivityListener
@@ -75,6 +78,7 @@ public sealed class TelemetryTests
         // parallel tests' spans on the shared hub source leak into the list.
         using var root = KnowledgeHubActivity.Source.StartActivity("test.scope");
         action();
+        rootSpanId = root?.SpanId ?? default;
         var traceId = root?.TraceId;
         return traceId is null
             ? []
@@ -336,6 +340,88 @@ public sealed class TelemetryTests
             && (m.Tags.TryGetValue("tool", out var tn) && (tn as string) == "tavily_search")
             && (m.Tags.TryGetValue("outcome", out var oc) && (oc as string) == "success"));
         Assert.Single(activities, a => a.OperationName == "search.live_actions");
+    }
+
+    // SPEC-20260929-observability-and-tests-residual RF-002/AC-2: an in-band
+    // failure (IsError=true result, no exception) must still mark the span.
+    [Fact]
+    public async Task LiveActions_IsErrorResult_MarksSpanError()
+    {
+        var tool = new CatalogTool
+        {
+            Name = "tavily_search",
+            Description = "t",
+            InputSchema = JsonNode.Parse(
+                """{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}""")!.AsObject(),
+            ReadOnly = true,
+            Handler = (_, _) => new ValueTask<CallToolResult>(new CallToolResult
+            {
+                IsError = true,
+                Content = [new TextContentBlock { Text = "upstream 500" }]
+            })
+        };
+        var hit = new SearchResultItem
+        {
+            ChunkText = "cheque <!-- mcp-tool: tavily_search query=\"x\" -->",
+            DocumentTitle = "d",
+            SourceName = "s",
+            SourceId = Guid.NewGuid(),
+            Score = 0.9,
+            UriReference = "u",
+            ChunkId = Guid.NewGuid()
+        };
+        var ctx = new ToolCallContext { Services = null! };
+
+        var activities = CollectActivities(() =>
+            McpDynamicRagActionBridge.ExecuteAsync("q", [hit], [tool], ctx, 3,
+                allowDocumentMarkers: true, CancellationToken.None)
+                .GetAwaiter().GetResult());
+
+        var span = Assert.Single(activities, a => a.OperationName == "search.live_actions");
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+    }
+
+    // SPEC-20260929-observability-and-tests-residual RF-003: a swallowed
+    // evidence-emission failure must still mark the evidence.emit span.
+    [Fact]
+    public async Task EvidenceEmit_Failure_MarksSpanError()
+    {
+        var failing = new FailingEvidenceChain();
+        var chunks = new List<SearchResultItem>
+        {
+            new()
+            {
+                ChunkText = "c", DocumentTitle = "d", SourceName = "s",
+                SourceId = Guid.NewGuid(), Score = 0.9, UriReference = "u",
+                ChunkId = Guid.NewGuid()
+            }
+        };
+
+        var activities = CollectActivities(() =>
+            KnowledgeHub.Server.Audit.Evidence.EvidenceEmission.RecordAskAsync(
+                failing, null, "s1", null, "q", chunks, "a", CancellationToken.None)
+                .GetAwaiter().GetResult());
+
+        var span = Assert.Single(activities, a => a.OperationName == "evidence.emit");
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+    }
+
+    private sealed class FailingEvidenceChain : KnowledgeHub.Server.Audit.Evidence.IEvidenceChainService
+    {
+        public string KeyId => "test";
+        public Task<EvidenceReceipt> AppendAsync(
+            KnowledgeHub.Server.Audit.Evidence.EvidenceEvent ev, CancellationToken ct) =>
+            throw new InvalidOperationException("store down");
+        public Task<IReadOnlyList<EvidenceReceipt>> GetSessionReceiptsAsync(
+            string sessionId, CancellationToken ct) =>
+            throw new InvalidOperationException("store down");
+        public Task<KnowledgeHub.Server.Audit.Evidence.EvidenceVerification> VerifyAsync(
+            string sessionId, CancellationToken ct) =>
+            throw new InvalidOperationException("store down");
+        public Task<KnowledgeHub.Server.Audit.Evidence.EvidenceVerification> VerifyReceiptsAsync(
+            IReadOnlyList<KnowledgeHub.Server.Domain.Entities.EvidenceReceipt> receipts,
+            CancellationToken ct) =>
+            throw new InvalidOperationException("store down");
     }
 
     [Fact]

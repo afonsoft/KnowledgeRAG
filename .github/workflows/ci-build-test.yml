@@ -68,22 +68,22 @@ jobs:
       - name: Run Unit Tests
         run: dotnet test tests/KnowledgeHub.Tests.Unit/KnowledgeHub.Tests.Unit.csproj --configuration Release --verbosity minimal --logger "trx;LogFileName=unit-tests.trx" --collect:"XPlat Code Coverage"
 
-      # SPEC-20260928-test-reliability-and-coverage-gate RF-002: enforce the
-      # floor instead of collecting passively. Ratchet — never lower COVERAGE_MIN;
-      # raise it when coverage improves. Measured 2026-09-29: 20.6% (Blazor WASM
-      # client pulls the aggregate down; server projects are ~21–64%).
+      # SPEC-20260928-test-reliability-and-coverage-gate RF-002 +
+      # SPEC-20260929-observability-and-tests-residual RF-004: the floor lives
+      # in .ci/coverage-baseline.txt — a committed baseline, not a hardcoded
+      # env var. PRs compare against it; the coverage-ratchet job raises it
+      # automatically when main's measured coverage improves.
       - name: Coverage Gate
-        env:
-          COVERAGE_MIN: "20"
         run: |
           XML=$(ls -t tests/KnowledgeHub.Tests.Unit/TestResults/*/coverage.cobertura.xml 2>/dev/null | head -1)
           if [ -z "$XML" ]; then echo "::error::coverage.cobertura.xml not found"; exit 1; fi
           RATE=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('$XML').getroot().get('line-rate'))*100, 2))")
-          echo "Line coverage: ${RATE}% (min ${COVERAGE_MIN}%)"
-          if python3 -c "import sys; sys.exit(0 if float('$RATE') >= float('$COVERAGE_MIN') else 1)"; then
+          BASELINE=$(cat .ci/coverage-baseline.txt 2>/dev/null || echo "20")
+          echo "Line coverage: ${RATE}% (baseline ${BASELINE}%)"
+          if python3 -c "import sys; sys.exit(0 if float('$RATE') >= float('$BASELINE') else 1)"; then
             echo "Coverage gate passed."
           else
-            echo "::error::Coverage ${RATE}% < ${COVERAGE_MIN}%"; exit 1
+            echo "::error::Coverage ${RATE}% < baseline ${BASELINE}%"; exit 1
           fi
 
       - name: Upload Test Results
@@ -92,6 +92,14 @@ jobs:
         with:
           name: unit-test-results
           path: "**/unit-tests.trx"
+          if-no-files-found: ignore
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
+        if: always()
+        with:
+          name: unit-coverage-xml
+          path: "**/coverage.cobertura.xml"
           if-no-files-found: ignore
 
   test-integration:
@@ -182,3 +190,42 @@ jobs:
           tags: knowledgehub:ci-test
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
+
+  # SPEC-20260929-observability-and-tests-residual RF-004: after a main push,
+  # raise .ci/coverage-baseline.txt to the measured rate when it improved.
+  # The gate on PRs then enforces "no regression vs main" automatically —
+  # the baseline is a ratchet, never lowered by CI.
+  coverage-ratchet:
+    name: Coverage Baseline Ratchet
+    runs-on: ubuntu-latest
+    needs: test-unit
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: Download Coverage Report
+        uses: actions/download-artifact@fc4bd39353f77d6ebe6f7a0b66a61cc069d5ae11   # v8
+        with:
+          name: unit-coverage-xml
+
+      - name: Raise Baseline When Improved
+        run: |
+          XML=$(find . -name "coverage.cobertura.xml" | head -1)
+          if [ -z "$XML" ]; then echo "coverage xml not found — skipping ratchet"; exit 0; fi
+          RATE=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('$XML').getroot().get('line-rate'))*100, 2))")
+          BASELINE=$(cat .ci/coverage-baseline.txt 2>/dev/null || echo "0")
+          echo "measured ${RATE}% vs baseline ${BASELINE}%"
+          if python3 -c "import sys; sys.exit(0 if float('$RATE') > float('$BASELINE') else 1)"; then
+            echo "$RATE" > .ci/coverage-baseline.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .ci/coverage-baseline.txt
+            git commit -m "chore(ci): raise coverage baseline to ${RATE}% [skip ci]"
+            git push
+          else
+            echo "coverage did not improve — baseline unchanged"
+          fi
