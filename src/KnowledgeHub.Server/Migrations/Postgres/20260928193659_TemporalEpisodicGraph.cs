@@ -23,7 +23,8 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                 name: "Labels",
                 table: "KgNodes",
                 type: "text[]",
-                nullable: false);
+                nullable: false,
+                defaultValueSql: "'{}'::text[]");
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "ObservedAt",

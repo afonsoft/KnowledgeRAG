@@ -2,19 +2,20 @@
 
 ## Visão geral
 
-O KnowledgeHub é uma plataforma de conhecimento standalone tudo-em-um em .NET 10. Combina uma SPA administrativa Blazor WebAssembly, uma API REST de gerenciamento, um servidor MCP (Model Context Protocol) nativo e um hub de atividade SignalR em um único processo Kestrel.
+O KnowledgeHub é uma plataforma de conhecimento standalone tudo-em-um em .NET 10. Combina uma SPA administrativa Blazor WebAssembly, uma API REST de gerenciamento, um servidor MCP (Model Context Protocol) nativo, um endpoint A2A v1.0 (Agent-to-Agent) e um hub de atividade SignalR em um único processo Kestrel.
 
 > Diagramas completos, ADRs e a visão de runtime interativa ficam em [`docs/architecture/`](../architecture/) — veja `system-architecture.md` e o `README.md` de lá.
 
 ## Camadas do sistema
 
 ```
-                                  +---------------------------+
-                                  |    External MCP Clients   |
-                                  | (Cursor, Claude Desktop)  |
-                                  +--------------+------------+
-                                                 | Streamable HTTP / SSE
-                                                 v
+     +---------------------------+   +---------------------------+
+     |    External MCP Clients   |   |      Agentes A2A (v1.0)   |
+     | (Cursor, Claude Desktop)  |   | (JSON-RPC / HTTP+JSON)    |
+     +--------------+------------+   +--------------+------------+
+                    | Streamable HTTP / SSE      | /.well-known/agent-card.json
+                    |                            | /a2a  (mesmo escopo aft_*)
+                    v                            v
 +------------------+             +---------------+-----------+
 |    Blazor SPA    |             |  KnowledgeHub.Server      |
 | (Admin PWA / UI) |             |  (Kestrel, Minimal APIs)  |

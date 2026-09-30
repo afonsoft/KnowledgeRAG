@@ -112,7 +112,7 @@
     private List<(string Name, string Snippet)> _clients = [];
     private bool _legacySse = true;
 
-    private string LlmConfigPrompt => McpOnboardingPrompt.Build(_mcpUrl, _sseUrl);
+    private string LlmConfigPrompt => McpOnboardingPrompt.Build(Nav.BaseUri.TrimEnd('/'));
 
     protected override async Task OnInitializedAsync()
     {

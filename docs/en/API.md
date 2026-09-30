@@ -130,3 +130,19 @@ Responses may carry `suggestedActions` (search — tool calls the model can issu
 | `/hubs/mcp` | SignalR activity feed |
 | `/metrics` | Prometheus scrape endpoint (`Telemetry:Metrics:Prometheus=true`) |
 | `/framework-assets/{stem}/{ext}` | proxy-safe `_framework` asset mirror |
+
+## A2A (Agent-to-Agent v1.0)
+
+Discovery is anonymous; execution requires `Authorization: Bearer aft_*` and runs under that key's scope (allowed tools/sources, write gates, `llm` rate limit).
+
+- `GET /.well-known/agent-card.json` — Agent Card (`protocolVersion` 1.0, bindings `JSONRPC` + `HTTP+JSON`, streaming on).
+- `POST /a2a` — JSON-RPC `SendMessage`/`SendStreamingMessage`/`GetTask`/`ListTasks`/`CancelTask`; or HTTP+JSON `POST /a2a/message:send`.
+- Skill selection via message metadata `{"skill": "ask_knowledge|search_knowledge|agent_chat|read_document"}` (default `ask_knowledge`); optional `{"arguments": {...}}` merges with the message text (`question`/`query`/`message`/`path`).
+
+```jsonc
+// POST /a2a  (JSON-RPC)
+{ "jsonrpc": "2.0", "id": 1, "method": "SendMessage",
+  "params": { "message": { "messageId": "m1", "role": "ROLE_USER",
+    "parts": [{ "text": "what changed in the auth policy?" }],
+    "metadata": { "skill": "search_knowledge" } } } }
+```
