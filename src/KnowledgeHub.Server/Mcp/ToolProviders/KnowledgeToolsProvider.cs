@@ -392,9 +392,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             // keyed by the caller's API key (or "mcp" for cookie sessions).
             var apiKeyId = CallerIdentity.TryGetApiKeyId(ctx)?.ToString("N");
             await Audit.Evidence.EvidenceEmission.RecordAskAsync(
-                ctx.Services.GetService<Audit.Evidence.IEvidenceChainService>(),
-                ctx.Services.GetService<ILoggerFactory>()?.CreateLogger("EvidenceEmission"),
-                $"mcp:{apiKeyId ?? "session"}", apiKeyId,
+                new Audit.Evidence.EvidenceEmission.EmissionContext(
+                    ctx.Services.GetService<Audit.Evidence.IEvidenceChainService>(),
+                    $"mcp:{apiKeyId ?? "session"}", apiKeyId,
+                    ctx.Services.GetService<ILoggerFactory>()?.CreateLogger("EvidenceEmission")),
                 question, results, answer.Answer ?? "", ct);
             var text = new StringBuilder(answer.Answer + relaxedWarning);
             if (answer.Citations.Count > 0)

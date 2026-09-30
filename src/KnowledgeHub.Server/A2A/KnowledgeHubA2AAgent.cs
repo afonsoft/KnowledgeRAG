@@ -44,33 +44,36 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         using var span = KnowledgeHubActivity.Start("a2a.serve");
         span?.SetTag("a2a.skill", skill ?? "rejected");
 
+        var route = new InvocationRoute(skill, arguments, routeError);
         if (string.IsNullOrEmpty(context.TaskId))
         {
-            await HandleMessageAsync(context, eventQueue, services, skill, arguments, routeError,
-                span, cancellationToken);
+            await HandleMessageAsync(context, eventQueue, services, route, span, cancellationToken);
             return;
         }
 
-        await HandleTaskAsync(context, eventQueue, services, logger, skill, arguments, routeError,
-            span, cancellationToken);
+        await HandleTaskAsync(context, eventQueue, services, logger, route, span, cancellationToken);
     }
+
+    /// <summary>Resolved invocation: the routed skill, its arguments and any
+    /// routing error — shared by the message and task paths.</summary>
+    private sealed record InvocationRoute(
+        string? Skill, IDictionary<string, JsonElement>? Arguments, string? RouteError);
 
     /// <summary>Simple (non-task) message path — replies via <see cref="MessageResponder"/>.</summary>
     private static async Task HandleMessageAsync(
         RequestContext context, AgentEventQueue eventQueue, IServiceProvider? services,
-        string? skill, IDictionary<string, JsonElement>? arguments, string? routeError,
-        Activity? span, CancellationToken ct)
+        InvocationRoute route, Activity? span, CancellationToken ct)
     {
         var responder = new MessageResponder(eventQueue, context.ContextId);
-        if (routeError is not null || services is null || skill is null)
+        if (route.RouteError is not null || services is null || route.Skill is null)
         {
             RecordOutcome("rejected");
             await responder.ReplyAsync(
-                routeError ?? "A2A handler unavailable", cancellationToken: ct);
+                route.RouteError ?? "A2A handler unavailable", cancellationToken: ct);
             return;
         }
 
-        var (ok, parts, _) = await InvokeAsync(services, skill, arguments, span, ct);
+        var (ok, parts, _) = await InvokeAsync(services, route.Skill, route.Arguments, span, ct);
         RecordOutcome(ok ? "ok" : "error");
         await responder.ReplyAsync(LastText(parts), cancellationToken: ct);
     }
@@ -79,26 +82,25 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
     /// RF-005 evidence receipt for the delegated tool call.</summary>
     private async Task HandleTaskAsync(
         RequestContext context, AgentEventQueue eventQueue, IServiceProvider? services,
-        ILogger? logger, string? skill, IDictionary<string, JsonElement>? arguments,
-        string? routeError, Activity? span, CancellationToken ct)
+        ILogger? logger, InvocationRoute route, Activity? span, CancellationToken ct)
     {
         var updater = new TaskUpdater(eventQueue, context.TaskId, context.ContextId);
         if (!context.IsContinuation)
             await updater.SubmitAsync(ct);
 
-        if (routeError is not null || services is null || skill is null)
+        if (route.RouteError is not null || services is null || route.Skill is null)
         {
             RecordOutcome("rejected");
-            await updater.FailAsync(AgentMessage(routeError ?? "A2A handler unavailable", context.ContextId), ct);
+            await updater.FailAsync(AgentMessage(route.RouteError ?? "A2A handler unavailable", context.ContextId), ct);
             return;
         }
 
         await updater.StartWorkAsync(cancellationToken: ct);
 
-        var (success, parts, resultJson) = await InvokeAsync(services, skill, arguments, span, ct);
+        var (success, parts, resultJson) = await InvokeAsync(services, route.Skill, route.Arguments, span, ct);
 
-        await updater.AddArtifactAsync(parts, artifactId: $"art_{skill}",
-            name: skill, lastChunk: true, cancellationToken: ct);
+        await updater.AddArtifactAsync(parts, artifactId: $"art_{route.Skill}",
+            name: route.Skill, lastChunk: true, cancellationToken: ct);
         var done = AgentMessage(
             parts.FirstOrDefault(p => p.Text is not null)?.Text ?? (success ? "done" : "failed"),
             context.ContextId);
@@ -111,10 +113,11 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
 
         var apiKeyId = http.HttpContext?.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
         await EvidenceEmission.RecordToolAsync(
-            services.GetService<IEvidenceChainService>(), logger,
-            $"a2a:{context.ContextId}", apiKeyId, context.TaskId,
-            skill, context.TaskId,
-            arguments is null ? null : JsonSerializer.Serialize(arguments),
+            new EvidenceEmission.EmissionContext(
+                services.GetService<IEvidenceChainService>(), $"a2a:{context.ContextId}", apiKeyId, logger),
+            threadId: context.TaskId,
+            route.Skill,
+            route.Arguments is null ? null : JsonSerializer.Serialize(route.Arguments),
             resultJson, parent: null, ct);
     }
 

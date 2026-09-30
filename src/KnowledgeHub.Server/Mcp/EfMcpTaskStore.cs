@@ -33,7 +33,7 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
             new DbContextOptionsBuilder<KnowledgeHubDbContext>()
                 .UseSqlite($"Data Source={DatabasePath.Resolve(configuration)}").Options);
 
-    public async Task<McpTaskInfo> CreateTaskAsync(CancellationToken cancellationToken)
+    public async Task<McpTaskInfo> CreateTaskAsync(CancellationToken cancellationToken = default)
     {
         var row = new McpTask
         {
@@ -48,21 +48,21 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
         return Map(row);
     }
 
-    public async Task<McpTaskInfo?> GetTaskAsync(string taskId, CancellationToken cancellationToken)
+    public async Task<McpTaskInfo?> GetTaskAsync(string taskId, CancellationToken cancellationToken = default)
     {
         await using var db = Open();
         var row = await db.McpTasks.FirstOrDefaultAsync(t => t.TaskId == taskId, cancellationToken);
         return row is null || Expired(row) ? null : Map(row);
     }
 
-    public async Task SetCompletedAsync(string taskId, JsonElement result, CancellationToken cancellationToken) =>
+    public async Task SetCompletedAsync(string taskId, JsonElement result, CancellationToken cancellationToken = default) =>
         await MutateAsync(taskId, cancellationToken, row =>
         {
             row.Status = "completed";
             row.ResultJson = result.GetRawText();
         });
 
-    public async Task SetFailedAsync(string taskId, JsonElement error, CancellationToken cancellationToken) =>
+    public async Task SetFailedAsync(string taskId, JsonElement error, CancellationToken cancellationToken = default) =>
         await MutateAsync(taskId, cancellationToken, row =>
         {
             row.Status = "failed";
@@ -71,7 +71,7 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
 
     /// <summary>Cancellation is idempotent — terminal rows return false,
     /// anything pending flips to cancelled.</summary>
-    public async Task<bool> SetCancelledAsync(string taskId, CancellationToken cancellationToken)
+    public async Task<bool> SetCancelledAsync(string taskId, CancellationToken cancellationToken = default)
     {
         await using var db = Open();
         var row = await db.McpTasks.FirstOrDefaultAsync(t => t.TaskId == taskId, cancellationToken);
@@ -84,7 +84,7 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
     }
 
     public async Task SetInputRequestsAsync(
-        string taskId, IDictionary<string, InputRequest> inputRequests, CancellationToken cancellationToken) =>
+        string taskId, IDictionary<string, InputRequest> inputRequests, CancellationToken cancellationToken = default) =>
         await MutateAsync(taskId, cancellationToken, row =>
         {
             row.Status = "input_required";
@@ -96,7 +96,7 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
     /// raises <see cref="InputResponseReceived"/> per entry so the blocked
     /// execution can resume.</summary>
     public async Task ResolveInputRequestsAsync(
-        string taskId, IDictionary<string, InputResponse> inputResponses, CancellationToken cancellationToken)
+        string taskId, IDictionary<string, InputResponse> inputResponses, CancellationToken cancellationToken = default)
     {
         await MutateAsync(taskId, cancellationToken, row =>
         {
@@ -119,7 +119,7 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
         await db.SaveChangesAsync(ct);
     }
 
-    private bool Expired(McpTask row) =>
+    private static bool Expired(McpTask row) =>
         row.TtlMs is { } ttl && row.CreatedAt + TimeSpan.FromMilliseconds(ttl) < DateTimeOffset.UtcNow;
 
     private static McpTaskInfo Map(McpTask row) => new(

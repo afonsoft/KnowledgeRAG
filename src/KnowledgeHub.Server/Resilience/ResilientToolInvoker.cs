@@ -63,8 +63,8 @@ public static class ResilientToolInvoker
                 {
                     var decision = engine.Evaluate(ex, "tools", attempt, ct);
                     if (!decision.ShouldFallback
-                        || !TryNext(registry, catalog, available, visited,
-                            current.Name, ctx.Arguments, out var next, out var mappedArgs))
+                        || !TryNext(new FallbackProbe(registry, catalog, available, visited,
+                            current.Name, ctx.Arguments), out var next, out var mappedArgs))
                         throw;
 
                     KnowledgeHubMetrics.ToolFallbacks.Add(1,
@@ -94,8 +94,8 @@ public static class ResilientToolInvoker
                 var reason = ToolErrorClassifier.ReasonFor(text);
                 var decision2 = engine.EvaluateReason(reason, "tools", attempt, ct);
                 if (!decision2.ShouldFallback
-                    || !TryNext(registry, catalog, available, visited,
-                        current.Name, ctx.Arguments, out var next2, out var mappedArgs2))
+                    || !TryNext(new FallbackProbe(registry, catalog, available, visited,
+                        current.Name, ctx.Arguments), out var next2, out var mappedArgs2))
                     return result;
 
                 KnowledgeHubMetrics.ToolFallbacks.Add(1,
@@ -114,28 +114,33 @@ public static class ResilientToolInvoker
             }
         };
 
+    /// <summary>Fallback search state for <see cref="TryNext"/> — the caller's
+    /// environment (registry/catalog/available) plus the probe cursor.</summary>
+    private sealed record FallbackProbe(
+        ToolCapabilityRegistry Registry,
+        IReadOnlyDictionary<string, CatalogTool> Catalog,
+        IReadOnlyCollection<string> Available,
+        HashSet<string> Visited,
+        string Current,
+        IDictionary<string, System.Text.Json.JsonElement>? OriginalArgs);
+
     /// <summary>Picks the next same-capability tool that is visible to this
     /// caller (present in the scope-filtered catalog), read-only, not already
     /// tried, and whose required args the caller's arguments can satisfy
     /// (SPEC-20260929 RF-003 — never hand another tool a foreign arg shape).</summary>
     private static bool TryNext(
-        ToolCapabilityRegistry registry,
-        IReadOnlyDictionary<string, CatalogTool> catalog,
-        IReadOnlyCollection<string> available,
-        HashSet<string> visited,
-        string current,
-        IDictionary<string, System.Text.Json.JsonElement>? originalArgs,
+        FallbackProbe probe,
         out CatalogTool next,
         out IDictionary<string, System.Text.Json.JsonElement>? mappedArgs)
     {
-        foreach (var name in registry.CandidateToolNames(current, available)
-            .Where(n => !visited.Contains(n)))
+        foreach (var name in probe.Registry.CandidateToolNames(probe.Current, probe.Available)
+            .Where(n => !probe.Visited.Contains(n)))
         {
-            if (!catalog.TryGetValue(name, out var candidate))
+            if (!probe.Catalog.TryGetValue(name, out var candidate))
                 continue;
             if (!candidate.ReadOnly)
                 continue; // never substitute a write-capable tool
-            if (!MapArgs(candidate, originalArgs, out mappedArgs))
+            if (!MapArgs(candidate, probe.OriginalArgs, out mappedArgs))
                 continue; // schema-incompatible — args would be meaningless
             next = candidate;
             return true;

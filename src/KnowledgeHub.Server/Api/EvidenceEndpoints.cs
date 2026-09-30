@@ -1,5 +1,6 @@
 using System.Text.Json;
 using KnowledgeHub.Server.Audit.Evidence;
+using KnowledgeHub.Server.Domain.Entities;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KnowledgeHub.Server.Api;
@@ -28,16 +29,9 @@ public static class EvidenceEndpoints
             // produced — every receipt must carry its ApiKeyId. Cookie callers
             // are refused outright: the shared "mcp:session" bucket carries no
             // per-user attribution, so no cookie-scoped ownership can be proven.
-            var scope = http.RequestServices.GetService<Auth.ICallerScopeProvider>() is { } sp
-                ? await sp.GetAsync(ct) : null;
-            if (scope is { } s)
-            {
-                if (s.ApiKeyId is null)
-                    return Results.Forbid();
-                if (receipts.Any(r => !string.Equals(r.ApiKeyId,
-                        s.ApiKeyId.Value.ToString("N"), StringComparison.OrdinalIgnoreCase)))
-                    return Results.Forbid();
-            }
+            var denied = await ExportDeniedAsync(receipts, http, ct);
+            if (denied is not null)
+                return denied;
 
             // SPEC-20260929 RF-003: integrity is re-verified with the instance
             // key — over exactly the exported snapshot, not a fresh re-read.
@@ -52,29 +46,49 @@ public static class EvidenceEndpoints
                 totalReceipts = receipts.Count,
                 chainIntegrity = verification.IsValid ? "Valid" : "Failed",
                 violations = verification.Violations,
-                receipts = receipts.Select(r => new
-                {
-                    receiptId = r.ReceiptId,
-                    parentReceiptIds = r.ParentReceiptIds is null
-                        ? (object?)null : JsonSerializer.Deserialize<object>(r.ParentReceiptIds),
-                    sessionId = r.SessionId,
-                    threadId = r.ThreadId,
-                    apiKeyId = r.ApiKeyId,
-                    eventType = r.EventType,
-                    actorType = r.ActorType,
-                    inputHash = r.InputHash,
-                    outputHash = r.OutputHash,
-                    artifactHashes = r.ArtifactHashes is null
-                        ? (object?)null : JsonSerializer.Deserialize<object>(r.ArtifactHashes),
-                    timestamp = r.Timestamp,
-                    parentDigest = r.ParentDigest,
-                    receiptDigest = r.ReceiptDigest,
-                    signature = r.Signature,
-                    keyId = r.KeyId
-                })
+                receipts = receipts.Select(ProjectReceipt)
             });
         });
 
         return group;
     }
+
+    /// <summary>RF-002 export authorization — non-null result means denied.</summary>
+    private static async Task<IResult?> ExportDeniedAsync(
+        IReadOnlyList<EvidenceReceipt> receipts, HttpContext http, CancellationToken ct)
+    {
+        if (http.RequestServices.GetService<Auth.ICallerScopeProvider>() is not { } provider)
+            return null;
+        var scope = await provider.GetAsync(ct);
+        if (scope is null)
+            return null;
+        if (scope.ApiKeyId is null)
+            return Results.Forbid();
+        if (receipts.Any(r => !string.Equals(r.ApiKeyId,
+                scope.ApiKeyId.Value.ToString("N"), StringComparison.OrdinalIgnoreCase)))
+            return Results.Forbid();
+        return null;
+    }
+
+    /// <summary>Wire projection of one receipt (null JSON blobs stay null).</summary>
+    private static object ProjectReceipt(EvidenceReceipt r) => new
+    {
+        receiptId = r.ReceiptId,
+        parentReceiptIds = r.ParentReceiptIds is null
+            ? (object?)null : JsonSerializer.Deserialize<object>(r.ParentReceiptIds),
+        sessionId = r.SessionId,
+        threadId = r.ThreadId,
+        apiKeyId = r.ApiKeyId,
+        eventType = r.EventType,
+        actorType = r.ActorType,
+        inputHash = r.InputHash,
+        outputHash = r.OutputHash,
+        artifactHashes = r.ArtifactHashes is null
+            ? (object?)null : JsonSerializer.Deserialize<object>(r.ArtifactHashes),
+        timestamp = r.Timestamp,
+        parentDigest = r.ParentDigest,
+        receiptDigest = r.ReceiptDigest,
+        signature = r.Signature,
+        keyId = r.KeyId
+    };
 }

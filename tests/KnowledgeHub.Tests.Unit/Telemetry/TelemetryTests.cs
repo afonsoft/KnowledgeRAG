@@ -193,7 +193,8 @@ public sealed class TelemetryTests
         };
         var agent = new AgentService(new TwoTurnChatClient(),
             new ServiceCollection().BuildServiceProvider(), new StubCatalog(tool), db,
-            new AgentOptions(), null, NullLogger<AgentService>.Instance);
+            new AgentOptions(), new AgentDiagnostics(null, null, null),
+            NullLogger<AgentService>.Instance);
 
         var activities = CollectActivities(() =>
             agent.RunAsync(new AgentRequest { Prompt = "hi" }).GetAwaiter().GetResult());
@@ -399,7 +400,8 @@ public sealed class TelemetryTests
 
         var activities = CollectActivities(() =>
             KnowledgeHub.Server.Audit.Evidence.EvidenceEmission.RecordAskAsync(
-                failing, null, "s1", null, "q", chunks, "a", CancellationToken.None)
+                new KnowledgeHub.Server.Audit.Evidence.EvidenceEmission.EmissionContext(
+                    failing, "s1", null, null), "q", chunks, "a", CancellationToken.None)
                 .GetAwaiter().GetResult());
 
         var span = Assert.Single(activities, a => a.OperationName == "evidence.emit");

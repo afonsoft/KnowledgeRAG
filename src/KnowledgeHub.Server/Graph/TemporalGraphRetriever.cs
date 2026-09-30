@@ -156,17 +156,7 @@ public sealed class TemporalGraphRetriever(
         // Temporal queries are history-aware: superseded rows (ValidTo set)
         // remain retrievable by their observation time — ValidTo is surfaced
         // in the payload so callers can tell current facts from history.
-        IQueryable<KgEdge> edgesQuery = db.KgEdges.AsNoTracking();
-        if (scope.AllowedSourceIds is { } allowed)
-            edgesQuery = edgesQuery.Where(e => allowed.Contains(e.KnowledgeSourceId));
-        if (start is not null)
-            edgesQuery = edgesQuery.Where(e => e.ObservedAt >= start);
-        if (end is not null)
-            edgesQuery = edgesQuery.Where(e => e.ObservedAt <= end);
-        if (linked.Count > 0)
-            edgesQuery = edgesQuery.Where(e =>
-                linked.Contains(e.FromNodeId) || linked.Contains(e.ToNodeId));
-
+        var edgesQuery = BuildWindowEdgeQuery(scope, start, end, linked);
         var edges = await edgesQuery
             .OrderByDescending(e => e.ObservedAt)
             .Take(EdgeScanCap + 1)
@@ -201,6 +191,25 @@ public sealed class TemporalGraphRetriever(
             "temporal window search '{Query}' [{Start}..{End}] → {Nodes} node(s), {Edges} edge(s)",
             query, start, end, nodes.Count, edges.Count);
         return new TemporalSearchResult(nodes, edges, null, start, end, truncated);
+    }
+
+    /// <summary>Composes the window edge query: caller scope, observation
+    /// bounds and linked-entity restriction (history-aware — ValidTo rows stay
+    /// retrievable by ObservedAt).</summary>
+    private IQueryable<KgEdge> BuildWindowEdgeQuery(
+        Auth.CallerScope scope, DateTime? start, DateTime? end, List<Guid> linked)
+    {
+        IQueryable<KgEdge> edgesQuery = db.KgEdges.AsNoTracking();
+        if (scope.AllowedSourceIds is { } allowed)
+            edgesQuery = edgesQuery.Where(e => allowed.Contains(e.KnowledgeSourceId));
+        if (start is not null)
+            edgesQuery = edgesQuery.Where(e => e.ObservedAt >= start);
+        if (end is not null)
+            edgesQuery = edgesQuery.Where(e => e.ObservedAt <= end);
+        if (linked.Count > 0)
+            edgesQuery = edgesQuery.Where(e =>
+                linked.Contains(e.FromNodeId) || linked.Contains(e.ToNodeId));
+        return edgesQuery;
     }
 
     /// <summary>Sliding-window variant: facts observed since

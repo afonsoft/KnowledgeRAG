@@ -293,8 +293,10 @@ public sealed class SearchService(
             && !callerAllowed.Contains(s);
         var minResults = Math.Max(0, configuration.GetValue("Search:Relaxation:MinResults", 1));
         if (relaxAllowed && !deniedSource && final.Count < minResults)
-            final = await ApplyRelaxationAsync(query, topK, sourceId, filter, mode,
-                scope, conversationContext, degraded, final.ToList(), minResults, ct);
+            final = await ApplyRelaxationAsync(
+                new RelaxationQuery(query, topK, sourceId, filter, mode,
+                    scope, conversationContext, degraded, minResults),
+                final.ToList(), ct);
 
         // SPEC-20260924-hierarchical-retrieval: post-selection context expansion
         // (neighbours / parent section) — never affects ranking.
@@ -309,12 +311,16 @@ public sealed class SearchService(
     /// the caller's allowed-source scope). Relaxed hits merge with the strict
     /// ones under a 0.85^level score penalty so strict matches keep precedence.
     /// </summary>
+    /// <summary>Query context for the relaxation cascade (SPEC-20260927-multiquery RF-002).</summary>
+    private sealed record RelaxationQuery(
+        string Query, int TopK, Guid? SourceId, ResolvedSearchFilter? Filter,
+        SearchMode Mode, Auth.CallerScope Scope, string? ConversationContext,
+        DegradationState Degraded, int MinResults);
+
     private async Task<List<SearchResultItem>> ApplyRelaxationAsync(
-        string query, int topK, Guid? sourceId, ResolvedSearchFilter? filter,
-        SearchMode mode, Auth.CallerScope scope, string? conversationContext,
-        DegradationState degraded, List<SearchResultItem> strict,
-        int minResults, CancellationToken ct)
+        RelaxationQuery q, List<SearchResultItem> strict, CancellationToken ct)
     {
+        var (query, topK, sourceId, filter, mode, scope, conversationContext, degraded, minResults) = q;
         var merged = strict.ToList();
         var seen = strict.Where(i => i.ChunkId is not null)
             .Select(i => i.ChunkId!.Value).ToHashSet();

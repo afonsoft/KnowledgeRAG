@@ -69,9 +69,10 @@ public sealed class SqlDatabaseConnector(
             await connection.OpenAsync(cancellationToken);
 
             return await RunQueryAsync(
-                connection, query, commandTimeout, maxRows,
-                idColumns, titleColumn, contentColumns, urlColumn,
-                provider == "postgres", source.Name, cancellationToken);
+                connection,
+                new QuerySpec(query, commandTimeout, maxRows, provider == "postgres"),
+                new ColumnMapping(idColumns, titleColumn, contentColumns, urlColumn),
+                source.Name, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -86,13 +87,22 @@ public sealed class SqlDatabaseConnector(
             ? new SqliteConnection(PrepareSqliteConnectionString(connectionString))
             : new NpgsqlConnection(connectionString);
 
+    /// <summary>Query execution settings for <see cref="RunQueryAsync"/>.</summary>
+    private sealed record QuerySpec(
+        string Query, int CommandTimeout, int MaxRows, bool PostgresReadOnlyTransaction);
+
+    /// <summary>Column-mapping configuration for <see cref="RunQueryAsync"/>.</summary>
+    private sealed record ColumnMapping(
+        string[] IdColumns, string? TitleColumn, string[] ContentColumns, string? UrlColumn);
+
     /// <summary>Runs the validated query and maps rows (RF-005). Postgres runs
     /// inside a READ ONLY transaction that always rolls back.</summary>
     private async Task<FetchResult> RunQueryAsync(
-        DbConnection connection, string query, int commandTimeout, int maxRows,
-        string[] idColumns, string? titleColumn, string[] contentColumns, string? urlColumn,
-        bool postgresReadOnlyTransaction, string sourceName, CancellationToken ct)
+        DbConnection connection, QuerySpec spec, ColumnMapping mapping,
+        string sourceName, CancellationToken ct)
     {
+        var (query, commandTimeout, maxRows, postgresReadOnlyTransaction) = spec;
+        var (idColumns, titleColumn, contentColumns, urlColumn) = mapping;
         var warnings = new List<string>();
         var warned = new HashSet<string>(StringComparer.Ordinal);
         var documents = new List<RawDocument>();

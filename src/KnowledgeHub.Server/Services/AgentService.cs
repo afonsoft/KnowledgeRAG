@@ -22,17 +22,25 @@ namespace KnowledgeHub.Server.Services;
 /// the run into a pending <see cref="ToolApproval"/> resumable via
 /// <see cref="ResumeAsync"/> (SPEC-20260914-hitl-tool-approval).
 /// </summary>
+/// <param name="Diagnostics">Optional observability collaborators (feed, compactor, evidence).</param>
+public sealed record AgentDiagnostics(
+    IMcpActivityFeed? Feed,
+    McpEngine.Agents.ChainAst.IChainCompactor? Compactor,
+    Audit.Evidence.IEvidenceChainService? Evidence);
+
 public sealed class AgentService(
     IChatClient? chatClient,
     IServiceProvider services,
     IDynamicToolCatalog catalog,
     KnowledgeHubDbContext db,
     AgentOptions options,
-    IMcpActivityFeed? feed,
-    ILogger<AgentService> logger,
-    McpEngine.Agents.ChainAst.IChainCompactor? compactor = null,
-    Audit.Evidence.IEvidenceChainService? evidence = null) : IAgentService
+    AgentDiagnostics diagnostics,
+    ILogger<AgentService> logger) : IAgentService
 {
+    private IMcpActivityFeed? Feed => diagnostics.Feed;
+    private McpEngine.Agents.ChainAst.IChainCompactor? Compactor => diagnostics.Compactor;
+    private Audit.Evidence.IEvidenceChainService? Evidence => diagnostics.Evidence;
+
     private const string SystemPrompt =
         "You are the KnowledgeHub agent. Use the available tools to research the " +
         "knowledge base, then answer concisely and cite source/uri of what you used. " +
@@ -522,11 +530,11 @@ public sealed class AgentService(
                         // SPEC-20260927-chain-ast-thread-compactor: repair
                         // dangling tool calls and compact history before the
                         // model sees it (never on the persisted transcript).
-                        if (compactor is not null)
+                        if (Compactor is not null)
                         {
                             var ast = McpEngine.Agents.ChainAst.ChainAstParser.Parse(
                                 loop.Messages, options.ContextManagement.AutoRepairBrokenToolCalls);
-                            ast = await compactor.CompactAsync(ast, cancellationToken);
+                            ast = await Compactor.CompactAsync(ast, cancellationToken);
                             loop.Messages.Clear();
                             loop.Messages.AddRange(ast.ToChatMessages());
                         }
@@ -638,11 +646,12 @@ public sealed class AgentService(
                     // SPEC-20260927-cryptographic-evidence-provenance-chain
                     // RF-002: every executed tool call emits a chained
                     // ToolExecuted receipt (best-effort, never breaks the loop).
-                    if (evidence is not null && loop.EvidenceSessionId is { } sess)
+                    if (Evidence is not null && loop.EvidenceSessionId is { } sess)
                         loop.LastReceipt = await Audit.Evidence.EvidenceEmission.RecordToolAsync(
-                            evidence, logger, sess, apiKeyId: null,
+                            new Audit.Evidence.EvidenceEmission.EmissionContext(
+                                Evidence, sess, null, logger),
                             threadId: loop.Request.ThreadId?.ToString("N"),
-                            call.Name ?? "", call.CallId,
+                            call.Name ?? "",
                             Summarize(call.Arguments), result?.ToString(),
                             loop.LastReceipt, cancellationToken);
                 }
@@ -748,7 +757,7 @@ public sealed class AgentService(
         db.Approvals.Add(approval);
         await db.SaveChangesAsync(ct);
 
-        feed?.Record(new McpActivityEvent
+        Feed?.Record(new McpActivityEvent
         {
             Timestamp = DateTimeOffset.UtcNow,
             Kind = McpActivityKind.ApprovalRequested,

@@ -98,29 +98,13 @@ public static class TableChunkSplitter
         var dataRows = lines.Skip(dataStart).ToList();
         var headers = markdown ? HeaderCells(lines[headerIdx]) : [];
 
-        string BuildSlice(List<string> rows, int firstRow, int lastRow, bool continuation)
-        {
-            var sb = new System.Text.StringBuilder();
-            if (continuation)
-                sb.Append("[Continuação da Tabela - Linhas ")
-                    .Append(firstRow).Append(" a ").Append(lastRow).Append("]\n");
-            if (preserveHeaders)
-            {
-                sb.Append(lines[headerIdx]).Append('\n');
-                if (markdown && lines.Count > 1 && dataStart == 2)
-                    sb.Append(lines[1]).Append('\n');
-            }
-            foreach (var r in rows)
-                sb.Append(r).Append('\n');
-            return sb.ToString().TrimEnd('\n');
-        }
-
+        var shape = new TableShape(lines, headerIdx, dataStart, markdown, preserveHeaders);
         var meta = Metadata(headers, dataRows.Count, sectionPath);
         var pieces = new List<ChunkPiece>();
         if (dataRows.Count <= Math.Max(1, maxRows))
         {
             pieces.Add(new ChunkPiece(
-                BuildSlice(dataRows, 1, dataRows.Count, continuation: false),
+                BuildSlice(shape, dataRows, 1, dataRows.Count, continuation: false),
                 SectionPath: sectionPath, MetadataJson: meta));
             return pieces;
         }
@@ -129,10 +113,33 @@ public static class TableChunkSplitter
         {
             var slice = dataRows.Skip(i).Take(Math.Max(1, maxRows)).ToList();
             pieces.Add(new ChunkPiece(
-                BuildSlice(slice, i + 1, i + slice.Count, continuation: i > 0),
+                BuildSlice(shape, slice, i + 1, i + slice.Count, continuation: i > 0),
                 SectionPath: sectionPath, MetadataJson: meta));
         }
         return pieces;
+    }
+
+    /// <summary>Structural state captured while scanning the table.</summary>
+    private sealed record TableShape(
+        List<string> Lines, int HeaderIdx, int DataStart, bool Markdown, bool PreserveHeaders);
+
+    /// <summary>Emits one slice: continuation marker + optional header block + rows.</summary>
+    private static string BuildSlice(
+        TableShape shape, List<string> rows, int firstRow, int lastRow, bool continuation)
+    {
+        var sb = new System.Text.StringBuilder();
+        if (continuation)
+            sb.Append("[Continuação da Tabela - Linhas ")
+                .Append(firstRow).Append(" a ").Append(lastRow).Append("]\n");
+        if (shape.PreserveHeaders)
+        {
+            sb.Append(shape.Lines[shape.HeaderIdx]).Append('\n');
+            if (shape.Markdown && shape.Lines.Count > 1 && shape.DataStart == 2)
+                sb.Append(shape.Lines[1]).Append('\n');
+        }
+        foreach (var r in rows)
+            sb.Append(r).Append('\n');
+        return sb.ToString().TrimEnd('\n');
     }
 
     private static string Metadata(List<string> headers, int rowCount, string? sectionPath) =>

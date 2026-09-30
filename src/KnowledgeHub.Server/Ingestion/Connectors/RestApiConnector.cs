@@ -81,7 +81,8 @@ public sealed class RestApiConnector(
         var documents = new List<RawDocument>(items.Count);
         for (var i = 0; i < items.Count; i++)
         {
-            var doc = MapItem(items[i], i + 1, titleField, contentFields, urlField, idField, warnings, warned);
+            var doc = MapItem(items[i], i + 1,
+                new ItemMapping(titleField, contentFields, urlField, idField), warnings, warned);
             if (doc is not null)
                 documents.Add(doc);
         }
@@ -232,15 +233,18 @@ public sealed class RestApiConnector(
         return [body];
     }
 
+    /// <summary>Field-mapping configuration for <see cref="MapItem"/> (RF-002).</summary>
+    private sealed record ItemMapping(
+        string? TitleField, string[] ContentFields, string? UrlField, string? IdField);
+
     /// <summary>Maps one JSON item to a <see cref="RawDocument"/> (RF-002).</summary>
     private static RawDocument? MapItem(
-        JsonElement item, int index, string? titleField, string[] contentFields,
-        string? urlField, string? idField, List<string> warnings, HashSet<string> warned)
+        JsonElement item, int index, ItemMapping mapping, List<string> warnings, HashSet<string> warned)
     {
-        var title = FieldOrNull(item, titleField) ?? $"item {index}";
+        var title = FieldOrNull(item, mapping.TitleField) ?? $"item {index}";
 
-        var content = contentFields.Length > 0
-            ? JoinContentFields(item, contentFields, warnings, warned)
+        var content = mapping.ContentFields.Length > 0
+            ? JoinContentFields(item, mapping.ContentFields, warnings, warned)
             : DefaultSerialization(item);
 
         if (string.IsNullOrWhiteSpace(content))
@@ -249,8 +253,8 @@ public sealed class RestApiConnector(
             return null;
         }
 
-        var id = FieldOrNull(item, idField);
-        var url = FieldOrNull(item, urlField);
+        var id = FieldOrNull(item, mapping.IdField);
+        var url = FieldOrNull(item, mapping.UrlField);
         string uri;
         if (id is { Length: > 0 })
             uri = $"rest:{id}";
