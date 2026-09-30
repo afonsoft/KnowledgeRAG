@@ -12,6 +12,7 @@ namespace KnowledgeHub.Server.Api;
 /// </summary>
 public static class SettingsEndpoints
 {
+    private const string BodyRequired = "body is required";
     /// <summary>Mapeia o grupo /api/settings: keys de integrações e configuração de chat.</summary>
     public static RouteGroupBuilder MapSettingsApi(this IEndpointRouteBuilder app)
     {
@@ -181,7 +182,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             if (body is null)
-                return Results.BadRequest(new { error = "body is required" });
+                return Results.BadRequest(new { error = BodyRequired });
             var provider = body.Provider?.Trim().ToLowerInvariant();
             if (!embeddingProviders.Contains(provider))
                 return Results.BadRequest(new { error = $"provider must be one of: {string.Join(", ", embeddingProviders)}" });
@@ -284,7 +285,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             if (body is null)
-                return Results.BadRequest(new { error = "body is required" });
+                return Results.BadRequest(new { error = BodyRequired });
             if (body.MaxChunksPerSync is < 1 or > 10_000)
                 return Results.BadRequest(new { error = "maxChunksPerSync must be 1..10000" });
             if (body.MaxChunkChars is < 200 or > 50_000)
@@ -318,7 +319,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             if (body is null)
-                return Results.BadRequest(new { error = "body is required" });
+                return Results.BadRequest(new { error = BodyRequired });
             if (body.Mode is not ("disabled" or "observe" or "enforce"))
                 return Results.BadRequest(new { error = "mode must be disabled|observe|enforce" });
             if (body.MaxFallbackAttempts is < 1 or > 5)
@@ -351,7 +352,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             if (body is null)
-                return Results.BadRequest(new { error = "body is required" });
+                return Results.BadRequest(new { error = BodyRequired });
             if (body.Mode is not ("local" or "remote"))
                 return Results.BadRequest(new { error = "mode must be local|remote" });
             if (body.Enabled && string.IsNullOrWhiteSpace(body.Endpoint))

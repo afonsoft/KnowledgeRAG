@@ -16,6 +16,7 @@ namespace KnowledgeHub.Server.Mcp.ToolProviders;
 /// </summary>
 public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettings) : IToolProvider
 {
+    private const string MaxResultsParam = "maxResults";
     private static readonly string WindowList =
         string.Join(", ", TemporalDateParser.SupportedWindows);
 
@@ -131,7 +132,7 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
         var query = ToolArgs.OptionalString(ctx, "query") ?? "";
         var startArg = ToolArgs.OptionalString(ctx, "start");
         var endArg = ToolArgs.OptionalString(ctx, "end");
-        var maxResults = ToolArgs.OptionalInt(ctx, "maxResults", 15, 100);
+        var maxResults = ToolArgs.OptionalInt(ctx, MaxResultsParam, 15, 100);
 
         DateTime? start = null, end = null;
         if (startArg is not null)
@@ -158,7 +159,7 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
     {
         var query = ToolArgs.RequiredString(ctx, "query");
         var windowArg = ToolArgs.RequiredString(ctx, "window");
-        var maxResults = ToolArgs.OptionalInt(ctx, "maxResults", 10, 100);
+        var maxResults = ToolArgs.OptionalInt(ctx, MaxResultsParam, 10, 100);
 
         if (!TemporalDateParser.TryParseWindow(windowArg, out var window))
             return await ToolResults.Error(
@@ -172,7 +173,7 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
     {
         var entity = ToolArgs.RequiredString(ctx, "entity");
         var level = ToolArgs.OptionalString(ctx, "diversityLevel") ?? "medium";
-        var maxResults = ToolArgs.OptionalInt(ctx, "maxResults", 10, 100);
+        var maxResults = ToolArgs.OptionalInt(ctx, MaxResultsParam, 10, 100);
 
         if (!DiversityRanker.IsValidLevel(level))
             return await ToolResults.Error(
@@ -195,7 +196,7 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
     {
         var entity = ToolArgs.RequiredString(ctx, "entity");
         var depth = ToolArgs.OptionalInt(ctx, "depth", TemporalGraphRetriever.DefaultDepth, 100);
-        var maxResults = ToolArgs.OptionalInt(ctx, "maxResults", 15, 100);
+        var maxResults = ToolArgs.OptionalInt(ctx, MaxResultsParam, 15, 100);
 
         TemporalSearchResult result;
         try
@@ -212,7 +213,7 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
     private static async ValueTask<CallToolResult> EpisodeAsync(ToolCallContext ctx, CancellationToken ct)
     {
         var episodeArg = ToolArgs.RequiredString(ctx, "episodeId");
-        var maxResults = ToolArgs.OptionalInt(ctx, "maxResults", 10, 100);
+        var maxResults = ToolArgs.OptionalInt(ctx, MaxResultsParam, 10, 100);
 
         TemporalSearchResult result;
         try
@@ -229,7 +230,7 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
     }
 
     private static TemporalGraphRetriever Retriever(ToolCallContext ctx) =>
-        ctx.Services!.GetRequiredService<TemporalGraphRetriever>();
+        ctx.Services.GetRequiredService<TemporalGraphRetriever>();
 
     private static string InvalidDate(string name, string value) =>
         $"invalid {name} '{value}' — expected RFC3339/ISO-8601, " +

@@ -22,14 +22,12 @@ public sealed class RagEvaluationEnqueuer : IRagEvaluationEnqueuer, IDisposable
 {
     private readonly Channel<RagEvaluationTask> _channel;
     private readonly RagEvaluationOptions _options;
-    private readonly ILogger<RagEvaluationEnqueuer> _logger;
     private long _tickets;
 
     public RagEvaluationEnqueuer(
-        IOptions<RagEvaluationOptions> options, ILogger<RagEvaluationEnqueuer> logger)
+        IOptions<RagEvaluationOptions> options)
     {
         _options = options.Value;
-        _logger = logger;
         _channel = Channel.CreateBounded<RagEvaluationTask>(new BoundedChannelOptions(10_000)
         {
             SingleReader = true,

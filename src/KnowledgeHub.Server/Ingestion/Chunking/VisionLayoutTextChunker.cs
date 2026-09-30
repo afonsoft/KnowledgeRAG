@@ -34,12 +34,12 @@ public sealed class VisionLayoutTextChunker(
             && chat is not null && httpFactory is not null
             ? (Func<string, Task<string?>>)(url => CaptionAsync(url, ct))
             : null;
-        return await ChunkCore(text, maxTokens, overlapTokens, caption, ct);
+        return await ChunkCore(text, maxTokens, overlapTokens, caption);
     }
 
     private async Task<IReadOnlyList<ChunkPiece>> ChunkCore(
         string text, int maxTokens, int overlapTokens,
-        Func<string, Task<string?>>? caption, CancellationToken ct = default)
+        Func<string, Task<string?>>? caption)
     {
         var preserveHeaders = configuration?.GetValue("Ingestion:Chunking:PreserveTableHeaders", true) ?? true;
         var maxRows = Math.Clamp(

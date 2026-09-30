@@ -13,6 +13,7 @@ namespace KnowledgeHub.Server.Embeddings;
 /// </summary>
 public sealed class CohereEmbeddingProvider : IEmbeddingProvider
 {
+    private const string UriPathSeparator = "/";
     private const string DefaultEndpoint = "https://api.cohere.com/v2/";
     private static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
 
@@ -23,10 +24,10 @@ public sealed class CohereEmbeddingProvider : IEmbeddingProvider
 
     public CohereEmbeddingProvider(HttpClient http, EmbeddingOptions.CohereOptions options)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ApiKey, "Embeddings:Cohere:ApiKey");
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.Model, "Embeddings:Cohere:Model");
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ApiKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.Model);
         _http = http;
-        _http.BaseAddress = new Uri((options.Endpoint ?? DefaultEndpoint).TrimEnd('/') + "/");
+        _http.BaseAddress = new Uri((options.Endpoint ?? DefaultEndpoint).TrimEnd('/') + UriPathSeparator);
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
         _model = options.Model;
         _dimensions = options.Dimensions;
@@ -67,7 +68,8 @@ public sealed class CohereEmbeddingProvider : IEmbeddingProvider
     private async Task<IReadOnlyList<float[]>> SendWithRetryAsync(
         IReadOnlyList<string> inputs, string? inputType, CancellationToken cancellationToken)
     {
-        for (var attempt = 0; ; attempt++)
+        var attempt = 0;
+        while (true)
         {
             var request = new CohereRequest(_model, inputs.ToList(), inputType);
             var response = await _http.PostAsJsonAsync("embed", request, cancellationToken);
@@ -75,6 +77,7 @@ public sealed class CohereEmbeddingProvider : IEmbeddingProvider
             if (response.StatusCode == (System.Net.HttpStatusCode)429 && attempt < RetryDelays.Length)
             {
                 await Task.Delay(RetryDelays[attempt], cancellationToken);
+                attempt++;
                 continue;
             }
 

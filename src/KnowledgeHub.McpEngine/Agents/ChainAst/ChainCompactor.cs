@@ -23,7 +23,7 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
     public const string SummaryMarker = "**summarized content:**";
     public const string SkipThoughtSignature = "skip_thought_signature";
 
-    public Task<ChainAST> CompactAsync(ChainAST ast, CancellationToken ct = default)
+    public Task<ChainAst> CompactAsync(ChainAst ast, CancellationToken ct = default)
     {
         if (!options.EnableChainCompaction || ast.EstimateBytes() <= options.MaxTotalHistoryBytes)
             return Task.FromResult(ast);

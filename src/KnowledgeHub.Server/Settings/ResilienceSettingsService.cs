@@ -28,6 +28,8 @@ public sealed class ResilienceSettingsService(
     ILogger<ResilienceSettingsService> logger)
     : SingleRowSettingsStore<ResilienceSettings>(scopeFactory), IResilienceSettingsService
 {
+    private const string ProviderField = "provider";
+    private const string HasKeyField = "hasKey";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly SnapshotCache<FallbackOptions> _cache = new();
 
@@ -99,11 +101,11 @@ public sealed class ResilienceSettingsService(
                 continue;
             var option = new ChatProviderOptions
             {
-                Provider = f["provider"]?.GetValue<string>() ?? "openai",
+                Provider = f[ProviderField]?.GetValue<string>() ?? "openai",
                 Endpoint = f["endpoint"]?.GetValue<string>(),
                 Model = f["model"]?.GetValue<string>()
             };
-            if (f["hasKey"]?.GetValue<bool>() == true)
+            if (f[HasKeyField]?.GetValue<bool>() == true)
                 option.ApiKey = await secrets.GetAsync(
                     SecretKey(option.Provider, option.Endpoint, option.Model),
                     CancellationToken.None);
@@ -143,7 +145,7 @@ public sealed class ResilienceSettingsService(
         {
             if (array[i] is not JsonObject f)
                 continue;
-            var provider = f["provider"]?.GetValue<string>() ?? "openai";
+            var provider = f[ProviderField]?.GetValue<string>() ?? "openai";
             var endpoint = f["endpoint"]?.GetValue<string>();
             var model = f["model"]?.GetValue<string>();
             var key = SecretKey(provider, endpoint, model);
@@ -157,7 +159,7 @@ public sealed class ResilienceSettingsService(
                 if (await secrets.GetAsync(key, ct) is not null)
                 {
                     f.Remove("apiKey");
-                    f["hasKey"] = true;
+                    f[HasKeyField] = true;
                     scrubbed = true;
                 }
                 continue;
@@ -165,7 +167,7 @@ public sealed class ResilienceSettingsService(
 
             // Legacy index-bound slot → identity slot (copy, keep both: the
             // legacy slot stays until the row's JSON is rewritten).
-            if (f["hasKey"]?.GetValue<bool>() == true
+            if (f[HasKeyField]?.GetValue<bool>() == true
                 && await secrets.GetAsync(key, ct) is null
                 && await secrets.GetAsync(LegacySecretKey(i), ct) is { } legacy)
                 await secrets.SetAsync(key, legacy, ct);
@@ -217,7 +219,7 @@ public sealed class ResilienceSettingsService(
 
         var previous = previousArray
             .OfType<JsonObject>()
-            .Select(f => f["provider"]?.GetValue<string>())
+            .Select(f => f[ProviderField]?.GetValue<string>())
             .ToList();
 
         // RF-001: keys move to the secret store before the row is written.
@@ -241,10 +243,10 @@ public sealed class ResilienceSettingsService(
 
             stored.Add(new JsonObject
             {
-                ["provider"] = provider,
+                [ProviderField] = provider,
                 ["endpoint"] = f.Endpoint,
                 ["model"] = f.Model,
-                ["hasKey"] = hasKey
+                [HasKeyField] = hasKey
             });
         }
 

@@ -21,9 +21,14 @@ public sealed class KnowledgeSourceService(
     Microsoft.Extensions.Caching.Distributed.IDistributedCache? cache = null,
     Caching.ICacheInvalidationBus? invalidationBus = null) : IKnowledgeSourceService
 {
+    private const string TokenField = "token";
+    private const string HeadersField = "headers";
+    private const string EndpointField = "endpoint";
+    private const string HasKeyField = "hasKey";
+    private const string HttpsScheme = "https";
     /// <summary>Config keys that must never be echoed back to API consumers.</summary>
     private static readonly HashSet<string> SensitiveKeys = new(StringComparer.OrdinalIgnoreCase)
-        { "connectionString", "apiKey", "key", "headers", "token", "password", "secret",
+        { "connectionString", "apiKey", "key", HeadersField, TokenField, "password", "secret",
           "secretAccessKey", "accountKey" };
 
     /// <summary>Required configuration keys per connector type (SPEC-02 §Scope).</summary>
@@ -31,10 +36,10 @@ public sealed class KnowledgeSourceService(
     {
         [SourceType.ObsidianVault] = ["path"],
         [SourceType.WebPage] = ["url"],
-        [SourceType.RestApi] = ["endpoint"],
+        [SourceType.RestApi] = [EndpointField],
         [SourceType.SqlDatabase] = ["provider", "query"],
         [SourceType.DocumentFile] = ["path"],
-        [SourceType.McpProxy] = ["endpoint"],
+        [SourceType.McpProxy] = [EndpointField],
         [SourceType.Notion] = [],
         [SourceType.AwsS3] = ["bucketName", "region", "accessKeyId"],
         [SourceType.AzureFiles] = ["shareName"],
@@ -217,7 +222,7 @@ public sealed class KnowledgeSourceService(
 
         if (source.SourceType == SourceType.Notion)
         {
-            var usable = configuration["token"] is JsonValue tv
+            var usable = configuration[TokenField] is JsonValue tv
                 && tv.TryGetValue<string>(out var token)
                 && token.Length > 0 && token != "***";
             if (usable)
@@ -241,13 +246,13 @@ public sealed class KnowledgeSourceService(
         // that could never sync.
         if (source.SourceType == SourceType.RestApi)
         {
-            var hasHeaders = configuration["hasKey"] is JsonValue hv
+            var hasHeaders = configuration[HasKeyField] is JsonValue hv
                 && hv.TryGetValue<bool>(out var flagged) && flagged;
             if (!hasHeaders)
                 return null;
             // SPEC-20260929 RF-001: an inline key in the same request is
             // write-through — persist happens after validation, so accept it.
-            if (UsableSecret(configuration, "headers"))
+            if (UsableSecret(configuration, HeadersField))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.RestApiConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'headers' marked as stored (hasKey) but no stored headers for this source"
@@ -259,7 +264,7 @@ public sealed class KnowledgeSourceService(
         // hasKey without a stored secret is rejected.
         if (source.SourceType == SourceType.UnstructuredDocument)
         {
-            var flagged = configuration["hasKey"] is JsonValue hv
+            var flagged = configuration[HasKeyField] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
             if (!flagged || UsableSecret(configuration, "apiKey"))
                 return null;
@@ -271,9 +276,9 @@ public sealed class KnowledgeSourceService(
         // SPEC-20260927-git-repository-source-connector: PAT optional.
         if (source.SourceType == SourceType.GitRepository)
         {
-            var flagged = configuration["hasKey"] is JsonValue hv
+            var flagged = configuration[HasKeyField] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged || UsableSecret(configuration, "token"))
+            if (!flagged || UsableSecret(configuration, TokenField))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'token' marked as stored (hasKey) but no stored PAT for this source"
@@ -283,7 +288,7 @@ public sealed class KnowledgeSourceService(
         // SPEC-20260927-audio-transcription-connector: apiKey optional.
         if (source.SourceType == SourceType.AudioTranscription)
         {
-            var flagged = configuration["hasKey"] is JsonValue hv
+            var flagged = configuration[HasKeyField] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
             if (!flagged || UsableSecret(configuration, "apiKey"))
                 return null;
@@ -345,19 +350,19 @@ public sealed class KnowledgeSourceService(
         var (configKey, secretKey) = source.SourceType switch
         {
             SourceType.McpProxy => ("apiKey", McpProxySession.SecretKey(source.Id)),
-            SourceType.Notion => ("token", Ingestion.Connectors.NotionConnector.SecretKey(source.Id)),
+            SourceType.Notion => (TokenField, Ingestion.Connectors.NotionConnector.SecretKey(source.Id)),
             SourceType.GoogleDrive => ("apiKey", Ingestion.Connectors.GoogleDriveSharedConnector.SecretKey(source.Id)),
             // SPEC-20260927-restapi-sqldatabase-connectors RF-003/RF-006: the
             // RestApi headers JSON and the SqlDatabase connection string move
             // to the encrypted store — config persists only hasKey.
-            SourceType.RestApi => ("headers", Ingestion.Connectors.RestApiConnector.SecretKey(source.Id)),
+            SourceType.RestApi => (HeadersField, Ingestion.Connectors.RestApiConnector.SecretKey(source.Id)),
             SourceType.SqlDatabase => ("connectionString", Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id)),
             // SPEC-20260927-unstructured-document-parser-connector RF-001:
             // apiKey is optional (self-hosted endpoints need none).
             SourceType.UnstructuredDocument => ("apiKey", Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id)),
             // SPEC-20260927-git-repository-source-connector RF-001: PAT is
             // optional (public repos need none) — same optional-secret slot.
-            SourceType.GitRepository => ("token", Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id)),
+            SourceType.GitRepository => (TokenField, Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id)),
             // SPEC-20260927-audio-transcription-connector: apiKey optional for
             // whisper-compatible self-hosted endpoints.
             SourceType.AudioTranscription => ("apiKey", Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id)),
@@ -375,17 +380,17 @@ public sealed class KnowledgeSourceService(
                 if (key.Length == 0)
                 {
                     await secrets.RemoveAsync(secretKey, ct);
-                    singleConfig["hasKey"] = false;
+                    singleConfig[HasKeyField] = false;
                 }
                 else
                 {
                     await secrets.SetAsync(secretKey, key, ct);
-                    singleConfig["hasKey"] = true;
+                    singleConfig[HasKeyField] = true;
                 }
             }
             else
             {
-                singleConfig["hasKey"] = await secrets.GetAsync(secretKey, ct) is not null;
+                singleConfig[HasKeyField] = await secrets.GetAsync(secretKey, ct) is not null;
             }
 
             source.ConfigurationJson = singleConfig.ToJsonString();
@@ -427,17 +432,17 @@ public sealed class KnowledgeSourceService(
                 {
                     await secrets.SetAsync(cloudKey,
                         source.SourceType == SourceType.AzureFiles ? payload.ToJsonString() : payload[fields[0]]!.GetValue<string>(), ct);
-                    config["hasKey"] = true;
+                    config[HasKeyField] = true;
                 }
                 else
                 {
                     await secrets.RemoveAsync(cloudKey, ct);
-                    config["hasKey"] = false;
+                    config[HasKeyField] = false;
                 }
             }
             else
             {
-                config["hasKey"] = await secrets.GetAsync(cloudKey, ct) is not null;
+                config[HasKeyField] = await secrets.GetAsync(cloudKey, ct) is not null;
             }
 
             source.ConfigurationJson = config.ToJsonString();
@@ -493,9 +498,9 @@ public sealed class KnowledgeSourceService(
 
         if (type == SourceType.McpProxy)
         {
-            var endpoint = configuration["endpoint"]?.GetValue<string>();
+            var endpoint = configuration[EndpointField]?.GetValue<string>();
             if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
-                || (uri.Scheme != "http" && uri.Scheme != "https"))
+                || (uri.Scheme != "http" && uri.Scheme != HttpsScheme))
                 return "Configuration key 'endpoint' must be an absolute http(s) URI for McpProxy";
             if (configuration["transport"]?.GetValue<string>()?.ToLowerInvariant()
                     is not (null or "auto" or "http" or "sse"))
@@ -506,7 +511,7 @@ public sealed class KnowledgeSourceService(
         {
             var feedUrl = configuration["feedUrl"]?.GetValue<string>();
             if (!Uri.TryCreate(feedUrl, UriKind.Absolute, out var feedUri)
-                || feedUri.Scheme is not ("http" or "https"))
+                || feedUri.Scheme is not ("http" or HttpsScheme))
                 return "Configuration key 'feedUrl' must be an absolute http(s) URI for RssFeed";
         }
 
@@ -533,12 +538,12 @@ public sealed class KnowledgeSourceService(
 
         if (type == SourceType.RestApi)
         {
-            var restEndpoint = configuration["endpoint"]?.GetValue<string>();
+            var restEndpoint = configuration[EndpointField]?.GetValue<string>();
             if (!Uri.TryCreate(restEndpoint, UriKind.Absolute, out var restUri)
-                || restUri.Scheme is not ("http" or "https"))
+                || restUri.Scheme is not ("http" or HttpsScheme))
                 return "Configuration key 'endpoint' must be an absolute http(s) URI for RestApi";
 
-            if (configuration["headers"] is JsonValue headersValue
+            if (configuration[HeadersField] is JsonValue headersValue
                 && headersValue.TryGetValue<string>(out var headers)
                 && !string.IsNullOrWhiteSpace(headers) && headers != "***")
             {
@@ -572,9 +577,9 @@ public sealed class KnowledgeSourceService(
 
         if (type == SourceType.Notion)
         {
-            var tokenPresent = configuration["token"] is JsonValue tv
+            var tokenPresent = configuration[TokenField] is JsonValue tv
                 && tv.TryGetValue<string>(out var _);
-            var hasKey = configuration["hasKey"] is JsonValue hk
+            var hasKey = configuration[HasKeyField] is JsonValue hk
                 && hk.TryGetValue<bool>(out var b) && b;
             if (!tokenPresent && !hasKey)
                 return "Configuration key 'token' is required for Notion (integration token)";
@@ -584,7 +589,7 @@ public sealed class KnowledgeSourceService(
                 && (baseUrlNode is not JsonValue bv
                     || !bv.TryGetValue<string>(out var baseUrl)
                     || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var bu)
-                    || (bu.Scheme != "http" && bu.Scheme != "https")))
+                    || (bu.Scheme != "http" && bu.Scheme != HttpsScheme)))
                 return "Configuration key 'apiBaseUrl' must be an absolute http(s) URI for Notion";
 
             var maxPagesNode = configuration["maxPages"];

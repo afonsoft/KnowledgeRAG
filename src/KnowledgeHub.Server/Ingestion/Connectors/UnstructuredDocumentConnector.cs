@@ -20,7 +20,7 @@ public sealed class UnstructuredDocumentConnector(
     UnstructuredApiClient api,
     IIntegrationSecretStore secrets,
     ILogger<UnstructuredDocumentConnector> logger)
-    : ISourceConnector, IIncrementalSourceConnector
+    : IIncrementalSourceConnector
 {
     /// <summary>Secret-store slot for the API key (optional — local endpoints).</summary>
     public static string SecretKey(Guid sourceId) => $"unstructured:{sourceId}";
@@ -91,15 +91,12 @@ public sealed class UnstructuredDocumentConnector(
 
                 // RF-003: fingerprint = file hash + strategy — unchanged files
                 // emit an empty-content stub so reconciliation keeps the doc.
-                string fingerprint;
-                {
-                    await using var fs = File.OpenRead(path);
-                    var sha = Convert.ToHexString(await SHA256.HashDataAsync(fs, cancellationToken))[..16];
-                    // SPEC-20260929 RF-004: extraction-shaping options join the
-                    // fingerprint — changing strategy/tables/coordinates must
-                    // re-extract, not reuse stale output.
-                    fingerprint = $"unstructured:{relativePath}:{sha}:{strategy}:{tableExtraction}:{coordinates}";
-                }
+                // SPEC-20260929 RF-004: extraction-shaping options join the
+                // fingerprint — changing strategy/tables/coordinates must
+                // re-extract, not reuse stale output.
+                var fingerprint =
+                    $"unstructured:{relativePath}:{await FileFingerprintAsync(path, cancellationToken)}"
+                    + $":{strategy}:{tableExtraction}:{coordinates}";
                 if (existingFingerprints.TryGetValue(uri, out var prev) && prev == fingerprint)
                 {
                     documents.Add(new RawDocument(uri, fileName, "", fingerprint));
@@ -148,5 +145,13 @@ public sealed class UnstructuredDocumentConnector(
         paths.AddRange(files
             .Where(f => File.Exists(f) && SupportedExtensions.Contains(Path.GetExtension(f))));
         return paths.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToList();
+    }
+
+    /// <summary>SHA-256 fingerprint (16 hex chars) of the local file bytes —
+    /// combined with the extraction options into the doc fingerprint.</summary>
+    private static async Task<string> FileFingerprintAsync(string path, CancellationToken cancellationToken)
+    {
+        await using var fs = File.OpenRead(path);
+        return Convert.ToHexString(await SHA256.HashDataAsync(fs, cancellationToken))[..16];
     }
 }

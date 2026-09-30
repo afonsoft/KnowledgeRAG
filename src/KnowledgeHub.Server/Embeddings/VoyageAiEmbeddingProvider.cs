@@ -14,6 +14,7 @@ namespace KnowledgeHub.Server.Embeddings;
 /// </summary>
 public sealed class VoyageAiEmbeddingProvider : IEmbeddingProvider
 {
+    private const string UriPathSeparator = "/";
     private const string DefaultEndpoint = "https://api.voyageai.com/v1/";
     private static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
 
@@ -24,10 +25,10 @@ public sealed class VoyageAiEmbeddingProvider : IEmbeddingProvider
 
     public VoyageAiEmbeddingProvider(HttpClient http, EmbeddingOptions.VoyageOptions options)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.ApiKey, "Embeddings:Voyage:ApiKey");
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.Model, "Embeddings:Voyage:Model");
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ApiKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.Model);
         _http = http;
-        _http.BaseAddress = new Uri((options.Endpoint ?? DefaultEndpoint).TrimEnd('/') + "/");
+        _http.BaseAddress = new Uri((options.Endpoint ?? DefaultEndpoint).TrimEnd('/') + UriPathSeparator);
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
         _model = options.Model;
         _dimensions = options.Dimensions;
@@ -68,7 +69,8 @@ public sealed class VoyageAiEmbeddingProvider : IEmbeddingProvider
     private async Task<IReadOnlyList<float[]>> SendWithRetryAsync(
         IReadOnlyList<string> inputs, string? inputType, CancellationToken cancellationToken)
     {
-        for (var attempt = 0; ; attempt++)
+        var attempt = 0;
+        while (true)
         {
             var request = new VoyageRequest(_model, inputs.ToList(), inputType);
             var response = await _http.PostAsJsonAsync("embeddings", request, cancellationToken);
@@ -76,6 +78,7 @@ public sealed class VoyageAiEmbeddingProvider : IEmbeddingProvider
             if (response.StatusCode == (System.Net.HttpStatusCode)429 && attempt < RetryDelays.Length)
             {
                 await Task.Delay(RetryDelays[attempt], cancellationToken);
+                attempt++;
                 continue;
             }
 

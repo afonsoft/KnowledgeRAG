@@ -126,7 +126,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         => await new TaskUpdater(eventQueue, context.TaskId, context.ContextId)
             .CancelAsync(cancellationToken);
 
-    private async Task<(bool Success, List<Part> Parts, string? ResultJson)> InvokeAsync(
+    private static async Task<(bool Success, List<Part> Parts, string? ResultJson)> InvokeAsync(
         IServiceProvider services, string skill, IDictionary<string, JsonElement>? args,
         Activity? span, CancellationToken ct)
     {
@@ -193,24 +193,12 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
     private static (string? Skill, IDictionary<string, JsonElement>? Args, string? Error)
         ResolveInvocation(RequestContext context)
     {
-        var skill = DefaultSkill;
+        string? skill = DefaultSkill;
         var args = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
         var userText = context.UserText ?? string.Empty;
 
         if (context.Message?.Metadata is { } md)
-        {
-            if ((md.TryGetValue("skill", out var s) || md.TryGetValue("tool", out s)
-                || md.TryGetValue("skillId", out s))
-                && s.ValueKind == JsonValueKind.String)
-            {
-                skill = s.GetString();
-            }
-            if (md.TryGetValue("arguments", out var a) && a.ValueKind == JsonValueKind.Object)
-            {
-                foreach (var p in a.EnumerateObject())
-                    args[p.Name] = p.Value;
-            }
-        }
+            ApplyMetadata(md, ref skill, args);
 
         if (skill is null || !DelegableSkills.Contains(skill))
             return (skill, null, $"skill '{skill}' is not delegable — allowed: {string.Join(", ", DelegableSkills)}");
@@ -235,6 +223,26 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         }
 
         return (skill, args, null);
+    }
+
+    /// <summary>Reads the optional A2A message metadata: <c>skill</c> (or
+    /// <c>tool</c>/<c>skillId</c>) selects the catalog tool; <c>arguments</c>
+    /// is merged verbatim into the invocation args.</summary>
+    private static void ApplyMetadata(
+        IReadOnlyDictionary<string, JsonElement> metadata,
+        ref string? skill, Dictionary<string, JsonElement> args)
+    {
+        if ((metadata.TryGetValue("skill", out var s) || metadata.TryGetValue("tool", out s)
+            || metadata.TryGetValue("skillId", out s))
+            && s.ValueKind == JsonValueKind.String)
+        {
+            skill = s.GetString();
+        }
+        if (metadata.TryGetValue("arguments", out var a) && a.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var p in a.EnumerateObject())
+                args[p.Name] = p.Value;
+        }
     }
 
     private static string LastText(List<Part> parts)

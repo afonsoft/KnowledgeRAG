@@ -17,15 +17,18 @@ namespace KnowledgeHub.Server.Ingestion.Connectors.GitProviders;
 /// </summary>
 public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
 {
+    private const string ProviderGitLab = "gitlab";
+    private const string ProviderGitea = "gitea";
+    private const string ProviderGitHub = "github";
     public async Task<string?> GetBranchCommitShaAsync(
         GitRepositoryRef repo, string? token, CancellationToken ct)
     {
         var client = httpFactory.CreateClient("git");
         var url = repo.Provider switch
         {
-            "gitlab" => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
+            ProviderGitLab => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
                 + $"/repository/commits/{Uri.EscapeDataString(repo.Branch)}",
-            "gitea" => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/branches/{Uri.EscapeDataString(repo.Branch)}",
+            ProviderGitea => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/branches/{Uri.EscapeDataString(repo.Branch)}",
             _ => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/branches/{Uri.EscapeDataString(repo.Branch)}"
         };
 
@@ -38,18 +41,21 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
         using var doc = JsonDocument.Parse(json);
         // github/gitlab: {commit:{sha}} / {id}; gitea: {commit:{id}}.
         var root = doc.RootElement;
-        if (repo.Provider == "gitlab")
+        if (repo.Provider == ProviderGitLab)
             return root.TryGetProperty("id", out var id) ? id.GetString() : null;
         if (root.TryGetProperty("commit", out var commit))
-            return commit.TryGetProperty("sha", out var sha) ? sha.GetString()
-                : commit.TryGetProperty("id", out var id) ? id.GetString() : null;
+        {
+            if (commit.TryGetProperty("sha", out var sha))
+                return sha.GetString();
+            return commit.TryGetProperty("id", out var id) ? id.GetString() : null;
+        }
         return null;
     }
 
     public async Task<IReadOnlyList<GitTreeEntry>> GetTreeAsync(
         GitRepositoryRef repo, string? token, CancellationToken ct)
     {
-        return repo.Provider == "gitlab"
+        return repo.Provider == ProviderGitLab
             ? await GetGitLabTreeAsync(repo, token, ct)
             : await GetGitHubShapedTreeAsync(repo, token, ct);
     }
@@ -90,7 +96,8 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
         var client = httpFactory.CreateClient("git");
         var project = Uri.EscapeDataString($"{repo.Owner}/{repo.Name}");
         var entries = new List<GitTreeEntry>();
-        for (var page = 1; ; page++)
+        var page = 1;
+        while (true)
         {
             var url = $"{repo.ApiBase}/projects/{project}/repository/tree"
                 + $"?ref={Uri.EscapeDataString(repo.Branch)}&recursive=true&per_page=100&page={page}";
@@ -115,6 +122,7 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
             }
             if (count < 100)
                 return entries;
+            page++;
         }
     }
 
@@ -124,15 +132,15 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
         var client = httpFactory.CreateClient("git");
         var url = repo.Provider switch
         {
-            "gitlab" => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
+            ProviderGitLab => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
                 + $"/repository/files/{Uri.EscapeDataString(path)}/raw"
                 + $"?ref={Uri.EscapeDataString(repo.Branch)}",
-            "gitea" => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/media/{path}"
+            ProviderGitea => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/media/{path}"
                 + $"?ref={Uri.EscapeDataString(repo.Branch)}",
             _ => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/contents/{path}"
                 + $"?ref={Uri.EscapeDataString(repo.Branch)}"
         };
-        var raw = repo.Provider is "gitlab" or "gitea";
+        var raw = repo.Provider is ProviderGitLab or ProviderGitea;
         using var response = await SendAsync(client, repo, url, token, acceptRaw: raw, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
             throw new InvalidOperationException($"file '{path}' not found at {repo.Branch}");
@@ -152,11 +160,11 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.raw"));
         if (!string.IsNullOrEmpty(token))
         {
-            if (repo.Provider == "gitlab")
+            if (repo.Provider == ProviderGitLab)
                 request.Headers.TryAddWithoutValidation("PRIVATE-TOKEN", token);
             else
                 request.Headers.Authorization = new AuthenticationHeaderValue(
-                    repo.Provider == "gitea" ? "token" : "Bearer", token);
+                    repo.Provider == ProviderGitea ? "token" : "Bearer", token);
         }
         return await client.SendAsync(request, ct);
     }

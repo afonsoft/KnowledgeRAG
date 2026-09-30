@@ -14,9 +14,11 @@ namespace KnowledgeHub.Server.Ingestion.Connectors.Clients;
 /// </summary>
 public sealed class AssemblyAiClient(
     IHttpClientFactory httpFactory,
-    string baseUrl = "https://api.assemblyai.com",
+    string baseUrl = AssemblyAiClient.DefaultBaseUrl,
     TimeSpan? pollInterval = null) : ITranscriptionClient
 {
+    /// <summary>Hosted AssemblyAI REST endpoint.</summary>
+    public const string DefaultBaseUrl = "https://api.assemblyai.com";
     private readonly TimeSpan _pollInterval = pollInterval ?? TimeSpan.FromSeconds(2);
     private readonly TimeSpan _maxWait = TimeSpan.FromMinutes(10);
 

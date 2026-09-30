@@ -31,8 +31,11 @@ public sealed class GitRepositoryConnector(
     IHttpClientFactory httpFactory,
     IIntegrationSecretStore secrets,
     ILogger<GitRepositoryConnector> logger)
-    : ISourceConnector, IIncrementalSourceConnector
+    : IIncrementalSourceConnector
 {
+    private const string ProviderGitLab = "gitlab";
+    private const string ProviderGitea = "gitea";
+    private const string ProviderGitHub = "github";
     private static readonly string[] DefaultIncludes = ["**/*.md", "**/README*", "**/*.txt"];
     private static readonly string[] DefaultExcludes =
         [".git/**", "**/node_modules/**", "**/bin/**", "**/obj/**", "**/*.min.js"];
@@ -180,12 +183,17 @@ public sealed class GitRepositoryConnector(
             // before the repo (group/sub/...), not just the parent.
             owner ??= string.Join('/', segs[..^1]);
             name ??= segs[^1].TrimEnd('/');
-            if (name!.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
                 name = name[..^4];
             if (provider.Length == 0)
-                provider = u.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase) ? "gitlab"
-                    : u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) ? "github"
-                    : "gitea";
+            {
+                if (u.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
+                    provider = ProviderGitLab;
+                else if (u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+                    provider = ProviderGitHub;
+                else
+                    provider = ProviderGitea;
+            }
             // Non-default host → self-hosted instance.
             if (!u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
                 && !u.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
@@ -197,8 +205,8 @@ public sealed class GitRepositoryConnector(
                 "GitRepository requires 'repoUrl' or both 'owner' and 'name'");
 
         if (provider.Length == 0)
-            provider = "github";
-        if (provider is not ("github" or "gitlab" or "gitea"))
+            provider = ProviderGitHub;
+        if (provider is not (ProviderGitHub or ProviderGitLab or ProviderGitea))
             throw new InvalidOperationException(
                 $"unsupported provider '{provider}' — github|gitlab|gitea");
 
@@ -215,22 +223,24 @@ public sealed class GitRepositoryConnector(
                 await WebPageConnector.GuardPublicAsync(inst, ct);
             apiBase = provider switch
             {
-                "gitlab" => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v4",
-                "gitea" => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v1",
+                ProviderGitLab => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v4",
+                ProviderGitea => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v1",
                 _ => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v3" // GitHub Enterprise
             };
         }
         else
         {
-            apiBase = provider == "gitlab" ? "https://gitlab.com/api/v4"
-                : provider == "gitea"
-                    ? throw new InvalidOperationException(
-                        "provider 'gitea' requires 'instanceUrl' (no hosted default)")
-                    : "https://api.github.com";
+            if (provider == ProviderGitLab)
+                apiBase = "https://gitlab.com/api/v4";
+            else if (provider == ProviderGitea)
+                throw new InvalidOperationException(
+                    "provider 'gitea' requires 'instanceUrl' (no hosted default)");
+            else
+                apiBase = "https://api.github.com";
         }
 
         var branch = config.String("branch") is { Length: > 0 } b ? b : "main";
-        return new GitRepositoryRef(provider, apiBase.TrimEnd('/'), owner!, name!, branch,
+        return new GitRepositoryRef(provider, apiBase.TrimEnd('/'), owner, name, branch,
             config.Bool("allowPrivateHosts"));
     }
 }

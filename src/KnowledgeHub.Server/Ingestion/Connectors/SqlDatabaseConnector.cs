@@ -180,11 +180,13 @@ public sealed class SqlDatabaseConnector(
                 }
 
                 var idValues = idOrdinals.Select(Value).Where(v => v is { Length: > 0 }).ToArray();
-                var uri = idValues.Length > 0
-                    ? $"sql:{string.Join(":", idValues)}"
-                    : Value(urlOrdinal) is { Length: > 0 } url
-                        ? url
-                        : $"sql:{Sha256Hex(string.Join("|", rowValues))}";
+                string uri;
+                if (idValues.Length > 0)
+                    uri = $"sql:{string.Join(":", idValues)}";
+                else if (Value(urlOrdinal) is { Length: > 0 } url)
+                    uri = url;
+                else
+                    uri = $"sql:{Sha256Hex(string.Join("|", rowValues))}";
 
                 documents.Add(new RawDocument(uri, title, string.Join("\n", lines)));
             }
