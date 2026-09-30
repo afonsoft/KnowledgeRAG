@@ -72,39 +72,57 @@ public sealed partial class RssFeedConnector(
                 continue;
             seenUris.Add(uriRef);
 
-            var fingerprint = ComputeFingerprint(item);
-
-            // Incremental: if the fingerprint matches, emit a stub.
-            if (!forceRefresh
-                && existingFingerprints.TryGetValue(uriRef, out var stored)
-                && stored == fingerprint)
-            {
-                documents.Add(new RawDocument(uriRef, item.Title, "", fingerprint));
-                continue;
-            }
-
-            var content = BuildContent(item, feedUrl);
-            if (fetchFullContent && item.Link is not null)
-            {
-                try
-                {
-                    var fullText = await FetchFullContentAsync(item.Link, cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(fullText))
-                        content = fullText;
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    warnings.Add($"full content fetch failed for '{item.Link}': {ex.Message} — using feed content");
-                }
-            }
-
-            documents.Add(new RawDocument(uriRef, item.Title, content, fingerprint));
+            var job = new FeedItemJob(item, uriRef, ComputeFingerprint(item),
+                fetchFullContent, forceRefresh, feedUrl, existingFingerprints);
+            var (doc, warning) = await ProcessFeedItemAsync(job, cancellationToken);
+            if (warning is not null)
+                warnings.Add(warning);
+            if (doc is not null)
+                documents.Add(doc);
         }
 
         if (documents.Count == 0 && items.Count > 0)
             logger.LogWarning("RssFeed source {SourceId} mapped no documents from {ItemCount} feed items", source.Id, items.Count);
 
         return new FetchResult(documents, warnings, Truncated: truncated);
+    }
+
+    /// <summary>Per-item processing inputs for <see cref="ProcessFeedItemAsync"/>.</summary>
+    private sealed record FeedItemJob(
+        FeedParser.FeedItem Item, string UriRef, string Fingerprint,
+        bool FetchFullContent, bool ForceRefresh, string FeedUrl,
+        IReadOnlyDictionary<string, string> ExistingFingerprints);
+
+    /// <summary>Fingerprint stub → content build → optional full-content
+    /// fetch (failures warn and fall back to feed content).</summary>
+    private async Task<(RawDocument? Doc, string? Warning)> ProcessFeedItemAsync(
+        FeedItemJob job, CancellationToken ct)
+    {
+        // Incremental: if the fingerprint matches, emit a stub.
+        if (!job.ForceRefresh
+            && job.ExistingFingerprints.TryGetValue(job.UriRef, out var stored)
+            && stored == job.Fingerprint)
+        {
+            return (new RawDocument(job.UriRef, job.Item.Title, "", job.Fingerprint), null);
+        }
+
+        var content = BuildContent(job.Item, job.FeedUrl);
+        if (job.FetchFullContent && job.Item.Link is not null)
+        {
+            try
+            {
+                var fullText = await FetchFullContentAsync(job.Item.Link, ct);
+                if (!string.IsNullOrWhiteSpace(fullText))
+                    content = fullText;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return (new RawDocument(job.UriRef, job.Item.Title, content, job.Fingerprint),
+                    $"full content fetch failed for '{job.Item.Link}': {ex.Message} — using feed content");
+            }
+        }
+
+        return (new RawDocument(job.UriRef, job.Item.Title, content, job.Fingerprint), null);
     }
 
     public async Task<RawDocument?> FetchItemAsync(

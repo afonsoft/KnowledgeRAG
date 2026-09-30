@@ -105,22 +105,30 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
 
             var json = await response.Content.ReadAsStringAsync(ct);
             using var doc = JsonDocument.Parse(json);
-            var count = 0;
-            foreach (var e in doc.RootElement.EnumerateArray())
-            {
-                count++;
-                if (e.TryGetProperty("type", out var type) && type.GetString() != "blob")
-                    continue;
-                var path = e.TryGetProperty("path", out var p) ? p.GetString() : null;
-                if (string.IsNullOrEmpty(path))
-                    continue;
-                var sha = e.TryGetProperty("id", out var h) ? h.GetString() ?? "" : "";
-                entries.Add(new GitTreeEntry(path, 0, sha));
-            }
+            var count = ParseGitLabTreeEntries(doc.RootElement, entries);
             if (count < 100)
                 return entries;
             page++;
         }
+    }
+
+    /// <summary>Parses one GitLab tree page into blob entries; returns the
+    /// element count so the caller can detect the last page.</summary>
+    private static int ParseGitLabTreeEntries(JsonElement root, List<GitTreeEntry> entries)
+    {
+        var count = 0;
+        foreach (var e in root.EnumerateArray())
+        {
+            count++;
+            if (e.TryGetProperty("type", out var type) && type.GetString() != "blob")
+                continue;
+            var path = e.TryGetProperty("path", out var p) ? p.GetString() : null;
+            if (string.IsNullOrEmpty(path))
+                continue;
+            var sha = e.TryGetProperty("id", out var h) ? h.GetString() ?? "" : "";
+            entries.Add(new GitTreeEntry(path, 0, sha));
+        }
+        return count;
     }
 
     public async Task<string> GetFileTextAsync(
