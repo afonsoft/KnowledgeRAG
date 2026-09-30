@@ -89,3 +89,9 @@ Checklist de provisionamento no lado Postgres:
 3. **Verificação** — `docker compose config` deve renderizar a connection string interpolada; após o `up`, `GET /api/diagnostics/vectorstore` reporta `postgres`, a dimensão, a contagem de chunks e o estado do índice (HNSW criado automaticamente acima de `HnswThreshold`).
 
 > **Nota sobre Redis.** O mesmo padrão `host.docker.internal` se aplica a `REDIS_CONNECTIONSTRING` (`Cache:Provider=redis`). Um Redis sem autenticação dispara um warning no startup — veja "Segurança do Redis" no README para hardening.
+
+### Checklist de deploy em produção (pós-incidente 30/09/2026)
+
+1. **Presença do `.env`** — `env_file` é `required: false` para checkouts limpos funcionarem, o que significa que um `.env` deletado **silenciosamente** cai nos defaults (porta `5000`, cache em memória). Antes de `docker compose up -d` em deploy de host, verifique que `docker compose config` renderiza `KNOWLEDGEHUB_PORT` e as connection strings esperadas — um `.env` ausente reproduz sem erro, e um drift de porta aparece como 502 no proxy reverso.
+2. **Proxy reverso deve repassar `/.well-known/*`** — a descoberta A2A exige `/.well-known/agent-card.json`. Algumas configs de edge (ex.: regras Cloudflare/WAF bloqueando paths com ponto) retornam 404 antes do request chegar ao container; a app em si serve 200. Permita `/.well-known/agent-card.json` na config do proxy/zona.
+3. **Sobreposição PWA** — o service worker mantém a geração de precache anterior; após um deploy, abas na versão antiga continuam funcionando até o reload. Um force-refresh (`Ctrl+Shift+R`) resolve imediatamente qualquer caso residual de shell velho.
