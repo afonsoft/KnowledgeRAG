@@ -1,7 +1,7 @@
 ---
 id: SPEC-20260930-sonarcloud-gate-blockers
 title: SonarCloud Quality Gate blockers — ReDoS timeouts, cancellation tokens, dead condition
-status: Approved
+status: Done
 type: Bugfix
 ticket: gap-analysis-20260930 / sonarqube-autofix run
 source: .sonar_devin_auto_fix/sonarqube_issues.json (sinceLeakPeriod, branch=main)
