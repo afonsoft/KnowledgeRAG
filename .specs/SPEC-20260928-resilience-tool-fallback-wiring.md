@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260928-resilience-tool-fallback` |
 | Ticket | `#385` — https://github.com/afonsoft/LangGraph-UI/issues/385 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 

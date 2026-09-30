@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260928-test-reliability-coverage` |
 | Ticket | `#387` — https://github.com/afonsoft/LangGraph-UI/issues/387 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 

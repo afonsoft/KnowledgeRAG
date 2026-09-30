@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260928-post-pentagi-wave-docs-sync` |
 | Ticket | `#384` — https://github.com/afonsoft/LangGraph-UI/issues/384 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 

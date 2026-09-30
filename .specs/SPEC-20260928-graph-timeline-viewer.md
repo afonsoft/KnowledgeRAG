@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260928-graph-timeline-viewer` |
 | Ticket | `#386` — https://github.com/afonsoft/LangGraph-UI/issues/386 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 

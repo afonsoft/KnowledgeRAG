@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — AgentService, ChainAst, compaction |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-agent-context-window-compaction` |
-| Status | `Approved` |
+| Status | `Done` |
 | Source | Comentários `devin-ai-integration` no PR #376 |
 
 ## 1. User Story

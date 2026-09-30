@@ -10,7 +10,7 @@
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260928-observability-followups` |
 | Ticket | `#388` — https://github.com/afonsoft/LangGraph-UI/issues/388 |
-| Status | `Approved` |
+| Status | `Done` |
 
 ## 1. User Story
 
