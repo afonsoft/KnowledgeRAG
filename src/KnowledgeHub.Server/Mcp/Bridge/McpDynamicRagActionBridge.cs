@@ -127,27 +127,38 @@ public static class McpDynamicRagActionBridge
     /// nomination: the tool's single required string param must be a
     /// query-shaped name — otherwise skip.</summary>
     private static IDictionary<string, JsonElement>? ResolveArgs(
-        ToolActionAnnotation nomination, CatalogTool tool, string question)
-    {
-        if (nomination.Args.Count > 0)
-        {
-            var markerArgs = new Dictionary<string, JsonElement>(nomination.Args);
-            if (tool.InputSchema.TryGetPropertyValue("required", out var markerReq)
-                && markerReq is JsonArray requiredParams)
-            {
-                foreach (var param in requiredParams)
-                {
-                    if (param?.GetValue<string>() is not { } name)
-                        continue;
-                    if (!markerArgs.TryGetValue(name, out var value)
-                        || (value.ValueKind == JsonValueKind.String
-                            && string.IsNullOrWhiteSpace(value.GetString())))
-                        return null;
-                }
-            }
-            return markerArgs;
-        }
+        ToolActionAnnotation nomination, CatalogTool tool, string question) =>
+        nomination.Args.Count > 0
+            ? ValidateMarkerArgs(nomination.Args, tool)
+            : ArglessNominationArgs(tool, question);
 
+    /// <summary>Marker-supplied args are valid only when every schema-required
+    /// param is present with a non-blank value (RF-006).</summary>
+    private static IDictionary<string, JsonElement>? ValidateMarkerArgs(
+        IReadOnlyDictionary<string, JsonElement> supplied, CatalogTool tool)
+    {
+        var markerArgs = new Dictionary<string, JsonElement>(supplied);
+        if (tool.InputSchema.TryGetPropertyValue("required", out var markerReq)
+            && markerReq is JsonArray requiredParams)
+        {
+            foreach (var param in requiredParams)
+            {
+                if (param?.GetValue<string>() is not { } name)
+                    continue;
+                if (!markerArgs.TryGetValue(name, out var value)
+                    || (value.ValueKind == JsonValueKind.String
+                        && string.IsNullOrWhiteSpace(value.GetString())))
+                    return null;
+            }
+        }
+        return markerArgs;
+    }
+
+    /// <summary>Arg-less nomination: the tool's single required string param
+    /// must be a query-shaped name — otherwise skip.</summary>
+    private static IDictionary<string, JsonElement>? ArglessNominationArgs(
+        CatalogTool tool, string question)
+    {
         if (tool.InputSchema.TryGetPropertyValue("required", out var req)
             && req is JsonArray { Count: 1 } arr
             && arr[0]?.GetValue<string>() is { } single
