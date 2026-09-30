@@ -236,36 +236,9 @@ public sealed class TemporalGraphRetriever(
         depth = Math.Clamp(depth, 1, MaxDepth);
         maxResults = Math.Clamp(maxResults, 1, 100);
 
-        var visited = new HashSet<Guid> { root.Id };
-        var frontier = new List<Guid> { root.Id };
         var edges = new List<KgEdge>();
-        var truncated = false;
-
-        for (var d = 0; d < depth && frontier.Count > 0; d++)
-        {
-            var batch = await db.KgEdges.AsNoTracking()
-                .Where(e => e.ValidTo == null
-                    && (scope.AllowedSourceIds == null
-                        || scope.AllowedSourceIds.Contains(e.KnowledgeSourceId))
-                    && (frontier.Contains(e.FromNodeId) || frontier.Contains(e.ToNodeId)))
-                .OrderByDescending(e => e.ObservedAt)
-                .Take(EdgeScanCap - edges.Count + 1)
-                .ToListAsync(ct);
-            truncated = batch.Count > EdgeScanCap - edges.Count;
-
-            var next = new List<Guid>();
-            foreach (var e in batch.Take(EdgeScanCap - edges.Count))
-            {
-                edges.Add(e);
-                if (visited.Add(e.FromNodeId))
-                    next.Add(e.FromNodeId);
-                if (visited.Add(e.ToNodeId))
-                    next.Add(e.ToNodeId);
-            }
-            frontier = next;
-            if (truncated)
-                break;
-        }
+        var (visited, truncated) = await ExpandRelationshipFrontierAsync(
+            scope, root.Id, depth, edges, ct);
 
         var nodes = await db.KgNodes.AsNoTracking()
             .Where(n => visited.Contains(n.Id))
