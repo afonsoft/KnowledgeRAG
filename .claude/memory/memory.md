@@ -1,6 +1,6 @@
 # Short-term memory — session state (overwritten each session, ≤100 lines)
 
-- **Last verified commit on `main`**: `b167e1b` (PR #437 — sonar smell sweep ~85 fixes; SonarCloud gate main = OK, duplicação 0.7%).
+- **Last verified commit on `main`**: `45e8404` (PR #438 — hindsight SPECs + sonar batch D: S3776×25, S107×9, S1006×7, S2325×1 — new-code smells zerados; gate main OK, duplicação 0.3%).
 - **Baseline**: build 0 warnings · 1129+ unit · 306+ integration verdes.
 - **Deploy produção**: `knowledgehub` container healthy em `0.0.0.0:5550->8080`, `rag.afonsoft.dev` OK via Cloudflare. `.env` recriado: `DATABASE_PROVIDER=postgres` (`host.docker.internal:5432`, `rag_db`/`rag_user`), `CACHE_PROVIDER=redis` (`host.docker.internal:6379,defaultDatabase=3`), porta 5550.
 - **Epic #428 (gap-analysis-20260930) entregue**: #429 PWA meta-cache retention (#432), #430 migration-populated-db tests (#433, negativo verificado), #431 spec-status-sync 15 SPECs (#434). SPECs 20260930 → Done (#436).
@@ -35,3 +35,11 @@
 - **2 SPECs criadas** (branch `feature/Devin-20261001-mcp-a2a-improvements`, Draft): `SPEC-20261001-mcp-recall-ergonomics` (budget/maxTokens/minScores/temporalWindow/annotations) e `SPEC-20261001-a2a-task-durability` (ITaskStore EF durável, progresso incremental, push webhook HMAC, harness attribution, skills metadata).
 - Padrões salvos em `.claude/knowledge/hindsight-patterns.md`.
 - Pendente: S3776×26 + S107×9 (Batch D) — refactors de complexidade/params.
+
+## Session summary (2026-10-01 cont. — sonar batch D completo — PR #438)
+
+- **Todos os 42 new-code smells resolvidos** e mergeados em #438: S1006×7+S2325×1 (EfMcpTaskStore defaults da interface), S107×9 (parameter objects: InvocationRoute, EmissionContext, ItemMapping, QuerySpec+ColumnMapping, FallbackProbe, AgentDiagnostics, RelaxationQuery), S3776×25 (extrações por fase em 15 arquivos).
+- Padrão dos parameter objects: records privados agrupando config/estado; ctor DI do AgentService usa `AgentDiagnostics` registrado na factory DI.
+- **Lição heredoc:** `<<'PY'` preserva `<`/`>` literal — âncoras com entidades HTML (`&lt;img&gt;`) não casam; construir âncora lendo o arquivo. E: gravar arquivo só após TODOS os asserts (evitou corrupção parcial 3×).
+- **Verificação:** 1143 unit + 308 integration local; CI completo PASS; SonarCloud gate PASS na PR e OK na main (0.3% duplicação).
+- SPECs 20261001 seguem **Draft** — aguardando aprovação do usuário para virar Epic/Issues.
