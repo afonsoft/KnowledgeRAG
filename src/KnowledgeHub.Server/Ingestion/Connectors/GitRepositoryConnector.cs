@@ -215,7 +215,7 @@ public sealed class GitRepositoryConnector(
 
         (provider, owner, name, instance) = ApplyRepoUrl(
             config.String("repoUrl"), provider, owner, name, instance);
-        provider = ValidateOwnerAndProvider(provider, owner, name);
+        (provider, owner, name) = ValidateOwnerAndProvider(provider, owner, name);
         var apiBase = await ResolveApiBaseAsync(config, provider, instance, ct);
 
         var branch = config.String("branch") is { Length: > 0 } b ? b : "main";
@@ -259,7 +259,8 @@ public sealed class GitRepositoryConnector(
 
     /// <summary>Owner/name must be present; provider defaults to GitHub and
     /// must be one of the supported ones.</summary>
-    private static string ValidateOwnerAndProvider(string provider, string? owner, string? name)
+    private static (string Provider, string Owner, string Name) ValidateOwnerAndProvider(
+        string provider, string? owner, string? name)
     {
         if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException(
@@ -270,7 +271,7 @@ public sealed class GitRepositoryConnector(
         if (provider is not (GitProviderNames.GitHub or GitProviderNames.GitLab or GitProviderNames.Gitea))
             throw new InvalidOperationException(
                 $"unsupported provider '{provider}' — github|gitlab|gitea");
-        return provider;
+        return (provider, owner, name);
     }
 
     /// <summary>Instance URL must be https and non-private unless

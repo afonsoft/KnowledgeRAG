@@ -1168,7 +1168,7 @@
             && iv.TryGetValue<int>(out var n) ? n : null;
 
         /// <summary>String config key with a fallback default when absent/empty.</summary>
-        private static string? ReadStringOr(JsonObject? config, string key, string fallback) =>
+        private static string ReadStringOr(JsonObject? config, string key, string fallback) =>
             config is not null
             && config.TryGetPropertyValue(key, out var snode)
             && snode?.GetValue<string>() is { Length: > 0 } s ? s : fallback;
