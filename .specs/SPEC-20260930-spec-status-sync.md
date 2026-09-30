@@ -9,7 +9,7 @@
 | Stack | `.specs/` metadata |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260930-spec-status-sync` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | `GAP-documentation-spec-status-drift` (gap-analysis-20260930) |
 
 ## 1. User Story

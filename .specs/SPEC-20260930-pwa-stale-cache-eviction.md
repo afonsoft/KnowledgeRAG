@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / Blazor WASM PWA` — `service-worker.published.js` |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260930-pwa-cache-retention` |
-| Status | `Draft` |
+| Status | `Approved` |
 | Source | `GAP-implementation-pwa-stale-cache-eviction` (gap-analysis-20260930) |
 
 ## 1. User Story
