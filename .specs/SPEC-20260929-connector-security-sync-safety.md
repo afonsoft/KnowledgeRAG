@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — conectores, `IIntegrationSecretStore`, `HttpClient` egress |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-connector-security-sync-safety` |
-| Status | `Approved` |
+| Status | `Done` |
 | Source | Comentários `devin-ai-integration` em PRs #371–#374, #381 |
 
 ## 1. User Story

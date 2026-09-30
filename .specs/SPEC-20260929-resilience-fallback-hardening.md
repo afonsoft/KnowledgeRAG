@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / C#` — Resilience, Settings, DynamicToolCatalog |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-resilience-fallback-hardening` |
-| Status | `Approved` |
+| Status | `Done` |
 | Source | Comentários `devin-ai-integration` em PRs #375, #389, #391 (verificados em código) |
 
 ## 1. User Story
