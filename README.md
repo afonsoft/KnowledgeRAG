@@ -448,7 +448,7 @@ CI gates: Build (0 warnings), Unit Tests, Integration Tests (SQLite), Blazor WAS
 Knowledge MCP Hub follows a clean architecture pattern with four layers:
 
 - **Shared**: DTOs, MCP contracts, enums — consumed by all projects
-- **Client**: Blazor WASM SPA with BootstrapBlazor components, PWA support, SignalR for real-time updates
+- **Client**: Blazor WASM SPA with BootstrapBlazor components, PWA support, SignalR for real-time updates. The service worker keeps the current **and** previous precache generation so tabs still running an older app version don't break on deploy (SPEC-20260930).
 - **Server**: Kestrel host with Minimal APIs, EF Core SQLite persistence, authentication, configuration validation
 - **McpEngine**: Native MCP server implementing Streamable HTTP and legacy SSE transports, JSON-RPC 2.0 dispatcher, session management
 

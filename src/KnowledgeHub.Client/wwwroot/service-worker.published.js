@@ -10,6 +10,9 @@ self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
 
 const cacheNamePrefix = 'knowledgehub-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;
+// Side cache outside the evicted prefix — records the previous generation.
+const metaCacheName = 'knowledgehub-meta';
+const previousVersionKey = '/previous-version';
 const offlineAssetsInclude = [/\.dll$/, /\.pdb$/, /\.wasm/, /\.html/, /\.js$/, /\.json$/, /\.css$/, /\.woff$/, /\.png$/, /\.jpe?g$/, /\.gif$/, /\.ico$/, /\.blat$/, /\.dat$/, /\.webmanifest$/];
 const offlineAssetsExclude = [/^service-worker\.js$/];
 
@@ -49,10 +52,24 @@ async function onInstall(event) {
 }
 
 async function onActivate(event) {
+    // SPEC-20260930-pwa-stale-cache-eviction: keep the current AND the
+    // immediately previous cache generation. Tabs still running the old app
+    // version keep resolving their cached assets until they reload — deleting
+    // every prior cache on activate made those tabs fail with 404s whenever
+    // the server no longer serves their (renamed) boot assets. The previous
+    // generation is recorded in a side meta-cache because manifest version
+    // suffixes are content hashes, not ordered timestamps.
+    const meta = await caches.open(metaCacheName);
+    const prevResponse = await meta.match(previousVersionKey);
+    const previous = prevResponse ? await prevResponse.text() : null;
+
     const cacheKeys = await caches.keys();
     await Promise.all(cacheKeys
-        .filter(key => key.startsWith(cacheNamePrefix) && key !== cacheName)
+        .filter(key => key.startsWith(cacheNamePrefix)
+            && key !== cacheName && key !== previous)
         .map(key => caches.delete(key)));
+
+    await meta.put(previousVersionKey, new Response(cacheName));
 }
 
 async function onFetch(event) {
