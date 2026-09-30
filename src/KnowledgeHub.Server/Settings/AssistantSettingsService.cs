@@ -36,11 +36,22 @@ public sealed class AssistantSettingsService(
         var env = envOptions.Value;
         var row = await FindRowAsync(cancellationToken);
         var info = await secrets.GetInfoAsync(IntegrationProviders.Assistant, cancellationToken);
-        var (hasKey, hint, keySource) = info is not null
-            ? (true, $"••••{info.KeyHint}", "store")
-            : !string.IsNullOrWhiteSpace(env.ApiKey)
-                ? (true, $"••••{(env.ApiKey.Length >= 4 ? env.ApiKey[^4..] : env.ApiKey)}", "env")
-                : (false, (string?)null, "none");
+        bool hasKey;
+        string? hint;
+        string keySource;
+        if (info is not null)
+        {
+            (hasKey, hint, keySource) = (true, $"••••{info.KeyHint}", "store");
+        }
+        else if (!string.IsNullOrWhiteSpace(env.ApiKey))
+        {
+            var k = env.ApiKey;
+            (hasKey, hint, keySource) = (true, $"••••{(k.Length >= 4 ? k[^4..] : k)}", "env");
+        }
+        else
+        {
+            (hasKey, hint, keySource) = (false, null, "none");
+        }
 
         if (row is not null)
             return new AssistantSettingsDto
@@ -128,7 +139,6 @@ public sealed class AssistantSettingsService(
         var dto = await DescribeAsync(cancellationToken);
         var mode = !string.IsNullOrWhiteSpace(request.Mode) ? request.Mode : dto.Mode;
         var endpoint = !string.IsNullOrWhiteSpace(request.Endpoint) ? request.Endpoint.Trim() : dto.Endpoint;
-        var model = !string.IsNullOrWhiteSpace(request.Model) ? request.Model.Trim() : dto.Model;
         var apiKey = !string.IsNullOrWhiteSpace(request.ApiKey)
             ? request.ApiKey.Trim()
             : await secrets.GetAsync(IntegrationProviders.Assistant, cancellationToken) ?? envOptions.Value.ApiKey;
@@ -144,16 +154,28 @@ public sealed class AssistantSettingsService(
         {
             if (mode.Equals("remote", StringComparison.OrdinalIgnoreCase))
             {
-                var resolver = new A2ACardResolver(new Uri(endpoint), http,
-                    "/.well-known/agent-card.json", logger);
-                var card = await resolver.GetAgentCardAsync(timeout.Token);
-                var ok = card.SupportedInterfaces.Count > 0;
-                return new TestChatConnectionResponse
+                try
                 {
-                    Ok = ok,
-                    LatencyMs = sw.ElapsedMilliseconds,
-                    Detail = ok ? $"agent '{card.Name}' — {card.SupportedInterfaces.Count} interface(s)" : "agent card has no interfaces"
-                };
+                    var resolver = new A2ACardResolver(new Uri(endpoint), http,
+                        "/.well-known/agent-card.json", logger);
+                    var card = await resolver.GetAgentCardAsync(timeout.Token);
+                    var ok = card.SupportedInterfaces.Count > 0;
+                    return new TestChatConnectionResponse
+                    {
+                        Ok = ok,
+                        LatencyMs = sw.ElapsedMilliseconds,
+                        Detail = ok ? $"agent '{card.Name}' — {card.SupportedInterfaces.Count} interface(s)" : "agent card has no interfaces"
+                    };
+                }
+                catch (global::A2A.A2AException)
+                {
+                    return new TestChatConnectionResponse
+                    {
+                        Ok = false,
+                        LatencyMs = sw.ElapsedMilliseconds,
+                        Detail = "invalid agent card"
+                    };
+                }
             }
 
             using var probe = new HttpRequestMessage(HttpMethod.Get, $"{endpoint.TrimEnd('/')}/v1/models");

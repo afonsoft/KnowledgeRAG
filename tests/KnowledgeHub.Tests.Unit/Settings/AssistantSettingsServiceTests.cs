@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 namespace KnowledgeHub.Tests.Unit.Settings;
@@ -191,9 +193,149 @@ public sealed class AssistantSettingsServiceTests : IDisposable
         Assert.Equal("cheap-reply", response.Text);
     }
 
-    private sealed class FakeHttpFactory : IHttpClientFactory
+    [Fact]
+    public async Task ForSubtask_RemoteMode_BuildsA2AAdapter()
     {
-        public HttpClient CreateClient(string name) => new();
+        var cardJson = AgentCardJson("http://remote/a2a");
+        var provider = new AssistantChatClientProvider(
+            Options.Create(new AssistantOptions
+            {
+                Enabled = true,
+                Mode = "remote",
+                Endpoint = "http://remote-agent",
+                Route = ["grade"]
+            }),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(new StubHandler(cardJson)),
+            NullLogger<AssistantChatClientProvider>.Instance);
+
+        var main = new StubChatClient("main");
+        var wrapped = provider.ForSubtask("grade", main);
+        var deco = Assert.IsType<AssistantFallbackChatClient>(wrapped);
+        Assert.Same(main, provider.ForSubtask("rewrite", main));
+    }
+
+    [Fact]
+    public async Task TestAsync_LocalOk_ReportsSuccess()
+    {
+        var sut = new AssistantSettingsService(
+            Options.Create(new AssistantOptions()),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(new StubHandler("""{"data":[{"id":"m1"}]}""")),
+            NewProvider(),
+            NullLogger<AssistantSettingsService>.Instance);
+        var res = await sut.TestAsync(new TestAssistantConnectionRequest
+        {
+            Mode = "local",
+            Endpoint = "http://llm.test",
+            Model = "m1"
+        });
+        Assert.True(res.Ok);
+        Assert.True(res.LatencyMs >= 0);
+    }
+
+    [Fact]
+    public async Task TestAsync_Remote_ResolvesAgentCard()
+    {
+        var cardJson = AgentCardJson("http://r/a2a");
+        var sut = new AssistantSettingsService(
+            Options.Create(new AssistantOptions()),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(new StubHandler(cardJson)),
+            NewProvider(),
+            NullLogger<AssistantSettingsService>.Instance);
+        var res = await sut.TestAsync(new TestAssistantConnectionRequest
+        {
+            Mode = "remote",
+            Endpoint = "http://remote-agent"
+        });
+        Assert.True(res.Ok);
+        Assert.Contains("remote-agent", res.Detail);
+    }
+
+    [Fact]
+    public async Task TestAsync_NoEndpoint_FailsFast()
+    {
+        var res = await Sut().TestAsync(new TestAssistantConnectionRequest());
+        Assert.False(res.Ok);
+        Assert.Equal("endpoint is required", res.Detail);
+    }
+
+    [Fact]
+    public async Task TestAsync_Unreachable_ReportsConnectionFailed()
+    {
+        var sut = new AssistantSettingsService(
+            Options.Create(new AssistantOptions()),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(new StubHandler("x", HttpStatusCode.BadGateway)),
+            NewProvider(),
+            NullLogger<AssistantSettingsService>.Instance);
+        var res = await sut.TestAsync(new TestAssistantConnectionRequest
+        {
+            Mode = "local",
+            Endpoint = "http://llm.test"
+        });
+        Assert.False(res.Ok);
+        Assert.Equal("HTTP 502", res.Detail);
+    }
+
+    [Fact]
+    public async Task RemoveKey_RemovesOnlyKey()
+    {
+        var provider = NewProvider();
+        var sut = Sut(provider);
+        await sut.SaveAsync(new SaveAssistantSettingsRequest
+        {
+            Enabled = true,
+            Mode = "local",
+            Endpoint = "http://x",
+            ApiKey = "k1"
+        });
+        await sut.RemoveKeyAsync();
+        var dto = await sut.DescribeAsync();
+        Assert.True(dto.Enabled);          // row intact
+        Assert.False(dto.HasApiKey);       // key gone
+    }
+
+    private static string AgentCardJson(string url) => JsonSerializer.Serialize(
+        new A2A.AgentCard
+        {
+            Name = "remote-agent",
+            Version = "1.0",
+            Description = "d",
+            SupportedInterfaces =
+            [
+                new A2A.AgentInterface
+                {
+                    Url = url, ProtocolBinding = A2A.ProtocolBindingNames.JsonRpc,
+                    ProtocolVersion = "1.0"
+                }
+            ],
+            Capabilities = new A2A.AgentCapabilities(),
+            Skills = [],
+            DefaultInputModes = ["text/plain"],
+            DefaultOutputModes = ["text/plain"]
+        }, A2A.A2AJsonUtilities.DefaultOptions);
+
+    private sealed class FakeHttpFactory(HttpMessageHandler? handler = null) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) =>
+            handler is null ? new() : new HttpClient(handler);
+    }
+
+    private sealed class StubHandler(string body, HttpStatusCode status = HttpStatusCode.OK)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(status)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+            });
     }
 
     private sealed class StubChatClient(string reply, bool fails = false) : IChatClient

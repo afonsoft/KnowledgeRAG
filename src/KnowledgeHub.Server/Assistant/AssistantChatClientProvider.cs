@@ -94,7 +94,7 @@ public sealed class AssistantChatClientProvider(
             try
             {
                 client = mode.Equals("remote", StringComparison.OrdinalIgnoreCase)
-                    ? BuildRemoteClient(endpoint!, key)
+                    ? BuildRemoteClient(endpoint, key)
                     : ChatClientFactory.Create(new ChatProviderOptions
                     {
                         Provider = "openai",
