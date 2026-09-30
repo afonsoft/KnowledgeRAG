@@ -103,6 +103,11 @@ public sealed class KnowledgeHubMetrics : IMcpRequestMetrics
     public static readonly Counter<long> EvidenceRecords =
         Meter.CreateCounter<long>("knowledgehub.evidence.records");
 
+    /// <summary>A2A delegations served (SPEC-20260929-a2a-server-interop).
+    /// Tags: outcome (ok|error|rejected).</summary>
+    public static readonly Counter<long> A2ARequests =
+        Meter.CreateCounter<long>("knowledgehub.a2a.requests");
+
     /// <inheritdoc />
     public void Record(string method, string sessionMode, bool succeeded)
     {
