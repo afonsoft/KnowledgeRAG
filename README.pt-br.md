@@ -444,7 +444,7 @@ Gates do CI: Build (0 warnings), Testes Unitários, Testes de Integração (SQLi
 Knowledge MCP Hub segue um padrão de arquitetura limpa com quatro camadas:
 
 - **Shared**: DTOs, contratos MCP, enums — consumido por todos os projetos
-- **Client**: SPA Blazor WASM com componentes BootstrapBlazor, suporte PWA, SignalR para atualizações em tempo real
+- **Client**: SPA Blazor WASM com componentes BootstrapBlazor, suporte PWA, SignalR para atualizações em tempo real. O service worker mantém a geração de precache atual **e** a anterior para que abas rodando uma versão antiga não quebrem no deploy (SPEC-20260930).
 - **Server**: Host Kestrel com Minimal APIs, persistência EF Core SQLite, autenticação, validação de configuração
 - **McpEngine**: Servidor MCP nativo implementando transportes Streamable HTTP e SSE legado, dispatcher JSON-RPC 2.0, gerenciamento de sessões
 
