@@ -13,7 +13,7 @@ public class A2AApiTests
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-a2a-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-a2a-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -27,7 +27,7 @@ public class A2AApiTests
         public override async ValueTask DisposeAsync()
         {
             await base.DisposeAsync();
-            try { File.Delete(DbPath); } catch { /* best effort */ }
+            try { File.Delete(DbPath); } catch (IOException) { /* best effort */ }
         }
     }
 

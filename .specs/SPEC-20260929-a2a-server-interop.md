@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / ASP.NET Core`, `A2A` + `A2A.AspNetCore` (NuGet, v1.0 spec) |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-a2a-server` |
-| Status | `In Progress` |
+| Status | `Done` |
 | Ticket | #419 |
 | Source | Direto do dono — interoperabilidade agent-to-agent (A2A Protocol) |
 

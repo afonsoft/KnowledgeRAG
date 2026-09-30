@@ -31,6 +31,8 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
     };
 
     private const string DefaultSkill = "ask_knowledge";
+    private const string OutcomeTag = "outcome";
+    private const string SpanOutcomeTag = "a2a.outcome";
 
     public async Task ExecuteAsync(
         RequestContext context, AgentEventQueue eventQueue, CancellationToken cancellationToken)
@@ -42,61 +44,82 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         using var span = KnowledgeHubActivity.Start("a2a.serve");
         span?.SetTag("a2a.skill", skill ?? "rejected");
 
-        // Simple (non-task) message path: reply via MessageResponder.
         if (string.IsNullOrEmpty(context.TaskId))
         {
-            var responder = new MessageResponder(eventQueue, context.ContextId);
-            if (routeError is not null || services is null || skill is null)
-            {
-                KnowledgeHubMetrics.A2ARequests.Add(1, new TagList { { "outcome", "rejected" } });
-                await responder.ReplyAsync(
-                    routeError ?? "A2A handler unavailable", cancellationToken: cancellationToken);
-                return;
-            }
-
-            var (ok, parts0, _) = await InvokeAsync(services, skill, arguments, context, span, cancellationToken);
-            KnowledgeHubMetrics.A2ARequests.Add(1, new TagList { { "outcome", ok ? "ok" : "error" } });
-            await responder.ReplyAsync(LastText(parts0), cancellationToken: cancellationToken);
+            await HandleMessageAsync(context, eventQueue, services, skill, arguments, routeError,
+                span, cancellationToken);
             return;
         }
 
+        await HandleTaskAsync(context, eventQueue, services, logger, skill, arguments, routeError,
+            span, cancellationToken);
+    }
+
+    /// <summary>Simple (non-task) message path — replies via <see cref="MessageResponder"/>.</summary>
+    private async Task HandleMessageAsync(
+        RequestContext context, AgentEventQueue eventQueue, IServiceProvider? services,
+        string? skill, IDictionary<string, JsonElement>? arguments, string? routeError,
+        Activity? span, CancellationToken ct)
+    {
+        var responder = new MessageResponder(eventQueue, context.ContextId);
+        if (routeError is not null || services is null || skill is null)
+        {
+            RecordOutcome("rejected");
+            await responder.ReplyAsync(
+                routeError ?? "A2A handler unavailable", cancellationToken: ct);
+            return;
+        }
+
+        var (ok, parts, _) = await InvokeAsync(services, skill, arguments, span, ct);
+        RecordOutcome(ok ? "ok" : "error");
+        await responder.ReplyAsync(LastText(parts), cancellationToken: ct);
+    }
+
+    /// <summary>Task path — Submit → Work → artifact → Complete/Fail, plus the
+    /// RF-005 evidence receipt for the delegated tool call.</summary>
+    private async Task HandleTaskAsync(
+        RequestContext context, AgentEventQueue eventQueue, IServiceProvider? services,
+        ILogger? logger, string? skill, IDictionary<string, JsonElement>? arguments,
+        string? routeError, Activity? span, CancellationToken ct)
+    {
         var updater = new TaskUpdater(eventQueue, context.TaskId, context.ContextId);
         if (!context.IsContinuation)
-            await updater.SubmitAsync(cancellationToken);
+            await updater.SubmitAsync(ct);
 
         if (routeError is not null || services is null || skill is null)
         {
-            KnowledgeHubMetrics.A2ARequests.Add(1, new TagList { { "outcome", "rejected" } });
-            await updater.FailAsync(AgentMessage(routeError ?? "A2A handler unavailable", context.ContextId), cancellationToken);
+            RecordOutcome("rejected");
+            await updater.FailAsync(AgentMessage(routeError ?? "A2A handler unavailable", context.ContextId), ct);
             return;
         }
 
-        await updater.StartWorkAsync(cancellationToken: cancellationToken);
+        await updater.StartWorkAsync(cancellationToken: ct);
 
-        var (success, parts, resultJson) = await InvokeAsync(
-            services, skill, arguments, context, span, cancellationToken);
+        var (success, parts, resultJson) = await InvokeAsync(services, skill, arguments, span, ct);
 
         await updater.AddArtifactAsync(parts, artifactId: $"art_{skill}",
-            name: skill, lastChunk: true, cancellationToken: cancellationToken);
+            name: skill, lastChunk: true, cancellationToken: ct);
         var done = AgentMessage(
             parts.FirstOrDefault(p => p.Text is not null)?.Text ?? (success ? "done" : "failed"),
             context.ContextId);
         if (success)
-            await updater.CompleteAsync(done, cancellationToken);
+            await updater.CompleteAsync(done, ct);
         else
-            await updater.FailAsync(done, cancellationToken);
+            await updater.FailAsync(done, ct);
 
-        KnowledgeHubMetrics.A2ARequests.Add(1, new TagList { { "outcome", success ? "ok" : "error" } });
+        RecordOutcome(success ? "ok" : "error");
 
-        // RF-005: evidence receipt for the delegated tool call (same chain as MCP).
         var apiKeyId = http.HttpContext?.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
         await EvidenceEmission.RecordToolAsync(
             services.GetService<IEvidenceChainService>(), logger,
             $"a2a:{context.ContextId}", apiKeyId, context.TaskId,
             skill, context.TaskId,
             arguments is null ? null : JsonSerializer.Serialize(arguments),
-            resultJson, parent: null, cancellationToken);
+            resultJson, parent: null, ct);
     }
+
+    private static void RecordOutcome(string outcome) =>
+        KnowledgeHubMetrics.A2ARequests.Add(1, new TagList { { OutcomeTag, outcome } });
 
     public async Task CancelAsync(
         RequestContext context, AgentEventQueue eventQueue, CancellationToken cancellationToken)
@@ -105,7 +128,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
 
     private async Task<(bool Success, List<Part> Parts, string? ResultJson)> InvokeAsync(
         IServiceProvider services, string skill, IDictionary<string, JsonElement>? args,
-        RequestContext context, Activity? span, CancellationToken ct)
+        Activity? span, CancellationToken ct)
     {
         var catalog = services.GetRequiredService<IDynamicToolCatalog>();
         var tool = (await catalog.GetToolsAsync(services, ct))
@@ -117,7 +140,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
             var msg = exists
                 ? $"skill '{skill}' is not available for this credential"
                 : $"unknown skill '{skill}'";
-            span?.SetTag("a2a.outcome", exists ? "denied" : "unknown");
+            span?.SetTag(SpanOutcomeTag, exists ? "denied" : "unknown");
             return (false, [Part.FromText(msg)], null);
         }
 
@@ -125,35 +148,43 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
             ? await p.GetAsync(ct) : CallerScope.Unrestricted;
         if (!tool.ReadOnly && !scope.AllowWrite)
         {
-            span?.SetTag("a2a.outcome", "denied");
+            span?.SetTag(SpanOutcomeTag, "denied");
             return (false, [Part.FromText($"skill '{skill}' requires write access")], null);
         }
 
+        return await CallToolAsync(services, tool, args, span, ct);
+    }
+
+    /// <summary>Invokes the catalog handler and maps content/structured content
+    /// to A2A parts (text parts first, structured payload as a data part).</summary>
+    private static async Task<(bool, List<Part>, string?)> CallToolAsync(
+        IServiceProvider services, CatalogTool tool,
+        IDictionary<string, JsonElement>? args, Activity? span, CancellationToken ct)
+    {
         try
         {
             var result = await tool.Handler(
                 new ToolCallContext { Services = services, Arguments = args }, ct);
-            var parts = new List<Part>();
             var json = result.StructuredContent is { } sc
                 && sc.ValueKind is JsonValueKind.Object or JsonValueKind.Array
                 ? sc.GetRawText()
                 : JsonSerializer.Serialize(result.Content);
-            foreach (var c in result.Content)
-            {
-                if (c is TextContentBlock tb && !string.IsNullOrEmpty(tb.Text))
-                    parts.Add(Part.FromText(tb.Text));
-            }
+            var parts = result.Content
+                .OfType<TextContentBlock>()
+                .Where(tb => !string.IsNullOrEmpty(tb.Text))
+                .Select(tb => Part.FromText(tb.Text))
+                .ToList();
             if (parts.Count == 0)
                 parts.Add(Part.FromText("(no output)"));
             parts.Add(new Part { Data = JsonDocument.Parse(json).RootElement });
 
             var ok = result.IsError is not true;
-            span?.SetTag("a2a.outcome", ok ? "ok" : "tool_error");
+            span?.SetTag(SpanOutcomeTag, ok ? "ok" : "tool_error");
             return (ok, parts, json);
         }
         catch (McpProtocolException ex)
         {
-            span?.SetTag("a2a.outcome", "tool_error");
+            span?.SetTag(SpanOutcomeTag, "tool_error");
             return (false, [Part.FromText(ex.Message)], null);
         }
     }
@@ -168,11 +199,11 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
 
         if (context.Message?.Metadata is { } md)
         {
-            if (md.TryGetValue("skill", out var s) || md.TryGetValue("tool", out s)
+            if ((md.TryGetValue("skill", out var s) || md.TryGetValue("tool", out s)
                 || md.TryGetValue("skillId", out s))
+                && s.ValueKind == JsonValueKind.String)
             {
-                if (s.ValueKind == JsonValueKind.String)
-                    skill = s.GetString();
+                skill = s.GetString();
             }
             if (md.TryGetValue("arguments", out var a) && a.ValueKind == JsonValueKind.Object)
             {
