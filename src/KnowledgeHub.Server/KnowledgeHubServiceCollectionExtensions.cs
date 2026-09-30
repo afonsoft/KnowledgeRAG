@@ -284,10 +284,11 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<IDynamicToolCatalog>(),
             sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
             sp.GetRequiredService<IOptions<Agent.AgentOptions>>().Value,
-            sp.GetService<IMcpActivityFeed>(),
-            sp.GetRequiredService<ILogger<AgentService>>(),
-            sp.GetService<McpEngine.Agents.ChainAst.IChainCompactor>(),
-            sp.GetService<Audit.Evidence.IEvidenceChainService>()));
+            new AgentDiagnostics(
+                sp.GetService<IMcpActivityFeed>(),
+                sp.GetService<McpEngine.Agents.ChainAst.IChainCompactor>(),
+                sp.GetService<Audit.Evidence.IEvidenceChainService>()),
+            sp.GetRequiredService<ILogger<AgentService>>()));
         services.AddScoped<IApprovalService>(sp => new ApprovalService(
             sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
             TimeSpan.FromMinutes(

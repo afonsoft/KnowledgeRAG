@@ -40,58 +40,11 @@ public static class EvidenceChainVerifier
         foreach (var r in receipts)
         {
             // 1. Recompute the canonical digest.
-            if (!string.Equals(
-                EvidenceChainService.ComputeDigest(r), r.ReceiptDigest,
-                StringComparison.OrdinalIgnoreCase))
-                violations.Add(new EvidenceViolation(r.ReceiptId, "TamperingDetected",
-                    "canonical digest mismatch — body fields were altered"));
-
+            CheckDigest(r, violations);
             // 2. Signature check (skipped only when the key is unavailable).
-            // SPEC-20260929 RF-005: an unrecognized scheme is a violation —
-            // swapping the prefix must not smuggle an unsigned receipt.
-            if (r.Signature is null
-                || !r.Signature.StartsWith("hmac-sha256:", StringComparison.Ordinal))
-            {
-                if (hmacKey is not null)
-                    violations.Add(new EvidenceViolation(r.ReceiptId,
-                        "UnknownSignatureScheme",
-                        "signature is missing or uses an unknown scheme"));
-            }
-            else if (hmacKey is not null)
-            {
-                using var hmac = new HMACSHA256(hmacKey);
-                var expected = Convert.ToHexString(
-                    hmac.ComputeHash(Encoding.UTF8.GetBytes(r.ReceiptDigest)))
-                    .ToLowerInvariant();
-                if (!string.Equals(r.Signature, $"hmac-sha256:{expected}",
-                    StringComparison.OrdinalIgnoreCase))
-                    violations.Add(new EvidenceViolation(r.ReceiptId, "BadSignature",
-                        "signature does not match the stored digest"));
-            }
-
+            CheckSignature(r, hmacKey, violations);
             // 3. Parent links must resolve to already-seen valid receipts.
-            if (r.ParentReceiptIds is { } idsJson)
-            {
-                var ids = System.Text.Json.JsonSerializer
-                    .Deserialize<List<string>>(idsJson) ?? [];
-                var parentDigests = new List<string>();
-                foreach (var id in ids)
-                {
-                    if (!byId.TryGetValue(id, out var parent) || !seen.Contains(id))
-                        violations.Add(new EvidenceViolation(r.ReceiptId, "BrokenParentLink",
-                            $"parent '{id}' missing from bundle or appears out of order"));
-                    else
-                        parentDigests.Add(parent.ReceiptDigest);
-                }
-                var expectedParent = parentDigests.Count == 0
-                    ? "" : EvidenceChainService.Sha256Hex(string.Join(':', parentDigests));
-                if (parentDigests.Count == ids.Count && ids.Count > 0
-                    && !string.Equals(r.ParentDigest, expectedParent,
-                        StringComparison.OrdinalIgnoreCase))
-                    violations.Add(new EvidenceViolation(r.ReceiptId, "TamperingDetected",
-                        "parent digest mismatch — parent receipts were replaced"));
-            }
-
+            CheckParentLinks(r, byId, seen, violations);
             seen.Add(r.ReceiptId);
         }
 
@@ -102,5 +55,72 @@ public static class EvidenceChainVerifier
                     "OrderingViolation", "timestamp precedes the previous receipt"));
 
         return new EvidenceVerification(violations.Count == 0, violations);
+    }
+
+    /// <summary>Step 1 — canonical digest must match the recomputation.</summary>
+    private static void CheckDigest(
+        EvidenceReceipt r, List<EvidenceViolation> violations)
+    {
+        if (!string.Equals(
+            EvidenceChainService.ComputeDigest(r), r.ReceiptDigest,
+            StringComparison.OrdinalIgnoreCase))
+            violations.Add(new EvidenceViolation(r.ReceiptId, "TamperingDetected",
+                "canonical digest mismatch — body fields were altered"));
+    }
+
+    /// <summary>Step 2 — SPEC-20260929 RF-005: an unrecognized scheme is a
+    /// violation — swapping the prefix must not smuggle an unsigned receipt.</summary>
+    private static void CheckSignature(
+        EvidenceReceipt r, byte[]? hmacKey, List<EvidenceViolation> violations)
+    {
+        if (r.Signature is null
+            || !r.Signature.StartsWith("hmac-sha256:", StringComparison.Ordinal))
+        {
+            if (hmacKey is not null)
+                violations.Add(new EvidenceViolation(r.ReceiptId,
+                    "UnknownSignatureScheme",
+                    "signature is missing or uses an unknown scheme"));
+            return;
+        }
+        if (hmacKey is null)
+            return;
+
+        using var hmac = new HMACSHA256(hmacKey);
+        var expected = Convert.ToHexString(
+            hmac.ComputeHash(Encoding.UTF8.GetBytes(r.ReceiptDigest)))
+            .ToLowerInvariant();
+        if (!string.Equals(r.Signature, $"hmac-sha256:{expected}",
+            StringComparison.OrdinalIgnoreCase))
+            violations.Add(new EvidenceViolation(r.ReceiptId, "BadSignature",
+                "signature does not match the stored digest"));
+    }
+
+    /// <summary>Step 3 — parent links must resolve to already-seen receipts
+    /// and the chained parent digest must match.</summary>
+    private static void CheckParentLinks(
+        EvidenceReceipt r, Dictionary<string, EvidenceReceipt> byId,
+        HashSet<string> seen, List<EvidenceViolation> violations)
+    {
+        if (r.ParentReceiptIds is not { } idsJson)
+            return;
+
+        var ids = System.Text.Json.JsonSerializer
+            .Deserialize<List<string>>(idsJson) ?? [];
+        var parentDigests = new List<string>();
+        foreach (var id in ids)
+        {
+            if (!byId.TryGetValue(id, out var parent) || !seen.Contains(id))
+                violations.Add(new EvidenceViolation(r.ReceiptId, "BrokenParentLink",
+                    $"parent '{id}' missing from bundle or appears out of order"));
+            else
+                parentDigests.Add(parent.ReceiptDigest);
+        }
+        var expectedParent = parentDigests.Count == 0
+            ? "" : EvidenceChainService.Sha256Hex(string.Join(':', parentDigests));
+        if (parentDigests.Count == ids.Count && ids.Count > 0
+            && !string.Equals(r.ParentDigest, expectedParent,
+                StringComparison.OrdinalIgnoreCase))
+            violations.Add(new EvidenceViolation(r.ReceiptId, "TamperingDetected",
+                "parent digest mismatch — parent receipts were replaced"));
     }
 }

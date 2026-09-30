@@ -45,6 +45,32 @@ public sealed class RestApiConnector(
         var maxPages = config.Int("maxPages", 1, 1, 50);
 
         var http = httpClientFactory.CreateClient("restapi");
+        var (items, warnings, warned) = await FetchAllPagesAsync(
+            source, http, endpoint, headers, itemsPath, pageParam, maxPages, cancellationToken);
+
+        var documents = new List<RawDocument>(items.Count);
+        for (var i = 0; i < items.Count; i++)
+        {
+            var doc = MapItem(items[i], i + 1,
+                new ItemMapping(titleField, contentFields, urlField, idField), warnings, warned);
+            if (doc is not null)
+                documents.Add(doc);
+        }
+
+        if (documents.Count == 0 && items.Count > 0)
+            logger.LogWarning("RestApi source {SourceId} mapped no documents from {ItemCount} items", source.Id, items.Count);
+
+        return new FetchResult(documents, warnings);
+    }
+
+    /// <summary>Walks the pagination loop: page 1 failure aborts the sync,
+    /// later failures keep collected items, empty page ends pagination.</summary>
+    private async Task<(List<JsonElement> Items, List<string> Warnings, HashSet<string> Warned)>
+        FetchAllPagesAsync(
+            KnowledgeSource source, HttpClient http, string endpoint,
+            IReadOnlyDictionary<string, string> headers, string? itemsPath,
+            string? pageParam, int maxPages, CancellationToken ct)
+    {
         var items = new List<JsonElement>();
         var warnings = new List<string>();
         var warned = new HashSet<string>(StringComparer.Ordinal);
@@ -58,7 +84,7 @@ public sealed class RestApiConnector(
             JsonElement body;
             try
             {
-                body = await GetJsonAsync(http, requestUrl, headers, page == 1, cancellationToken);
+                body = await GetJsonAsync(http, requestUrl, headers, page == 1, ct);
             }
             catch (RestApiFetchException ex)
             {
@@ -78,18 +104,7 @@ public sealed class RestApiConnector(
                 break; // single-shot fetch
         }
 
-        var documents = new List<RawDocument>(items.Count);
-        for (var i = 0; i < items.Count; i++)
-        {
-            var doc = MapItem(items[i], i + 1, titleField, contentFields, urlField, idField, warnings, warned);
-            if (doc is not null)
-                documents.Add(doc);
-        }
-
-        if (documents.Count == 0 && items.Count > 0)
-            logger.LogWarning("RestApi source {SourceId} mapped no documents from {ItemCount} items", source.Id, items.Count);
-
-        return new FetchResult(documents, warnings);
+        return (items, warnings, warned);
     }
 
     /// <summary>Headers live in the encrypted store; <c>hasKey:true</c> without a
@@ -232,15 +247,18 @@ public sealed class RestApiConnector(
         return [body];
     }
 
+    /// <summary>Field-mapping configuration for <see cref="MapItem"/> (RF-002).</summary>
+    private sealed record ItemMapping(
+        string? TitleField, string[] ContentFields, string? UrlField, string? IdField);
+
     /// <summary>Maps one JSON item to a <see cref="RawDocument"/> (RF-002).</summary>
     private static RawDocument? MapItem(
-        JsonElement item, int index, string? titleField, string[] contentFields,
-        string? urlField, string? idField, List<string> warnings, HashSet<string> warned)
+        JsonElement item, int index, ItemMapping mapping, List<string> warnings, HashSet<string> warned)
     {
-        var title = FieldOrNull(item, titleField) ?? $"item {index}";
+        var title = FieldOrNull(item, mapping.TitleField) ?? $"item {index}";
 
-        var content = contentFields.Length > 0
-            ? JoinContentFields(item, contentFields, warnings, warned)
+        var content = mapping.ContentFields.Length > 0
+            ? JoinContentFields(item, mapping.ContentFields, warnings, warned)
             : DefaultSerialization(item);
 
         if (string.IsNullOrWhiteSpace(content))
@@ -249,8 +267,8 @@ public sealed class RestApiConnector(
             return null;
         }
 
-        var id = FieldOrNull(item, idField);
-        var url = FieldOrNull(item, urlField);
+        var id = FieldOrNull(item, mapping.IdField);
+        var url = FieldOrNull(item, mapping.UrlField);
         string uri;
         if (id is { Length: > 0 })
             uri = $"rest:{id}";

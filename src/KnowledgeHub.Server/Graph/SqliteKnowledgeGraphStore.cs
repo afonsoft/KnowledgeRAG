@@ -27,49 +27,8 @@ public sealed class SqliteKnowledgeGraphStore(
             .FirstOrDefaultAsync(n => n.NormalizedName == normalized && n.Type == nodeType, ct);
         if (node is null)
         {
-            node = new KgNode
-            {
-                Name = name.Trim(),
-                NormalizedName = normalized,
-                Type = nodeType,
-                EpisodeId = episodeId
-            };
-            db.KgNodes.Add(node);
-            // Conflict visibility: another node already holds this normalized
-            // name under a different type — both get conflict alias rows.
-            var siblings = await db.KgNodes
-                .Where(n => n.NormalizedName == normalized && n.Type != nodeType)
-                .ToListAsync(ct);
-            // SPEC-20260926-kg-alias-conflict-dedup RF-001: siblings may already
-            // carry a conflict/merge alias for this normalized name (entity
-            // gaining a 3rd+ type, or pending adds in the same batch) — the
-            // (AliasNormalized, KgNodeId) unique index would blow the save.
-            foreach (var sibling in siblings)
-            {
-                if (await AliasExistsOrPendingAsync(normalized, sibling.Id, ct))
-                    continue;
-                db.KgAliases.Add(new KgAlias
-                {
-                    AliasNormalized = normalized,
-                    KgNodeId = sibling.Id,
-                    KnowledgeSourceId = sourceId,
-                    Reason = "conflict"
-                });
-            }
-            if (siblings.Count > 0)
-            {
-                logger.LogInformation(
-                    "entity '{Name}' now exists under {Count}+1 types — conflict aliases recorded",
-                    normalized, siblings.Count);
-                if (!await AliasExistsOrPendingAsync(normalized, node.Id, ct))
-                    db.KgAliases.Add(new KgAlias
-                    {
-                        AliasNormalized = normalized,
-                        KgNodeId = node.Id,
-                        KnowledgeSourceId = sourceId,
-                        Reason = "conflict"
-                    });
-            }
+            node = await CreateNodeWithConflictsAsync(
+                name, normalized, nodeType, sourceId, episodeId, ct);
         }
         else
         {
@@ -90,6 +49,58 @@ public sealed class SqliteKnowledgeGraphStore(
             }
         }
         await db.SaveChangesAsync(ct);
+        return node;
+    }
+
+    /// <summary>Creates the node and records conflict aliases for every sibling
+    /// holding the same normalized name under a different type.</summary>
+    private async Task<KgNode> CreateNodeWithConflictsAsync(
+        string name, string normalized, string nodeType, Guid sourceId,
+        Guid? episodeId, CancellationToken ct)
+    {
+        var node = new KgNode
+        {
+            Name = name.Trim(),
+            NormalizedName = normalized,
+            Type = nodeType,
+            EpisodeId = episodeId
+        };
+        db.KgNodes.Add(node);
+        // Conflict visibility: another node already holds this normalized
+        // name under a different type — both get conflict alias rows.
+        var siblings = await db.KgNodes
+            .Where(n => n.NormalizedName == normalized && n.Type != nodeType)
+            .ToListAsync(ct);
+        // SPEC-20260926-kg-alias-conflict-dedup RF-001: siblings may already
+        // carry a conflict/merge alias for this normalized name (entity
+        // gaining a 3rd+ type, or pending adds in the same batch) — the
+        // (AliasNormalized, KgNodeId) unique index would blow the save.
+        foreach (var sibling in siblings)
+        {
+            if (await AliasExistsOrPendingAsync(normalized, sibling.Id, ct))
+                continue;
+            db.KgAliases.Add(new KgAlias
+            {
+                AliasNormalized = normalized,
+                KgNodeId = sibling.Id,
+                KnowledgeSourceId = sourceId,
+                Reason = "conflict"
+            });
+        }
+        if (siblings.Count > 0)
+        {
+            logger.LogInformation(
+                "entity '{Name}' now exists under {Count}+1 types — conflict aliases recorded",
+                normalized, siblings.Count);
+            if (!await AliasExistsOrPendingAsync(normalized, node.Id, ct))
+                db.KgAliases.Add(new KgAlias
+                {
+                    AliasNormalized = normalized,
+                    KgNodeId = node.Id,
+                    KnowledgeSourceId = sourceId,
+                    Reason = "conflict"
+                });
+        }
         return node;
     }
 

@@ -32,52 +32,72 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
         var protectedFrom = Math.Max(0, ast.Sections.Count - keep);
 
         // Pass 1 — truncate oversized tool outputs inside foldable sections.
+        TruncateFoldableSections(ast, protectedFrom);
+
+        // Pass 2 — fold oldest sections into one summarized block.
+        FoldOldestSections(ast, protectedFrom);
+
+        // Pass 3 — progressive per-item cap until the history fits.
+        TightenPerItemCap(ast);
+
+        return Task.FromResult(ast);
+    }
+
+    /// <summary>Pass 1 — truncate oversized tool outputs inside foldable sections.</summary>
+    private void TruncateFoldableSections(ChainAst ast, int protectedFrom)
+    {
         for (var i = 0; i < protectedFrom; i++)
             foreach (var pair in ast.Sections[i].Body)
                 foreach (var msg in pair.ToolMessages)
                     TruncateToolResults(msg);
+    }
 
-        // Pass 2 — fold oldest sections into one summarized block.
-        var fold = protectedFrom;
-        if (fold > 0)
+    /// <summary>Pass 2 — fold the oldest sections into one summarized block;
+    /// pinned headers survive, reasoning gets a synthetic signature (RF-004).</summary>
+    private void FoldOldestSections(ChainAst ast, int fold)
+    {
+        if (fold <= 0)
+            return;
+
+        // SPEC-20260929 RF-001: system/developer messages are pinned —
+        // hoisted into the folded section's headers, never summarized
+        // away. The parser parks every non-User role in Headers (incl.
+        // future "developer" roles), so pin everything that isn't the
+        // user's own prompt — instruction headers must survive.
+        var pinned = ast.Sections.Take(fold)
+            .SelectMany(s => s.Headers)
+            .Where(h => h.Role != ChatRole.User)
+            .ToList();
+
+        var summary = BuildSummary(ast.Sections.Take(fold));
+        var folded = new ChainSection
         {
-            // SPEC-20260929 RF-001: system/developer messages are pinned —
-            // hoisted into the folded section's headers, never summarized
-            // away. The parser parks every non-User role in Headers (incl.
-            // future "developer" roles), so pin everything that isn't the
-            // user's own prompt — instruction headers must survive.
-            var pinned = ast.Sections.Take(fold)
-                .SelectMany(s => s.Headers)
-                .Where(h => h.Role != ChatRole.User)
-                .ToList();
-
-            var summary = BuildSummary(ast.Sections.Take(fold));
-            var folded = new ChainSection
+            Body =
             {
-                Body =
+                new BodyPair
                 {
-                    new BodyPair
-                    {
-                        AiMessage = new ChatMessage(ChatRole.Assistant,
-                            $"{SummaryMarker}\n{summary}"),
-                        Type = BodyPairType.SummarizedSection
-                    }
+                    AiMessage = new ChatMessage(ChatRole.Assistant,
+                        $"{SummaryMarker}\n{summary}"),
+                    Type = BodyPairType.SummarizedSection
                 }
-            };
-            folded.Headers.AddRange(pinned);
-            // RF-004: reasoning was dropped with the folded sections — emit a
-            // synthetic signature so providers that require thought retention
-            // (Gemini/Claude thinking models) still accept the history.
-            if (ast.Sections.Take(fold).SelectMany(s => s.Body).Any(p => p.HasReasoning))
-                folded.Body[0].AiMessage.Contents.Insert(0,
-                    new TextReasoningContent("") { ProtectedData = SkipThoughtSignature });
-            ast.Sections.RemoveRange(0, fold);
-            ast.Sections.Insert(0, folded);
-        }
+            }
+        };
+        folded.Headers.AddRange(pinned);
+        // RF-004: reasoning was dropped with the folded sections — emit a
+        // synthetic signature so providers that require thought retention
+        // (Gemini/Claude thinking models) still accept the history.
+        if (ast.Sections.Take(fold).SelectMany(s => s.Body).Any(p => p.HasReasoning))
+            folded.Body[0].AiMessage.Contents.Insert(0,
+                new TextReasoningContent("") { ProtectedData = SkipThoughtSignature });
+        ast.Sections.RemoveRange(0, fold);
+        ast.Sections.Insert(0, folded);
+    }
 
-        // SPEC-20260929 RF-004: several individually-fine results can still
-        // overshoot the total budget — tighten the per-item cap progressively
-        // until the history fits (or nothing shrinkable remains).
+    /// <summary>Pass 3 — SPEC-20260929 RF-004: several individually-fine
+    /// results can still overshoot the total budget — tighten the per-item
+    /// cap progressively until the history fits (or nothing shrinkable remains).</summary>
+    private void TightenPerItemCap(ChainAst ast)
+    {
         var cap = options.MaxBodyPairBytes;
         while (ast.EstimateBytes() > options.MaxTotalHistoryBytes && cap > 256)
         {
@@ -87,8 +107,6 @@ public sealed class ChainCompactor(ChainCompactionOptions options) : IChainCompa
                     foreach (var msg in pair.ToolMessages)
                         TruncateToolResults(msg, cap);
         }
-
-        return Task.FromResult(ast);
     }
 
     /// <summary>Cuts oversized payloads inside tool-result contents —

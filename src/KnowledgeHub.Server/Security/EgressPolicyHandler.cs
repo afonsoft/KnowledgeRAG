@@ -147,28 +147,36 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
         return addresses.Any(a => IsBlockedAddress(a, allowPrivate));
     }
 
-    private static bool IsBlockedAddress(IPAddress address, bool allowPrivate)
-    {
-        if (address.AddressFamily == AddressFamily.InterNetwork)
-        {
-            var b = address.GetAddressBytes();
-            // 169.254.0.0/16 — link-local incl. cloud metadata (169.254.169.254).
-            if (b[0] == 169 && b[1] == 254)
-                return true;
-            // 0.0.0.0/8, 100.64.0.0/10 CGNAT, multicast/reserved 224.0.0.0+.
-            if (b[0] == 0 || (b[0] == 100 && b[1] >= 64 && b[1] <= 127) || b[0] >= 224)
-                return true;
-            if (!allowPrivate &&
-                (IPAddress.IsLoopback(address)
-                 || b[0] == 10
-                 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
-                 || (b[0] == 192 && b[1] == 168)))
-                return true;
-            return false;
-        }
+    private static bool IsBlockedAddress(IPAddress address, bool allowPrivate) =>
+        address.AddressFamily == AddressFamily.InterNetwork
+            ? IsBlockedIPv4(address, allowPrivate)
+            : IsBlockedIPv6(address, allowPrivate);
 
-        // IPv6: link-local fe80::/10 always (metadata equivalents); loopback
-        // ::1 and unique-local fc00::/7 only when private nets are denied.
+    /// <summary>IPv4 blocklist: link-local (incl. cloud metadata), 0.0.0.0/8,
+    /// CGNAT, multicast/reserved; loopback + RFC1918 only when private is denied.</summary>
+    private static bool IsBlockedIPv4(IPAddress address, bool allowPrivate)
+    {
+        var b = address.GetAddressBytes();
+        // 169.254.0.0/16 — link-local incl. cloud metadata (169.254.169.254).
+        if (b[0] == 169 && b[1] == 254)
+            return true;
+        // 0.0.0.0/8, 100.64.0.0/10 CGNAT, multicast/reserved 224.0.0.0+.
+        if (b[0] == 0 || (b[0] == 100 && b[1] >= 64 && b[1] <= 127) || b[0] >= 224)
+            return true;
+        if (!allowPrivate &&
+            (IPAddress.IsLoopback(address)
+             || b[0] == 10
+             || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
+             || (b[0] == 192 && b[1] == 168)))
+            return true;
+        return false;
+    }
+
+    /// <summary>IPv6 blocklist: link-local fe80::/10 always (metadata
+    /// equivalents); loopback ::1 and unique-local fc00::/7 only when private
+    /// nets are denied.</summary>
+    private static bool IsBlockedIPv6(IPAddress address, bool allowPrivate)
+    {
         var v6 = address.GetAddressBytes();
         if (v6[0] == 0xfe && (v6[1] & 0xc0) == 0x80)
             return true;

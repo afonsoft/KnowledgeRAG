@@ -58,17 +58,7 @@ public sealed class GitRepositoryConnector(
 
         var prefix = $"git:{repo.Provider}:{repo.Owner}/{repo.Name}:{repo.Branch}";
 
-        var sha = await api.GetBranchCommitShaAsync(repo, token, cancellationToken);
-        if (sha is null && repo.Branch == "main")
-        {
-            // Default-branch fallback (RF-001: "main ou master").
-            repo = repo with { Branch = "master" };
-            sha = await api.GetBranchCommitShaAsync(repo, token, cancellationToken);
-        }
-        if (sha is null)
-            throw new InvalidOperationException(
-                $"git: branch '{repo.Branch}' not found in {repo.Owner}/{repo.Name} "
-                + "(private repo without a PAT also returns 404)");
+        (repo, var sha) = await ResolveBranchShaAsync(api, repo, token, cancellationToken);
 
         // RF-004 fast path: unchanged commit → NoChanges stubs, zero downloads.
         var commitPrefix = $"{prefix}:{sha}:";
@@ -92,6 +82,56 @@ public sealed class GitRepositoryConnector(
         var maxBytes = config.Int("maxFileSizeBytes", 500 * 1024, 10 * 1024, 5 * 1024 * 1024);
 
         var tree = await api.GetTreeAsync(repo, token, cancellationToken);
+        var (eligible, oversized) = FilterTree(
+            tree, includeMatchers, excludeMatchers, pathPrefix, maxBytes, repo, failed);
+        if (oversized > 0)
+            warnings.Add($"{oversized} file(s) skipped — over maxFileSizeBytes");
+        var truncatedByCap = eligible.Count > maxFiles;
+        if (truncatedByCap)
+        {
+            warnings.Add($"file list truncated at maxFiles={maxFiles} ({eligible.Count} eligible)");
+            eligible = eligible.Take(maxFiles).ToList();
+        }
+
+        var documents = await DownloadFilesAsync(
+            api, repo, token, eligible, existingFingerprints, commitPrefix,
+            maxBytes, warnings, failed, cancellationToken);
+
+        return new FetchResult(documents, warnings,
+            FailedUris: failed.Count > 0 ? failed : null,
+            Truncated: truncatedByCap);
+    }
+
+    /// <summary>Resolves the branch commit SHA with the default-branch
+    /// fallback (RF-001: "main ou master").</summary>
+    private async Task<(GitRepositoryRef Repo, string Sha)> ResolveBranchShaAsync(
+        GitApiClient api, GitRepositoryRef repo, string? token, CancellationToken ct)
+    {
+        var sha = await api.GetBranchCommitShaAsync(repo, token, ct);
+        if (sha is null && repo.Branch == "main")
+        {
+            // Default-branch fallback (RF-001: "main ou master").
+            repo = repo with { Branch = "master" };
+            sha = await api.GetBranchCommitShaAsync(repo, token, ct);
+        }
+        if (sha is null)
+            throw new InvalidOperationException(
+                $"git: branch '{repo.Branch}' not found in {repo.Owner}/{repo.Name} "
+                + "(private repo without a PAT also returns 404)");
+        return (repo, sha);
+    }
+
+    /// <summary>Tree filter result: eligible entries + oversized count.</summary>
+    private sealed record TreeFilterResult(List<GitTreeEntry> Eligible, int Oversized);
+
+    /// <summary>Applies path prefix, glob include/exclude and the size gate;
+    /// oversized-but-present files enter FailedUris (RF-007) so reconciliation
+    /// keeps the already-indexed document.</summary>
+    private TreeFilterResult FilterTree(
+        IReadOnlyList<GitTreeEntry> tree,
+        Func<string, bool>[] includeMatchers, Func<string, bool>[] excludeMatchers,
+        string pathPrefix, long maxBytes, GitRepositoryRef repo, List<string> failed)
+    {
         var eligible = new List<GitTreeEntry>();
         var oversized = 0;
         foreach (var e in tree)
@@ -112,16 +152,20 @@ public sealed class GitRepositoryConnector(
             }
             eligible.Add(e);
         }
-        if (oversized > 0)
-            warnings.Add($"{oversized} file(s) skipped — over maxFileSizeBytes");
-        var truncatedByCap = eligible.Count > maxFiles;
-        if (truncatedByCap)
-        {
-            warnings.Add($"file list truncated at maxFiles={maxFiles} ({eligible.Count} eligible)");
-            eligible = eligible.Take(maxFiles).ToList();
-        }
+        return new TreeFilterResult(eligible, oversized);
+    }
 
+    /// <summary>Downloads eligible files with fingerprint skip + post-download
+    /// size enforcement (SPEC-20260929 RF-007 — GitLab Size=0 entries).</summary>
+    private async Task<List<RawDocument>> DownloadFilesAsync(
+        GitApiClient api, GitRepositoryRef repo, string? token,
+        List<GitTreeEntry> eligible,
+        IReadOnlyDictionary<string, string> existingFingerprints,
+        string commitPrefix, long maxBytes,
+        List<string> warnings, List<string> failed, CancellationToken ct)
+    {
         var documents = new List<RawDocument>();
+        var oversized = 0;
         foreach (var e in eligible)
         {
             var fingerprint = $"{commitPrefix}{e.Path}:{e.BlobSha}";
@@ -135,7 +179,7 @@ public sealed class GitRepositoryConnector(
 
             try
             {
-                var text = await api.GetFileTextAsync(repo, e.Path, token, cancellationToken);
+                var text = await api.GetFileTextAsync(repo, e.Path, token, ct);
                 // SPEC-20260929 RF-007: GitLab tree entries carry Size=0 — the
                 // pre-download gate can't fire; enforce the limit on content.
                 // FailedUris keeps the previously-indexed document alive.
@@ -154,10 +198,9 @@ public sealed class GitRepositoryConnector(
                 failed.Add(uri);
             }
         }
-
-        return new FetchResult(documents, warnings,
-            FailedUris: failed.Count > 0 ? failed : null,
-            Truncated: truncatedByCap);
+        if (oversized > 0)
+            warnings.Add($"{oversized} file(s) skipped — over maxFileSizeBytes (post-download)");
+        return documents;
     }
 
     /// <summary>RF-001 + SSRF: resolves provider/owner/name/apiBase —
@@ -170,33 +213,55 @@ public sealed class GitRepositoryConnector(
         string? owner = config.String("owner"), name = config.String("name");
         var instance = config.String("instanceUrl");
 
-        if (config.String("repoUrl") is { Length: > 0 } url
-            && Uri.TryCreate(url, UriKind.Absolute, out var u))
-        {
-            var segs = u.AbsolutePath.Trim('/').Split('/');
-            if (segs.Length < 2)
-                throw new InvalidOperationException("repoUrl must look like https://host/owner/name");
-            // SPEC-20260929 RF-007: GitLab subgroups — owner is every segment
-            // before the repo (group/sub/...), not just the parent.
-            owner ??= string.Join('/', segs[..^1]);
-            name ??= segs[^1].TrimEnd('/');
-            if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
-                name = name[..^4];
-            if (provider.Length == 0)
-            {
-                if (u.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
-                    provider = GitProviderNames.GitLab;
-                else if (u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
-                    provider = GitProviderNames.GitHub;
-                else
-                    provider = GitProviderNames.Gitea;
-            }
-            // Non-default host → self-hosted instance.
-            if (!u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
-                && !u.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
-                instance ??= $"{u.Scheme}://{u.Host}";
-        }
+        (provider, owner, name, instance) = ApplyRepoUrl(
+            config.String("repoUrl"), provider, owner, name, instance);
+        (provider, owner, name) = ValidateOwnerAndProvider(provider, owner, name);
+        var apiBase = await ResolveApiBaseAsync(config, provider, instance, ct);
 
+        var branch = config.String("branch") is { Length: > 0 } b ? b : "main";
+        return new GitRepositoryRef(provider, apiBase.TrimEnd('/'), owner, name, branch,
+            config.Bool("allowPrivateHosts"));
+    }
+
+    /// <summary>repoUrl wins over the owner+name tuple: derives owner/name
+    /// (GitLab subgroups — owner is every segment before the repo, RF-007),
+    /// the provider from the host, and a self-hosted instance for
+    /// non-default hosts.</summary>
+    private static (string Provider, string? Owner, string? Name, string? Instance) ApplyRepoUrl(
+        string? repoUrl, string provider, string? owner, string? name, string? instance)
+    {
+        if (string.IsNullOrEmpty(repoUrl)
+            || !Uri.TryCreate(repoUrl, UriKind.Absolute, out var u))
+            return (provider, owner, name, instance);
+
+        var segs = u.AbsolutePath.Trim('/').Split('/');
+        if (segs.Length < 2)
+            throw new InvalidOperationException("repoUrl must look like https://host/owner/name");
+        // SPEC-20260929 RF-007: GitLab subgroups — owner is every segment
+        // before the repo (group/sub/...), not just the parent.
+        owner ??= string.Join('/', segs[..^1]);
+        name ??= segs[^1].TrimEnd('/');
+        if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            name = name[..^4];
+        if (provider.Length == 0)
+            provider = ProviderFromHost(u.Host);
+        // Non-default host → self-hosted instance.
+        if (!u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+            && !u.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
+            instance ??= $"{u.Scheme}://{u.Host}";
+        return (provider, owner, name, instance);
+    }
+
+    private static string ProviderFromHost(string host) =>
+        host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase) ? GitProviderNames.GitLab
+        : host.Equals("github.com", StringComparison.OrdinalIgnoreCase) ? GitProviderNames.GitHub
+        : GitProviderNames.Gitea;
+
+    /// <summary>Owner/name must be present; provider defaults to GitHub and
+    /// must be one of the supported ones.</summary>
+    private static (string Provider, string Owner, string Name) ValidateOwnerAndProvider(
+        string provider, string? owner, string? name)
+    {
         if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(name))
             throw new InvalidOperationException(
                 "GitRepository requires 'repoUrl' or both 'owner' and 'name'");
@@ -206,38 +271,38 @@ public sealed class GitRepositoryConnector(
         if (provider is not (GitProviderNames.GitHub or GitProviderNames.GitLab or GitProviderNames.Gitea))
             throw new InvalidOperationException(
                 $"unsupported provider '{provider}' — github|gitlab|gitea");
+        return (provider, owner, name);
+    }
 
-        string apiBase;
-        if (!string.IsNullOrWhiteSpace(instance))
-        {
-            if (!Uri.TryCreate(instance, UriKind.Absolute, out var inst)
-                || inst.Scheme is not ("https" or "http"))
-                throw new InvalidOperationException("instanceUrl must be an absolute http(s) URL");
-            if (inst.Scheme != "https" && !config.Bool("allowPrivateHosts"))
-                throw new InvalidOperationException(
-                    "instanceUrl must use https — set 'allowPrivateHosts': true for local instances");
-            if (!config.Bool("allowPrivateHosts"))
-                await WebPageConnector.GuardPublicAsync(inst, ct);
-            apiBase = provider switch
-            {
-                GitProviderNames.GitLab => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v4",
-                GitProviderNames.Gitea => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v1",
-                _ => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v3" // GitHub Enterprise
-            };
-        }
-        else
+    /// <summary>Instance URL must be https and non-private unless
+    /// <c>allowPrivateHosts</c>; hosted providers get their default API base.</summary>
+    private static async Task<string> ResolveApiBaseAsync(
+        ConnectorConfig config, string provider, string? instance, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(instance))
         {
             if (provider == GitProviderNames.GitLab)
-                apiBase = "https://gitlab.com/api/v4";
-            else if (provider == GitProviderNames.Gitea)
+                return "https://gitlab.com/api/v4";
+            if (provider == GitProviderNames.Gitea)
                 throw new InvalidOperationException(
                     "provider 'gitea' requires 'instanceUrl' (no hosted default)");
-            else
-                apiBase = "https://api.github.com";
+            return "https://api.github.com";
         }
 
-        var branch = config.String("branch") is { Length: > 0 } b ? b : "main";
-        return new GitRepositoryRef(provider, apiBase.TrimEnd('/'), owner, name, branch,
-            config.Bool("allowPrivateHosts"));
+        if (!Uri.TryCreate(instance, UriKind.Absolute, out var inst)
+            || inst.Scheme is not ("https" or "http"))
+            throw new InvalidOperationException("instanceUrl must be an absolute http(s) URL");
+        if (inst.Scheme != "https" && !config.Bool("allowPrivateHosts"))
+            throw new InvalidOperationException(
+                "instanceUrl must use https — set 'allowPrivateHosts': true for local instances");
+        if (!config.Bool("allowPrivateHosts"))
+            await WebPageConnector.GuardPublicAsync(inst, ct);
+        var authority = inst.GetLeftPart(UriPartial.Authority);
+        return provider switch
+        {
+            GitProviderNames.GitLab => $"{authority}/api/v4",
+            GitProviderNames.Gitea => $"{authority}/api/v1",
+            _ => $"{authority}/api/v3" // GitHub Enterprise
+        };
     }
 }

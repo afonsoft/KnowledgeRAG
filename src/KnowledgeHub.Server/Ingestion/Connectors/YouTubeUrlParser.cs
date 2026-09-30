@@ -28,7 +28,12 @@ public static partial class YouTubeUrlParser
             return null;
 
         var trimmed = input.Trim();
+        return ParseRawId(trimmed) ?? ParseUrl(trimmed);
+    }
 
+    /// <summary>Raw identifier forms: video/playlist/channel IDs and @handles.</summary>
+    private static YouTubeEntry? ParseRawId(string trimmed)
+    {
         // Raw video ID (exactly 11 chars, alphanumeric + - and _)
         if (IsLikelyVideoId(trimmed))
             return new YouTubeEntry(YouTubeEntryKind.Video, trimmed);
@@ -45,6 +50,12 @@ public static partial class YouTubeUrlParser
         if (trimmed.StartsWith('@'))
             return new YouTubeEntry(YouTubeEntryKind.Channel, trimmed);
 
+        return null;
+    }
+
+    /// <summary>URL forms across the youtube.com/youtu.be hosts.</summary>
+    private static YouTubeEntry? ParseUrl(string trimmed)
+    {
         // Must be a URL from here on
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
             return null;
@@ -54,42 +65,30 @@ public static partial class YouTubeUrlParser
             return null;
 
         var path = uri.AbsolutePath.TrimStart('/');
+        return host == "youtu.be" ? ParseShortHost(path) : ParseYouTubePath(uri, path);
+    }
 
-        // youtu.be/{videoId}
-        if (host == "youtu.be")
-        {
-            var id = path;
-            if (IsLikelyVideoId(id))
-                return new YouTubeEntry(YouTubeEntryKind.Video, id);
-            return null;
-        }
+    /// <summary>youtu.be/{videoId} short-host form.</summary>
+    private static YouTubeEntry? ParseShortHost(string path)
+    {
+        var id = path;
+        if (IsLikelyVideoId(id))
+            return new YouTubeEntry(YouTubeEntryKind.Video, id);
+        return null;
+    }
 
+    /// <summary>youtube.com path dispatch: watch / shorts / live / playlist /
+    /// channel / @handle.</summary>
+    private static YouTubeEntry? ParseYouTubePath(Uri uri, string path)
+    {
         // youtube.com/watch?v={videoId}
         if (path is "watch" or "watch/")
-        {
-            var match = WatchVParamRegex().Match(uri.Query.TrimStart('?'));
-            if (match.Success)
-                return new YouTubeEntry(YouTubeEntryKind.Video, match.Groups[1].Value);
-            // Also check the full query string without the leading ?
-            match = WatchVParamRegex().Match(uri.Query);
-            if (match.Success)
-                return new YouTubeEntry(YouTubeEntryKind.Video, match.Groups[1].Value);
-            return null;
-        }
+            return ParseWatchQuery(uri);
 
-        // youtube.com/shorts/{videoId}
-        if (path.StartsWith("shorts/"))
+        // youtube.com/shorts/{videoId} and /live/{videoId}
+        if (path.StartsWith("shorts/") || path.StartsWith("live/"))
         {
-            var id = path["shorts/".Length..];
-            if (IsLikelyVideoId(id))
-                return new YouTubeEntry(YouTubeEntryKind.Video, id);
-            return null;
-        }
-
-        // youtube.com/live/{videoId}
-        if (path.StartsWith("live/"))
-        {
-            var id = path["live/".Length..];
+            var id = path[(path.IndexOf('/') + 1)..];
             if (IsLikelyVideoId(id))
                 return new YouTubeEntry(YouTubeEntryKind.Video, id);
             return null;
@@ -118,6 +117,19 @@ public static partial class YouTubeUrlParser
         if (path.StartsWith('@'))
             return new YouTubeEntry(YouTubeEntryKind.Channel, path);
 
+        return null;
+    }
+
+    /// <summary>watch?v={videoId} — checks the query with and without the leading ?.</summary>
+    private static YouTubeEntry? ParseWatchQuery(Uri uri)
+    {
+        var match = WatchVParamRegex().Match(uri.Query.TrimStart('?'));
+        if (match.Success)
+            return new YouTubeEntry(YouTubeEntryKind.Video, match.Groups[1].Value);
+        // Also check the full query string without the leading ?
+        match = WatchVParamRegex().Match(uri.Query);
+        if (match.Success)
+            return new YouTubeEntry(YouTubeEntryKind.Video, match.Groups[1].Value);
         return null;
     }
 

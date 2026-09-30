@@ -68,62 +68,16 @@ public sealed class UnstructuredDocumentConnector(
         foreach (var path in paths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var fileName = Path.GetFileName(path);
-            // SPEC-20260929 RF-002: URI is the path relative to the configured
-            // root — homonymous files in different folders must not share a
-            // doc. Without folderPath, explicit `files` can point anywhere —
-            // hash the full path so same-name files keep distinct URIs.
-            var relativePath = folderPath is { Length: > 0 } root
-                ? Path.GetRelativePath(root, path)
-                : $"{Convert.ToHexString(SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(path))))[..12]}/{fileName}";
-            var uri = $"unstructured://{relativePath.Replace('\\', '/')}";
-
-            try
-            {
-                var info = new FileInfo(path);
-                if (info.Length > maxBytes)
-                {
-                    warnings.Add($"{fileName}: skipped — {info.Length / 1024 / 1024}MB exceeds maxFileSizeMb");
-                    logger.LogDebug("unstructured skip {File}: over maxFileSizeMb", fileName);
-                    continue;
-                }
-
-                // RF-003: fingerprint = file hash + strategy — unchanged files
-                // emit an empty-content stub so reconciliation keeps the doc.
-                // SPEC-20260929 RF-004: extraction-shaping options join the
-                // fingerprint — changing strategy/tables/coordinates must
-                // re-extract, not reuse stale output.
-                var fingerprint =
-                    $"unstructured:{relativePath}:{await FileFingerprintAsync(path, cancellationToken)}"
-                    + $":{strategy}:{tableExtraction}:{coordinates}";
-                if (existingFingerprints.TryGetValue(uri, out var prev) && prev == fingerprint)
-                {
-                    documents.Add(new RawDocument(uri, fileName, "", fingerprint));
-                    continue;
-                }
-
-                var elements = await api.ParseAsync(
-                    apiUrl, apiKey, path, strategy, coordinates, tableExtraction, cancellationToken);
-                var markdown = UnstructuredElementRenderer.Render(elements);
-                documents.Add(new RawDocument(uri, fileName, markdown, fingerprint));
-            }
-            catch (UnstructuredApiException ex)
-            {
-                // Auth failure poisons every subsequent call — fail the sync
-                // with an explicit message instead of warning 50 times (AC-4).
-                if (ex.Status is System.Net.HttpStatusCode.Unauthorized
-                    or System.Net.HttpStatusCode.Forbidden)
-                    throw new InvalidOperationException(
-                        $"UnstructuredDocument source '{source.Name}': API authentication failed (HTTP {(int)ex.Status}) — check the stored apiKey", ex);
+            var (uri, fileName, relativePath) = ResolveFileUri(folderPath, path);
+            var job = new FileJob(source, path, uri, fileName, relativePath,
+                apiUrl, strategy, coordinates, tableExtraction, maxBytes, apiKey, existingFingerprints);
+            var outcome = await ProcessFileAsync(job, cancellationToken);
+            if (outcome.Document is not null)
+                documents.Add(outcome.Document);
+            if (outcome.Warning is not null)
+                warnings.Add(outcome.Warning);
+            if (outcome.Failed)
                 failedUris.Add(uri);
-                warnings.Add($"{fileName}: {ex.Message}");
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                failedUris.Add(uri);
-                warnings.Add($"{fileName}: {ex.Message}");
-            }
         }
 
         // Endpoint down for every file → fail the sync with a retry hint;
@@ -133,6 +87,79 @@ public sealed class UnstructuredDocumentConnector(
                 $"UnstructuredDocument source '{source.Name}': all {paths.Count} files failed — endpoint may be down, retry the sync later");
 
         return new FetchResult(documents, warnings, failedUris);
+    }
+
+    /// <summary>Per-file processing inputs for <see cref="ProcessFileAsync"/>.</summary>
+    private sealed record FileJob(
+        KnowledgeSource Source, string Path, string Uri, string FileName, string RelativePath,
+        string ApiUrl, string Strategy, bool Coordinates, bool TableExtraction, long MaxBytes,
+        string? ApiKey, IReadOnlyDictionary<string, string> ExistingFingerprints);
+
+    /// <summary>Outcome of one file: a document, or a warning + failure flag.</summary>
+    private sealed record FileOutcome(RawDocument? Document, string? Warning, bool Failed);
+
+    /// <summary>SPEC-20260929 RF-002: URI is the path relative to the configured
+    /// root — homonymous files in different folders must not share a doc.
+    /// Without folderPath, explicit `files` can point anywhere — hash the full
+    /// path so same-name files keep distinct URIs.</summary>
+    private static (string Uri, string FileName, string RelativePath) ResolveFileUri(
+        string? folderPath, string path)
+    {
+        var fileName = Path.GetFileName(path);
+        var relativePath = folderPath is { Length: > 0 } root
+            ? Path.GetRelativePath(root, path)
+            : $"{Convert.ToHexString(SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(path))))[..12]}/{fileName}";
+        return ($"unstructured://{relativePath.Replace('\\', '/')}", fileName, relativePath);
+    }
+
+    /// <summary>Size gate → fingerprint gate → parse+render (RF-003/RF-004);
+    /// API auth failures poison the sync (AC-4), other failures warn.</summary>
+    private async Task<FileOutcome> ProcessFileAsync(FileJob job, CancellationToken ct)
+    {
+        try
+        {
+            var info = new FileInfo(job.Path);
+            if (info.Length > job.MaxBytes)
+            {
+                logger.LogDebug("unstructured skip {File}: over maxFileSizeMb", job.FileName);
+                return new FileOutcome(null,
+                    $"{job.FileName}: skipped — {info.Length / 1024 / 1024}MB exceeds maxFileSizeMb", false);
+            }
+
+            // RF-003: fingerprint = file hash + strategy — unchanged files
+            // emit an empty-content stub so reconciliation keeps the doc.
+            // SPEC-20260929 RF-004: extraction-shaping options join the
+            // fingerprint — changing strategy/tables/coordinates must
+            // re-extract, not reuse stale output.
+            var fingerprint =
+                $"unstructured:{job.RelativePath}:{await FileFingerprintAsync(job.Path, ct)}"
+                + $":{job.Strategy}:{job.TableExtraction}:{job.Coordinates}";
+            if (job.ExistingFingerprints.TryGetValue(job.Uri, out var prev) && prev == fingerprint)
+                return new FileOutcome(
+                    new RawDocument(job.Uri, job.FileName, "", fingerprint), null, false);
+
+            var elements = await api.ParseAsync(
+                job.ApiUrl, job.ApiKey, job.Path, job.Strategy,
+                job.Coordinates, job.TableExtraction, ct);
+            var markdown = UnstructuredElementRenderer.Render(elements);
+            return new FileOutcome(
+                new RawDocument(job.Uri, job.FileName, markdown, fingerprint), null, false);
+        }
+        catch (UnstructuredApiException ex)
+        {
+            // Auth failure poisons every subsequent call — fail the sync
+            // with an explicit message instead of warning 50 times (AC-4).
+            if (ex.Status is System.Net.HttpStatusCode.Unauthorized
+                or System.Net.HttpStatusCode.Forbidden)
+                throw new InvalidOperationException(
+                    $"UnstructuredDocument source '{job.Source.Name}': API authentication failed (HTTP {(int)ex.Status}) — check the stored apiKey", ex);
+            return new FileOutcome(null, $"{job.FileName}: {ex.Message}", true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new FileOutcome(null, $"{job.FileName}: {ex.Message}", true);
+        }
     }
 
     /// <summary>folderPath (directory, non-recursive) ∪ files (explicit list).</summary>

@@ -13,53 +13,74 @@ namespace KnowledgeHub.Server.Ingestion.Connectors;
 /// </summary>
 public static class UnstructuredElementRenderer
 {
+    /// <summary>Mutable render state across the element stream.</summary>
+    private sealed class RenderState
+    {
+        public HashSet<string> SeenFurniture = new(StringComparer.OrdinalIgnoreCase);
+        public int HeadingLevel = 1;
+    }
+
     public static string Render(JsonElement elements)
     {
         if (elements.ValueKind != JsonValueKind.Array)
             return "";
 
         var sb = new StringBuilder();
-        var seenFurniture = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var headingLevel = 1;
-
+        var state = new RenderState();
         foreach (var el in elements.EnumerateArray())
-        {
-            var type = el.TryGetProperty("type", out var t) ? t.GetString() : null;
-            var text = el.TryGetProperty("text", out var x) && x.ValueKind == JsonValueKind.String
-                ? x.GetString()?.Trim() : null;
-
-            switch (type)
-            {
-                case "Header":
-                case "Footer":
-                    // Repetitive page furniture — suppress duplicates entirely.
-                    if (text is { Length: > 0 } && seenFurniture.Add($"{type}:{text}"))
-                        sb.Append("\n\n<!-- ").Append(type).Append(": ").Append(text).Append(" -->");
-                    continue;
-                case "Title":
-                    if (text is { Length: > 0 })
-                        sb.Append("\n\n").Append('#', headingLevel).Append(' ').Append(text);
-                    headingLevel = Math.Min(headingLevel + 1, 4);
-                    continue;
-                case "Table":
-                    sb.Append("\n\n").Append(RenderTable(el, text));
-                    continue;
-                case "ListItem":
-                    if (text is { Length: > 0 })
-                        sb.Append("\n- ").Append(text);
-                    continue;
-                case "Image":
-                case "FigureCaption":
-                    if (text is { Length: > 0 })
-                        sb.Append("\n\n> ").Append(text);
-                    continue;
-                default:
-                    if (text is { Length: > 0 })
-                        sb.Append("\n\n").Append(text);
-                    continue;
-            }
-        }
+            AppendElement(sb, el, state);
         return sb.ToString().Trim();
+    }
+
+    /// <summary>Dispatches one element to its markdown rendering.</summary>
+    private static void AppendElement(StringBuilder sb, JsonElement el, RenderState state)
+    {
+        var type = el.TryGetProperty("type", out var t) ? t.GetString() : null;
+        var text = el.TryGetProperty("text", out var x) && x.ValueKind == JsonValueKind.String
+            ? x.GetString()?.Trim() : null;
+
+        switch (type)
+        {
+            case "Header":
+            case "Footer":
+                AppendFurniture(sb, type!, text, state.SeenFurniture);
+                return;
+            case "Title":
+                AppendTitle(sb, text, state);
+                return;
+            case "Table":
+                sb.Append("\n\n").Append(RenderTable(el, text));
+                return;
+            case "ListItem":
+                if (text is { Length: > 0 })
+                    sb.Append("\n- ").Append(text);
+                return;
+            case "Image":
+            case "FigureCaption":
+                if (text is { Length: > 0 })
+                    sb.Append("\n\n> ").Append(text);
+                return;
+            default:
+                if (text is { Length: > 0 })
+                    sb.Append("\n\n").Append(text);
+                return;
+        }
+    }
+
+    /// <summary>Repetitive page furniture — suppress duplicates entirely.</summary>
+    private static void AppendFurniture(
+        StringBuilder sb, string type, string? text, HashSet<string> seenFurniture)
+    {
+        if (text is { Length: > 0 } && seenFurniture.Add($"{type}:{text}"))
+            sb.Append("\n\n<!-- ").Append(type).Append(": ").Append(text).Append(" -->");
+    }
+
+    /// <summary>Title → heading; nesting deepens up to level 4.</summary>
+    private static void AppendTitle(StringBuilder sb, string? text, RenderState state)
+    {
+        if (text is { Length: > 0 })
+            sb.Append("\n\n").Append('#', state.HeadingLevel).Append(' ').Append(text);
+        state.HeadingLevel = Math.Min(state.HeadingLevel + 1, 4);
     }
 
     /// <summary>Table element → GFM. Prefers <c>metadata.text_as_html</c>;
@@ -91,19 +112,7 @@ public static class UnstructuredElementRenderer
             var rowHtml = rowEnd < 0 ? html[cursor..] : html[cursor..rowEnd];
             cursor = rowEnd < 0 ? html.Length : rowEnd + 5;
 
-            var cells = new List<string>();
-            var i = 0;
-            while (i < rowHtml.Length)
-            {
-                var th = rowHtml.IndexOf("<t", i, StringComparison.OrdinalIgnoreCase);
-                if (th < 0) break;
-                var close = rowHtml.IndexOf('>', th);
-                if (close < 0) break;
-                var cellEnd = rowHtml.IndexOf("</t", close, StringComparison.OrdinalIgnoreCase);
-                var cell = cellEnd < 0 ? rowHtml[(close + 1)..] : rowHtml[(close + 1)..cellEnd];
-                cells.Add(NormalizeCell(cell));
-                i = cellEnd < 0 ? rowHtml.Length : cellEnd + 4;
-            }
+            var cells = ParseRowCells(rowHtml);
             if (cells.Count > 0)
                 rows.Add(cells);
         }
@@ -121,6 +130,25 @@ public static class UnstructuredElementRenderer
             sb.Append("| ").Append(string.Join(" | ", padded)).Append(" |\n");
         }
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Scans one <tr> row for <th>/<td> cells.</summary>
+    private static List<string> ParseRowCells(string rowHtml)
+    {
+        var cells = new List<string>();
+        var i = 0;
+        while (i < rowHtml.Length)
+        {
+            var th = rowHtml.IndexOf("<t", i, StringComparison.OrdinalIgnoreCase);
+            if (th < 0) break;
+            var close = rowHtml.IndexOf('>', th);
+            if (close < 0) break;
+            var cellEnd = rowHtml.IndexOf("</t", close, StringComparison.OrdinalIgnoreCase);
+            var cell = cellEnd < 0 ? rowHtml[(close + 1)..] : rowHtml[(close + 1)..cellEnd];
+            cells.Add(NormalizeCell(cell));
+            i = cellEnd < 0 ? rowHtml.Length : cellEnd + 4;
+        }
+        return cells;
     }
 
     private static string NormalizeCell(string cell)

@@ -45,36 +45,10 @@ public sealed class SettingsToolsProvider : IToolProvider
                 IdempotentHint = true,
                 Handler = async (ctx, ct) =>
                 {
-                    var http = ctx.Services?.GetService<IHttpContextAccessor>()?.HttpContext;
-                    if (http is null)
-                        throw new McpProtocolException("HTTP context not available", McpErrorCode.InternalError);
-
-                    var authMethod = http.User.FindFirst(ApiKeyAuthenticationHandler.AuthMethodClaim)?.Value;
-                    var keyIdValue = http.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
-                    if (authMethod != "apikey" || !Guid.TryParse(keyIdValue, out var keyId))
-                        throw new McpProtocolException("This tool is only available to API-key-authenticated sessions", McpErrorCode.InvalidParams);
-
+                    var keyId = RequireApiKeySession(ctx);
                     var provider = ToolArgs.RequiredString(ctx, "provider");
                     var service = ctx.Services!.GetRequiredService<IApiKeyChatSettingsService>();
-
-                    if (provider is "firecrawl" or "deepwiki" or "tavily" or "context7")
-                    {
-                        var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
-                        if (apiKey is not null && !string.IsNullOrWhiteSpace(apiKey))
-                        {
-                            await service.SaveIntegrationKeyAsync(keyId, provider, apiKey, ct);
-                            return await ToolResults.Text($"{provider} API key saved for API key '{keyId}'.");
-                        }
-                        else
-                        {
-                            await service.RemoveIntegrationKeyAsync(keyId, provider, ct);
-                            return await ToolResults.Text($"{provider} API key removed for API key '{keyId}' — falls back to global.");
-                        }
-                    }
-                    else
-                    {
-                        throw new McpProtocolException($"Unknown provider '{provider}'", McpErrorCode.InvalidParams);
-                    }
+                    return await SaveOrRemoveIntegrationKeyAsync(service, keyId, provider, ctx, ct);
                 }
             },
             new CatalogTool
@@ -115,5 +89,39 @@ public sealed class SettingsToolsProvider : IToolProvider
             }
         ];
         return Task.FromResult(tools);
+    }
+
+    /// <summary>Resolves the caller's API-key identity or throws — the settings
+    /// tools are only available to API-key-authenticated sessions.</summary>
+    private static Guid RequireApiKeySession(ToolCallContext ctx)
+    {
+        var http = ctx.Services?.GetService<IHttpContextAccessor>()?.HttpContext;
+        if (http is null)
+            throw new McpProtocolException("HTTP context not available", McpErrorCode.InternalError);
+
+        var authMethod = http.User.FindFirst(ApiKeyAuthenticationHandler.AuthMethodClaim)?.Value;
+        var keyIdValue = http.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
+        if (authMethod != "apikey" || !Guid.TryParse(keyIdValue, out var keyId))
+            throw new McpProtocolException("This tool is only available to API-key-authenticated sessions", McpErrorCode.InvalidParams);
+        return keyId;
+    }
+
+    /// <summary>Saves or removes the integration key override for one provider.</summary>
+    private static async ValueTask<CallToolResult> SaveOrRemoveIntegrationKeyAsync(
+        IApiKeyChatSettingsService service, Guid keyId, string provider,
+        ToolCallContext ctx, CancellationToken ct)
+    {
+        if (provider is not ("firecrawl" or "deepwiki" or "tavily" or "context7"))
+            throw new McpProtocolException($"Unknown provider '{provider}'", McpErrorCode.InvalidParams);
+
+        var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            await service.SaveIntegrationKeyAsync(keyId, provider, apiKey, ct);
+            return await ToolResults.Text($"{provider} API key saved for API key '{keyId}'.");
+        }
+
+        await service.RemoveIntegrationKeyAsync(keyId, provider, ct);
+        return await ToolResults.Text($"{provider} API key removed for API key '{keyId}' — falls back to global.");
     }
 }

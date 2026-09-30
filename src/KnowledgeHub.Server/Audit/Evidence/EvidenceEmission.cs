@@ -11,15 +11,17 @@ namespace KnowledgeHub.Server.Audit.Evidence;
 /// </summary>
 public static class EvidenceEmission
 {
+    /// <summary>Common emission fields shared by the ask and tool chains.</summary>
+    public sealed record EmissionContext(
+        IEvidenceChainService? Evidence, string SessionId, string? ApiKeyId, ILogger? Logger);
+
     /// <summary>QuerySubmitted → ChunksRetrieved → AnswerSynthesized chain.</summary>
     public static async Task<EvidenceReceipt?> RecordAskAsync(
-        IEvidenceChainService? evidence,
-        ILogger? logger,
-        string sessionId, string? apiKeyId, string question,
+        EmissionContext ctx, string question,
         IReadOnlyList<SearchResultItem> chunks, string answer,
         CancellationToken ct)
     {
-        if (evidence is null)
+        if (ctx.Evidence is null)
             return null;
         // SPEC-20260928-observability-followups RF-002: span per emission chain
         // (QuerySubmitted → ChunksRetrieved → AnswerSynthesized).
@@ -27,17 +29,17 @@ public static class EvidenceEmission
         span?.SetTag("kind", "ask");
         try
         {
-            var query = await evidence.AppendAsync(
-                new EvidenceEvent(sessionId, null, apiKeyId,
+            var query = await ctx.Evidence.AppendAsync(
+                new EvidenceEvent(ctx.SessionId, null, ctx.ApiKeyId,
                     "QuerySubmitted", "User", question, ""), ct);
-            var retrieved = await evidence.AppendAsync(
-                new EvidenceEvent(sessionId, null, apiKeyId,
+            var retrieved = await ctx.Evidence.AppendAsync(
+                new EvidenceEvent(ctx.SessionId, null, ctx.ApiKeyId,
                     "ChunksRetrieved", "System", question,
                     string.Join(',', chunks.Select(c => c.ChunkId)),
                     chunks.Select(c => c.ChunkText).ToList(),
                     [query]), ct);
-            return await evidence.AppendAsync(
-                new EvidenceEvent(sessionId, null, apiKeyId,
+            return await ctx.Evidence.AppendAsync(
+                new EvidenceEvent(ctx.SessionId, null, ctx.ApiKeyId,
                     "AnswerSynthesized", "Agent", question, answer,
                     Parents: [retrieved]), ct);
         }
@@ -46,27 +48,25 @@ public static class EvidenceEmission
             // SPEC-20260929-observability-and-tests-residual RF-003: swallowed
             // emission failures still mark the span so they are observable.
             Telemetry.KnowledgeHubActivity.Fail(span, ex);
-            logger?.LogWarning(ex, "evidence emission failed for session {SessionId}", sessionId);
+            ctx.Logger?.LogWarning(ex, "evidence emission failed for session {SessionId}", ctx.SessionId);
             return null;
         }
     }
 
     /// <summary>One ToolExecuted receipt chained to the previous step.</summary>
     public static async Task<EvidenceReceipt?> RecordToolAsync(
-        IEvidenceChainService? evidence,
-        ILogger? logger,
-        string sessionId, string? apiKeyId, string? threadId,
-        string toolName, string callId, string? argsJson, string? resultJson,
+        EmissionContext ctx, string? threadId,
+        string toolName, string? argsJson, string? resultJson,
         EvidenceReceipt? parent, CancellationToken ct)
     {
-        if (evidence is null)
+        if (ctx.Evidence is null)
             return null;
         using var span = Telemetry.KnowledgeHubActivity.Start("evidence.emit");
         span?.SetTag("kind", "tool");
         try
         {
-            return await evidence.AppendAsync(
-                new EvidenceEvent(sessionId, threadId, apiKeyId,
+            return await ctx.Evidence.AppendAsync(
+                new EvidenceEvent(ctx.SessionId, threadId, ctx.ApiKeyId,
                     "ToolExecuted", "McpTool",
                     $"{toolName}({argsJson ?? ""})", resultJson ?? "",
                     Parents: parent is null ? null : [parent]), ct);
@@ -74,7 +74,7 @@ public static class EvidenceEmission
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Telemetry.KnowledgeHubActivity.Fail(span, ex);
-            logger?.LogWarning(ex, "evidence emission failed for tool {Tool}", toolName);
+            ctx.Logger?.LogWarning(ex, "evidence emission failed for tool {Tool}", toolName);
             return null;
         }
     }

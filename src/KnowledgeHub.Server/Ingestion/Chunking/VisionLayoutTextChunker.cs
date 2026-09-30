@@ -84,15 +84,7 @@ public sealed class VisionLayoutTextChunker(
             if (url is not null)
             {
                 FlushProse();
-                var block = line.Trim();
-                if (caption is not null)
-                {
-                    var cap = await caption(url);
-                    if (cap is not null)
-                        block += $"\n[figure caption: {cap}]";
-                }
-                pieces.Add(new ChunkPiece(block, SectionPath: headings.CurrentPath,
-                    MetadataJson: "{\"is_figure\":true}"));
+                pieces.Add(await FigurePieceAsync(line, url, caption, headings));
                 i++;
                 continue;
             }
@@ -102,6 +94,21 @@ public sealed class VisionLayoutTextChunker(
         }
         FlushProse();
         return pieces;
+    }
+
+    /// <summary>Figure block: trimmed line + optional fetched caption.</summary>
+    private static async Task<ChunkPiece> FigurePieceAsync(
+        string line, string url, Func<string, Task<string?>>? caption, HeadingTracker headings)
+    {
+        var block = line.Trim();
+        if (caption is not null)
+        {
+            var cap = await caption(url);
+            if (cap is not null)
+                block += $"\n[figure caption: {cap}]";
+        }
+        return new ChunkPiece(block, SectionPath: headings.CurrentPath,
+            MetadataJson: "{\"is_figure\":true}");
     }
 
     /// <summary>Markdown `![alt](url)` / HTML `&lt;img src="url"&gt;` detection —

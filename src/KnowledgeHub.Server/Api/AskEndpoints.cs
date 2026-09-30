@@ -67,8 +67,9 @@ public static class AskEndpoints
             // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002.
             var apiKeyId = http.User.FindFirst(Auth.ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
             await Audit.Evidence.EvidenceEmission.RecordAskAsync(
-                evidence, loggerFactory?.CreateLogger("EvidenceEmission"),
-                $"rest:{apiKeyId ?? "session"}", apiKeyId,
+                new Audit.Evidence.EvidenceEmission.EmissionContext(
+                    evidence, $"rest:{apiKeyId ?? "session"}", apiKeyId,
+                    loggerFactory?.CreateLogger("EvidenceEmission")),
                 request.Question, context, answer.Answer ?? "", ct);
             return Results.Ok(answer);
         });
