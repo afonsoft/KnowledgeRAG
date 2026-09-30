@@ -89,3 +89,9 @@ Provisioning checklist on the Postgres side:
 3. **Verify** — `docker compose config` should render the interpolated connection string; after `up`, `GET /api/diagnostics/vectorstore` reports `postgres`, the dimension, chunk count and index state (HNSW auto-created past `HnswThreshold`).
 
 > **Redis note.** The same `host.docker.internal` pattern applies to `REDIS_CONNECTIONSTRING` (`Cache:Provider=redis`). An unauthenticated Redis triggers a startup warning — see "Redis security" in the README for hardening.
+
+### Production deploy checklist (post-incident 2026-09-30)
+
+1. **`.env` presence** — `env_file` is `required: false` so clean checkouts deploy, which means a deleted `.env` **silently** falls back to defaults (port `5000`, in-memory cache). Before `docker compose up -d` on a host deploy, verify `docker compose config` renders the expected `KNOWLEDGEHUB_PORT` and connection strings — a missing `.env` reproduces silently, and a port drift shows as 502 at the reverse proxy.
+2. **Reverse proxy must pass `/.well-known/*`** — A2A discovery requires `/.well-known/agent-card.json`. Some edge configs (e.g. Cloudflare rules/WAF blocking dotted paths) return 404 before the request reaches the container; the app itself serves 200. Allowlist `/.well-known/agent-card.json` in the proxy/zone config.
+3. **PWA overlap** — the service worker retains the previous precache generation; after a deploy, tabs on the old version keep working until reload. Force-refresh (`Ctrl+Shift+R`) still resolves any stale-shell edge cases immediately.
