@@ -376,7 +376,9 @@ public sealed class AgentService(
     private void ScheduleSummarization(Guid threadId, List<ConversationMessage> dropped)
     {
         var scopeFactory = services.GetService<IServiceScopeFactory>();
-        if (scopeFactory is null || chatClient is null)
+        var summarizer = services.GetService<Assistant.IAssistantChatClientProvider>()
+            ?.ForSubtask("summarize", chatClient) ?? chatClient;
+        if (scopeFactory is null || summarizer is null)
             return;
         _ = Task.Run(async () =>
         {
@@ -394,7 +396,7 @@ public sealed class AgentService(
                     ? $"Condense este trecho de conversa em um resumo curto preservando fatos e decisões:\n\n{transcript}"
                     : $"Resumo anterior:\n{thread.Summary}\n\nIncorpore este novo trecho ao resumo, mantendo-o curto:\n\n{transcript}";
 
-                var response = await chatClient.GetResponseAsync(
+                var response = await summarizer.GetResponseAsync(
                     [new ChatMessage(ChatRole.User, prompt)]);
                 var summary = response.Text?.Trim();
                 if (!string.IsNullOrEmpty(summary))

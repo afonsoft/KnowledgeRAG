@@ -57,7 +57,9 @@ public sealed class LlmQueryExpander(
     public async Task<IReadOnlyList<string>> ExpandQueriesAsync(
         string query, int count, CancellationToken ct = default)
     {
-        var chat = services.GetService<IChatClient>();
+        var chat = services.GetService<Assistant.IAssistantChatClientProvider>()
+            ?.ForSubtask("expand", services.GetService<IChatClient>())
+            ?? services.GetService<IChatClient>();
         if (chat is null)
             return [];
 
@@ -98,7 +100,9 @@ public sealed class LlmQueryExpander(
 
     public async Task<string?> GenerateHypotheticalAsync(string query, CancellationToken ct = default)
     {
-        var chat = services.GetService<IChatClient>();
+        var chat = services.GetService<Assistant.IAssistantChatClientProvider>()
+            ?.ForSubtask("expand", services.GetService<IChatClient>())
+            ?? services.GetService<IChatClient>();
         if (chat is null)
             return null;
 

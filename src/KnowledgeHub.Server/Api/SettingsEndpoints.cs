@@ -338,6 +338,51 @@ public static class SettingsEndpoints
             return Results.NoContent();
         });
 
+        // SPEC-20260929-a2a-assistant-delegation RF-001: low-cost assistant provider
+        // (local OpenAI-compatible or remote A2A agent) routed to cheap sub-tasks.
+        group.MapGet("/assistant", async (
+            Settings.IAssistantSettingsService assistant,
+            CancellationToken ct) =>
+            Results.Ok(await assistant.DescribeAsync(ct)));
+
+        group.MapPut("/assistant", async (
+            SaveAssistantSettingsRequest? body,
+            Settings.IAssistantSettingsService assistant,
+            CancellationToken ct) =>
+        {
+            if (body is null)
+                return Results.BadRequest(new { error = "body is required" });
+            if (body.Mode is not ("local" or "remote"))
+                return Results.BadRequest(new { error = "mode must be local|remote" });
+            if (body.Enabled && string.IsNullOrWhiteSpace(body.Endpoint))
+                return Results.BadRequest(new { error = "endpoint is required when enabled" });
+
+            await assistant.SaveAsync(body, ct);
+            return Results.NoContent();
+        });
+
+        group.MapDelete("/assistant/apikey", async (
+            Settings.IAssistantSettingsService assistant,
+            CancellationToken ct) =>
+        {
+            await assistant.RemoveKeyAsync(ct);
+            return Results.NoContent();
+        });
+
+        group.MapDelete("/assistant", async (
+            Settings.IAssistantSettingsService assistant,
+            CancellationToken ct) =>
+        {
+            await assistant.ClearAsync(ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/assistant/test", async (
+            TestAssistantConnectionRequest? body,
+            Settings.IAssistantSettingsService assistant,
+            CancellationToken ct) =>
+            Results.Ok(await assistant.TestAsync(body ?? new TestAssistantConnectionRequest(), ct)));
+
         // SPEC-20260924-redis-cache-and-tool-caching RF-003/RF-004: Cache inspection and clear
         group.MapGet("/cache", async (
             Caching.ICacheManagerService cacheMgr,

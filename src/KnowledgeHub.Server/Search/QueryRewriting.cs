@@ -54,7 +54,9 @@ public sealed class LlmQueryRewriter(
         if (!configuration.GetValue("Search:QueryRewrite:Enabled", false))
             return query;
 
-        var chat = services.GetService<IChatClient>();
+        var chat = services.GetService<Assistant.IAssistantChatClientProvider>()
+            ?.ForSubtask("rewrite", services.GetService<IChatClient>())
+            ?? services.GetService<IChatClient>();
         if (chat is null)
             return query;
 

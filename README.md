@@ -28,6 +28,7 @@ All-in-one standalone knowledge platform: Blazor WebAssembly admin UI, REST API,
 | `/api/ask/stream`, `/api/agent/stream` | REST SSE — `token`/`tool_start`/`tool_end`/`awaiting_approval`/`done`/`error` events, 15 s heartbeat, `X-Accel-Buffering: no` |
 | `/mcp` | MCP — Streamable HTTP, hybrid sessions: `initialize`-handshake clients (≤2025-11-25) get full stateful sessions incl. `tools/list_changed` push; `2026-07-28` clients are served statelessly (no session, re-list on demand). `Mcp:SessionMode` knob: `Stateless`/`Stateful`/`StatefulForInitializeClients` (default) |
 | `/mcp/sse` + `/mcp/message` | MCP — legacy HTTP/SSE (Cursor, Claude Desktop) |
+| `/.well-known/agent-card.json` + `/a2a` | A2A v1.0 (Agent-to-Agent) — anonymous Agent Card; JSON-RPC + HTTP+JSON bindings delegating `ask_knowledge`/`search_knowledge`/`agent_chat`/`read_document` under the caller's `aft_*` scope |
 | `/hubs/mcp` | SignalR feed for the MCP monitor |
 
 ## Authentication
@@ -268,6 +269,13 @@ Configure the Knowledge Hub MCP server in your environment to access organizatio
     "Endpoint": "http://localhost:11434",
     "Model": "llama3.2",
     "ApiKey": ""
+  },
+  "Assistant": {                               // optional low-cost assistant for cheap sub-tasks
+    "Enabled": false,                           // routes rewrite/grade/expand/summarize
+    "Mode": "local",                            // local | remote (remote = A2A Agent Card URL)
+    "Endpoint": "", "Model": "",                // remote: agent base URL
+    "Route": ["rewrite", "grade", "summarize"],
+    "TimeoutSeconds": 15
   },
   "DeepWiki": {                                // upstream MCP proxy
     "Enabled": true,

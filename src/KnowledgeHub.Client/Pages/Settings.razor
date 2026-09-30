@@ -304,6 +304,151 @@ else
     </div>
 }
     </TabItem>
+    <TabItem Text="Assistente (A2A)" Icon="fa-solid fa-robot">
+@* SPEC-20260929-a2a-assistant-delegation RF-001: modelo assistente de baixo custo
+   (ou agente A2A remoto) que executa sub-tarefas baratas — rewrite, grading,
+   expansão de query e sumarização — reservando o modelo principal para síntese. *@
+
+<p class="text-muted">
+    Provider secundário de baixo custo usado nas sub-tarefas do pipeline
+    (rewrite de query, grading de chunks, expansão/HyDE, sumarização de thread).
+    Em <code>remote</code>, o endpoint é a URL de um Agent Card A2A e a sub-tarefa
+    é delegada via protocolo A2A. Falhas/timeout caem para o modelo principal.
+</p>
+
+@if (_assistant is null)
+{
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando configuração do assistente…</div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <Card>
+                <HeaderTemplate>
+                    <div class="d-flex justify-content-between gap-2 align-items-center">
+                        <span>Assistente de baixo custo</span>
+                        @if (_assistant.Enabled)
+                        {
+                            <Badge Color="Color.Success">ativo</Badge>
+                        }
+                        else
+                        {
+                            <Badge Color="Color.Secondary">desabilitado</Badge>
+                        }
+                    </div>
+                </HeaderTemplate>
+                <BodyTemplate>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Habilitado</label>
+                            <div class="form-check form-switch mt-1">
+                                <input class="form-check-input" type="checkbox" @bind="_asForm.Enabled" />
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label">Modo</label>
+                            <select class="form-select" @bind="_asForm.Mode">
+                                <option value="local">local (OpenAI-compatible)</option>
+                                <option value="remote">remote (A2A agent)</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Endpoint</label>
+                            <input type="text" class="form-control font-monospace"
+                                   @bind="_asForm.Endpoint"
+                                   placeholder="@(_asForm.Mode == "remote" ? "https://agent.exemplo.com" : "https://api.exemplo.com")" autocomplete="off" />
+                        </div>
+                        @if (_asForm.Mode == "local")
+                        {
+                            <div class="col-12 col-md-2">
+                                <label class="form-label">Model</label>
+                                <input type="text" class="form-control font-monospace"
+                                       @bind="_asForm.Model" placeholder="gpt-4o-mini" autocomplete="off" />
+                            </div>
+                        }
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-12 col-md-8">
+                            <label class="form-label">Sub-tarefas roteadas</label>
+                            <div class="d-flex gap-3 flex-wrap">
+                                @foreach (var st in AssistantFormState.AllSubtasks)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox"
+                                               checked="@_asForm.Route.Contains(st)"
+                                               @onchange="e => ToggleRoute(st, (bool)e.Value!)" />
+                                        <label class="form-check-label">@st</label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <label class="form-label">Timeout (s)</label>
+                            <input type="number" class="form-control" min="1" max="300"
+                                   @bind="_asForm.TimeoutSeconds" />
+                        </div>
+                    </div>
+
+                    @if (_assistant.HasApiKey)
+                    {
+                        <div class="mb-2">
+                            <small class="text-muted">Key ativa (@_assistant.ApiKeySource):</small>
+                            <code class="ms-1">@_assistant.ApiKeyHint</code>
+                        </div>
+                    }
+
+                    <label class="form-label">
+                        @(_assistant.HasApiKey ? "Substituir API key" : "API key")
+                    </label>
+                    <input type="password" class="form-control font-monospace mb-2"
+                           @bind="_asForm.ApiKey"
+                           placeholder="@(_assistant.HasApiKey ? "deixe em branco para manter" : "sk-…")"
+                           autocomplete="off" />
+
+                    <div class="d-flex gap-2 flex-wrap kh-icon-btns">
+                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                                IsAsync="true" IsDisabled="_asForm.Saving"
+                                OnClick="SaveAssistantAsync" />
+                        <Button Color="Color.Secondary" Icon="fa-solid fa-plug" Text="Testar conexão"
+                                IsAsync="true" IsDisabled="_asForm.Testing"
+                                OnClick="TestAssistantAsync" />
+                        @if (_assistant.ApiKeySource == "store")
+                        {
+                            <PopConfirmButton Color="Color.Danger" Icon="fa-solid fa-trash"
+                                              Text="Remover key" Title="Remover key"
+                                              Content="A key salva será removida; a env var (se houver) volta a valer."
+                                              OnConfirm="RemoveAssistantKeyAsync" />
+                        }
+                        @if (_assistant.Source == "store")
+                        {
+                            <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
+                                              Text="Restaurar ambiente" Title="Restaurar ambiente"
+                                              Content="A configuração salva será removida; as variáveis de ambiente voltam a valer."
+                                              OnConfirm="ClearAssistantAsync" />
+                        }
+                    </div>
+
+                    @if (_asForm.TestResult is { } atest)
+                    {
+                        <div class="mt-2">
+                            @if (atest.Ok)
+                            {
+                                <Badge Color="Color.Success">conexão OK — @(atest.LatencyMs.ToString("F0")) ms</Badge>
+                            }
+                            else
+                            {
+                                <Badge Color="Color.Danger">falha — @(atest.Detail ?? "sem detalhe")</Badge>
+                            }
+                        </div>
+                    }
+                </BodyTemplate>
+            </Card>
+        </div>
+    </div>
+}
+    </TabItem>
     <TabItem Text="GraphRAG" Icon="fa-solid fa-diagram-project">
 
 <p class="text-muted">
@@ -874,6 +1019,8 @@ else
     private readonly Dictionary<string, FormState> _forms = new();
     private ChatSettingsDto? _chat;
     private readonly ChatFormState _chatForm = new();
+    private AssistantSettingsDto? _assistant;
+    private readonly AssistantFormState _asForm = new();
     private GraphSettingsDto? _graph;
     private readonly GraphFormState _graphForm = new();
     private ResilienceSettingsDto? _resilience;
@@ -896,6 +1043,21 @@ else
     {
         public string Endpoint { get; set; } = "";
         public string Model { get; set; } = "";
+        public string ApiKey { get; set; } = "";
+        public bool Saving { get; set; }
+        public bool Testing { get; set; }
+        public TestChatConnectionResponse? TestResult { get; set; }
+    }
+
+    private sealed class AssistantFormState
+    {
+        public static readonly string[] AllSubtasks = ["rewrite", "grade", "expand", "summarize"];
+        public bool Enabled { get; set; }
+        public string Mode { get; set; } = "local";
+        public string Endpoint { get; set; } = "";
+        public string Model { get; set; } = "";
+        public HashSet<string> Route { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public int TimeoutSeconds { get; set; } = 15;
         public string ApiKey { get; set; } = "";
         public bool Saving { get; set; }
         public bool Testing { get; set; }
@@ -956,6 +1118,7 @@ else
     {
         await ReloadAsync();
         await ReloadChatAsync();
+        await ReloadAssistantAsync();
         await ReloadGraphAsync();
         await ReloadResilienceAsync();
         await ReloadCacheAsync();
@@ -1257,6 +1420,124 @@ else
         {
             _chatForm.Testing = false;
         }
+    }
+
+    /// <summary>Recarrega a configuração efetiva do assistente e preenche o formulário.</summary>
+    private async Task ReloadAssistantAsync()
+    {
+        try
+        {
+            _assistant = await Api.GetAssistantAsync();
+            _asForm.Enabled = _assistant?.Enabled ?? false;
+            _asForm.Mode = _assistant?.Mode ?? "local";
+            _asForm.Endpoint = _assistant?.Endpoint ?? "";
+            _asForm.Model = _assistant?.Model ?? "";
+            _asForm.Route = new HashSet<string>(_assistant?.Route ?? [], StringComparer.OrdinalIgnoreCase);
+            _asForm.TimeoutSeconds = _assistant?.TimeoutSeconds ?? 15;
+            _asForm.TestResult = null;
+        }
+        catch (Exception ex)
+        {
+            _assistant = null;
+            await Toast.Error("Erro", $"Falha ao carregar configuração do assistente: {ex.Message}");
+        }
+    }
+
+    private void ToggleRoute(string subtask, bool on)
+    {
+        if (on)
+            _asForm.Route.Add(subtask);
+        else
+            _asForm.Route.Remove(subtask);
+    }
+
+    /// <summary>Valida e salva a config do assistente; key em branco mantém a armazenada.</summary>
+    private async Task SaveAssistantAsync()
+    {
+        if (_asForm.Enabled && string.IsNullOrWhiteSpace(_asForm.Endpoint))
+        {
+            await Toast.Error("Campos obrigatórios", "Informe o endpoint antes de habilitar o assistente.");
+            return;
+        }
+
+        _asForm.Saving = true;
+        try
+        {
+            var result = await Api.SaveAssistantAsync(new SaveAssistantSettingsRequest
+            {
+                Enabled = _asForm.Enabled,
+                Mode = _asForm.Mode,
+                Endpoint = _asForm.Endpoint,
+                Model = _asForm.Model,
+                Route = _asForm.Route.ToArray(),
+                TimeoutSeconds = _asForm.TimeoutSeconds,
+                ApiKey = string.IsNullOrWhiteSpace(_asForm.ApiKey) ? null : _asForm.ApiKey.Trim()
+            });
+            if (!result.IsSuccess)
+            {
+                await Toast.Error("Erro", result.Error ?? "Falha ao salvar a configuração");
+                return;
+            }
+            _asForm.ApiKey = "";
+            await Toast.Success("Salva", "Assistente aplicado — já está em vigor.");
+            await ReloadAssistantAsync();
+        }
+        finally
+        {
+            _asForm.Saving = false;
+        }
+    }
+
+    private async Task TestAssistantAsync()
+    {
+        _asForm.Testing = true;
+        _asForm.TestResult = null;
+        try
+        {
+            var result = await Api.TestAssistantAsync(new TestAssistantConnectionRequest
+            {
+                Mode = _asForm.Mode,
+                Endpoint = _asForm.Endpoint,
+                Model = _asForm.Model,
+                ApiKey = _asForm.ApiKey
+            });
+            if (!result.IsSuccess)
+            {
+                await Toast.Error("Erro", result.Error ?? "Falha ao testar a conexão");
+                return;
+            }
+            _asForm.TestResult = result.Value;
+            if (result.Value?.Ok == true)
+                await Toast.Success("Conexão OK", $"Assistente respondeu em {result.Value.LatencyMs:F0} ms.");
+        }
+        finally
+        {
+            _asForm.Testing = false;
+        }
+    }
+
+    private async Task RemoveAssistantKeyAsync()
+    {
+        var result = await Api.RemoveAssistantKeyAsync();
+        if (!result.IsSuccess)
+        {
+            await Toast.Error("Erro", result.Error ?? "Falha ao remover a key");
+            return;
+        }
+        await Toast.Success("Removida", "Key do assistente removida do store.");
+        await ReloadAssistantAsync();
+    }
+
+    private async Task ClearAssistantAsync()
+    {
+        var result = await Api.ClearAssistantAsync();
+        if (!result.IsSuccess)
+        {
+            await Toast.Error("Erro", result.Error ?? "Falha ao restaurar o ambiente");
+            return;
+        }
+        await Toast.Success("Restaurado", "Configuração do assistente voltou ao ambiente.");
+        await ReloadAssistantAsync();
     }
 
     /// <summary>Recarrega a configuração efetiva do grafo e preenche o formulário do card.</summary>

@@ -71,7 +71,9 @@ public sealed class LlmRetrievalGrader(
         if (results.Count == 0)
             return new RetrievalGrading(RetrievalGrade.Insufficient, 1.0);
 
-        var chat = services.GetService<IChatClient>();
+        var chat = services.GetService<Assistant.IAssistantChatClientProvider>()
+            ?.ForSubtask("grade", services.GetService<IChatClient>())
+            ?? services.GetService<IChatClient>();
         if (chat is null)
             return new RetrievalGrading(RetrievalGrade.Sufficient, 0);
 

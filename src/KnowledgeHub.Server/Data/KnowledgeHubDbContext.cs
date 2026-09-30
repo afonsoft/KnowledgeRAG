@@ -36,6 +36,8 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<IngestionJob> IngestionJobs => Set<IngestionJob>();
     /// <summary>SPEC-20260928-resilience-tool-fallback-wiring: single-row fallback overrides.</summary>
     public DbSet<ResilienceSettings> ResilienceSettings => Set<ResilienceSettings>();
+    /// <summary>Single-row assistant-provider override (SPEC-20260929-a2a-assistant-delegation).</summary>
+    public DbSet<AssistantSettings> AssistantSettings => Set<AssistantSettings>();
     /// <summary>SPEC-20260926-mcp-sdk-alignment RF-004: durable MCP task handles.</summary>
     public DbSet<McpTask> McpTasks => Set<McpTask>();
     /// <summary>SPEC-20260927-rag-evaluation-triad-metrics: persisted triad scores.</summary>
@@ -210,6 +212,14 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
         {
             e.HasKey(s => s.Id);
             e.Property(s => s.Mode).HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<AssistantSettings>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Mode).HasMaxLength(20);
+            e.Property(s => s.Endpoint).HasMaxLength(512);
+            e.Property(s => s.Model).HasMaxLength(200);
         });
 
         modelBuilder.Entity<ApiKeyChatSettings>(e =>
