@@ -7,7 +7,11 @@ namespace KnowledgeHub.Client.Services;
 /// </summary>
 public static class McpOnboardingPrompt
 {
-    public static string Build(string mcpUrl, string sseUrl) => $$"""
+    public static string Build(string baseUrl)
+    {
+        var mcpUrl = $"{baseUrl}/mcp";
+        var sseUrl = $"{baseUrl}/mcp/sse";
+        return $$"""
         Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de conhecimento e ferramentas RAG da organização:
 
         1. Parâmetros de Conexão:
@@ -48,5 +52,14 @@ public static class McpOnboardingPrompt
         - find_dependencies / analyze_impact: Avalie o grafo de entidades e dependências (GraphRAG) ao planejar refatorações.
         - read_document / write_note / write_knowledge: Acesse documentos e registre notas ou conhecimento no cofre Obsidian conectado.
         - set_chat_settings / set_api_key_settings: Configure seu modelo de chat ou chaves de integração upstream se desejar overrides para sua sessão.
+
+        5. Interoperabilidade A2A (Agent-to-Agent, v1.0):
+        - Além do MCP, o hub publica um endpoint A2A para delegação entre agentes:
+          - Agent Card (descoberta, anônimo): {{baseUrl}}/.well-known/agent-card.json
+          - Endpoint: {{baseUrl}}/a2a — bindings JSON-RPC 2.0 e HTTP+JSON ({{baseUrl}}/a2a/message:send)
+          - Auth: o mesmo Bearer aft_SUA_CHAVE; a execução reutiliza o escopo da sua chave (tools permitidas, fontes e rate limit).
+        - Skills expostas: ask_knowledge (default), search_knowledge, agent_chat, read_document — selecione via metadata {"skill": "<nome>"} na message.
+        - Quando usar: MCP = você chama as tools diretamente; A2A = outro agente delega uma tarefa a este hub (task lifecycle submitted → working → completed/failed).
         """;
+    }
 }

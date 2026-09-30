@@ -167,6 +167,14 @@ Configure the Knowledge Hub MCP server in your environment to access organizatio
 - find_dependencies / analyze_impact: Inspect entity graphs (GraphRAG) when assessing architectural impact.
 - read_document / write_note / write_knowledge: Read documents and persist notes or knowledge into the connected Obsidian vault.
 - set_chat_settings / set_api_key_settings: Configure custom chat models or integration API keys for your session.
+
+5. A2A Interoperability (Agent-to-Agent, v1.0):
+- Besides MCP, the hub publishes an A2A endpoint for agent-to-agent delegation:
+  - Agent Card (anonymous discovery): http://<host>:5000/.well-known/agent-card.json
+  - Endpoint: http://<host>:5000/a2a — JSON-RPC 2.0 and HTTP+JSON bindings (…/a2a/message:send)
+  - Auth: the same Bearer aft_YOUR_KEY; execution reuses your key's scope (allowed tools, sources, rate limit).
+- Exposed skills: ask_knowledge (default), search_knowledge, agent_chat, read_document — select via message metadata {"skill": "<name>"}.
+- When to use: MCP = you call the tools directly; A2A = another agent delegates a task to this hub (task lifecycle submitted → working → completed/failed).
 ```
 
 ## Configuration

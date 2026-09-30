@@ -59,6 +59,7 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 - **Endpoints de Transporte**:
   - Streamable HTTP (especificação `2026-07-28` / C# SDK 2.2): `/mcp`
   - SSE legado: `/mcp/sse`
+  - A2A v1.0 (agent-to-agent): Agent Card anônimo em `/.well-known/agent-card.json`; execução em `/a2a` (JSON-RPC 2.0 e HTTP+JSON `/a2a/message:send`). Skills expostas: `ask_knowledge` (default), `search_knowledge`, `agent_chat`, `read_document` — selecionadas via metadata `{"skill": "<nome>"}` na message. Reutiliza o mesmo Bearer `aft_*` e o escopo da chave (tools/fontes/rate limit).
 - **Autenticação**:
   - Header HTTP `Authorization: Bearer aft_SUA_CHAVE` (gerada na tela `/api-keys`).
   - Clients SSE que não enviam headers customizados aceitam query string: `/mcp/sse?access_token=aft_SUA_CHAVE`.

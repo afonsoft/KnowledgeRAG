@@ -66,10 +66,7 @@
 </div>
 
 @code {
-    private string McpUrl => $"{Nav.BaseUri.TrimEnd('/')}/mcp";
-    private string SseUrl => $"{Nav.BaseUri.TrimEnd('/')}/mcp/sse";
-
-    private string LlmConfigPrompt => McpOnboardingPrompt.Build(McpUrl, SseUrl);
+    private string LlmConfigPrompt => McpOnboardingPrompt.Build(Nav.BaseUri.TrimEnd('/'));
 
     private async Task CopyPromptAsync()
     {
