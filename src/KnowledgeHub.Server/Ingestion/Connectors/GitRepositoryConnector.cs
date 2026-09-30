@@ -33,9 +33,6 @@ public sealed class GitRepositoryConnector(
     ILogger<GitRepositoryConnector> logger)
     : IIncrementalSourceConnector
 {
-    private const string ProviderGitLab = "gitlab";
-    private const string ProviderGitea = "gitea";
-    private const string ProviderGitHub = "github";
     private static readonly string[] DefaultIncludes = ["**/*.md", "**/README*", "**/*.txt"];
     private static readonly string[] DefaultExcludes =
         [".git/**", "**/node_modules/**", "**/bin/**", "**/obj/**", "**/*.min.js"];
@@ -188,11 +185,11 @@ public sealed class GitRepositoryConnector(
             if (provider.Length == 0)
             {
                 if (u.Host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
-                    provider = ProviderGitLab;
+                    provider = GitProviderNames.GitLab;
                 else if (u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
-                    provider = ProviderGitHub;
+                    provider = GitProviderNames.GitHub;
                 else
-                    provider = ProviderGitea;
+                    provider = GitProviderNames.Gitea;
             }
             // Non-default host → self-hosted instance.
             if (!u.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
@@ -205,8 +202,8 @@ public sealed class GitRepositoryConnector(
                 "GitRepository requires 'repoUrl' or both 'owner' and 'name'");
 
         if (provider.Length == 0)
-            provider = ProviderGitHub;
-        if (provider is not (ProviderGitHub or ProviderGitLab or ProviderGitea))
+            provider = GitProviderNames.GitHub;
+        if (provider is not (GitProviderNames.GitHub or GitProviderNames.GitLab or GitProviderNames.Gitea))
             throw new InvalidOperationException(
                 $"unsupported provider '{provider}' — github|gitlab|gitea");
 
@@ -223,16 +220,16 @@ public sealed class GitRepositoryConnector(
                 await WebPageConnector.GuardPublicAsync(inst, ct);
             apiBase = provider switch
             {
-                ProviderGitLab => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v4",
-                ProviderGitea => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v1",
+                GitProviderNames.GitLab => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v4",
+                GitProviderNames.Gitea => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v1",
                 _ => $"{inst.GetLeftPart(UriPartial.Authority)}/api/v3" // GitHub Enterprise
             };
         }
         else
         {
-            if (provider == ProviderGitLab)
+            if (provider == GitProviderNames.GitLab)
                 apiBase = "https://gitlab.com/api/v4";
-            else if (provider == ProviderGitea)
+            else if (provider == GitProviderNames.Gitea)
                 throw new InvalidOperationException(
                     "provider 'gitea' requires 'instanceUrl' (no hosted default)");
             else

@@ -15,7 +15,7 @@ public sealed class CohereEmbeddingProvider : IEmbeddingProvider
 {
     private const string UriPathSeparator = "/";
     private const string DefaultEndpoint = "https://api.cohere.com/v2/";
-    private static readonly TimeSpan[] RetryDelays = [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
+    private static readonly TimeSpan[] RetryDelays = EmbeddingHttpRetry.DefaultDelays;
 
     private readonly HttpClient _http;
     private readonly string _model;
@@ -68,39 +68,18 @@ public sealed class CohereEmbeddingProvider : IEmbeddingProvider
     private async Task<IReadOnlyList<float[]>> SendWithRetryAsync(
         IReadOnlyList<string> inputs, string? inputType, CancellationToken cancellationToken)
     {
-        var attempt = 0;
-        while (true)
-        {
-            var request = new CohereRequest(_model, inputs.ToList(), inputType);
-            var response = await _http.PostAsJsonAsync("embed", request, cancellationToken);
-
-            if (response.StatusCode == (System.Net.HttpStatusCode)429 && attempt < RetryDelays.Length)
-            {
-                await Task.Delay(RetryDelays[attempt], cancellationToken);
-                attempt++;
-                continue;
-            }
-
-            if (!response.IsSuccessStatusCode)
-                throw new EmbeddingProviderException($"Cohere embeddings failed with HTTP {(int)response.StatusCode}");
-
-            var payload = await response.Content.ReadFromJsonAsync<CohereResponse>(cancellationToken);
-            var vectors = payload?.Embeddings?.Select(FitDimensions).ToList()
-                ?? throw new EmbeddingProviderException("Cohere returned no embeddings");
-            if (vectors.Count != inputs.Count)
-                throw new EmbeddingProviderException("Cohere returned a mismatched number of embeddings");
-            return vectors;
-        }
+        var payload = await EmbeddingHttpRetry.PostJsonAsync<CohereResponse>(
+            _http, "embed", new CohereRequest(_model, inputs.ToList(), inputType),
+            RetryDelays, "Cohere", cancellationToken);
+        var vectors = payload.Embeddings?.Select(FitDimensions).ToList()
+            ?? throw new EmbeddingProviderException("Cohere returned no embeddings");
+        if (vectors.Count != inputs.Count)
+            throw new EmbeddingProviderException("Cohere returned a mismatched number of embeddings");
+        return vectors;
     }
 
-    private float[] FitDimensions(float[] vector)
-    {
-        if (vector.Length == _dimensions)
-            return vector;
-        var fitted = new float[_dimensions];
-        Array.Copy(vector, fitted, Math.Min(vector.Length, _dimensions));
-        return fitted;
-    }
+    private float[] FitDimensions(float[] vector) =>
+        EmbeddingHttpRetry.FitDimensions(vector, _dimensions);
 
     private sealed record CohereRequest(
         [property: JsonPropertyName("model")] string Model,

@@ -17,18 +17,15 @@ namespace KnowledgeHub.Server.Ingestion.Connectors.GitProviders;
 /// </summary>
 public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
 {
-    private const string ProviderGitLab = "gitlab";
-    private const string ProviderGitea = "gitea";
-    private const string ProviderGitHub = "github";
     public async Task<string?> GetBranchCommitShaAsync(
         GitRepositoryRef repo, string? token, CancellationToken ct)
     {
         var client = httpFactory.CreateClient("git");
         var url = repo.Provider switch
         {
-            ProviderGitLab => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
+            GitProviderNames.GitLab => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
                 + $"/repository/commits/{Uri.EscapeDataString(repo.Branch)}",
-            ProviderGitea => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/branches/{Uri.EscapeDataString(repo.Branch)}",
+            GitProviderNames.Gitea => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/branches/{Uri.EscapeDataString(repo.Branch)}",
             _ => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/branches/{Uri.EscapeDataString(repo.Branch)}"
         };
 
@@ -41,7 +38,7 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
         using var doc = JsonDocument.Parse(json);
         // github/gitlab: {commit:{sha}} / {id}; gitea: {commit:{id}}.
         var root = doc.RootElement;
-        if (repo.Provider == ProviderGitLab)
+        if (repo.Provider == GitProviderNames.GitLab)
             return root.TryGetProperty("id", out var id) ? id.GetString() : null;
         if (root.TryGetProperty("commit", out var commit))
         {
@@ -55,7 +52,7 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
     public async Task<IReadOnlyList<GitTreeEntry>> GetTreeAsync(
         GitRepositoryRef repo, string? token, CancellationToken ct)
     {
-        return repo.Provider == ProviderGitLab
+        return repo.Provider == GitProviderNames.GitLab
             ? await GetGitLabTreeAsync(repo, token, ct)
             : await GetGitHubShapedTreeAsync(repo, token, ct);
     }
@@ -132,15 +129,15 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
         var client = httpFactory.CreateClient("git");
         var url = repo.Provider switch
         {
-            ProviderGitLab => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
+            GitProviderNames.GitLab => $"{repo.ApiBase}/projects/{Uri.EscapeDataString($"{repo.Owner}/{repo.Name}")}"
                 + $"/repository/files/{Uri.EscapeDataString(path)}/raw"
                 + $"?ref={Uri.EscapeDataString(repo.Branch)}",
-            ProviderGitea => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/media/{path}"
+            GitProviderNames.Gitea => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/media/{path}"
                 + $"?ref={Uri.EscapeDataString(repo.Branch)}",
             _ => $"{repo.ApiBase}/repos/{repo.Owner}/{repo.Name}/contents/{path}"
                 + $"?ref={Uri.EscapeDataString(repo.Branch)}"
         };
-        var raw = repo.Provider is ProviderGitLab or ProviderGitea;
+        var raw = repo.Provider is GitProviderNames.GitLab or GitProviderNames.Gitea;
         using var response = await SendAsync(client, repo, url, token, acceptRaw: raw, ct);
         if (response.StatusCode == HttpStatusCode.NotFound)
             throw new InvalidOperationException($"file '{path}' not found at {repo.Branch}");
@@ -160,11 +157,11 @@ public sealed class GitApiClient(IHttpClientFactory httpFactory) : IGitApiClient
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.raw"));
         if (!string.IsNullOrEmpty(token))
         {
-            if (repo.Provider == ProviderGitLab)
+            if (repo.Provider == GitProviderNames.GitLab)
                 request.Headers.TryAddWithoutValidation("PRIVATE-TOKEN", token);
             else
                 request.Headers.Authorization = new AuthenticationHeaderValue(
-                    repo.Provider == ProviderGitea ? "token" : "Bearer", token);
+                    repo.Provider == GitProviderNames.Gitea ? "token" : "Bearer", token);
         }
         return await client.SendAsync(request, ct);
     }

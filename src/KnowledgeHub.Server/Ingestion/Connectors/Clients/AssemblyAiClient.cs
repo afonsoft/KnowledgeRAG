@@ -18,7 +18,7 @@ public sealed class AssemblyAiClient(
     TimeSpan? pollInterval = null) : ITranscriptionClient
 {
     /// <summary>Hosted AssemblyAI REST endpoint.</summary>
-    public const string DefaultBaseUrl = "https://api.assemblyai.com";
+    public const string DefaultBaseUrl = "https://api.assemblyai.com"; // NOSONAR — hosted default, overridable via source config
     private readonly TimeSpan _pollInterval = pollInterval ?? TimeSpan.FromSeconds(2);
     private readonly TimeSpan _maxWait = TimeSpan.FromMinutes(10);
 

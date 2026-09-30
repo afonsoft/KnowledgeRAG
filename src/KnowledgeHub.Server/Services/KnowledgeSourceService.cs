@@ -22,13 +22,15 @@ public sealed class KnowledgeSourceService(
     Caching.ICacheInvalidationBus? invalidationBus = null) : IKnowledgeSourceService
 {
     private const string TokenField = "token";
+    private const string ConnectionStringField = "connectionString";
+    private const string ApiKeyField = "apiKey";
     private const string HeadersField = "headers";
     private const string EndpointField = "endpoint";
     private const string HasKeyField = "hasKey";
     private const string HttpsScheme = "https";
     /// <summary>Config keys that must never be echoed back to API consumers.</summary>
     private static readonly HashSet<string> SensitiveKeys = new(StringComparer.OrdinalIgnoreCase)
-        { "connectionString", "apiKey", "key", HeadersField, TokenField, "password", "secret",
+        { ConnectionStringField, ApiKeyField, "key", HeadersField, TokenField, "password", "secret",
           "secretAccessKey", "accountKey" };
 
     /// <summary>Required configuration keys per connector type (SPEC-02 §Scope).</summary>
@@ -234,7 +236,7 @@ public sealed class KnowledgeSourceService(
 
         if (source.SourceType == SourceType.SqlDatabase)
         {
-            if (UsableSecret(configuration, "connectionString"))
+            if (UsableSecret(configuration, ConnectionStringField))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'connectionString' is required for SqlDatabase — no stored secret for this source"
@@ -266,7 +268,7 @@ public sealed class KnowledgeSourceService(
         {
             var flagged = configuration[HasKeyField] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged || UsableSecret(configuration, "apiKey"))
+            if (!flagged || UsableSecret(configuration, ApiKeyField))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
@@ -290,7 +292,7 @@ public sealed class KnowledgeSourceService(
         {
             var flagged = configuration[HasKeyField] is JsonValue hv
                 && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged || UsableSecret(configuration, "apiKey"))
+            if (!flagged || UsableSecret(configuration, ApiKeyField))
                 return null;
             return await secrets.GetAsync(Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id), ct) is null
                 ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
@@ -308,7 +310,7 @@ public sealed class KnowledgeSourceService(
 
         if (source.SourceType == SourceType.AzureFiles)
         {
-            if (UsableSecret(configuration, "connectionString") || UsableSecret(configuration, "accountKey"))
+            if (UsableSecret(configuration, ConnectionStringField) || UsableSecret(configuration, "accountKey"))
                 return null;
             return await secrets.GetAsync(CloudSecretKey(source.SourceType, source.Id), ct) is null
                 ? "A 'connectionString' or 'accountKey' is required for AzureFiles — no stored secret for this source"
@@ -349,23 +351,23 @@ public sealed class KnowledgeSourceService(
     {
         var (configKey, secretKey) = source.SourceType switch
         {
-            SourceType.McpProxy => ("apiKey", McpProxySession.SecretKey(source.Id)),
+            SourceType.McpProxy => (ApiKeyField, McpProxySession.SecretKey(source.Id)),
             SourceType.Notion => (TokenField, Ingestion.Connectors.NotionConnector.SecretKey(source.Id)),
-            SourceType.GoogleDrive => ("apiKey", Ingestion.Connectors.GoogleDriveSharedConnector.SecretKey(source.Id)),
+            SourceType.GoogleDrive => (ApiKeyField, Ingestion.Connectors.GoogleDriveSharedConnector.SecretKey(source.Id)),
             // SPEC-20260927-restapi-sqldatabase-connectors RF-003/RF-006: the
             // RestApi headers JSON and the SqlDatabase connection string move
             // to the encrypted store — config persists only hasKey.
             SourceType.RestApi => (HeadersField, Ingestion.Connectors.RestApiConnector.SecretKey(source.Id)),
-            SourceType.SqlDatabase => ("connectionString", Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id)),
+            SourceType.SqlDatabase => (ConnectionStringField, Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id)),
             // SPEC-20260927-unstructured-document-parser-connector RF-001:
             // apiKey is optional (self-hosted endpoints need none).
-            SourceType.UnstructuredDocument => ("apiKey", Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id)),
+            SourceType.UnstructuredDocument => (ApiKeyField, Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id)),
             // SPEC-20260927-git-repository-source-connector RF-001: PAT is
             // optional (public repos need none) — same optional-secret slot.
             SourceType.GitRepository => (TokenField, Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id)),
             // SPEC-20260927-audio-transcription-connector: apiKey optional for
             // whisper-compatible self-hosted endpoints.
-            SourceType.AudioTranscription => ("apiKey", Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id)),
+            SourceType.AudioTranscription => (ApiKeyField, Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id)),
             _ => (null, null)
         };
         if (configKey is not null && secretKey is not null && configuration is not null)
@@ -404,7 +406,7 @@ public sealed class KnowledgeSourceService(
             && configuration is not null)
         {
             var fields = source.SourceType == SourceType.AzureFiles
-                ? new[] { "connectionString", "accountKey" }
+                ? new[] { ConnectionStringField, "accountKey" }
                 : new[] { "secretAccessKey" };
             var cloudKey = CloudSecretKey(source.SourceType, source.Id);
             var config = JsonNode.Parse(source.ConfigurationJson ?? "{}") as JsonObject ?? new JsonObject();

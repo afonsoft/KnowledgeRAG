@@ -56,7 +56,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
     }
 
     /// <summary>Simple (non-task) message path — replies via <see cref="MessageResponder"/>.</summary>
-    private async Task HandleMessageAsync(
+    private static async Task HandleMessageAsync(
         RequestContext context, AgentEventQueue eventQueue, IServiceProvider? services,
         string? skill, IDictionary<string, JsonElement>? arguments, string? routeError,
         Activity? span, CancellationToken ct)
