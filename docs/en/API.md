@@ -65,6 +65,7 @@ All `/api/*` endpoints require authentication (cookie session or `Authorization:
 | `GET/PUT/DELETE /api/settings/chat` · `POST /api/settings/chat/test` · `DELETE /api/settings/chat/apikey` | persisted chat config + connectivity test; `/apikey` clears only the stored key |
 | `GET/PUT/DELETE /api/settings/embeddings` · `DELETE /api/settings/embeddings/apikey` | persisted embeddings config — GET stamps `stampedModelId`, `providerError`, `storeDimensions`; `/apikey` clears only the stored key |
 | `GET/PUT/DELETE /api/settings/graph` | GraphRAG `enabled`, `maxChunksPerSync`, `maxChunkChars`, `maxResults` — applies without restart |
+| `GET/PUT/DELETE /api/settings/assistant` · `POST /api/settings/assistant/test` · `DELETE /api/settings/assistant/apikey` | low-cost assistant provider (`enabled`, `mode` local|remote, `endpoint`, `model`, `route`, `timeoutSeconds`); remote mode resolves an A2A Agent Card; key masked — `/apikey` clears only the stored key |
 | `GET/PUT/DELETE /api/settings/integrations/{provider}` | masked integration keys (firecrawl, deepwiki, tavily, context7) |
 | `GET /api/settings/cache` · `POST /api/settings/cache/clear` · `DELETE /api/settings/cache/keys/{*key}` | cache stats (per-process tracked keys + Redis server SCAN/INFO overlay — `serverReported`/`partial`) + clear all regions + delete one key pattern |
 | `GET /api/settings/database` | database stats (table counts, sizes, vector-store summary) |
@@ -124,6 +125,8 @@ Responses may carry `suggestedActions` (search — tool calls the model can issu
 | `GET /api/diagnostics/vectorstore` | vector store diagnostics — provider, host, database, dimension, chunk count, storage type (`vector`\|`halfvec`), index state |
 | `GET /api/mcp/capabilities` | advertised MCP session mode (`sessionMode`, `legacySse`) — anonymous |
 | `/mcp` (+ `/mcp/sse`, `/mcp/message`) | MCP transports — see README |
+| `/.well-known/agent-card.json` | A2A Agent Card — anonymous; skills `ask_knowledge`/`search_knowledge`/`agent_chat`/`read_document`, bearer scheme `aft_*` |
+| `/a2a` | A2A v1.0 bindings — JSON-RPC `message/send`·`tasks/*` and HTTP+JSON (`/a2a/message:send`); Operational policy + `llm` rate limit |
 | `/hubs/mcp` | SignalR activity feed |
 | `/metrics` | Prometheus scrape endpoint (`Telemetry:Metrics:Prometheus=true`) |
 | `/framework-assets/{stem}/{ext}` | proxy-safe `_framework` asset mirror |
