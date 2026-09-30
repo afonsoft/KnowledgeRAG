@@ -51,9 +51,9 @@ public sealed class RestApiConnector(
 
         for (var page = 1; page <= maxPages; page++)
         {
-            var requestUrl = pageParam is null && page == 1
+            var requestUrl = pageParam is null
                 ? endpoint
-                : pageParam is null ? endpoint : PageUrl(endpoint, pageParam, page);
+                : PageUrl(endpoint, pageParam, page);
 
             JsonElement body;
             try

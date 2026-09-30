@@ -16,12 +16,14 @@ public static partial class SqlQueryGuard
         "INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|EXEC|EXECUTE|"
         + "GRANT|REVOKE|COPY|CALL|TRUNCATE|VACUUM|MERGE|REPLACE";
 
-    [GeneratedRegex(@"\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|EXEC|EXECUTE|GRANT|REVOKE|COPY|CALL|TRUNCATE|VACUUM|MERGE|REPLACE)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static readonly TimeSpan RegexMatchTimeout = TimeSpan.FromMilliseconds(500);
+
+    [GeneratedRegex(@"\b(?:INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|ATTACH|DETACH|PRAGMA|EXEC|EXECUTE|GRANT|REVOKE|COPY|CALL|TRUNCATE|VACUUM|MERGE|REPLACE)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 500)]
     private static partial Regex WriteKeywordRegex();
 
     /// <summary>Keyword list surfaced for diagnostics and tests.</summary>
-    public static readonly string[] Keywords =
-        WriteKeywords.Split('|').ToArray();
+    public static IReadOnlyList<string> Keywords { get; } =
+        WriteKeywords.Split('|');
 
     /// <summary>Returns (true, null) when the query is a safe read-only
     /// statement, otherwise (false, reason).</summary>
@@ -34,7 +36,16 @@ public static partial class SqlQueryGuard
             return (false, "query is empty");
 
         // First token must be SELECT or WITH.
-        var first = Regex.Match(sanitized, @"^[A-Za-z]+");
+        Match first;
+        try
+        {
+            first = Regex.Match(
+                sanitized, @"^[A-Za-z]+", RegexOptions.CultureInvariant, RegexMatchTimeout);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return (false, "query validation timed out");
+        }
         if (!first.Success || first.Value.ToUpperInvariant() is not ("SELECT" or "WITH"))
             return (false, $"query must start with SELECT or WITH (found '{first.Value}')");
 
@@ -44,7 +55,15 @@ public static partial class SqlQueryGuard
         if (sanitized.Contains(';'))
             return (false, "only a single statement is allowed (no intermediate ';')");
 
-        var match = WriteKeywordRegex().Match(sanitized);
+        Match match;
+        try
+        {
+            match = WriteKeywordRegex().Match(sanitized);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return (false, "query validation timed out");
+        }
         if (match.Success)
             return (false, $"write keyword '{match.Value.ToUpperInvariant()}' is not allowed (read-only queries only)");
 
