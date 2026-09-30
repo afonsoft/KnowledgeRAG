@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / ASP.NET Core`, MCP (Streamable HTTP + SSE) |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20261001-mcp-a2a-improvements` |
-| Status | `Draft` |
-| Ticket | TBD |
+| Status | `Approved` |
+| Ticket | #441 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (recall tool surface) |
 
 ## 1. User Story
