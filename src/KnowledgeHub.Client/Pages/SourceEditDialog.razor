@@ -1091,24 +1091,20 @@
             Transport = dto.Configuration?["transport"]?.GetValue<string>() ?? "auto",
             RootPageIds = ReadStringList(dto.Configuration, "rootPageIds"),
             RootDatabaseIds = ReadStringList(dto.Configuration, "rootDatabaseIds"),
-            MaxPages = dto.Configuration?["maxPages"] is JsonValue mp
-                && mp.TryGetValue<int>(out var mpn) ? mpn : null,
+            MaxPages = ReadInt(dto.Configuration, "maxPages"),
             ItemsPath = dto.Configuration?["itemsPath"]?.GetValue<string>(),
             TitleField = dto.Configuration?["titleField"]?.GetValue<string>(),
             ContentFields = ReadStringList(dto.Configuration, "contentFields"),
             IdField = dto.Configuration?["idField"]?.GetValue<string>(),
             UrlField = dto.Configuration?["urlField"]?.GetValue<string>(),
             PageParam = dto.Configuration?["pageParam"]?.GetValue<string>(),
-            Provider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } provider
-                ? provider : "sqlite",
+            Provider = ReadStringOr(dto.Configuration, "provider", "sqlite"),
             IdColumn = dto.Configuration?["idColumn"]?.GetValue<string>(),
             TitleColumn = dto.Configuration?["titleColumn"]?.GetValue<string>(),
             ContentColumns = ReadStringList(dto.Configuration, "contentColumns"),
             UrlColumn = dto.Configuration?["urlColumn"]?.GetValue<string>(),
-            MaxRows = dto.Configuration?["maxRows"] is JsonValue mr
-                && mr.TryGetValue<int>(out var mrn) ? mrn : null,
-            CommandTimeoutSeconds = dto.Configuration?["commandTimeoutSeconds"] is JsonValue ct
-                && ct.TryGetValue<int>(out var ctn) ? ctn : null,
+            MaxRows = ReadInt(dto.Configuration, "maxRows"),
+            CommandTimeoutSeconds = ReadInt(dto.Configuration, "commandTimeoutSeconds"),
             BucketName = dto.Configuration?["bucketName"]?.GetValue<string>(),
             Region = dto.Configuration?["region"]?.GetValue<string>(),
             Namespace = dto.Configuration?["namespace"]?.GetValue<string>(),
@@ -1116,26 +1112,21 @@
             DirectoryPath = dto.Configuration?["directoryPath"]?.GetValue<string>(),
             Prefix = dto.Configuration?["prefix"]?.GetValue<string>(),
             Glob = dto.Configuration?["glob"]?.GetValue<string>(),
-            MaxFileSizeMB = dto.Configuration?["maxFileSizeMB"] is JsonValue mf
-                && mf.TryGetValue<int>(out var mfn) ? mfn : null,
+            MaxFileSizeMB = ReadInt(dto.Configuration, "maxFileSizeMB"),
             AccessKeyId = dto.Configuration?["accessKeyId"]?.GetValue<string>(),
             AccountName = dto.Configuration?["accountName"]?.GetValue<string>(),
             Chunking = dto.Configuration?["chunking"]?.GetValue<string>(),
             SharedUrl = dto.Configuration?["sharedUrl"]?.GetValue<string>(),
-            MaxFiles = dto.Configuration?["maxFiles"] is JsonValue mx
-                && mx.TryGetValue<int>(out var mxn) ? mxn : null,
+            MaxFiles = ReadInt(dto.Configuration, "maxFiles"),
             FolderPath = dto.Configuration?["folderPath"]?.GetValue<string>(),
             Files = ReadStringList(dto.Configuration, "files"),
             ApiUrl = dto.Configuration?["apiUrl"]?.GetValue<string>(),
-            Strategy = dto.Configuration?["strategy"]?.GetValue<string>() is { Length: > 0 } st
-                ? st : "auto",
+            Strategy = ReadStringOr(dto.Configuration, "strategy", "auto"),
             Coordinates = ReadBool(dto.Configuration, "coordinates"),
-            TableExtraction = dto.Configuration?["tableExtraction"] is not JsonValue te
-                || !te.TryGetValue<bool>(out var teb) || teb,
+            TableExtraction = ReadBoolOrTrue(dto.Configuration, "tableExtraction"),
             MaxFileSizeMb = dto.Configuration?["maxFileSizeMb"] is JsonValue msm
                 && msm.TryGetValue<int>(out var msmn) ? msmn : null,
-            GitProvider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } gp
-                ? gp : "github",
+            GitProvider = ReadStringOr(dto.Configuration, "provider", "github"),
             RepoUrl = dto.Configuration?["repoUrl"]?.GetValue<string>(),
             Owner = dto.Configuration?["owner"]?.GetValue<string>(),
             RepoName = dto.Configuration?["name"]?.GetValue<string>(),
@@ -1144,20 +1135,14 @@
                 ? br : "main",
             IncludePatterns = ReadStringList(dto.Configuration, "includePatterns"),
             ExcludePatterns = ReadStringList(dto.Configuration, "excludePatterns"),
-            MaxFileSizeBytes = dto.Configuration?["maxFileSizeBytes"] is JsonValue mfb
-                && mfb.TryGetValue<int>(out var mfbn) ? mfbn : null,
+            MaxFileSizeBytes = ReadInt(dto.Configuration, "maxFileSizeBytes"),
             AllowPrivateHosts = ReadBool(dto.Configuration, "allowPrivateHosts"),
-            AudioProvider = dto.Configuration?["provider"]?.GetValue<string>() is { Length: > 0 } ap
-                ? ap : "assemblyai",
-            EnableSpeakerDiarization = dto.Configuration?["enableSpeakerDiarization"] is not JsonValue sd
-                || !sd.TryGetValue<bool>(out var sdb) || sdb,
-            EnableAutoChapters = dto.Configuration?["enableAutoChapters"] is not JsonValue ac
-                || !ac.TryGetValue<bool>(out var acb) || acb,
-            TimeoutMinutes = dto.Configuration?["timeoutMinutes"] is JsonValue tm
-                && tm.TryGetValue<int>(out var tmn) ? tmn : null,
+            AudioProvider = ReadStringOr(dto.Configuration, "provider", "assemblyai"),
+            EnableSpeakerDiarization = ReadBoolOrTrue(dto.Configuration, "enableSpeakerDiarization"),
+            EnableAutoChapters = ReadBoolOrTrue(dto.Configuration, "enableAutoChapters"),
+            TimeoutMinutes = ReadInt(dto.Configuration, "timeoutMinutes"),
             FeedUrl = dto.Configuration?["feedUrl"]?.GetValue<string>(),
-            MaxItems = dto.Configuration?["maxItems"] is JsonValue mi
-                && mi.TryGetValue<int>(out var min) ? min : null,
+            MaxItems = ReadInt(dto.Configuration, "maxItems"),
             FetchFullContent = ReadBool(dto.Configuration, "fetchFullContent"),
             ForceRefresh = ReadBool(dto.Configuration, "forceRefresh"),
             Urls = ReadStringList(dto.Configuration, "urls"),
@@ -1165,8 +1150,7 @@
             IncludeAutoCaptions = dto.Configuration?.TryGetPropertyValue("includeAutoCaptions", out _) != true
                 || ReadBool(dto.Configuration, "includeAutoCaptions"),
             IncludeTimestamps = ReadBool(dto.Configuration, "includeTimestamps"),
-            MaxVideos = dto.Configuration?["maxVideos"] is JsonValue mv
-                && mv.TryGetValue<int>(out var mvn) ? mvn : null,
+            MaxVideos = ReadInt(dto.Configuration, "maxVideos"),
             OriginalConfiguration = dto.Configuration?.DeepClone() as JsonObject
         };
 
@@ -1175,6 +1159,28 @@
             && config.TryGetPropertyValue(key, out var node)
             && node is JsonValue value
             && value.TryGetValue<bool>(out var b) && b;
+
+        /// <summary>Optional int config key (null when absent or not an int).</summary>
+        private static int? ReadInt(JsonObject? config, string key) =>
+            config is not null
+            && config.TryGetPropertyValue(key, out var inode)
+            && inode is JsonValue iv
+            && iv.TryGetValue<int>(out var n) ? n : null;
+
+        /// <summary>String config key with a fallback default when absent/empty.</summary>
+        private static string? ReadStringOr(JsonObject? config, string key, string fallback) =>
+            config is not null
+            && config.TryGetPropertyValue(key, out var snode)
+            && snode?.GetValue<string>() is { Length: > 0 } s ? s : fallback;
+
+        /// <summary>Bool config key defaulting to true when absent or unparsable.</summary>
+        private static bool ReadBoolOrTrue(JsonObject? config, string key)
+        {
+            if (config is null || !config.TryGetPropertyValue(key, out var node)
+                || node is not JsonValue bv || !bv.TryGetValue<bool>(out var b))
+                return true;
+            return b;
+        }
 
         /// <summary>Reads a root-ID list stored as JSON array or plain string.</summary>
         private static string? ReadStringList(JsonObject? config, string key) =>

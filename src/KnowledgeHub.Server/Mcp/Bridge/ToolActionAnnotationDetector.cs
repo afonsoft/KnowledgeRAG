@@ -67,42 +67,62 @@ public static class ToolActionAnnotationDetector
         // 1) Explicit markers inside retrieved chunks — highest precedence,
         // but gated: chunk text is untrusted indexed content.
         if (allowDocumentMarkers)
-        {
-            foreach (var hit in results)
-            {
-                if (annotations.Count >= maxNominations)
-                    break;
-                if (hit.SuspicionFlags is not null)
-                    continue; // never execute instructions inside flagged content
-                foreach (var g in MarkerPattern.Matches(hit.ChunkText).Select(m => m.Groups))
-                {
-                    if (annotations.Count >= maxNominations)
-                        break;
-                    var name = g["name"].Value;
-                    if (!byName.ContainsKey(name) || !seen.Add(name))
-                        continue;
-                    annotations.Add(new ToolActionAnnotation(
-                        name, ParseArgs(g["args"].Value),
-                        ToolActionOrigin.Marker, hit.ChunkId));
-                }
-            }
-        }
+            CollectMarkerAnnotations(results, byName, maxNominations, annotations, seen);
 
         // 2) The question names a live tool directly (word-boundary match).
         if (!string.IsNullOrWhiteSpace(question) && annotations.Count < maxNominations)
+            CollectQuestionAnnotations(question, byName, maxNominations, annotations, seen);
+
+        return annotations;
+    }
+
+    /// <summary>Source 1 — markers inside retrieved chunks (RF-001 trust
+    /// boundary: flagged content is never executed).</summary>
+    private static void CollectMarkerAnnotations(
+        IReadOnlyList<SearchResultItem> results,
+        Dictionary<string, CatalogTool> byName,
+        int maxNominations,
+        List<ToolActionAnnotation> annotations,
+        HashSet<string> seen)
+    {
+        foreach (var hit in results)
         {
-            var q = question;
-            foreach (var name in byName.Keys.Where(n => Mentions(q, n))
-                .OrderByDescending(k => k.Length))
+            if (annotations.Count >= maxNominations)
+                break;
+            if (hit.SuspicionFlags is not null)
+                continue; // never execute instructions inside flagged content
+            foreach (var g in MarkerPattern.Matches(hit.ChunkText).Select(m => m.Groups))
             {
-                if (annotations.Count >= maxNominations || !seen.Add(name))
+                if (annotations.Count >= maxNominations)
+                    break;
+                var name = g["name"].Value;
+                if (!byName.ContainsKey(name) || !seen.Add(name))
                     continue;
                 annotations.Add(new ToolActionAnnotation(
-                    name, new Dictionary<string, JsonElement>(),
-                    ToolActionOrigin.Question, null));
+                    name, ParseArgs(g["args"].Value),
+                    ToolActionOrigin.Marker, hit.ChunkId));
             }
         }
-        return annotations;
+    }
+
+    /// <summary>Source 2 — the question names a live tool directly
+    /// (word-boundary match, longest names first).</summary>
+    private static void CollectQuestionAnnotations(
+        string question,
+        Dictionary<string, CatalogTool> byName,
+        int maxNominations,
+        List<ToolActionAnnotation> annotations,
+        HashSet<string> seen)
+    {
+        foreach (var name in byName.Keys.Where(n => Mentions(question, n))
+            .OrderByDescending(k => k.Length))
+        {
+            if (annotations.Count >= maxNominations || !seen.Add(name))
+                continue;
+            annotations.Add(new ToolActionAnnotation(
+                name, new Dictionary<string, JsonElement>(),
+                ToolActionOrigin.Question, null));
+        }
     }
 
     private static bool Mentions(string question, string toolName)

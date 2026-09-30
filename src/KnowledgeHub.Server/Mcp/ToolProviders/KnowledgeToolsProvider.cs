@@ -131,69 +131,16 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     // agent can decide to rephrase on its own.
                     var retrieval = ctx.Services!.GetRequiredService<CorrectiveRetrievalService>();
                     var outcome = await retrieval.RetrieveAsync(query, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
-                    var grade = retrieval.GradingEnabled
-                        ? $"[grade: {outcome.Grading.Grade.ToString().ToLowerInvariant()}" +
-                          (outcome.Grading.Grade == Search.RetrievalGrade.Weak ? " — suggestion: rephrase the query" : "") +
-                          (outcome.Retried ? " — retried" : "") + "]\n"
-                        : null;
-                    // SPEC-20260927-chunk-window-retrieval-and-autocut RF-003/RF-004:
-                    // surface the applied limit mode + final count so agents can
-                    // tell a pruned (autocut) answer set from a full topK.
-                    var limitCfg = ctx.Services.GetRequiredService<IConfiguration>();
-                    // SPEC-20260927-mcp-dynamic-rag-action-bridge: markers in
-                    // retrieved chunks surface as suggested live actions —
-                    // inside agent_chat the model can invoke them next turn.
-                    var bridgeOptions = ctx.Services
-                        .GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
-                    var suggested = bridgeOptions.EnableDynamicActionBridge
-                        ? Bridge.ToolActionAnnotationDetector.Detect(
-                            query, outcome.Results,
-                            await ctx.Services.GetRequiredService<IDynamicToolCatalog>()
-                                .GetToolsAsync(ctx.Services, ct),
-                            Math.Clamp(bridgeOptions.MaxChainedDynamicCalls, 0, 3),
-                            bridgeOptions.AllowDocumentMarkers)
-                        : [];
-                    // SPEC-20260929-live-actions-bridge-hardening RF-004: the
-                    // agent loop only sees the text portion of tool results —
-                    // surface nominations there so the model can invoke the
-                    // suggested tool on the next iteration.
-                    var suggestedLine = suggested.Count == 0 ? null
-                        : "\n\nSuggested live actions: "
-                          + string.Join(", ", suggested.Select(a => a.Args.Count == 0
-                              ? a.ToolName
-                              : $"{a.ToolName}({string.Join(", ", a.Args.Select(kv => kv.Key))})"))
-                          + " — invoke as tool calls if they help answer the request";
+                    var suggested = await DetectSuggestedActionsAsync(ctx, query, outcome, ct);
                     // Suggestions lead the text — CatalogToolAIFunction truncates
                     // long results from the end, and appended suggestions were
                     // being cut off when hits filled the budget (devin-review).
                     return await ToolResults.Structured(
-                        grade + suggestedLine + FormatHits(outcome.Results),
-                        new
-                        {
-                            results = outcome.Results,
-                            grade = retrieval.GradingEnabled
-                                ? outcome.Grading.Grade.ToString().ToLowerInvariant() : null,
-                            retried = outcome.Retried,
-                            totalMatches = outcome.Results.Count,
-                            limitModeApplied = filter.EffectiveLimitMode(limitCfg),
-                            // SPEC-20260927-multiquery RF-003: never relax silently.
-                            filterRelaxed = outcome.Results.Any(r => r.IsRelaxed),
-                            // SPEC-20260929 RF-009: structured callers get the
-                            // warning field the text path appends inline.
-                            warnings = outcome.Results.All(r => r.IsRelaxed)
-                                && outcome.Results.Count > 0
-                                    ? (IReadOnlyList<string>)["evidence found outside the strict requested scope"]
-                                    : null,
-                            originalFilter = Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
-                            appliedFilter = outcome.Results.FirstOrDefault(r => r.IsRelaxed)?.RelaxedScope
-                                ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
-                            suggestedActions = suggested.Count == 0 ? null : suggested.Select(a => new
-                            {
-                                tool = a.ToolName,
-                                args = a.Args.Count == 0 ? null : a.Args,
-                                origin = a.Origin.ToString().ToLowerInvariant()
-                            })
-                        });
+                        BuildGradeLine(retrieval, outcome)
+                            + BuildSuggestedLine(suggested)
+                            + FormatHits(outcome.Results),
+                        BuildSearchStructured(retrieval, outcome, sourceId, filter, suggested,
+                            ctx.Services.GetRequiredService<IConfiguration>()));
                 }
             },
             new CatalogTool
@@ -234,6 +181,82 @@ public sealed class KnowledgeToolsProvider : IToolProvider
     /// shared by search_knowledge/ask_knowledge (SPEC-20260914-hybrid-retrieval
     /// RF-003, SPEC-20260923-retrieval-quality RF-003).
     /// </summary>
+    /// <summary>Grade hint appended to the text result when grading is on.</summary>
+    private static string? BuildGradeLine(
+        CorrectiveRetrievalService retrieval, CorrectiveRetrievalService.RetrievalOutcome outcome)
+    {
+        if (!retrieval.GradingEnabled)
+            return null;
+        return $"[grade: {outcome.Grading.Grade.ToString().ToLowerInvariant()}" +
+               (outcome.Grading.Grade == Search.RetrievalGrade.Weak ? " — suggestion: rephrase the query" : "") +
+               (outcome.Retried ? " — retried" : "") + "]\n";
+    }
+
+    /// <summary>SPEC-20260927-mcp-dynamic-rag-action-bridge: markers in
+    /// retrieved chunks surface as suggested live actions — inside agent_chat
+    /// the model can invoke them next turn. Disabled → empty list.</summary>
+    private static async Task<IReadOnlyList<Bridge.ToolActionAnnotation>> DetectSuggestedActionsAsync(
+        ToolCallContext ctx, string query,
+        CorrectiveRetrievalService.RetrievalOutcome outcome, CancellationToken ct)
+    {
+        var bridgeOptions = ctx.Services!.GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
+        if (!bridgeOptions.EnableDynamicActionBridge)
+            return [];
+        return Bridge.ToolActionAnnotationDetector.Detect(
+            query, outcome.Results,
+            await ctx.Services.GetRequiredService<IDynamicToolCatalog>().GetToolsAsync(ctx.Services, ct),
+            Math.Clamp(bridgeOptions.MaxChainedDynamicCalls, 0, 3),
+            bridgeOptions.AllowDocumentMarkers);
+    }
+
+    /// <summary>SPEC-20260929-live-actions-bridge-hardening RF-004: the agent
+    /// loop only sees the text portion of tool results — surface nominations
+    /// there so the model can invoke the suggested tool on the next iteration.</summary>
+    private static string? BuildSuggestedLine(IReadOnlyList<Bridge.ToolActionAnnotation> suggested)
+    {
+        if (suggested.Count == 0)
+            return null;
+        return "\n\nSuggested live actions: "
+               + string.Join(", ", suggested.Select(a => a.Args.Count == 0
+                   ? a.ToolName
+                   : $"{a.ToolName}({string.Join(", ", a.Args.Select(kv => kv.Key))})"))
+               + " — invoke as tool calls if they help answer the request";
+    }
+
+    /// <summary>Structured payload for search_knowledge (RF-009 — structured
+    /// callers get the warning field the text path appends inline).</summary>
+    private static object BuildSearchStructured(
+        CorrectiveRetrievalService retrieval,
+        CorrectiveRetrievalService.RetrievalOutcome outcome,
+        Guid? sourceId, Search.ResolvedSearchFilter filter,
+        IReadOnlyList<Bridge.ToolActionAnnotation> suggested, IConfiguration limitCfg)
+    {
+        return new
+        {
+            results = outcome.Results,
+            grade = retrieval.GradingEnabled
+                ? outcome.Grading.Grade.ToString().ToLowerInvariant() : null,
+            retried = outcome.Retried,
+            totalMatches = outcome.Results.Count,
+            limitModeApplied = filter.EffectiveLimitMode(limitCfg),
+            // SPEC-20260927-multiquery RF-003: never relax silently.
+            filterRelaxed = outcome.Results.Any(r => r.IsRelaxed),
+            warnings = outcome.Results.All(r => r.IsRelaxed)
+                && outcome.Results.Count > 0
+                    ? (IReadOnlyList<string>)["evidence found outside the strict requested scope"]
+                    : null,
+            originalFilter = Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
+            appliedFilter = outcome.Results.FirstOrDefault(r => r.IsRelaxed)?.RelaxedScope
+                ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
+            suggestedActions = suggested.Count == 0 ? null : suggested.Select(a => new
+            {
+                tool = a.ToolName,
+                args = a.Args.Count == 0 ? null : a.Args,
+                origin = a.Origin.ToString().ToLowerInvariant()
+            })
+        };
+    }
+
     private static async Task<(Guid? SourceId, SearchMode Mode, Search.ResolvedSearchFilter Filter)> ResolveScopeAsync(
         ToolCallContext ctx, CancellationToken ct)
     {

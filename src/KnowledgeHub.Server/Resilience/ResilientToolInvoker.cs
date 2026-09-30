@@ -43,8 +43,9 @@ public static class ResilientToolInvoker
 
             var logger = ctx.Services?.GetService<ILoggerFactory>()
                 ?.CreateLogger("KnowledgeHub.Resilience.ToolFallback");
-            var available = catalog.Keys.ToList();
-            var visited = new HashSet<string>(StringComparer.Ordinal) { tool.Name };
+            var env = new FallbackEnv(registry, catalog, catalog.Keys.ToList(),
+                new HashSet<string>(StringComparer.Ordinal) { tool.Name },
+                ctx.Arguments, logger);
             var current = tool;
             var currentArgs = ctx.Arguments;
             var attempt = 0;
@@ -62,24 +63,12 @@ public static class ResilientToolInvoker
                                            || !ct.IsCancellationRequested)
                 {
                     var decision = engine.Evaluate(ex, "tools", attempt, ct);
-                    if (!decision.ShouldFallback
-                        || !TryNext(new FallbackProbe(registry, catalog, available, visited,
-                            current.Name, ctx.Arguments), out var next, out var mappedArgs))
+                    var (nextTool, nextArgs) = AdvanceFallback(env, current.Name,
+                        "exception", decision.Reason, decision.ShouldFallback, ex);
+                    if (nextTool is null)
                         throw;
-
-                    KnowledgeHubMetrics.ToolFallbacks.Add(1,
-                        new KeyValuePair<string, object?>("capability",
-                            registry.GetCapabilityForTool(current.Name) ?? "unknown"),
-                        new KeyValuePair<string, object?>("from", current.Name),
-                        new KeyValuePair<string, object?>("to", next.Name),
-                        new KeyValuePair<string, object?>("trigger", "exception"));
-                    logger?.LogWarning(
-                        ex,
-                        "tool fallback: {From} → {To} after {Reason} (attempt {Attempt})",
-                        current.Name, next.Name, decision.Reason, attempt + 1);
-                    visited.Add(next.Name);
-                    current = next;
-                    currentArgs = mappedArgs;
+                    current = nextTool;
+                    currentArgs = nextArgs;
                     attempt++;
                     continue;
                 }
@@ -93,26 +82,54 @@ public static class ResilientToolInvoker
 
                 var reason = ToolErrorClassifier.ReasonFor(text);
                 var decision2 = engine.EvaluateReason(reason, "tools", attempt, ct);
-                if (!decision2.ShouldFallback
-                    || !TryNext(new FallbackProbe(registry, catalog, available, visited,
-                        current.Name, ctx.Arguments), out var next2, out var mappedArgs2))
+                var (nextTool2, nextArgs2) = AdvanceFallback(env, current.Name,
+                    "isError", reason, decision2.ShouldFallback, null);
+                if (nextTool2 is null)
                     return result;
-
-                KnowledgeHubMetrics.ToolFallbacks.Add(1,
-                    new KeyValuePair<string, object?>("capability",
-                        registry.GetCapabilityForTool(current.Name) ?? "unknown"),
-                    new KeyValuePair<string, object?>("from", current.Name),
-                    new KeyValuePair<string, object?>("to", next2.Name),
-                    new KeyValuePair<string, object?>("trigger", "isError"));
-                logger?.LogWarning(
-                    "tool fallback: {From} → {To} after {Reason} (attempt {Attempt})",
-                    current.Name, next2.Name, reason, attempt + 1);
-                visited.Add(next2.Name);
-                current = next2;
-                currentArgs = mappedArgs2;
+                current = nextTool2;
+                currentArgs = nextArgs2;
                 attempt++;
             }
         };
+
+    /// <summary>Fallback environment shared across attempts.</summary>
+    private sealed record FallbackEnv(
+        ToolCapabilityRegistry Registry,
+        IReadOnlyDictionary<string, CatalogTool> Catalog,
+        IReadOnlyCollection<string> Available,
+        HashSet<string> Visited,
+        IDictionary<string, System.Text.Json.JsonElement>? OriginalArgs,
+        ILogger? Logger);
+
+    /// <summary>Evaluates the fallback decision, picks the next candidate and
+    /// records the transition. Returns null when no fallback should happen.</summary>
+    private static (CatalogTool? Next, IDictionary<string, System.Text.Json.JsonElement>? Args)
+        AdvanceFallback(
+            FallbackEnv env, string currentName, string trigger, string reason,
+            bool shouldFallback, Exception? ex)
+    {
+        if (!shouldFallback
+            || !TryNext(new FallbackProbe(env.Registry, env.Catalog, env.Available,
+                env.Visited, currentName, env.OriginalArgs), out var next, out var mappedArgs))
+            return (null, null);
+
+        KnowledgeHubMetrics.ToolFallbacks.Add(1,
+            new KeyValuePair<string, object?>("capability",
+                env.Registry.GetCapabilityForTool(currentName) ?? "unknown"),
+            new KeyValuePair<string, object?>("from", currentName),
+            new KeyValuePair<string, object?>("to", next.Name),
+            new KeyValuePair<string, object?>("trigger", trigger));
+        if (ex is not null)
+            env.Logger?.LogWarning(ex,
+                "tool fallback: {From} → {To} after {Reason} (attempt {Attempt})",
+                currentName, next.Name, reason, env.Visited.Count);
+        else
+            env.Logger?.LogWarning(
+                "tool fallback: {From} → {To} after {Reason} (attempt {Attempt})",
+                currentName, next.Name, reason, env.Visited.Count);
+        env.Visited.Add(next.Name);
+        return (next, mappedArgs);
+    }
 
     /// <summary>Fallback search state for <see cref="TryNext"/> — the caller's
     /// environment (registry/catalog/available) plus the probe cursor.</summary>
