@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / EF Core` — Postgres + SQLite migrations |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260930-migration-regression-tests` |
-| Status | `Approved` |
+| Status | `Done` |
 | Source | `GAP-tests-migration-populated-db` (gap-analysis-20260930) |
 
 ## 1. User Story
