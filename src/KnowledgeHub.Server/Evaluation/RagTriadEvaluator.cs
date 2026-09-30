@@ -120,5 +120,5 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
         return list;
     }
 
-    private static double Clamp(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
+    private static double Clamp(double v) => Math.Clamp(v, 0, 1);
 }

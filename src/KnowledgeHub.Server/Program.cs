@@ -186,9 +186,11 @@ builder.Services.AddHostedService<IngestionProgressBroadcastService>();
 // SPEC-20260929-a2a-server-interop RF-001: KnowledgeHub as an A2A v1.0 agent.
 // Card URL uses A2A:BaseUrl when set (behind proxies); the well-known endpoint
 // rebuilds the card per-request with the actual scheme/host.
+const string A2aFallbackBaseUrl = "http://localhost:5000/"; // NOSONAR — dev fallback; prod sets A2A:BaseUrl
+
 builder.Services.AddA2AAgent<KnowledgeHub.Server.A2A.KnowledgeHubA2AAgent>(
     KnowledgeHub.Server.A2A.A2AEndpointExtensions.BuildAgentCard(
-        new Uri(builder.Configuration["A2A:BaseUrl"] ?? "http://localhost:5000/")));
+        new Uri(builder.Configuration["A2A:BaseUrl"] ?? A2aFallbackBaseUrl)));
 
 // SPEC-20260914-auth-login: cookie session (browser SPA) + aft_* API keys
 // (non-browser MCP/API/hub clients). Secure=SameAsRequest keeps dev/test over

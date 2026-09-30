@@ -27,7 +27,7 @@ public sealed class AudioTranscriptionConnector(
     IHttpClientFactory httpFactory,
     IIntegrationSecretStore secrets,
     ILogger<AudioTranscriptionConnector> logger)
-    : ISourceConnector, IIncrementalSourceConnector
+    : IIncrementalSourceConnector
 {
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -54,8 +54,8 @@ public sealed class AudioTranscriptionConnector(
 
         var timeoutMinutes = config.Int("timeoutMinutes", 10, 1, 120);
         ITranscriptionClient client = provider == "whisper"
-            ? new WhisperApiClient(httpFactory, config.String("endpoint") ?? "https://api.openai.com")
-            : new AssemblyAiClient(httpFactory, "https://api.assemblyai.com", null,
+            ? new WhisperApiClient(httpFactory, config.String("endpoint") ?? WhisperApiClient.DefaultBaseUrl)
+            : new AssemblyAiClient(httpFactory, AssemblyAiClient.DefaultBaseUrl, null,
                 TimeSpan.FromMinutes(timeoutMinutes));
         var apiKey = await secrets.GetAsync(SecretKey(source.Id), cancellationToken);
         var language = config.String("language");

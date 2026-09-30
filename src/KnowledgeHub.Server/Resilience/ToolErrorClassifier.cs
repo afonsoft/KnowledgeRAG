@@ -59,9 +59,9 @@ public static class ToolErrorClassifier
             return "Timeout";
         if (text.Contains("429") || text.Contains("rate limit") || text.Contains("too many"))
             return "RateLimited";
-        foreach (var code in new[] { "502", "503", "504" })
-            if (text.Contains(code))
-                return $"HttpError_{code}";
+        var serverError = new[] { "502", "503", "504" }.FirstOrDefault(text.Contains);
+        if (serverError is not null)
+            return $"HttpError_{serverError}";
         if (text.Contains("unavailable") || text.Contains("upstream error"))
             return "UpstreamError";
         if (text.Contains("connection") || text.Contains("reset"))

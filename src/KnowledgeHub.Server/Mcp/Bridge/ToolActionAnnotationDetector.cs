@@ -74,15 +74,15 @@ public static class ToolActionAnnotationDetector
                     break;
                 if (hit.SuspicionFlags is not null)
                     continue; // never execute instructions inside flagged content
-                foreach (Match m in MarkerPattern.Matches(hit.ChunkText))
+                foreach (var g in MarkerPattern.Matches(hit.ChunkText).Select(m => m.Groups))
                 {
                     if (annotations.Count >= maxNominations)
                         break;
-                    var name = m.Groups["name"].Value;
+                    var name = g["name"].Value;
                     if (!byName.ContainsKey(name) || !seen.Add(name))
                         continue;
                     annotations.Add(new ToolActionAnnotation(
-                        name, ParseArgs(m.Groups["args"].Value),
+                        name, ParseArgs(g["args"].Value),
                         ToolActionOrigin.Marker, hit.ChunkId));
                 }
             }
@@ -92,8 +92,8 @@ public static class ToolActionAnnotationDetector
         if (!string.IsNullOrWhiteSpace(question) && annotations.Count < maxNominations)
         {
             var q = question;
-            foreach (var name in byName.Keys.OrderByDescending(k => k.Length)
-                .Where(n => Mentions(q, n)))
+            foreach (var name in byName.Keys.Where(n => Mentions(q, n))
+                .OrderByDescending(k => k.Length))
             {
                 if (annotations.Count >= maxNominations || !seen.Add(name))
                     continue;
@@ -123,9 +123,9 @@ public static class ToolActionAnnotationDetector
     private static IReadOnlyDictionary<string, JsonElement> ParseArgs(string raw)
     {
         var args = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (Match m in ArgPattern.Matches(raw))
-            args[m.Groups["key"].Value] =
-                JsonSerializer.SerializeToElement(m.Groups["value"].Value);
+        foreach (var g in ArgPattern.Matches(raw).Select(m => m.Groups))
+            args[g["key"].Value] =
+                JsonSerializer.SerializeToElement(g["value"].Value);
         return args;
     }
 }

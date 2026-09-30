@@ -40,7 +40,7 @@ public sealed class TemporalGraphRetriever(
     /// <summary>SPEC-20260928-observability-followups RF-002/RF-003: every mode
     /// emits a <c>search.temporal_graph</c> span (tag <c>mode</c>) + a
     /// <c>graph.temporal_queries</c> counter; failures mark the span Error.</summary>
-    private async Task<TemporalSearchResult> TrackAsync(string mode, Func<Task<TemporalSearchResult>> work)
+    private static async Task<TemporalSearchResult> TrackAsync(string mode, Func<Task<TemporalSearchResult>> work)
     {
         Telemetry.KnowledgeHubMetrics.TemporalGraphQueries.Add(1,
             new KeyValuePair<string, object?>("mode", mode));
@@ -236,9 +236,29 @@ public sealed class TemporalGraphRetriever(
         depth = Math.Clamp(depth, 1, MaxDepth);
         maxResults = Math.Clamp(maxResults, 1, 100);
 
-        var visited = new HashSet<Guid> { root.Id };
-        var frontier = new List<Guid> { root.Id };
         var edges = new List<KgEdge>();
+        var (visited, truncated) = await ExpandRelationshipFrontierAsync(
+            scope, root.Id, depth, edges, ct);
+
+        var nodes = await db.KgNodes.AsNoTracking()
+            .Where(n => visited.Contains(n.Id))
+            .OrderByDescending(n => n.ObservedAt)
+            .Take(maxResults)
+            .ToListAsync(ct);
+        var keep = nodes.Select(n => n.Id).ToHashSet();
+        edges = edges.Where(e => keep.Contains(e.FromNodeId) && keep.Contains(e.ToNodeId)).ToList();
+
+        return new TemporalSearchResult(nodes, edges, null, null, null, truncated);
+    }
+
+    /// <summary>Layered BFS over still-valid edges (<see cref="EdgeScanCap"/>
+    /// global cap). Returns the visited node set and whether the cap cut the
+    /// expansion short.</summary>
+    private async Task<(HashSet<Guid> Visited, bool Truncated)> ExpandRelationshipFrontierAsync(
+        Auth.CallerScope scope, Guid rootId, int depth, List<KgEdge> edges, CancellationToken ct)
+    {
+        var visited = new HashSet<Guid> { rootId };
+        var frontier = new List<Guid> { rootId };
         var truncated = false;
 
         for (var d = 0; d < depth && frontier.Count > 0; d++)
@@ -266,16 +286,7 @@ public sealed class TemporalGraphRetriever(
             if (truncated)
                 break;
         }
-
-        var nodes = await db.KgNodes.AsNoTracking()
-            .Where(n => visited.Contains(n.Id))
-            .OrderByDescending(n => n.ObservedAt)
-            .Take(maxResults)
-            .ToListAsync(ct);
-        var keep = nodes.Select(n => n.Id).ToHashSet();
-        edges = edges.Where(e => keep.Contains(e.FromNodeId) && keep.Contains(e.ToNodeId)).ToList();
-
-        return new TemporalSearchResult(nodes, edges, null, null, null, truncated);
+        return (visited, truncated);
     }
 
     /// <summary>Cluster-diversified neighbourhood of an entity (RF-004):

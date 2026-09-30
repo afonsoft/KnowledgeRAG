@@ -21,5 +21,5 @@ public sealed class ChainCompactionOptions
 /// </summary>
 public interface IChainCompactor
 {
-    Task<ChainAST> CompactAsync(ChainAST ast, CancellationToken ct = default);
+    Task<ChainAst> CompactAsync(ChainAst ast, CancellationToken ct = default);
 }

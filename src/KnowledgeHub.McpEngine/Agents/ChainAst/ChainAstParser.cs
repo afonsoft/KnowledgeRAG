@@ -3,7 +3,7 @@ using Microsoft.Extensions.AI;
 namespace KnowledgeHub.McpEngine.Agents.ChainAst;
 
 /// <summary>
-/// Builds a <see cref="ChainAST"/> from a flat message list (RF-001).
+/// Builds a <see cref="ChainAst"/> from a flat message list (RF-001).
 /// Section boundaries: a <see cref="ChatRole.System"/>/<see cref="ChatRole.User"/>
 /// message after body pairs starts a new section; consecutive header messages
 /// join the open section's headers. Tool-role messages pair by
@@ -16,9 +16,9 @@ public static class ChainAstParser
     /// <summary>Parses <paramref name="messages"/>; when
     /// <paramref name="forceRepair"/> is set the result is passed through
     /// <see cref="ChainAstRepair.Repair"/> so every call has a response.</summary>
-    public static ChainAST Parse(IReadOnlyList<ChatMessage> messages, bool forceRepair = false)
+    public static ChainAst Parse(IReadOnlyList<ChatMessage> messages, bool forceRepair = false)
     {
-        var ast = new ChainAST();
+        var ast = new ChainAst();
         var orphans = new List<ChatMessage>();
         ChainSection? section = null;
         BodyPair? open = null;

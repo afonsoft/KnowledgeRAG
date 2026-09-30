@@ -12,8 +12,10 @@ namespace KnowledgeHub.Server.Ingestion.Connectors.Clients;
 /// </summary>
 public sealed class WhisperApiClient(
     IHttpClientFactory httpFactory,
-    string baseUrl = "https://api.openai.com") : ITranscriptionClient
+    string baseUrl = WhisperApiClient.DefaultBaseUrl) : ITranscriptionClient
 {
+    /// <summary>Hosted OpenAI-compatible Whisper endpoint.</summary>
+    public const string DefaultBaseUrl = "https://api.openai.com"; // NOSONAR — hosted default, overridable via source config
     public async Task<TranscriptionResult> TranscribeAsync(
         string filePath, string? language, bool diarization, bool chapters,
         string? apiKey, CancellationToken ct)

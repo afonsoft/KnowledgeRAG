@@ -139,17 +139,17 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     // SPEC-20260927-chunk-window-retrieval-and-autocut RF-003/RF-004:
                     // surface the applied limit mode + final count so agents can
                     // tell a pruned (autocut) answer set from a full topK.
-                    var limitCfg = ctx.Services!.GetRequiredService<IConfiguration>();
+                    var limitCfg = ctx.Services.GetRequiredService<IConfiguration>();
                     // SPEC-20260927-mcp-dynamic-rag-action-bridge: markers in
                     // retrieved chunks surface as suggested live actions —
                     // inside agent_chat the model can invoke them next turn.
-                    var bridgeOptions = ctx.Services!
+                    var bridgeOptions = ctx.Services
                         .GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
                     var suggested = bridgeOptions.EnableDynamicActionBridge
                         ? Bridge.ToolActionAnnotationDetector.Detect(
                             query, outcome.Results,
-                            await ctx.Services!.GetRequiredService<IDynamicToolCatalog>()
-                                .GetToolsAsync(ctx.Services!, ct),
+                            await ctx.Services.GetRequiredService<IDynamicToolCatalog>()
+                                .GetToolsAsync(ctx.Services, ct),
                             Math.Clamp(bridgeOptions.MaxChainedDynamicCalls, 0, 3),
                             bridgeOptions.AllowDocumentMarkers)
                         : [];
@@ -302,14 +302,14 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         // live MCP tools nominated by retrieved chunks (mcp-tool markers) or by
         // the question itself — inside the caller's scope (catalog is already
         // scope-filtered) — then fuse outputs as clearly-labelled live context.
-        var agentOptions = ctx.Services!.GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
+        var agentOptions = ctx.Services.GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
         var enableLiveActions = ToolArgs.OptionalBool(ctx, "enableLiveActions")
             ?? agentOptions.EnableDynamicActionBridge;
         IReadOnlyList<LiveToolExecution> liveExecutions = [];
         if (enableLiveActions)
         {
-            var catalog = ctx.Services!.GetRequiredService<IDynamicToolCatalog>();
-            var visible = await catalog.GetToolsAsync(ctx.Services!, ct);
+            var catalog = ctx.Services.GetRequiredService<IDynamicToolCatalog>();
+            var visible = await catalog.GetToolsAsync(ctx.Services, ct);
             liveExecutions = await Bridge.McpDynamicRagActionBridge.ExecuteAsync(
                 question, results, visible, ctx,
                 Math.Clamp(agentOptions.MaxChainedDynamicCalls, 0, 3),
@@ -392,8 +392,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             // keyed by the caller's API key (or "mcp" for cookie sessions).
             var apiKeyId = CallerIdentity.TryGetApiKeyId(ctx)?.ToString("N");
             await Audit.Evidence.EvidenceEmission.RecordAskAsync(
-                ctx.Services!.GetService<Audit.Evidence.IEvidenceChainService>(),
-                ctx.Services!.GetService<ILoggerFactory>()?.CreateLogger("EvidenceEmission"),
+                ctx.Services.GetService<Audit.Evidence.IEvidenceChainService>(),
+                ctx.Services.GetService<ILoggerFactory>()?.CreateLogger("EvidenceEmission"),
                 $"mcp:{apiKeyId ?? "session"}", apiKeyId,
                 question, results, answer.Answer ?? "", ct);
             var text = new StringBuilder(answer.Answer + relaxedWarning);

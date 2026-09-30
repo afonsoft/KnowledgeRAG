@@ -148,7 +148,6 @@ public sealed partial class RssFeedConnector(
             if ((int)response.StatusCode == 429)
             {
                 var retryAfter = RetryAfterSeconds(response);
-                response.Dispose();
                 if (retryAfter is null)
                     throw new InvalidOperationException(
                         $"feed returned HTTP 429 sem Retry-After — desistindo após 1 tentativa");

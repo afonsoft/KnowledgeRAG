@@ -159,40 +159,14 @@ public sealed class SqliteKnowledgeGraphStore(
                 continue; // provenance is non-negotiable
 
             // Re-observation of the identical fact: bump ObservedAt only.
-            var existing = await db.KgEdges.FirstOrDefaultAsync(x =>
-                x.FromNodeId == edge.FromNodeId && x.ToNodeId == edge.ToNodeId
-                && x.Kind == edge.Kind && x.EvidenceChunkId == edge.EvidenceChunkId, ct);
-            var pendingSame = existing is null
-                ? db.ChangeTracker.Entries<KgEdge>()
-                    .FirstOrDefault(x => x.State == EntityState.Added
-                        && x.Entity.ValidTo == null
-                        && x.Entity.FromNodeId == edge.FromNodeId
-                        && x.Entity.ToNodeId == edge.ToNodeId
-                        && x.Entity.Kind == edge.Kind
-                        && x.Entity.EvidenceChunkId == edge.EvidenceChunkId)?.Entity
-                : null;
-            if (existing is not null || pendingSame is not null)
+            var identical = await FindIdenticalAsync(edge, ct);
+            if (identical is not null)
             {
-                (existing ?? pendingSame)!.ObservedAt = now;
+                identical.ObservedAt = now;
                 continue;
             }
 
-            // Same relation learned from fresher evidence → soft-historicize
-            // the still-valid prior rows (ValidTo instead of delete).
-            var superseded = await db.KgEdges
-                .Where(x => x.FromNodeId == edge.FromNodeId && x.ToNodeId == edge.ToNodeId
-                    && x.Kind == edge.Kind && x.ValidTo == null)
-                .ToListAsync(ct);
-            foreach (var stale in superseded)
-                stale.ValidTo = now;
-            // Also catch identical triples still pending in the change tracker.
-            foreach (var pending in db.ChangeTracker.Entries<KgEdge>()
-                         .Where(x => x.State == EntityState.Added
-                             && x.Entity.FromNodeId == edge.FromNodeId
-                             && x.Entity.ToNodeId == edge.ToNodeId
-                             && x.Entity.Kind == edge.Kind
-                             && x.Entity.ValidTo == null))
-                pending.Entity.ValidTo = now;
+            await SoftHistoricizeAsync(edge, now, ct);
 
             edge.ObservedAt = now;
             edge.ValidFrom = now;
@@ -244,6 +218,43 @@ public sealed class SqliteKnowledgeGraphStore(
     }
 
     /// <inheritdoc />
+    /// <summary>Persisted or pending (change-tracker) edge identical to
+    /// <paramref name="edge"/> — same endpoints, kind, and evidence chunk.</summary>
+    private async Task<KgEdge?> FindIdenticalAsync(KgEdge edge, CancellationToken ct)
+    {
+        var existing = await db.KgEdges.FirstOrDefaultAsync(x =>
+            x.FromNodeId == edge.FromNodeId && x.ToNodeId == edge.ToNodeId
+            && x.Kind == edge.Kind && x.EvidenceChunkId == edge.EvidenceChunkId, ct);
+        return existing
+            ?? db.ChangeTracker.Entries<KgEdge>()
+                .FirstOrDefault(x => x.State == EntityState.Added
+                    && x.Entity.ValidTo == null
+                    && x.Entity.FromNodeId == edge.FromNodeId
+                    && x.Entity.ToNodeId == edge.ToNodeId
+                    && x.Entity.Kind == edge.Kind
+                    && x.Entity.EvidenceChunkId == edge.EvidenceChunkId)?.Entity;
+    }
+
+    /// <summary>Same relation learned from fresher evidence → soft-historicize
+    /// the still-valid prior rows (ValidTo instead of delete).</summary>
+    private async Task SoftHistoricizeAsync(KgEdge edge, DateTime now, CancellationToken ct)
+    {
+        var superseded = await db.KgEdges
+            .Where(x => x.FromNodeId == edge.FromNodeId && x.ToNodeId == edge.ToNodeId
+                && x.Kind == edge.Kind && x.ValidTo == null)
+            .ToListAsync(ct);
+        foreach (var stale in superseded)
+            stale.ValidTo = now;
+        // Also catch identical triples still pending in the change tracker.
+        foreach (var pending in db.ChangeTracker.Entries<KgEdge>()
+                     .Where(x => x.State == EntityState.Added
+                         && x.Entity.FromNodeId == edge.FromNodeId
+                         && x.Entity.ToNodeId == edge.ToNodeId
+                         && x.Entity.Kind == edge.Kind
+                         && x.Entity.ValidTo == null))
+            pending.Entity.ValidTo = now;
+    }
+
     public async Task<IReadOnlyList<IReadOnlyList<KgEdge>>> FindPathsAsync(
         Guid fromId, Guid toId, int depth, int maxPaths, CancellationToken ct)
     {
@@ -262,18 +273,7 @@ public sealed class SqliteKnowledgeGraphStore(
                 .Include(e => e.From).Include(e => e.To).Include(e => e.Document)
                 .Where(e => e.ValidTo == null && frontier.Contains(e.FromNodeId))
                 .ToListAsync(ct);
-            var next = new List<Guid>();
-            foreach (var e in batch)
-            {
-                if (!visited.Add(e.ToNodeId))
-                    continue;
-                parent[e.ToNodeId] = (e.FromNodeId, e);
-                if (e.ToNodeId == toId)
-                    reached = true;
-                else
-                    next.Add(e.ToNodeId);
-            }
-            frontier = next;
+            frontier = ExpandFrontier(batch, parent, visited, toId, ref reached);
         }
 
         if (!reached)
@@ -286,6 +286,26 @@ public sealed class SqliteKnowledgeGraphStore(
         if (path.Count > 0)
             paths.Add(path);
         return paths;
+    }
+
+    /// <summary>One BFS level: visits every edge target once, records the
+    /// parent edge, and reports whether <paramref name="toId"/> was reached.</summary>
+    private static List<Guid> ExpandFrontier(
+        List<KgEdge> batch, Dictionary<Guid, (Guid Prev, KgEdge Edge)> parent,
+        HashSet<Guid> visited, Guid toId, ref bool reached)
+    {
+        var next = new List<Guid>();
+        foreach (var e in batch)
+        {
+            if (!visited.Add(e.ToNodeId))
+                continue;
+            parent[e.ToNodeId] = (e.FromNodeId, e);
+            if (e.ToNodeId == toId)
+                reached = true;
+            else
+                next.Add(e.ToNodeId);
+        }
+        return next;
     }
 
     /// <inheritdoc />

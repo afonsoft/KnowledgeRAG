@@ -62,12 +62,21 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
         // Origin is per-request — the handler instance is shared for the whole
         // named-client lifetime, so a handler-level origin field would bleed
         // one caller's trust domain into another's.
+        var response = await base.SendAsync(request, cancellationToken);
+        return await FollowRedirectsAsync(request, response, uri, allowPrivate, cancellationToken);
+    }
+
+    // Manual redirect handling — auto-redirect resends Authorization to the
+    // new host; we strip credentials whenever the redirect leaves origin.
+    private async Task<HttpResponseMessage> FollowRedirectsAsync(
+        HttpRequestMessage request, HttpResponseMessage response, Uri uri,
+        bool allowPrivate, CancellationToken cancellationToken)
+    {
+        // Origin is per-request — the handler instance is shared for the whole
+        // named-client lifetime, so a handler-level origin field would bleed
+        // one caller's trust domain into another's.
         var originHost = uri.Host;
         var originScheme = uri.Scheme;
-        var response = await base.SendAsync(request, cancellationToken);
-
-        // Manual redirect handling — auto-redirect resends Authorization to the
-        // new host; we strip credentials whenever the redirect leaves origin.
         for (var hop = 0;
              IsRedirect(response) && response.Headers.Location is { } next
              && hop < MaxRedirects;

@@ -89,7 +89,7 @@ public sealed class ResilientChatClientTests
         Assert.Equal(1, primary.Calls);
         Assert.Equal(1, secondary.Calls);
         var meta = response.AdditionalProperties!;
-        Assert.Equal(true, meta["fallbackTriggered"]);
+        Assert.True((bool)meta["fallbackTriggered"]!);
         Assert.Equal("primary", meta["originalProvider"]);
         Assert.Equal("ollama", meta["fallbackProvider"]);
         Assert.Equal("HttpError_429", meta["fallbackReason"]);

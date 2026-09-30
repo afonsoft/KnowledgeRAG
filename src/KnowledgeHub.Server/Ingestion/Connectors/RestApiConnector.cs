@@ -133,11 +133,13 @@ public sealed class RestApiConnector(
         return $"{endpoint}{separator}{Uri.EscapeDataString(pageParam)}={page}";
     }
 
-    private sealed class RestApiFetchException(string message) : Exception(message);
+    /// <summary>Raised for fetch failures that are safe to surface to the caller
+    /// (HTTP status, non-JSON payload, retry exhaustion).</summary>
+    public sealed class RestApiFetchException(string message) : Exception(message);
 
     /// <summary>Fetches and parses one page. The first page failing fails the sync
     /// (rethrown); 429 honors <c>Retry-After</c> once.</summary>
-    private async Task<JsonElement> GetJsonAsync(
+    private static async Task<JsonElement> GetJsonAsync(
         HttpClient http, string url, IReadOnlyDictionary<string, string> headers,
         bool firstPage, CancellationToken ct)
     {
@@ -249,11 +251,13 @@ public sealed class RestApiConnector(
 
         var id = FieldOrNull(item, idField);
         var url = FieldOrNull(item, urlField);
-        var uri = id is { Length: > 0 }
-            ? $"rest:{id}"
-            : url is { Length: > 0 }
-                ? url
-                : $"rest:{Sha256Hex(item.GetRawText())}";
+        string uri;
+        if (id is { Length: > 0 })
+            uri = $"rest:{id}";
+        else if (url is { Length: > 0 })
+            uri = url;
+        else
+            uri = $"rest:{Sha256Hex(item.GetRawText())}";
 
         return new RawDocument(uri, title, content);
     }
@@ -301,10 +305,12 @@ public sealed class RestApiConnector(
         return string.Join("\n", lines);
     }
 
-    private static string? ScalarOrNull(JsonElement? element) =>
-        element is { } e && e.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
-            ? (e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText())
-            : null;
+    private static string? ScalarOrNull(JsonElement? element)
+    {
+        if (element is not { } e || e.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        return e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText();
+    }
 
     private static void WarnOnce(List<string> warnings, HashSet<string> warned, string message)
     {

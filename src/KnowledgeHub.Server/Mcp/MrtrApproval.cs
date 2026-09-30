@@ -164,7 +164,7 @@ public static class MrtrApproval
         try
         {
             var payload = JsonSerializer.Deserialize<JsonElement>(
-                protector.Unprotect(ctx.Params!.RequestState!));
+                protector.Unprotect(ctx.Params.RequestState!));
             approvalId = payload.GetProperty("approvalId").GetGuid();
         }
         catch (Exception)
@@ -182,7 +182,7 @@ public static class MrtrApproval
         if (approval.ToolName != tool.Name)
             return Error("requestState does not match this tool");
 
-        ctx.Params!.InputResponses!.TryGetValue(InputKey, out var response);
+        ctx.Params.InputResponses!.TryGetValue(InputKey, out var response);
         var action = ReadAction(response);
 
         approval.ResolvedAt = DateTimeOffset.UtcNow;

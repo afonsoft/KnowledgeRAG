@@ -57,7 +57,7 @@ public sealed class ChainSection
 
 /// <summary>The parsed conversation tree; <see cref="ToChatMessages"/>
 /// flattens back to provider order — Header, AI, Tool, AI, …</summary>
-public sealed class ChainAST
+public sealed class ChainAst
 {
     public List<ChainSection> Sections { get; } = [];
 

@@ -36,12 +36,12 @@ public sealed record ResolvedSearchFilter(
         (IsEmpty ? "-" : $"{SourceType}|{PathPrefix}|{IndexedAfter:O}|{Language}")
         + (Expansion is null ? "" : $"|expand:{Expansion}")
         + (ContextExpand is null or "none" ? "" : $"|ctx:{ContextExpand}")
-        + (UseGraph is null ? "" : $"|graph:{(UseGraph.Value ? 1 : 0)}")
+        + (UseGraph is { } g ? $"|graph:{Convert.ToInt32(g)}" : "")
         + (WindowSize is null ? "" : $"|win:{WindowSize}")
         + (LimitMode is null ? "" : $"|lim:{LimitMode}")
         + (AutocutSensitivity is null ? "" : $"|acs:{AutocutSensitivity}")
         + (SubQueries is { Count: > 0 } sq ? $"|sub:{string.Join('|', sq)}" : "")
-        + (AllowRelaxation is null ? "" : $"|relax:{(AllowRelaxation.Value ? 1 : 0)}");
+        + (AllowRelaxation is { } r ? $"|relax:{Convert.ToInt32(r)}" : "");
 
     public static bool TryResolve(
         SearchFilter? filter, out ResolvedSearchFilter resolved, out string? error)

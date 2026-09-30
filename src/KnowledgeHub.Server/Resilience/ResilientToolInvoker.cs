@@ -74,6 +74,7 @@ public static class ResilientToolInvoker
                         new KeyValuePair<string, object?>("to", next.Name),
                         new KeyValuePair<string, object?>("trigger", "exception"));
                     logger?.LogWarning(
+                        ex,
                         "tool fallback: {From} → {To} after {Reason} (attempt {Attempt})",
                         current.Name, next.Name, decision.Reason, attempt + 1);
                     visited.Add(next.Name);
