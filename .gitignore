@@ -80,3 +80,6 @@ models/
 
 # Backup/restore runtime artifacts (integration tests + backup.sh)
 backups/
+
+# SonarQube autofix artifacts
+.sonar_devin_auto_fix/**

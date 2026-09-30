@@ -26,6 +26,7 @@ public sealed class SqlDatabaseConnector(
     private const int MaxValueChars = 50 * 1024;
     private const string TruncatedMarker = " […truncated]";
     private const int ProviderErrorLimit = 300;
+    private static readonly TimeSpan RegexMatchTimeout = TimeSpan.FromMilliseconds(500);
 
     public SourceType Type => SourceType.SqlDatabase;
 
@@ -214,8 +215,17 @@ public sealed class SqlDatabaseConnector(
         if (!string.IsNullOrEmpty(builder.DataSource) && !Path.IsPathRooted(builder.DataSource))
             builder.DataSource = Path.GetFullPath(builder.DataSource, AppContext.BaseDirectory);
 
-        var hasExplicitMode = System.Text.RegularExpressions.Regex.IsMatch(
-            raw, @"(^|;)\s*Mode\s*=", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        bool hasExplicitMode;
+        try
+        {
+            hasExplicitMode = System.Text.RegularExpressions.Regex.IsMatch(
+                raw, @"(^|;)\s*Mode\s*=", System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                RegexMatchTimeout);
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+        {
+            hasExplicitMode = false;
+        }
         if (!hasExplicitMode)
             builder.Mode = SqliteOpenMode.ReadOnly;
 

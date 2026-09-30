@@ -515,7 +515,17 @@ public sealed class KnowledgeSourceService(
             var language = configuration["language"]?.GetValue<string>();
             if (language is { Length: > 0 } lang)
             {
-                var valid = System.Text.RegularExpressions.Regex.IsMatch(lang, @"^[a-zA-Z-]{2,8}$");
+                bool valid;
+                try
+                {
+                    valid = System.Text.RegularExpressions.Regex.IsMatch(
+                        lang, @"^[a-zA-Z-]{2,8}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                        TimeSpan.FromMilliseconds(500));
+                }
+                catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+                {
+                    valid = false;
+                }
                 if (!valid)
                     return "Configuration key 'language' must be 2-8 chars of letters and hyphens (e.g. 'pt', 'pt-BR', 'en')";
             }
