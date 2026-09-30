@@ -55,6 +55,28 @@
 
 ## Session summary (2026-09-29 — A2A Epic em andamento)
 
+- Reconciliação concluída (sessão anterior): 11 issues #269–#279 fechadas com evidência; PR #382 mergeada.
+- Gap-analysis: 7 gaps confirmados → 5 SPECs aprovados → Epic #383 + #384–#388.
+- S1 #384 docs-sync mergeada (PR #390). S2–S5 abertas: #391 resilience wiring, #392 graph viewer, #393 coverage gate+flake fix, #394 observability.
+- Achado: cobertura real medida 20.6% (não 80%) — ratchet COVERAGE_MIN=20; investimento em testes é debt futuro.
+- enforce_admins=false permanece inconclusivo (carried, decisão do dono).
+
+## Session summary (2026-09-29 — review-findings Epic #396 + A2A SPEC)
+
+- Epic #396 (#397–#406): 10 slices dos achados de review (256 comentários em 20 PRs).
+  - S1 #397→PR #407 MERGED: arm-failure isolation marca `degraded` (sem cache de parcial), dedup de janelas vizinhas, sanitização de labels em log.
+  - S2 #398→PR #408 MERGED: egress block-private-by-default + opt-in por request (`allowPrivateHosts`), redirect manual com strip de credencial cross-host para TODOS os clients conector, GitLab FailedUris p/ oversized, Unstructured URIs homônimos, mass-delete gate com threshold ≥4 docs (correção pós-CI: gate bloqueava deletes legítimos → 429 nos polls).
+  - S3 #399→PR #409 MERGED: secrets de fallback bound a provider/endpoint/model (não posicional), migração de legado, provider preservado no save.
+  - S4 #400→PR #410 MERGED: compactor pin non-user headers, budget progressivo, structured results truncados, flatten de Unicode separators.
+  - S5 #401→PR #411 MERGED: striped locks por sessão, export authz (cookie-session recusado — bucket `mcp:session` unattributable), verify-with-signature, snapshot verify.
+  - S6 #402→PR #412 MERGED: CallerScope no TemporalGraphRetriever (edges + episódios + homônimos via FindAllowedNodeAsync, linker overfetch 24→8).
+  - S7 #403→PR #413 MERGED: `allowDocumentMarkers` opt-in (doc-marker injection fechado), args vazios rejeitados, pseudo-citations live-only, cache key com fingerprint de contexto.
+  - S8 #404→PR #414 MERGED: CodeQL sweep (~45 fixes) + EvalWorker OCE filter (cancel per-task não mata o reader loop).
+  - S9 #405→PR #415 MERGED: feed snapshot ring (replay p/ novos subscribers), spans IsError em bridge+evidence, coverage baseline ratchet `.ci/coverage-baseline.txt`, seeded search test.
+  - S10 #406→PR #417 (checks): README pt/paridade, graph docs por camada, DoD section, toggles por capacidade no Resiliência, login com card "Conectar Agente de IA ao MCP" primeiro + McpOnboardingPrompt compartilhado (protocolo ask_question/read_wiki_contents + write_note/write_knowledge) + CLAUDE.md.
+- A2A: SPEC-20260929-a2a-agent-interop em PR #416 (Draft) — server A2A v1.0 (card das 24 skills afonsoft + tools, JSON-RPC+HTTP+JSON, SSE, assinatura HMAC), client p/ agentes remotos, assistant model low-cost OpenAI-compatible. SPECs antigas deletadas pelo usuário.
+- Lições: egPOLICY default-block quebra testes com fake servers locais — fixtures precisam `Security:Egress:AllowPrivateNetworks=true`; mass-delete gate precisa de threshold mínimo (senão bloqueia syncs de fontes pequenas → polls estouram rate limit → `$.status` 429).
+
 - Epic #396 concluída (10/10 slices) + deploy local ok. Epic A2A em execução.
 - **Estado do trabalho (worktree limpo — tudo commitado/pushado)**:
   - Branch atual: `feature/Devin-20260930-a2a-assistant`.

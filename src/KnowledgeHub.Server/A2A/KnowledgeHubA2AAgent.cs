@@ -138,7 +138,6 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
                 && sc.ValueKind is JsonValueKind.Object or JsonValueKind.Array
                 ? sc.GetRawText()
                 : JsonSerializer.Serialize(result.Content);
-            parts.Add(new Part { Data = JsonDocument.Parse(json).RootElement });
             foreach (var c in result.Content)
             {
                 if (c is TextContentBlock tb && !string.IsNullOrEmpty(tb.Text))
@@ -146,6 +145,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
             }
             if (parts.Count == 0)
                 parts.Add(Part.FromText("(no output)"));
+            parts.Add(new Part { Data = JsonDocument.Parse(json).RootElement });
 
             var ok = result.IsError is not true;
             span?.SetTag("a2a.outcome", ok ? "ok" : "tool_error");

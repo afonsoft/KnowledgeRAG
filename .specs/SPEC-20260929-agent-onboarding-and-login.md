@@ -9,7 +9,7 @@
 | Stack | `Markdown`, Blazor WASM (`Login.razor`, `Home.razor`) |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20260929-agent-onboarding` |
-| Status | `Draft` |
+| Status | `Done` |
 | Source | Direto do dono (2026-09-29) — prompt "Conectar Agente de IA ao MCP" + tela de login |
 
 ## 1. User Story

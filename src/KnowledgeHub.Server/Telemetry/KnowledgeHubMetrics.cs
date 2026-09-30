@@ -116,6 +116,7 @@ public sealed class KnowledgeHubMetrics : IMcpRequestMetrics
     public static readonly Counter<long> AssistantFallbacks =
         Meter.CreateCounter<long>("knowledgehub.assistant.fallbacks");
 
+
     /// <inheritdoc />
     public void Record(string method, string sessionMode, bool succeeded)
     {
