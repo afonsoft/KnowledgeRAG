@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `DocumentFileConnector.GlobMatcher`: `{a,b}` brace groups were never matched — groups are now split before `Regex.Escape` (braces are not escaped chars), with alternation terms individually escaped.
+- Settings → Assistente (A2A): Endpoint/Model do assistente de baixo custo agora têm default igual ao provider do chat quando não há configuração salva; toggle "Habilitado" usa o mesmo componente `Switch` da aba GraphRAG.
+
+### Added
+- Unit tests (36) covering paths touched by the sonarqube-autofix pass: `GlobMatcher.Compile`, `McpProxyToolsProvider.ParseConfig`, `ResolvedSearchFilter.TryResolve`, `A2AEndpointExtensions.BuildAgentCard`, `ChunkerSelector.ChunkAsync`. Suite: 1245 unit tests, 100% pass; line coverage 20.17% (baseline gate 20%).
+
 ## [0.0.3] - 2026-09-26
 
 ### Added

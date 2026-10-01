@@ -430,10 +430,10 @@ dotnet format KnowledgeHub.slnx --verify-no-changes  # formatting gate
 
 | Metric | Value |
 |---|---|
-| **Total tests** | 1416 (1121 unit + 295 integration) |
+| **Total tests** | 1567 (1245 unit + 322 integration) |
 | **Pass rate** | 100% |
-| **Line coverage** | ratcheted baseline — `.ci/coverage-baseline.txt` (CI fails under it, auto-bumps on `main`) |
-| **Counts/coverage date** | tests 2026-09-29 |
+| **Line coverage** | 20.17% (ratcheted baseline — `.ci/coverage-baseline.txt`, CI fails under it, auto-bumps on `main`) |
+| **Counts/coverage date** | tests + coverage 2026-10-01 |
 
 ### Definition of Done
 
