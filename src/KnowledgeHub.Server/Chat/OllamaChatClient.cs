@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.AI;
 
-// SonarQube S3236: o segundo argumento de ThrowIfNullOrWhiteSpace é a mensagem de erro (chave de config), não um parâmetro caller-info — falso positivo.
+// SonarQube S3236: ThrowIfNullOrWhiteSpace recebe a chave de config (Chat:Endpoint (Ollama)) como mensagem, não um parâmetro caller-info — falso positivo.
 #pragma warning disable S3236
 
 // SonarQube S1075: endpoint e path 'api/chat' vêm de Chat:Endpoint/protocolo Ollama — não há URI hardcoded.

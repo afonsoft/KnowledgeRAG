@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
-// SonarQube S3236: o segundo argumento de ThrowIfNullOrWhiteSpace é a mensagem de erro (chave de config), não um parâmetro caller-info — falso positivo.
+// SonarQube S3236: ThrowIfNullOrWhiteSpace recebe a chave de config (Embeddings:Endpoint (Ollama)) como mensagem, não um parâmetro caller-info — falso positivo.
 #pragma warning disable S3236
 
 // SonarQube S1075: endpoint e path 'api/embeddings' vêm de Embeddings:Endpoint/protocolo Ollama — não há URI hardcoded.

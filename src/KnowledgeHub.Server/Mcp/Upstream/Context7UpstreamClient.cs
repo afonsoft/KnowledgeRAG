@@ -31,14 +31,8 @@ public sealed class Context7UpstreamClient(
     internal Func<HttpClientTransportOptions, IClientTransport>? TransportFactory { get; set; }
 
     /// <summary>Effective API key (store → env/config). Null when none is configured.</summary>
-    public async Task<string?> ResolveApiKeyAsync(CancellationToken cancellationToken = default)
-    {
-        var stored = await secrets.GetAsync(IntegrationProviders.Context7, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(stored))
-            return stored;
-        var configured = _options.ApiKey;
-        return string.IsNullOrWhiteSpace(configured) ? null : configured;
-    }
+    public async Task<string?> ResolveApiKeyAsync(CancellationToken cancellationToken = default) =>
+        await secrets.GetEffectiveAsync(IntegrationProviders.Context7, _options.ApiKey, cancellationToken);
 
     public async Task<bool> HasApiKeyAsync(CancellationToken cancellationToken = default) =>
         await ResolveApiKeyAsync(cancellationToken) is not null;

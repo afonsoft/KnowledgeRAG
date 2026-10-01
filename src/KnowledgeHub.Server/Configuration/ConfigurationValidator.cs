@@ -41,10 +41,10 @@ public static class ConfigurationValidator
         ValidateDatabase(configuration, problems);
         ValidateEmbeddings(configuration, problems);
         ValidateVectorStore(configuration, problems);
-        ValidateDeepWiki(configuration, problems);
-        ValidateFirecrawl(configuration, problems);
-        ValidateTavily(configuration, problems);
-        ValidateContext7(configuration, problems);
+        ValidateUpstreamIntegration(configuration, DeepWikiOptions.SectionName, problems);
+        ValidateUpstreamIntegration(configuration, FirecrawlOptions.SectionName, problems);
+        ValidateUpstreamIntegration(configuration, TavilyOptions.SectionName, problems);
+        ValidateUpstreamIntegration(configuration, Context7Options.SectionName, problems);
         ValidateCache(configuration, problems);
         ValidateChat(configuration, problems);
         ValidateAuth(configuration, problems);
@@ -123,8 +123,7 @@ public static class ConfigurationValidator
                 problems.Add($"Embeddings:Dimensions '{onnxDims}' must be {OnnxEmbeddingProvider.EmbeddingDimensions} when Provider=onnx");
         }
 
-        if (section["Dimensions"] is { } dims && (!int.TryParse(dims, out var d) || d <= 0))
-            problems.Add($"Embeddings:Dimensions '{dims}' must be a positive integer");
+        RequirePositiveInt(section, "Dimensions", "Embeddings", problems);
     }
 
     private static void ValidateVectorStore(IConfiguration cfg, List<string> problems)
@@ -140,10 +139,7 @@ public static class ConfigurationValidator
 
         // SPEC-20260923-pgvector-hnsw-scale: numeric knobs must be positive ints.
         foreach (var key in new[] { "HnswThreshold", "HnswM", "HnswEfConstruction", "BatchMax" })
-        {
-            if (section[$"Postgres:{key}"] is { } v && (!int.TryParse(v, out var n) || n <= 0))
-                problems.Add($"VectorStore:Postgres:{key} '{v}' must be a positive integer");
-        }
+            RequirePositiveInt(section, $"Postgres:{key}", "VectorStore", problems);
 
         // SPEC-20260917-sqlite-vec-search CA-002: the extension is native and
         // RID-specific — probe it at startup so a missing lib fails loudly.
@@ -164,71 +160,28 @@ public static class ConfigurationValidator
         }
     }
 
-    private static void ValidateDeepWiki(IConfiguration cfg, List<string> problems)
+    private static void ValidateUpstreamIntegration(IConfiguration cfg, string sectionName, List<string> problems)
     {
-        var section = cfg.GetSection(DeepWikiOptions.SectionName);
+        var section = cfg.GetSection(sectionName);
         if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
             return;
 
-        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
-            problems.Add($"DeepWiki:Endpoint '{endpoint}' must be an absolute http(s) URI");
-
-        if (section[PrivateEndpointKey] is { } privateEndpoint && !IsHttpUri(privateEndpoint))
-            problems.Add($"DeepWiki:PrivateEndpoint '{privateEndpoint}' must be an absolute http(s) URI");
-
-        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
-            problems.Add($"DeepWiki:TimeoutSeconds '{t}' must be a positive integer");
-
-        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
-            problems.Add($"DeepWiki:ToolsCacheSeconds '{tc}' must be a positive integer");
+        RequireHttpUri(section, EndpointKey, sectionName, problems);
+        RequireHttpUri(section, PrivateEndpointKey, sectionName, problems);
+        RequirePositiveInt(section, TimeoutSecondsKey, sectionName, problems);
+        RequirePositiveInt(section, ToolsCacheSecondsKey, sectionName, problems);
     }
 
-    private static void ValidateFirecrawl(IConfiguration cfg, List<string> problems)
+    private static void RequireHttpUri(IConfigurationSection section, string key, string prefix, List<string> problems)
     {
-        var section = cfg.GetSection(FirecrawlOptions.SectionName);
-        if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
-            return;
-
-        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
-            problems.Add($"Firecrawl:Endpoint '{endpoint}' must be an absolute http(s) URI");
-
-        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
-            problems.Add($"Firecrawl:TimeoutSeconds '{t}' must be a positive integer");
-
-        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
-            problems.Add($"Firecrawl:ToolsCacheSeconds '{tc}' must be a positive integer");
+        if (section[key] is { } value && !IsHttpUri(value))
+            problems.Add($"{prefix}:{key} '{value}' must be an absolute http(s) URI");
     }
 
-    private static void ValidateTavily(IConfiguration cfg, List<string> problems)
+    private static void RequirePositiveInt(IConfigurationSection section, string key, string prefix, List<string> problems)
     {
-        var section = cfg.GetSection(TavilyOptions.SectionName);
-        if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
-            return;
-
-        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
-            problems.Add($"Tavily:Endpoint '{endpoint}' must be an absolute http(s) URI");
-
-        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
-            problems.Add($"Tavily:TimeoutSeconds '{t}' must be a positive integer");
-
-        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
-            problems.Add($"Tavily:ToolsCacheSeconds '{tc}' must be a positive integer");
-    }
-
-    private static void ValidateContext7(IConfiguration cfg, List<string> problems)
-    {
-        var section = cfg.GetSection(Context7Options.SectionName);
-        if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
-            return;
-
-        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
-            problems.Add($"Context7:Endpoint '{endpoint}' must be an absolute http(s) URI");
-
-        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
-            problems.Add($"Context7:TimeoutSeconds '{t}' must be a positive integer");
-
-        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
-            problems.Add($"Context7:ToolsCacheSeconds '{tc}' must be a positive integer");
+        if (section[key] is { } value && (!int.TryParse(value, out var n) || n <= 0))
+            problems.Add($"{prefix}:{key} '{value}' must be a positive integer");
     }
 
     private static void ValidateCache(IConfiguration cfg, List<string> problems)
@@ -262,12 +215,10 @@ public static class ConfigurationValidator
         if (string.IsNullOrWhiteSpace(section[ModelKey]))
             problems.Add($"Chat:Model is required when Provider={provider}");
 
-        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
-            problems.Add($"Chat:TimeoutSeconds '{t}' must be a positive integer");
+        RequirePositiveInt(section, TimeoutSecondsKey, "Chat", problems);
         if (section["Temperature"] is { } temp && !double.TryParse(temp, out _))
             problems.Add($"Chat:Temperature '{temp}' must be a number");
-        if (section["MaxTokens"] is { } mt && (!int.TryParse(mt, out var m) || m <= 0))
-            problems.Add($"Chat:MaxTokens '{mt}' must be a positive integer");
+        RequirePositiveInt(section, "MaxTokens", "Chat", problems);
     }
 
     private static void ValidateAuth(IConfiguration cfg, List<string> problems)
@@ -275,14 +226,10 @@ public static class ConfigurationValidator
         var section = cfg.GetSection(AuthOptions.SectionName);
         if (section["AdminInitialPassword"] is { } pw && string.IsNullOrWhiteSpace(pw))
             problems.Add("Auth:AdminInitialPassword must be non-empty when set");
-        if (section["LockoutThreshold"] is { } t && (!int.TryParse(t, out var n) || n <= 0))
-            problems.Add($"Auth:LockoutThreshold '{t}' must be a positive integer");
-        if (section["LockoutMinutes"] is { } m && (!int.TryParse(m, out var mm) || mm <= 0))
-            problems.Add($"Auth:LockoutMinutes '{m}' must be a positive integer");
-        if (section["MinPasswordLength"] is { } l && (!int.TryParse(l, out var ll) || ll <= 0))
-            problems.Add($"Auth:MinPasswordLength '{l}' must be a positive integer");
-        if (section["SessionHours"] is { } h && (!int.TryParse(h, out var hh) || hh <= 0))
-            problems.Add($"Auth:SessionHours '{h}' must be a positive integer");
+        RequirePositiveInt(section, "LockoutThreshold", "Auth", problems);
+        RequirePositiveInt(section, "LockoutMinutes", "Auth", problems);
+        RequirePositiveInt(section, "MinPasswordLength", "Auth", problems);
+        RequirePositiveInt(section, "SessionHours", "Auth", problems);
     }
 
     private static void ValidateRateLimiting(IConfiguration cfg, List<string> problems)
@@ -294,10 +241,7 @@ public static class ConfigurationValidator
             "LlmPermitLimit", "LlmWindowSeconds", "AnonymousLlmPermitLimit",
             "SyncPermitLimit", "SyncWindowSeconds", "GeneralPermitLimit", "GeneralWindowSeconds"
         })
-        {
-            if (section[key] is { } v && (!int.TryParse(v, out var n) || n <= 0))
-                problems.Add($"RateLimiting:{key} '{v}' must be a positive integer");
-        }
+            RequirePositiveInt(section, key, "RateLimiting", problems);
     }
 
     private static bool IsHttpUri(string? value) =>

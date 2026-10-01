@@ -467,30 +467,9 @@ public static class SettingsEndpoints
         string provider, IIntegrationSecretStore store, IIntegrationStateService state,
         IConfiguration cfg, CancellationToken ct)
     {
-        var info = await store.GetInfoAsync(provider, ct);
         var envKey = cfg[$"{ConfigSection(provider)}:ApiKey"];
-
-        bool hasKey;
-        string? hint;
-        string source;
-        if (info is not null)
-        {
-            hasKey = true;
-            hint = MaskHint(provider, info.KeyHint);
-            source = "store";
-        }
-        else if (!string.IsNullOrWhiteSpace(envKey))
-        {
-            hasKey = true;
-            hint = MaskHint(provider, envKey.Length >= 4 ? envKey[^4..] : envKey);
-            source = "env";
-        }
-        else
-        {
-            hasKey = false;
-            hint = null;
-            source = "none";
-        }
+        var (hasKey, last4, source) = await store.GetKeyStatusAsync(provider, envKey, ct);
+        var hint = last4 is null ? null : MaskHint(provider, last4);
 
         return new IntegrationSettingsDto
         {
