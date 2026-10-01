@@ -267,6 +267,39 @@ public sealed class A2aTaskDurabilityTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task TerminalDispatch_NotifierThrows_SaveStillSucceeds()
+    {
+        // Dispatch is fire-and-forget — a notifier failure must not break saves.
+        var store = new EfA2aTaskStore(
+            new CatalogDatabase(CatalogProvider.Sqlite, null),
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Path"] = _dbPath })
+                .Build(),
+            new HttpContextAccessor(),
+            new ThrowingNotifier(),
+            NullLogger<EfA2aTaskStore>.Instance);
+
+        await store.SaveTaskAsync("t1", MkTask("t1", "c", TaskState.Working));
+        await store.UpsertPushConfigAsync("t1", Config("cfg", "https://hooks.example/x"));
+        await store.SaveTaskAsync("t1", MkTask("t1", "c", TaskState.Completed));
+
+        var reloaded = await store.GetTaskAsync("t1");
+        Assert.Equal(TaskState.Completed, reloaded!.Status.State);
+    }
+
+    [Fact]
+    public async Task GetPushConfigs_UnknownTask_ReturnsEmpty()
+        => Assert.Empty(await Store().GetPushConfigsAsync("ghost"));
+
+    private sealed class ThrowingNotifier : IA2aPushNotifier
+    {
+        public Task DispatchTerminalAsync(
+            AgentTask task, IReadOnlyList<TaskPushNotificationConfig> configs,
+            CancellationToken cancellationToken)
+            => throw new InvalidOperationException("boom");
+    }
+
     // ---- RF-004: write provenance frontmatter ----------------------------
 
     [Fact]
