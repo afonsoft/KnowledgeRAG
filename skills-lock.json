@@ -5,7 +5,7 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/architecture/SKILL.md",
-      "computedHash": "42c7245e2fe7d5b61391301f1f311ab3f0141b734c45b56142ddd0894f4147bd"
+      "computedHash": "6907207ec527840c357ea229f314f36d76972d37883378e65821a05731ca480c"
     },
     "building-mcp-servers": {
       "source": "afonsoft/skills",
@@ -53,7 +53,7 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/diagnose/SKILL.md",
-      "computedHash": "0f4cd8de73705965ec1a7b42a93d9a604036db5f569b8a7ea6b17d074dd55810"
+      "computedHash": "d6db547e84ddbd0e13f0fdb9119f7adf8aee28c3623854be92c40e52d7fc2db7"
     },
     "drawio-architecture": {
       "source": "afonsoft/skills",
@@ -89,7 +89,7 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/notebooklm-mcp/SKILL.md",
-      "computedHash": "96ae14b5509edfc2dfe6c72371dc1374926c52e2e08086b569a8b2b259934ad1"
+      "computedHash": "7d588d6decca8f37d2f3872e21810574182b24fe6b2cfbc8c1086f0c763f3a1a"
     },
     "observability-and-instrumentation": {
       "source": "afonsoft/skills",
@@ -113,7 +113,7 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/qa-analyst/SKILL.md",
-      "computedHash": "977a24fe819fcb322fc384563cdc6465a45492a335f1db85bc69ddb6a2f82777"
+      "computedHash": "9d681b5d3e6793ae8b18fe8ff81f0cfac3ee4a01a245bdf910b541b042c1dac9"
     },
     "quality-test-implementation": {
       "source": "afonsoft/skills",
@@ -131,7 +131,7 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/sonarqube-autofix/SKILL.md",
-      "computedHash": "697a15073e50d99515c8493fdb02437e133ad277dc330f75f25688ed58393b88"
+      "computedHash": "aa44e3f7a8738ce3be0fbb4e6cae48ae62266fe5576bf75eaf9725dce84de4d2"
     },
     "wordpress-mcp": {
       "source": "afonsoft/skills",
