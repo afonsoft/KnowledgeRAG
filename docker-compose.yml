@@ -82,3 +82,5 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    mem_limit: 8g
+    memswap_limit: 8g
