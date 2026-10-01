@@ -341,10 +341,8 @@ else
                 <BodyTemplate>
                     <div class="row g-2 mb-2">
                         <div class="col-6 col-md-3">
-                            <label class="form-label">Habilitado</label>
-                            <div class="form-check form-switch mt-1">
-                                <input class="form-check-input" type="checkbox" @bind="_asForm.Enabled" />
-                            </div>
+                            <Switch @bind-Value="_asForm.Enabled"
+                                    DisplayText="Habilitado" ShowLabel="true" />
                         </div>
                         <div class="col-6 col-md-3">
                             <label class="form-label">Modo</label>
@@ -1430,8 +1428,12 @@ else
             _assistant = await Api.GetAssistantAsync();
             _asForm.Enabled = _assistant?.Enabled ?? false;
             _asForm.Mode = _assistant?.Mode ?? "local";
-            _asForm.Endpoint = _assistant?.Endpoint ?? "";
-            _asForm.Model = _assistant?.Model ?? "";
+            _asForm.Endpoint = !string.IsNullOrWhiteSpace(_assistant?.Endpoint)
+                ? _assistant!.Endpoint
+                : (_chat?.Endpoint ?? "");
+            _asForm.Model = !string.IsNullOrWhiteSpace(_assistant?.Model)
+                ? _assistant!.Model
+                : (_chat?.Model ?? "");
             _asForm.Route = new HashSet<string>(_assistant?.Route ?? [], StringComparer.OrdinalIgnoreCase);
             _asForm.TimeoutSeconds = _assistant?.TimeoutSeconds ?? 15;
             _asForm.TestResult = null;
