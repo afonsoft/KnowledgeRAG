@@ -88,6 +88,12 @@ public static class KnowledgeHubServiceCollectionExtensions
                 // Sampling window must be ≥ 2× the attempt timeout.
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(4);
             });
+        // SPEC-20261001-a2a-task-durability RF-003: A2A push webhooks ride the
+        // same SSRF egress policy as connector traffic (no auto-redirects,
+        // private-network block unless opted in).
+        services.AddHttpClient("a2a-push", c => c.Timeout = TimeSpan.FromSeconds(15))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddHttpClient("webpage", c => c.Timeout = Timeout.InfiniteTimeSpan).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()))
             .AddStandardResilienceHandler(o =>
             {

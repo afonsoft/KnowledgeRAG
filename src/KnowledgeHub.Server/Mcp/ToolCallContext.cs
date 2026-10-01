@@ -17,4 +17,10 @@ public sealed record ToolCallContext
     /// agent thread — lets retrieval tools contextualise follow-up questions.
     /// Null outside agent loops.</summary>
     public string? ConversationContext { get; init; }
+
+    /// <summary>SPEC-20261001-a2a-task-durability RF-002: optional progress
+    /// sink — transports that support incremental updates (A2A task events)
+    /// set it; long-running tools report human-readable progress lines.
+    /// Best-effort: handlers invoke it, callers tolerate null.</summary>
+    public Func<string, CancellationToken, ValueTask>? OnProgress { get; init; }
 }

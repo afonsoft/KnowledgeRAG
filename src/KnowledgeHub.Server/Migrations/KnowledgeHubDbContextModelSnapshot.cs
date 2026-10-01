@@ -17,6 +17,53 @@ namespace KnowledgeHub.Server.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.A2aTask", b =>
+                {
+                    b.Property<string>("TaskId")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CallerKeyId")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContextId")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("LastUpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PushConfigsJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("PushDispatched")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TaskJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TaskId");
+
+                    b.HasIndex("ContextId");
+
+                    b.HasIndex("LastUpdatedAt");
+
+                    b.HasIndex("State");
+
+                    b.ToTable("A2aTasks");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ApiKey", b =>
                 {
                     b.Property<Guid>("Id")

@@ -27,7 +27,8 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
     /// <summary>Skills this agent advertises and accepts (SPEC RF-001).</summary>
     internal static readonly HashSet<string> DelegableSkills = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ask_knowledge", "search_knowledge", "agent_chat", "read_document"
+        "ask_knowledge", "search_knowledge", "agent_chat", "read_document",
+        "write_knowledge", "write_note"
     };
 
     private const string DefaultSkill = "ask_knowledge";
@@ -43,6 +44,19 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
 
         using var span = KnowledgeHubActivity.Start("a2a.serve");
         span?.SetTag("a2a.skill", skill ?? "rejected");
+
+        // RF-004: write tools invoked downstream stamp frontmatter origin —
+        // channel "a2a" + caller key + advertised agent name (when provided).
+        if (services?.GetService<WriteOriginContext>() is { } origin)
+        {
+            origin.Channel = "a2a";
+            origin.KeyId = http.HttpContext?.User
+                .FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
+            origin.AgentName = context.Message?.Metadata is { } md
+                && md.TryGetValue("agentName", out var an)
+                && an.ValueKind == JsonValueKind.String
+                    ? an.GetString() : null;
+        }
 
         var route = new InvocationRoute(skill, arguments, routeError);
         if (string.IsNullOrEmpty(context.TaskId))
@@ -97,7 +111,15 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
 
         await updater.StartWorkAsync(cancellationToken: ct);
 
-        var (success, parts, resultJson) = await InvokeAsync(services, route.Skill, route.Arguments, span, ct);
+        // RF-002: incremental progress — agent_chat reports per iteration via
+        // OnProgress; a heartbeat covers any other skill running >2s so the
+        // caller sees working updates instead of a silent task.
+        ValueTask ProgressAsync(string message, CancellationToken pctx) =>
+            updater.StartWorkAsync(AgentMessage(message, context.ContextId), pctx);
+        var work = InvokeAsync(services, route.Skill, route.Arguments, span, ct, ProgressAsync);
+        var heartbeat = HeartbeatAsync(work, route.Skill, context.ContextId, updater, logger, ct);
+        var (success, parts, resultJson) = await work;
+        await heartbeat;
 
         await updater.AddArtifactAsync(parts, artifactId: $"art_{route.Skill}",
             name: route.Skill, lastChunk: true, cancellationToken: ct);
@@ -129,9 +151,39 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         => await new TaskUpdater(eventQueue, context.TaskId, context.ContextId)
             .CancelAsync(cancellationToken);
 
+    /// <summary>SPEC-20261001-a2a-task-durability RF-002: heartbeat working
+    /// updates while a skill call is in-flight — covers any skill slower than
+    /// ~2s (agent_chat also reports per-iteration lines via OnProgress).
+    /// Exits when the work completes; never throws.</summary>
+    private static async Task HeartbeatAsync(
+        Task work, string skill, string? contextId, TaskUpdater updater,
+        ILogger? logger, CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            while (!work.IsCompleted)
+            {
+                var delay = Task.Delay(TimeSpan.FromSeconds(2), ct);
+                if (await Task.WhenAny(work, delay) == work)
+                    return;
+                await updater.StartWorkAsync(
+                    AgentMessage($"working — {skill} ({sw.Elapsed.TotalSeconds:F0}s)", contextId), ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            logger?.LogDebug(ex, "a2a progress heartbeat stopped");
+        }
+    }
+
     private static async Task<(bool Success, List<Part> Parts, string? ResultJson)> InvokeAsync(
         IServiceProvider services, string skill, IDictionary<string, JsonElement>? args,
-        Activity? span, CancellationToken ct)
+        Activity? span, CancellationToken ct,
+        Func<string, CancellationToken, ValueTask>? progress = null)
     {
         var catalog = services.GetRequiredService<IDynamicToolCatalog>();
         var tool = (await catalog.GetToolsAsync(services, ct))
@@ -155,19 +207,20 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
             return (false, [Part.FromText($"skill '{skill}' requires write access")], null);
         }
 
-        return await CallToolAsync(services, tool, args, span, ct);
+        return await CallToolAsync(services, tool, args, span, ct, progress);
     }
 
     /// <summary>Invokes the catalog handler and maps content/structured content
     /// to A2A parts (text parts first, structured payload as a data part).</summary>
     private static async Task<(bool, List<Part>, string?)> CallToolAsync(
         IServiceProvider services, CatalogTool tool,
-        IDictionary<string, JsonElement>? args, Activity? span, CancellationToken ct)
+        IDictionary<string, JsonElement>? args, Activity? span, CancellationToken ct,
+        Func<string, CancellationToken, ValueTask>? progress = null)
     {
         try
         {
             var result = await tool.Handler(
-                new ToolCallContext { Services = services, Arguments = args }, ct);
+                new ToolCallContext { Services = services, Arguments = args, OnProgress = progress }, ct);
             var json = result.StructuredContent is { } sc
                 && sc.ValueKind is JsonValueKind.Object or JsonValueKind.Array
                 ? sc.GetRawText()
@@ -218,10 +271,15 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
             case "ask_knowledge": Primary("question"); break;
             case "search_knowledge": Primary("query"); break;
             case "read_document": Primary("path"); break;
+            case "write_knowledge":
+            case "write_note":
+                Primary("content");
+                break;
             case "agent_chat":
-                Primary("message");
-                args.TryAdd("threadId",
-                    JsonSerializer.SerializeToElement(context.ContextId ?? context.TaskId));
+                Primary("prompt");
+                // No threadId auto-map: A2A contextIds share the Guid format
+                // but are not ConversationThread rows — RunAsync throws on a
+                // missing thread. Callers pass arguments.threadId explicitly.
                 break;
         }
 

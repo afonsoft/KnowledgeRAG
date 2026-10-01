@@ -188,9 +188,32 @@ builder.Services.AddHostedService<IngestionProgressBroadcastService>();
 // rebuilds the card per-request with the actual scheme/host.
 const string A2aFallbackBaseUrl = "http://localhost:5000/"; // NOSONAR — dev fallback; prod sets A2A:BaseUrl
 
+// SPEC-20261001-a2a-task-durability RF-001/RF-003: durable EF task store +
+// push-config CRUD replace the SDK's InMemoryTaskStore/base A2AServer —
+// AddA2AAgent uses TryAdd*, so registering first wins.
+builder.Services.AddSingleton<KnowledgeHub.Server.A2A.EfA2aTaskStore>();
+builder.Services.AddSingleton<global::A2A.ITaskStore>(
+    sp => sp.GetRequiredService<KnowledgeHub.Server.A2A.EfA2aTaskStore>());
+builder.Services.AddSingleton<KnowledgeHub.Server.A2A.IA2aPushNotifier,
+    KnowledgeHub.Server.A2A.A2aPushNotifier>();
+builder.Services.AddSingleton<global::A2A.IA2ARequestHandler>(sp =>
+    new KnowledgeHub.Server.A2A.KnowledgeHubA2AServer(
+        sp.GetRequiredService<global::A2A.IAgentHandler>(),
+        sp.GetRequiredService<KnowledgeHub.Server.A2A.EfA2aTaskStore>(),
+        sp.GetRequiredService<global::A2A.ChannelEventNotifier>(),
+        sp.GetRequiredService<ILogger<global::A2A.A2AServer>>(),
+        sp.GetRequiredService<global::A2A.A2AServerOptions>(),
+        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService<KnowledgeHub.Server.A2A.IA2aPushNotifier>(),
+        sp.GetRequiredService<ILogger<KnowledgeHub.Server.A2A.KnowledgeHubA2AServer>>()));
+// RF-004: ambient write provenance (mcp|a2a channel, key id, agent name).
+builder.Services.AddScoped<KnowledgeHub.Server.Mcp.WriteOriginContext>();
+
 builder.Services.AddA2AAgent<KnowledgeHub.Server.A2A.KnowledgeHubA2AAgent>(
     KnowledgeHub.Server.A2A.A2AEndpointExtensions.BuildAgentCard(
-        new Uri(builder.Configuration["A2A:BaseUrl"] ?? A2aFallbackBaseUrl)));
+        new Uri(builder.Configuration["A2A:BaseUrl"] ?? A2aFallbackBaseUrl),
+        builder.Configuration.GetValue(
+            KnowledgeHub.Server.A2A.KnowledgeHubA2AServer.EnabledConfigKey, true)));
 
 // SPEC-20260914-auth-login: cookie session (browser SPA) + aft_* API keys
 // (non-browser MCP/API/hub clients). Secure=SameAsRequest keeps dev/test over

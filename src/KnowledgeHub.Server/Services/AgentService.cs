@@ -506,6 +506,23 @@ public sealed class AgentService(
         return sb.ToString();
     }
 
+    /// <summary>SPEC-20261001-a2a-task-durability RF-002: forwards loop progress
+    /// to the caller's sink (A2A working updates) — best-effort, a failing
+    /// callback must never break the agent loop.</summary>
+    private async ValueTask ReportProgressAsync(LoopState loop, string message, CancellationToken ct)
+    {
+        if (loop.Request.OnProgress is not { } report)
+            return;
+        try
+        {
+            await report(message, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "agent progress callback failed — continuing");
+        }
+    }
+
     private async Task<AgentResponse> RunLoopAsync(
         IChatClient client, LoopState loop, CancellationToken cancellationToken,
         ChannelWriter<SseEvent>? sink = null)
@@ -519,6 +536,8 @@ public sealed class AgentService(
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 loop.Iterations++;
+                await ReportProgressAsync(loop, $"iteration {loop.Iterations}/{loop.MaxIterations} — reasoning",
+                    cancellationToken);
 
                 ChatResponse response;
                 using (var iterSpan = Telemetry.KnowledgeHubActivity.Start("agent_iteration"))
@@ -599,6 +618,9 @@ public sealed class AgentService(
                     }
 
                     var fn = loop.Functions.FirstOrDefault(f => f.Name == call.Name);
+                    await ReportProgressAsync(loop,
+                        $"iteration {loop.Iterations}/{loop.MaxIterations} — calling {call.Name}",
+                        cancellationToken);
                     await WriteEventAsync(sink, new SseEvent("tool_start",
                         new { tool = call.Name, args = Summarize(call.Arguments) }), cancellationToken);
                     var stepSw = Stopwatch.StartNew();

@@ -14,8 +14,11 @@ namespace KnowledgeHub.Server.A2A;
 /// </summary>
 public static class A2AEndpointExtensions
 {
-    /// <summary>Builds the card with absolute URLs for the given base.</summary>
-    public static AgentCard BuildAgentCard(Uri baseUri)
+    /// <summary>Builds the card with absolute URLs for the given base.
+    /// SPEC-20261001-a2a-task-durability RF-003/RF-005: <c>pushNotifications</c>
+    /// is declared only when <c>A2a:PushNotifications:Enabled</c> is on, and
+    /// every skill advertises its input/output modes for richer discovery.</summary>
+    public static AgentCard BuildAgentCard(Uri baseUri, bool pushEnabled)
     {
         var a2aUrl = new Uri(baseUri, "a2a").ToString();
         var baseUrl = baseUri.ToString().TrimEnd('/');
@@ -34,7 +37,7 @@ public static class A2AEndpointExtensions
             ],
             DefaultInputModes = ["text/plain", "application/json"],
             DefaultOutputModes = ["text/plain", "application/json"],
-            Capabilities = new AgentCapabilities { Streaming = true, PushNotifications = false },
+            Capabilities = new AgentCapabilities { Streaming = true, PushNotifications = pushEnabled },
             SecuritySchemes = new Dictionary<string, SecurityScheme>
             {
                 ["bearer"] = new()
@@ -65,7 +68,9 @@ public static class A2AEndpointExtensions
                     Name = "Ask knowledge",
                     Description = "Grounded Q&A over the indexed knowledge base — returns a synthesized answer with [n] citations.",
                     Tags = ["rag", "qa", "knowledge"],
-                    Examples = ["What changed in the last release?"]
+                    Examples = ["What changed in the last release?"],
+                    InputModes = ["text/plain", "application/json"],
+                    OutputModes = ["text/plain", "application/json"]
                 },
                 new AgentSkill
                 {
@@ -73,7 +78,9 @@ public static class A2AEndpointExtensions
                     Name = "Search knowledge",
                     Description = "Hybrid semantic + lexical search across all active sources — ranked passages with provenance.",
                     Tags = ["search", "retrieval"],
-                    Examples = ["rate limiting policy"]
+                    Examples = ["rate limiting policy"],
+                    InputModes = ["text/plain", "application/json"],
+                    OutputModes = ["text/plain", "application/json"]
                 },
                 new AgentSkill
                 {
@@ -81,15 +88,39 @@ public static class A2AEndpointExtensions
                     Name = "Agent chat",
                     Description = "Multi-turn agentic loop with tool-calling over the live catalog.",
                     Tags = ["agent", "chat", "tools"],
-                    Examples = ["Summarize today's ingestion run"]
+                    Examples = ["Summarize today's ingestion run"],
+                    InputModes = ["text/plain"],
+                    OutputModes = ["text/plain", "application/json"]
                 },
                 new AgentSkill
                 {
                     Id = "read_document",
                     Name = "Read document",
-                    Description = "Reads a full markdown document from a connected vault by path.",
+                    Description = "Reads a full markdown document from a connected vault by path — input is a JSON object with a `path` field.",
                     Tags = ["docs", "read"],
-                    Examples = ["roadmap/2026.md"]
+                    Examples = ["roadmap/2026.md"],
+                    InputModes = ["application/json"],
+                    OutputModes = ["text/plain"]
+                },
+                new AgentSkill
+                {
+                    Id = "write_knowledge",
+                    Name = "Write knowledge",
+                    Description = "Creates a document in the connected vault — input is a JSON object with `title` and `content` (optional `source`, `tags`). Requires a write-capable credential.",
+                    Tags = ["docs", "write", "knowledge"],
+                    Examples = ["{\"title\": \"Runbook\", \"content\": \"Restart steps…\"}"],
+                    InputModes = ["application/json"],
+                    OutputModes = ["text/plain"]
+                },
+                new AgentSkill
+                {
+                    Id = "write_note",
+                    Name = "Write note",
+                    Description = "Writes a markdown note into the Obsidian vault — input is a JSON object with `title` and `content` (optional `path`, `tags`). Requires a write-capable credential.",
+                    Tags = ["docs", "write", "obsidian"],
+                    Examples = ["{\"title\": \"Daily log\", \"content\": \"…\"}"],
+                    InputModes = ["application/json"],
+                    OutputModes = ["text/plain"]
                 }
             ]
         };
@@ -99,10 +130,14 @@ public static class A2AEndpointExtensions
     public static void MapA2AApi(this WebApplication app)
     {
         // Well-known card: anonymous, per-request absolute URLs (proxy-safe).
+        // The push-notifications flag reads live configuration so test-host
+        // overrides apply even though the DI card was built at startup.
         app.MapGet("/.well-known/agent-card.json", (HttpContext http) =>
         {
             var baseUri = new Uri($"{http.Request.Scheme}://{http.Request.Host}/");
-            var card = BuildAgentCard(baseUri);
+            var cfg = http.RequestServices.GetRequiredService<IConfiguration>();
+            var card = BuildAgentCard(baseUri,
+                cfg.GetValue(KnowledgeHubA2AServer.EnabledConfigKey, true));
             return Results.Json(card, A2AJsonUtilities.DefaultOptions);
         }).AllowAnonymous();
 

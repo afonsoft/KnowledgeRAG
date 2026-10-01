@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace KnowledgeHub.Shared.Contracts;
 
 /// <summary>POST /api/agent request / agent_chat args (SPEC-20260914-agent-chat-loop).</summary>
@@ -16,6 +18,11 @@ public sealed record AgentRequest
     public Guid? ThreadId { get; init; }
     /// <summary>Create a new thread and persist this run's turns when no ThreadId is given.</summary>
     public bool Persist { get; init; }
+    /// <summary>SPEC-20261001-a2a-task-durability RF-002: in-process progress
+    /// callback (per iteration/tool call) — set by transports that can stream
+    /// task updates. Never serialized.</summary>
+    [JsonIgnore]
+    public Func<string, CancellationToken, ValueTask>? OnProgress { get; init; }
 }
 
 /// <summary>One prior conversation turn for <see cref="AgentRequest.Messages"/>.</summary>

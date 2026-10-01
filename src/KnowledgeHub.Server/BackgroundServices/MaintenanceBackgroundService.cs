@@ -26,6 +26,7 @@ public sealed class MaintenanceBackgroundService(
             try
             {
                 await PurgeOrphanedStagingAsync(stoppingToken);
+                await PurgeA2aTasksAsync(stoppingToken);
                 await VacuumVectorStoreAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -52,6 +53,25 @@ public sealed class MaintenanceBackgroundService(
         var removed = await staging.CleanupOrphanedStagingAsync(knownIds, ct);
         if (removed > 0)
             logger.LogInformation("Maintenance purged {Count} orphaned staging directorie(s)", removed);
+    }
+
+    /// <summary>SPEC-20261001-a2a-task-durability RF-001: purges A2A tasks
+    /// older than <c>A2a:TaskRetentionHours</c> (default 72h) — durable
+    /// storage grows with every delegated task otherwise.</summary>
+    private async Task PurgeA2aTasksAsync(CancellationToken ct)
+    {
+        var retention = TimeSpan.FromHours(
+            Math.Max(1, configuration.GetValue("A2a:TaskRetentionHours", 72)));
+        var cutoff = DateTimeOffset.UtcNow - retention;
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var removed = await scope.ServiceProvider
+            .GetRequiredService<A2A.EfA2aTaskStore>()
+            .PurgeOlderThanAsync(cutoff, ct);
+        if (removed > 0)
+            logger.LogInformation(
+                "Maintenance purged {Count} A2A task(s) past {Hours}h retention",
+                removed, retention.TotalHours);
     }
 
     /// <summary>SPEC-20260925-pgvector-source-cascade RF-003: weekly VACUUM

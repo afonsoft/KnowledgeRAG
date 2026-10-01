@@ -110,7 +110,8 @@ public sealed class ObsidianToolsProvider : IToolProvider
         var full = ObsidianNoteWriter.SafePath(root, path, forWrite: true);
 
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(content, tags), ct);
+        await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(
+            content, tags, ObsidianNoteWriter.ResolveOrigin(ctx.Services!)), ct);
 
         var relative = Path.GetRelativePath(root, full);
         var ingestion = ctx.Services!.GetRequiredService<IngestionService>();

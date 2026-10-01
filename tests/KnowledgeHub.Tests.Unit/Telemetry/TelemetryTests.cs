@@ -424,6 +424,8 @@ public sealed class TelemetryTests
             IReadOnlyList<KnowledgeHub.Server.Domain.Entities.EvidenceReceipt> receipts,
             CancellationToken ct) =>
             throw new InvalidOperationException("store down");
+        public Task<string> SignPayloadAsync(string payload, CancellationToken ct) =>
+            throw new InvalidOperationException("store down");
     }
 
     [Fact]

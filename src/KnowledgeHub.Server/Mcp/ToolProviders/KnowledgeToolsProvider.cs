@@ -531,7 +531,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             MaxIterations = ToolArgs.OptionalInt(ctx, "maxIterations", 10, 50),
             AllowWrite = ToolArgs.OptionalBool(ctx, "allowWrite") == true,
             ThreadId = ToolArgs.OptionalString(ctx, "threadId") is { } tid && Guid.TryParse(tid, out var g) ? g : null,
-            Persist = ToolArgs.OptionalBool(ctx, "persist") == true
+            Persist = ToolArgs.OptionalBool(ctx, "persist") == true,
+            // SPEC-20261001-a2a-task-durability RF-002: A2A task calls carry a
+            // progress sink — the loop reports iteration/tool progress lines.
+            OnProgress = ctx.OnProgress
         };
 
         try
@@ -561,6 +564,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         var content = ToolArgs.RequiredString(ctx, "content");
         var sourceSlug = ToolArgs.OptionalString(ctx, "source");
         var tags = ToolArgs.OptionalStringArray(ctx, "tags");
+        var origin = ObsidianNoteWriter.ResolveOrigin(ctx.Services!);
 
         var db = ctx.Services!.GetRequiredService<KnowledgeHubDbContext>();
         var ingestion = ctx.Services!.GetRequiredService<IngestionService>();
@@ -587,7 +591,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             var full = ObsidianNoteWriter.SafePath(root, relative, forWrite: true);
 
             Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(content, tags), ct);
+            await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(content, tags, origin), ct);
 
             var relPath = Path.GetRelativePath(root, full);
             await ingestion.SyncFileAsync(target.Id, relPath, ct);
@@ -620,7 +624,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             db.Chunks.RemoveRange(doc2.Chunks);
         }
 
-        var body = ObsidianNoteWriter.WithFrontmatter(content, tags);
+        var body = ObsidianNoteWriter.WithFrontmatter(content, tags, origin);
         doc2.RawContent = body;
         doc2.ContentHash = Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(body)));

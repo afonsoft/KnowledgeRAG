@@ -41,4 +41,10 @@ public interface IEvidenceChainService
     /// grown in between.</summary>
     Task<EvidenceVerification> VerifyReceiptsAsync(
         IReadOnlyList<EvidenceReceipt> receipts, CancellationToken ct);
+
+    /// <summary>SPEC-20261001-a2a-task-durability RF-003: HMAC-SHA256 over an
+    /// arbitrary payload with the instance signing key — backs the A2A push
+    /// webhook <c>X-KH-Signature</c> header with the same key material as
+    /// receipt signatures. Returns <c>hmac-sha256:{hex}</c>.</summary>
+    Task<string> SignPayloadAsync(string payload, CancellationToken ct);
 }

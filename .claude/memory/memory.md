@@ -52,3 +52,10 @@
 - `docker-compose.yml` `mem_limit:8g` local — **não commitado**. Violação de format em `ConnectorIntegrityTests.cs` é pré-existente na main (PR #408).
 - Detalhes + pegadinhas de teste (EncodedPayload em fixture, autocut cortando corpus, eixo de score do temporal boost) em `.claude/memory/20261001-memory.md`.
 - SPEC a2a-task-durability (#442): não iniciada.
+
+## Session summary (2026-10-01 cont. — SPEC a2a-task-durability #442 implementada)
+
+- **RF-001..RF-005 completos** na branch `feature/Devin-20261001-mcp-a2a-improvements`: `EfA2aTaskStore` (EF, ambos providers, purge por retenção 72h no maintenance loop), progresso incremental (`OnProgress` → `TaskUpdater` + heartbeat 2s), push webhooks HMAC `X-KH-Signature` com retry 3× e egress/SSRF gate (config + inline `SendMessageConfiguration.PushNotificationConfig`), origin frontmatter `channel/keyId/agentName` em `write_knowledge`/`write_note` (canal `a2a`|`mcp`), Agent Card com input/output modes + `pushNotifications` condicional.
+- Corrigido bug pré-existente: `contextId` A2A auto-mapeado p/ `agent_chat.threadId` — hex-32 parseia como Guid, jogava `KeyNotFoundException` → stream -32603.
+- Verificação: build 0/0, **1184 unit + 322 integration verdes** (12+6 novas cobrindo AC-1..AC-5), format limpo nos arquivos da feature. `docker-compose.yml` `mem_limit` segue não commitado.
+- Detalhes/pegadinhas (SQLite DateTimeOffset client-side, enum `TASK_STATE_*`, union `{task:…}`, ClearAllPools no restart test) em `.claude/memory/20261001-memory.md`.
