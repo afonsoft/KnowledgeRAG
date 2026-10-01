@@ -123,8 +123,8 @@ public sealed class TelemetryTests
             Assert.Equal("semantic", d.Tags["mode"]);
             Assert.True(d.Value >= 0);
         });
-        Assert.Equal(false, durations[0].Tags["cache_hit"]);
-        Assert.Equal(true, durations[1].Tags["cache_hit"]);
+        Assert.False((bool)durations[0].Tags["cache_hit"]!);
+        Assert.True((bool)durations[1].Tags["cache_hit"]!);
 
         Assert.Contains(samples, s =>
             s.Instrument == "knowledgehub.vector_search.duration" &&

@@ -252,10 +252,14 @@ public sealed class GitRepositoryConnector(
         return (provider, owner, name, instance);
     }
 
-    private static string ProviderFromHost(string host) =>
-        host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase) ? GitProviderNames.GitLab
-        : host.Equals("github.com", StringComparison.OrdinalIgnoreCase) ? GitProviderNames.GitHub
-        : GitProviderNames.Gitea;
+    private static string ProviderFromHost(string host)
+    {
+        if (host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
+            return GitProviderNames.GitLab;
+        if (host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            return GitProviderNames.GitHub;
+        return GitProviderNames.Gitea;
+    }
 
     /// <summary>Owner/name must be present; provider defaults to GitHub and
     /// must be one of the supported ones.</summary>

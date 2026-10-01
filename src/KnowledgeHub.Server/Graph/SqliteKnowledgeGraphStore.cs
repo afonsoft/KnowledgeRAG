@@ -75,7 +75,7 @@ public sealed class SqliteKnowledgeGraphStore(
         // carry a conflict/merge alias for this normalized name (entity
         // gaining a 3rd+ type, or pending adds in the same batch) — the
         // (AliasNormalized, KgNodeId) unique index would blow the save.
-        foreach (var sibling in siblings)
+        foreach (var sibling in siblings) // NOSONAR — Where-refactor not applicable: the skip predicate is awaited
         {
             if (await AliasExistsOrPendingAsync(normalized, sibling.Id, ct))
                 continue;
@@ -130,11 +130,11 @@ public sealed class SqliteKnowledgeGraphStore(
             return node;
         var alias = await db.KgAliases
             .Where(a => a.AliasNormalized == normalized)
-            .Select(a => a.KgNodeId)
+            .Select(a => (Guid?)a.KgNodeId)
             .FirstOrDefaultAsync(ct);
-        return alias == default
+        return alias is null
             ? null
-            : await db.KgNodes.FirstOrDefaultAsync(n => n.Id == alias && n.ValidTo == null, ct);
+            : await db.KgNodes.FirstOrDefaultAsync(n => n.Id == alias.Value && n.ValidTo == null, ct);
     }
 
     /// <inheritdoc />

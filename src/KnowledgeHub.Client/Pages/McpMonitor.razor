@@ -73,15 +73,15 @@
                     <div class="col-4"><strong class="text-success">@OkCount</strong><br />ok</div>
                     <div class="col-4"><strong class="text-danger">@ErrorCount</strong><br />erros</div>
                 </div>
-                @if (AvgMs is { } avg)
+                @if (GetAvgMs() is { } avg)
                 {
                     <div class="small text-muted mt-2">latência média: @avg.ToString("F0")ms</div>
                 }
-                @if (TopTools.Count > 0)
+                @if (GetTopTools() is { Count: > 0 } topTools)
                 {
                     <div class="mt-2">
                         <div class="small text-muted mb-1">tools mais chamadas:</div>
-                        @foreach (var t in TopTools)
+                        @foreach (var t in topTools)
                         {
                             <Badge Color="Color.Secondary" class="me-1 mb-1">@t.Key (@t.Value)</Badge>
                         }
@@ -261,11 +261,11 @@
     private int OkCount => _activity.Count(a => a.Succeeded == true);
     private int ErrorCount => _activity.Count(a => a.Succeeded == false);
 
-    private double? AvgMs =>
+    private double? GetAvgMs() =>
         _activity.Where(a => a.DurationMs is not null).ToList() is { Count: > 0 } timed
             ? timed.Average(a => a.DurationMs!.Value) : null;
 
-    private List<KeyValuePair<string, int>> TopTools => _activity
+    private List<KeyValuePair<string, int>> GetTopTools() => _activity
         .Where(a => a.Kind == McpMonitorEventKind.ToolCall && a.Method is not null)
         .GroupBy(a => a.Method!)
         .OrderByDescending(g => g.Count())

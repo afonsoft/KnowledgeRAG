@@ -68,9 +68,9 @@ public sealed class L1L2Cache : IDistributedCache
             // local-only caching — better than losing the cache entirely.
             _logger?.LogWarning(ex, "L2 write failed — entry cached in L1 only");
         }
-        var l1Ttl = options.AbsoluteExpirationRelativeToNow is { } ttl
-            ? (ttl < _l1MaxTtl ? ttl : _l1MaxTtl)
-            : _l1MaxTtl;
+        var l1Ttl = _l1MaxTtl;
+        if (options.AbsoluteExpirationRelativeToNow is { } ttl && ttl < l1Ttl)
+            l1Ttl = ttl;
         _l1.Set(key, value, l1Ttl);
     }
 

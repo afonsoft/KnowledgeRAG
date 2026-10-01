@@ -22,6 +22,8 @@ namespace KnowledgeHub.Server.Security;
 /// </summary>
 public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : DelegatingHandler
 {
+    private const string HttpScheme = "http";
+    private const string HttpsScheme = "https";
     /// <summary>Reads the flag from configuration at construction time.</summary>
     public static EgressPolicyHandler FromConfiguration(IConfiguration configuration) =>
         new(configuration.GetValue("Security:Egress:AllowPrivateNetworks", false));
@@ -49,7 +51,7 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var uri = request.RequestUri;
-        if (uri is null || (uri.Scheme != "http" && uri.Scheme != "https"))
+        if (uri is null || (uri.Scheme != HttpScheme && uri.Scheme != HttpsScheme))
             throw new HttpRequestException(
                 $"egress blocked: unsupported URI scheme '{uri?.Scheme ?? "null"}'");
 
@@ -85,7 +87,7 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
             var nextUri = next.IsAbsoluteUri ? next : new Uri(uri, next);
             // Only http(s) hops are followed — a Location pointing at
             // file:///etc/passwd or gopher:// must not reach the inner handler.
-            if (nextUri.Scheme is not ("http" or "https"))
+            if (nextUri.Scheme is not (HttpScheme or HttpsScheme))
                 return response; // surface the redirect; caller treats as error
             if (await IsBlockedHostAsync(nextUri.Host, allowPrivate, cancellationToken))
                 return response; // surface the redirect; caller treats as error
@@ -116,7 +118,7 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
         var target = request.RequestUri;
         var leavesOrigin = target?.Host is { } host
             && !string.Equals(host, originHost, StringComparison.OrdinalIgnoreCase);
-        var downgrades = originScheme == "https" && target?.Scheme == "http";
+        var downgrades = originScheme == HttpsScheme && target?.Scheme == HttpScheme;
         if (!leavesOrigin && !downgrades)
             return;
 
@@ -135,7 +137,7 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
     public static async Task<bool> IsBlockedAsync(
         Uri uri, bool allowPrivateNetworks, CancellationToken cancellationToken = default)
     {
-        if (uri.Scheme is not ("http" or "https"))
+        if (uri.Scheme is not (HttpScheme or HttpsScheme))
             return true;
         return await IsBlockedHostAsync(uri.Host, allowPrivateNetworks, cancellationToken);
     }

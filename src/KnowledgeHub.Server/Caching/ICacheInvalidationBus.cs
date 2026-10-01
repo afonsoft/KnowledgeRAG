@@ -24,7 +24,7 @@ public interface ICacheInvalidationBus
 /// <summary>Single-replica / memory provider — nothing to propagate.</summary>
 public sealed class NoopInvalidationBus : ICacheInvalidationBus
 {
-    public event EventHandler<string>? Received { add { } remove { } }
+    public event EventHandler<string>? Received { add { /* no-op bus */ } remove { /* no-op bus */ } }
     public Task PublishAsync(string topic, CancellationToken ct = default) => Task.CompletedTask;
 }
 

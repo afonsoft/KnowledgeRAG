@@ -32,9 +32,9 @@ public sealed partial class ConfigTextChunker : ITextChunker
 
         var nodes = trimmed.StartsWith('{') || trimmed.StartsWith('[')
             ? JsonNodes(text)
-            : trimmed.StartsWith('<')
-                ? XmlNodes(text)
-                : YamlNodes(text);
+            : null;
+        if (nodes is null)
+            nodes = trimmed.StartsWith('<') ? XmlNodes(text) : YamlNodes(text);
 
         if (nodes is null || nodes.Count == 0)
             // Malformed or empty-structure input → prose fallback (never throw).

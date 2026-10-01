@@ -121,7 +121,7 @@ public sealed class EvalScheduleService(
         }
         catch (JsonException ex)
         {
-            logger.LogWarning("Eval:Schedule:Gate is not valid JSON — ignored: {Message}", ex.Message);
+            logger.LogWarning(ex, "Eval:Schedule:Gate is not valid JSON — ignored");
             return null;
         }
     }

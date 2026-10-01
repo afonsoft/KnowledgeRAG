@@ -34,9 +34,10 @@ public sealed class TavilyUpstreamClient(
     public async Task<string?> ResolveApiKeyAsync(CancellationToken cancellationToken = default)
     {
         var stored = await secrets.GetAsync(IntegrationProviders.Tavily, cancellationToken);
-        return !string.IsNullOrWhiteSpace(stored) ? stored
-            : !string.IsNullOrWhiteSpace(_options.ApiKey) ? _options.ApiKey
-            : null;
+        if (!string.IsNullOrWhiteSpace(stored))
+            return stored;
+        var configured = _options.ApiKey;
+        return string.IsNullOrWhiteSpace(configured) ? null : configured;
     }
 
     public async Task<bool> HasApiKeyAsync(CancellationToken cancellationToken = default) =>
@@ -60,7 +61,7 @@ public sealed class TavilyUpstreamClient(
         }
         catch (Exception first) when (first is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogInformation("tavily call failed ({Message}); reconnecting once", first.Message);
+            logger.LogInformation(first, "tavily call failed; reconnecting once");
             await ResetAsync();
             try
             {

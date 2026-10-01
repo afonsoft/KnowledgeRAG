@@ -65,7 +65,13 @@ public sealed class EmbeddingProviderResolver(
 
         public bool TryAcquire()
         {
-            lock (_gate) { if (_closed) return false; _refs++; return true; }
+            lock (_gate)
+            {
+                if (_closed)
+                    return false;
+                _refs++;
+                return true;
+            }
         }
 
         public void Release()

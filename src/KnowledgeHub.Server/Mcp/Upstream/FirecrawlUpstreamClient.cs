@@ -32,9 +32,10 @@ public sealed class FirecrawlUpstreamClient(
     public async Task<string?> ResolveApiKeyAsync(CancellationToken cancellationToken = default)
     {
         var stored = await secrets.GetAsync(IntegrationProviders.Firecrawl, cancellationToken);
-        return !string.IsNullOrWhiteSpace(stored) ? stored
-            : !string.IsNullOrWhiteSpace(_options.ApiKey) ? _options.ApiKey
-            : null;
+        if (!string.IsNullOrWhiteSpace(stored))
+            return stored;
+        var configured = _options.ApiKey;
+        return string.IsNullOrWhiteSpace(configured) ? null : configured;
     }
 
     public async Task<bool> HasApiKeyAsync(CancellationToken cancellationToken = default) =>
@@ -58,7 +59,7 @@ public sealed class FirecrawlUpstreamClient(
         }
         catch (Exception first) when (first is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogInformation("firecrawl call failed ({Message}); reconnecting once", first.Message);
+            logger.LogInformation(first, "firecrawl call failed; reconnecting once");
             await ResetAsync();
             try
             {

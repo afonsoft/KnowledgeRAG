@@ -6,6 +6,8 @@ namespace KnowledgeHub.Server.Api;
 /// <summary>REST endpoints for knowledge-source CRUD + lifecycle (SPEC-02 RF-002/RF-003).</summary>
 public static class SourcesEndpoints
 {
+    private const string SourceNotFound = "Source not found";
+
     public static RouteGroupBuilder MapSourcesApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/sources");
@@ -23,7 +25,7 @@ public static class SourcesEndpoints
         });
 
         group.MapGet("/{id:guid}", async (IKnowledgeSourceService svc, Guid id, CancellationToken ct) =>
-            await svc.GetAsync(id, ct) is { } dto ? Results.Ok(dto) : Results.NotFound(new { error = "Source not found" }));
+            await svc.GetAsync(id, ct) is { } dto ? Results.Ok(dto) : Results.NotFound(new { error = SourceNotFound }));
 
         group.MapPost("/", async (IKnowledgeSourceService svc, CreateKnowledgeSourceRequest request, CancellationToken ct) =>
         {
@@ -53,7 +55,7 @@ public static class SourcesEndpoints
             Ingestion.IIngestionQueue queue, Guid id, bool? wait, CancellationToken ct) =>
         {
             if (await sources.GetAsync(id, ct) is null)
-                return Results.NotFound(new { error = "Source not found" });
+                return Results.NotFound(new { error = SourceNotFound });
 
             if (wait == true)
             {
@@ -81,7 +83,7 @@ public static class SourcesEndpoints
             Guid id, CancellationToken ct) =>
         {
             if (await sources.GetAsync(id, ct) is null)
-                return Results.NotFound(new { error = "Source not found" });
+                return Results.NotFound(new { error = SourceNotFound });
             try
             {
                 var (job, existed) = await queue.EnqueueAsync(id, "reindex", ct);
@@ -97,7 +99,7 @@ public static class SourcesEndpoints
         }).RequireRateLimiting("sync");
 
         group.MapGet("/{id:guid}/documents", async (IKnowledgeSourceService svc, Guid id, CancellationToken ct) =>
-            await svc.ListDocumentsAsync(id, ct) is { } docs ? Results.Ok(docs) : Results.NotFound(new { error = "Source not found" }));
+            await svc.ListDocumentsAsync(id, ct) is { } docs ? Results.Ok(docs) : Results.NotFound(new { error = SourceNotFound }));
 
         return group;
     }

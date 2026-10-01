@@ -135,7 +135,7 @@ public static class StreamingEndpoints
                     finally { gate.Release(); }
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException) { /* heartbeat stopped */ }
         });
 
         try
@@ -158,14 +158,14 @@ public static class StreamingEndpoints
         catch (OperationCanceledException) { /* client disconnected — stop quietly */ }
         catch (Exception ex)
         {
-            var payload = JsonSerializer.Serialize(new { seq = ++seq, data = new { message = ex.Message } }, JsonSerializerOptions.Web);
+            var payload = JsonSerializer.Serialize(new { seq = seq + 1, data = new { message = ex.Message } }, JsonSerializerOptions.Web);
             try { await http.Response.WriteAsync($"event: error\ndata: {payload}\n\n", CancellationToken.None); await http.Response.Body.FlushAsync(); }
             catch { /* connection already gone */ }
         }
         finally
         {
             await stop.CancelAsync();
-            try { await heartbeat; } catch { }
+            try { await heartbeat; } catch { /* heartbeat already faulted/stopped */ } // NOSONAR — nada a observar: o heartbeat só existe p/ manter a conexão viva
         }
     }
 }

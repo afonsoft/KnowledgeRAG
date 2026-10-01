@@ -285,7 +285,7 @@ public sealed class SearchService(
 
         var final = (!rerankEnabled || items.Count <= 1)
             ? items.Take(topK).ToList()
-            : await RerankAsync(query, items, breakdowns, topK, ct);
+            : await RerankAsync(query, items, topK, ct);
 
         // SPEC-20260927-chunk-window-retrieval-and-autocut RF-003: dynamic tail
         // pruning — the elbow in the score curve decides the count (≤topK).
@@ -351,24 +351,31 @@ public sealed class SearchService(
         if (start is null && end is null)
             return items.ToList();
         return items
-            .Select(i => (i.IndexedAt is { } at
-                          && (start is null || at >= start)
-                          && (end is null || at <= end)
-                ? i with
-                {
-                    Score = i.Score * TemporalBoost,
-                    ScoreBreakdown = i.ScoreBreakdown is { } bd
-                        ? bd with
-                        {
-                            Fused = bd.Fused * TemporalBoost,
-                            Normalized = Math.Min(1.0, bd.Normalized * TemporalBoost),
-                            Rerank = bd.Rerank * TemporalBoost
-                        }
-                        : null
-                }
-                : i))
+            .Select(Boost)
             .OrderByDescending(AutocutFilter.EffectiveScore)
             .ToList();
+
+        SearchResultItem Boost(SearchResultItem item)
+        {
+            var inWindow = item.IndexedAt is { } at
+                && (start is null || at >= start)
+                && (end is null || at <= end);
+            if (!inWindow)
+                return item;
+            SearchScoreBreakdown? breakdown = null;
+            if (item.ScoreBreakdown is { } bd)
+                breakdown = bd with
+                {
+                    Fused = bd.Fused * TemporalBoost,
+                    Normalized = Math.Min(1.0, bd.Normalized * TemporalBoost),
+                    Rerank = bd.Rerank * TemporalBoost
+                };
+            return item with
+            {
+                Score = item.Score * TemporalBoost,
+                ScoreBreakdown = breakdown
+            };
+        }
     }
 
     /// <summary>RF-004: in-window boost factor (modest — window ranks higher
@@ -482,8 +489,7 @@ public sealed class SearchService(
     /// <summary>RF-002: re-orders the hydrated window by rerank score; any
     /// failure preserves the fused order (fail-open).</summary>
     private async Task<IReadOnlyList<SearchResultItem>> RerankAsync(
-        string query, List<SearchResultItem> items,
-        IReadOnlyDictionary<Guid, SearchScoreBreakdown>? breakdowns, int topK, CancellationToken ct)
+        string query, List<SearchResultItem> items, int topK, CancellationToken ct)
     {
         IReadOnlyList<RerankScore> scores;
         using var span = Telemetry.KnowledgeHubActivity.Start("search.rerank");

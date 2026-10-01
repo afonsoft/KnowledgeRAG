@@ -487,11 +487,11 @@ public sealed class KnowledgeSourceService(
         if (configuration is null)
             return $"Configuration is required for {type} (expects {string.Join(", ", RequiredKeys[type])})";
 
-        foreach (var key in RequiredKeys[type])
-        {
-            if (configuration[key] is null || string.IsNullOrWhiteSpace(configuration[key]?.GetValue<string>()))
-                return $"Configuration key '{key}' is required for {type}";
-        }
+        var missingKey = RequiredKeys[type]
+            .FirstOrDefault(key => configuration[key] is null
+                || string.IsNullOrWhiteSpace(configuration[key]?.GetValue<string>()));
+        if (missingKey is not null)
+            return $"Configuration key '{missingKey}' is required for {type}";
 
         if (type == SourceType.GoogleDrive
             && !Ingestion.Connectors.GoogleDriveApiClient.TryParseSharedUrl(
@@ -630,11 +630,8 @@ public sealed class KnowledgeSourceService(
             if (node is null)
                 return null;
             var clone = (JsonObject)node.DeepClone();
-            foreach (var key in SensitiveKeys)
-            {
-                if (clone.ContainsKey(key))
-                    clone[key] = "***";
-            }
+            foreach (var key in SensitiveKeys.Where(clone.ContainsKey))
+                clone[key] = "***";
             return clone;
         }
         catch (JsonException)

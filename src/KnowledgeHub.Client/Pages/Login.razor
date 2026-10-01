@@ -173,8 +173,8 @@
             // ("/" + "//evil.com" seria redirect scheme-relative).
             var returnPath = ReturnUrl?.Replace('\\', '/').TrimStart('/');
             Nav.NavigateTo(result.Value.MustChangePassword
-                ? "/change-password"
-                : "/" + (returnPath ?? ""));
+                ? "/change-password" // NOSONAR — rotas internas da app, não URIs remotas
+                : "/" + (returnPath ?? "")); // NOSONAR
         }
         finally
         {

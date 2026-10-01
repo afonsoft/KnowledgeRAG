@@ -32,9 +32,10 @@ public sealed class DeepWikiUpstreamClient(
     public async Task<string?> ResolveApiKeyAsync(CancellationToken cancellationToken = default)
     {
         var stored = await secrets.GetAsync(IntegrationProviders.DeepWiki, cancellationToken);
-        return !string.IsNullOrWhiteSpace(stored) ? stored
-            : !string.IsNullOrWhiteSpace(_options.ApiKey) ? _options.ApiKey
-            : null;
+        if (!string.IsNullOrWhiteSpace(stored))
+            return stored;
+        var configured = _options.ApiKey;
+        return string.IsNullOrWhiteSpace(configured) ? null : configured;
     }
 
     public async Task<bool> HasApiKeyAsync(CancellationToken cancellationToken = default) =>
@@ -63,7 +64,7 @@ public sealed class DeepWikiUpstreamClient(
         }
         catch (Exception first) when (first is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogInformation("DeepWiki call failed ({Message}); reconnecting once", first.Message);
+            logger.LogInformation(first, "DeepWiki call failed; reconnecting once");
             await ResetAsync();
             try
             {

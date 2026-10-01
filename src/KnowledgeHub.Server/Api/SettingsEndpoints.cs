@@ -470,11 +470,27 @@ public static class SettingsEndpoints
         var info = await store.GetInfoAsync(provider, ct);
         var envKey = cfg[$"{ConfigSection(provider)}:ApiKey"];
 
-        var (hasKey, hint, source) = info is not null
-            ? (true, MaskHint(provider, info.KeyHint), "store")
-            : !string.IsNullOrWhiteSpace(envKey)
-                ? (true, MaskHint(provider, envKey.Length >= 4 ? envKey[^4..] : envKey), "env")
-                : (false, null, "none");
+        bool hasKey;
+        string? hint;
+        string source;
+        if (info is not null)
+        {
+            hasKey = true;
+            hint = MaskHint(provider, info.KeyHint);
+            source = "store";
+        }
+        else if (!string.IsNullOrWhiteSpace(envKey))
+        {
+            hasKey = true;
+            hint = MaskHint(provider, envKey.Length >= 4 ? envKey[^4..] : envKey);
+            source = "env";
+        }
+        else
+        {
+            hasKey = false;
+            hint = null;
+            source = "none";
+        }
 
         return new IntegrationSettingsDto
         {
@@ -517,11 +533,16 @@ public static class SettingsEndpoints
     };
 
     /// <summary>Formata o hint mascarado com o prefixo do provider quando aplicável.</summary>
-    private static string MaskHint(string provider, string last4) =>
-        provider == IntegrationProviders.Firecrawl ? $"fc-••••{last4}"
-            : provider == IntegrationProviders.Tavily ? $"tvly-••••{last4}"
-            : provider == IntegrationProviders.Context7 ? $"ctx7sk-••••{last4}"
-            : $"••••{last4}";
+    private static string MaskHint(string provider, string last4)
+    {
+        if (provider == IntegrationProviders.Firecrawl)
+            return $"fc-••••{last4}";
+        if (provider == IntegrationProviders.Tavily)
+            return $"tvly-••••{last4}";
+        if (provider == IntegrationProviders.Context7)
+            return $"ctx7sk-••••{last4}";
+        return $"••••{last4}";
+    }
 
     /// <summary>Descarta a sessão upstream do provider para a próxima chamada usar a
     /// nova credencial efetiva (e, no DeepWiki, o novo endpoint), depois notifica o

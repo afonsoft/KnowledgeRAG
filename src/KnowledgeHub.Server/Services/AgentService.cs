@@ -37,6 +37,8 @@ public sealed class AgentService(
     AgentDiagnostics diagnostics,
     ILogger<AgentService> logger) : IAgentService
 {
+    private const string AgentTag = "agent";
+
     private IMcpActivityFeed? Feed => diagnostics.Feed;
     private McpEngine.Agents.ChainAst.IChainCompactor? Compactor => diagnostics.Compactor;
     private Audit.Evidence.IEvidenceChainService? Evidence => diagnostics.Evidence;
@@ -421,9 +423,13 @@ public sealed class AgentService(
         });
     }
 
-    private static string DeriveTitle(string? prompt) =>
-        string.IsNullOrWhiteSpace(prompt) ? "nova conversa"
-            : prompt.Trim() is { Length: > 60 } p ? p[..60] + "…" : prompt.Trim();
+    private static string DeriveTitle(string? prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+            return "nova conversa";
+        var trimmed = prompt.Trim();
+        return trimmed.Length > 60 ? trimmed[..60] + "…" : trimmed;
+    }
 
     private bool IsExpired(ToolApproval approval) =>
         approval.CreatedAt + TimeSpan.FromMinutes(options.ApprovalTimeoutMinutes) < DateTimeOffset.UtcNow;
@@ -570,8 +576,8 @@ public sealed class AgentService(
                     {
                         Telemetry.KnowledgeHubMetrics.LlmDuration.Record(llmSw.Elapsed.TotalMilliseconds,
                             new KeyValuePair<string, object?>("provider", client.GetType().Name),
-                            new KeyValuePair<string, object?>("model", "agent"),
-                            new KeyValuePair<string, object?>("kind", "agent"));
+                            new KeyValuePair<string, object?>("model", AgentTag),
+                            new KeyValuePair<string, object?>("kind", AgentTag));
                     }
                 }
                 loop.Messages.AddRange(response.Messages);
@@ -766,7 +772,7 @@ public sealed class AgentService(
         {
             ToolName = call.Name,
             ArgumentsJson = ApprovalService.MaskSensitive(argsElement).GetRawText(),
-            RequestedBy = "agent",
+            RequestedBy = AgentTag,
             Status = "pending",
             StateJson = JsonSerializer.Serialize(new SuspendState(
                 SnapshotMessages(loop.Messages),
@@ -784,7 +790,7 @@ public sealed class AgentService(
         {
             Timestamp = DateTimeOffset.UtcNow,
             Kind = McpActivityKind.ApprovalRequested,
-            Transport = "agent",
+            Transport = AgentTag,
             Method = "agent_chat",
             ToolName = call.Name
         });
@@ -816,10 +822,13 @@ public sealed class AgentService(
                 c.CallId, c.Name, c.Args.Deserialize<Dictionary<string, object?>>())));
             contents.AddRange(m.Results.Select(r => new FunctionResultContent(r.CallId, r.Result)));
             return new ChatMessage(
-                m.Role == "assistant" ? ChatRole.Assistant
-                    : m.Role == "system" ? ChatRole.System
-                    : m.Role == "tool" ? ChatRole.Tool
-                    : ChatRole.User,
+                m.Role switch
+                {
+                    "assistant" => ChatRole.Assistant,
+                    "system" => ChatRole.System,
+                    "tool" => ChatRole.Tool,
+                    _ => ChatRole.User
+                },
                 contents);
         }).ToList();
 

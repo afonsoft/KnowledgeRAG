@@ -18,6 +18,9 @@ public sealed class IngestionWorker(
     IIngestionProgressFeed progressFeed,
     ILogger<IngestionWorker> logger) : BackgroundService
 {
+    private const string StatusQueued = "queued";
+    private const string StatusRunning = "running";
+    private const string StatusFailed = "failed";
     /// <summary>Synchronous <see cref="IProgress{T}"/> — just stores the latest
     /// snapshot; a timer flushes it to the DB on its own scope.</summary>
     private sealed class LatestProgress(Action<SyncProgress> onReport) : IProgress<SyncProgress>
@@ -125,7 +128,7 @@ public sealed class IngestionWorker(
         });
         var flushEverySeconds = Math.Max(2,
             configuration.GetValue("Ingestion:ProgressFlushSeconds", 5));
-        using var flushTimer = new PeriodicTimer(TimeSpan.FromSeconds(flushEverySeconds));
+        var flushTimer = new PeriodicTimer(TimeSpan.FromSeconds(flushEverySeconds));
         var flusher = FlushProgressAsync(jobId, () => latest, flushTimer, stoppingToken);
 
         var options = new SyncOptions
@@ -242,7 +245,7 @@ public sealed class IngestionWorker(
                         .SetProperty(j => j.ChunksCreated, p.ChunksCreated), ct);
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) { /* host shutting down */ }
         catch (Exception ex)
         {
             logger.LogDebug(ex, "Progress flush for job {JobId} stopped", jobId);

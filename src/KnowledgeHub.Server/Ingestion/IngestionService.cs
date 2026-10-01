@@ -31,6 +31,9 @@ public sealed class IngestionService(
     ILogger<IngestionService> logger,
     Caching.ICacheInvalidationBus? invalidationBus = null) : IIngestionService
 {
+    private const string SyncStatusFailed = "failed";
+    private const string SyncStatusCompleted = "completed";
+
     private const long MaxFileBytes = 5 * 1024 * 1024;
     /// <summary>SPEC-20260929 RF-003: the mass-delete gate only protects
     /// populated indexes — sources with fewer indexed docs can legitimately
@@ -52,7 +55,7 @@ public sealed class IngestionService(
     private static async Task<SyncResultDto> TrackSyncAsync(
         Task<SyncResultDto> task, Activity? span, Stopwatch sw)
     {
-        var status = "failed";
+        var status = SyncStatusFailed;
         var chunks = 0L;
         try
         {
@@ -119,7 +122,7 @@ public sealed class IngestionService(
                 // SPEC-20260914-obsidian-webdav RF-002: a missing vault path usually
                 // means an unmounted remote — surface that on the source record.
                 var reason = $"vault path '{root ?? "(not configured)"}' not found — mount unavailable?";
-                source.LastSyncStatus = "failed";
+                source.LastSyncStatus = SyncStatusFailed;
                 source.LastError = reason;
                 await db.SaveChangesAsync(cancellationToken);
                 return Fail(sourceId, reason);
@@ -290,7 +293,7 @@ public sealed class IngestionService(
             }
 
             source.LastSyncAt = DateTimeOffset.UtcNow;
-            source.LastSyncStatus = "completed";
+            source.LastSyncStatus = SyncStatusCompleted;
             source.LastError = null;
             await db.SaveChangesAsync(cancellationToken);
 
@@ -301,7 +304,7 @@ public sealed class IngestionService(
 
             return new SyncResultDto
             {
-                Status = "completed",
+                Status = SyncStatusCompleted,
                 SourceId = sourceId,
                 DocumentsProcessed = processed,
                 DocumentsSkipped = skipped,
@@ -537,7 +540,7 @@ public sealed class IngestionService(
         }
 
         source.LastSyncAt = DateTimeOffset.UtcNow;
-        source.LastSyncStatus = "completed";
+        source.LastSyncStatus = SyncStatusCompleted;
         source.LastError = warnings.Count == 0 ? null
             : $"{warnings.Count} item(s) skipped or flagged: {string.Join("; ", warnings.Take(5))}";
         await db.SaveChangesAsync(cancellationToken);
@@ -547,7 +550,7 @@ public sealed class IngestionService(
 
         return new SyncResultDto
         {
-            Status = "completed",
+            Status = SyncStatusCompleted,
             SourceId = source.Id,
             DocumentsProcessed = processed,
             DocumentsSkipped = skipped,
@@ -658,8 +661,7 @@ public sealed class IngestionService(
         catch (EmbeddingProviderException ex)
         {
             Telemetry.KnowledgeHubActivity.Fail(embedSpan, ex);
-            logger.LogWarning("Batch embedding failed for document {DocumentId}, falling back to per-chunk: {Message}",
-                doc.Id, ex.Message);
+            logger.LogWarning(ex, "Batch embedding failed for document {DocumentId}, falling back to per-chunk", doc.Id);
             return await EmbedChunksIndividuallyAsync(chunks, doc.Id, source.Id, vectors, metadata, cancellationToken);
         }
 
@@ -690,8 +692,7 @@ public sealed class IngestionService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning("Batch vector upsert failed for document {DocumentId}, falling back to per-chunk: {Message}",
-                doc.Id, ex.Message);
+            logger.LogWarning(ex, "Batch vector upsert failed for document {DocumentId}, falling back to per-chunk", doc.Id);
             return await EmbedChunksIndividuallyAsync(chunks, doc.Id, source.Id, vectors, metadata, cancellationToken);
         }
     }
@@ -713,7 +714,7 @@ public sealed class IngestionService(
             }
             catch (EmbeddingProviderException ex)
             {
-                logger.LogWarning("Embedding failed for chunk {ChunkId}: {Message}", chunk.Id, ex.Message);
+                logger.LogWarning(ex, "Embedding failed for chunk {ChunkId}", chunk.Id);
             }
         }
         return created;
@@ -865,9 +866,9 @@ public sealed class IngestionService(
                 (isDocFile ? Directory.Exists(root) || File.Exists(root) : Directory.Exists(root));
             if (!rootExists)
             {
-                if (source.LastSyncStatus != "failed")
+                if (source.LastSyncStatus != SyncStatusFailed)
                 {
-                    source.LastSyncStatus = "failed";
+                    source.LastSyncStatus = SyncStatusFailed;
                     source.LastError = $"vault path '{root ?? "(not configured)"}' not found — mount unavailable?";
                     await db.SaveChangesAsync(cancellationToken);
                 }
@@ -875,18 +876,15 @@ public sealed class IngestionService(
             }
 
             // Clear a previous failure once the mount is reachable again.
-            if (source.LastSyncStatus == "failed")
+            if (source.LastSyncStatus == SyncStatusFailed)
             {
-                source.LastSyncStatus = "completed";
+                source.LastSyncStatus = SyncStatusCompleted;
                 source.LastError = null;
                 await db.SaveChangesAsync(cancellationToken);
             }
 
-            if (root is null)
-                return;
-
-            var full = Path.GetFullPath(Path.Combine(root, relativePath));
-            if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            var full = Path.GetFullPath(Path.Combine(root!, relativePath));
+            if (!full.StartsWith(root!, StringComparison.OrdinalIgnoreCase))
                 return; // path traversal — ignore
 
             var doc = await db.Documents
@@ -1010,7 +1008,7 @@ public sealed class IngestionService(
             var source = await db.Sources.FindAsync([sourceId]);
             if (source is null)
                 return;
-            source.LastSyncStatus = "failed";
+            source.LastSyncStatus = SyncStatusFailed;
             source.LastError = message.Length > 1000 ? message[..1000] : message;
             await db.SaveChangesAsync();
         }
@@ -1053,10 +1051,10 @@ public sealed class IngestionService(
 
     private static bool IsExcluded(string relativePath)
     {
-        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var segments = relativePath.Split(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
         return segments.Any(s => s.StartsWith('.') || s.Equals(".obsidian", StringComparison.OrdinalIgnoreCase));
     }
 
     private static SyncResultDto Fail(Guid sourceId, string reason, double ms = 0) =>
-        new() { Status = "failed", Reason = reason, SourceId = sourceId, DurationMs = ms };
+        new() { Status = SyncStatusFailed, Reason = reason, SourceId = sourceId, DurationMs = ms };
 }

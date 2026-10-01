@@ -17,6 +17,8 @@ namespace KnowledgeHub.Server.VectorStore;
 /// </summary>
 public sealed class SqliteVecVectorStore : IVectorStore
 {
+    private const string ParamModel = "$model";
+
     private const string TableName = "vec_chunks";
     private static readonly Regex DeclaredDimensions =
         new(@"float\[(\d+)\]", RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
@@ -51,7 +53,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
         cmd.Parameters.AddWithValue("$id", chunkId.ToString());
         cmd.Parameters.AddWithValue("$doc", documentId.ToString());
         cmd.Parameters.AddWithValue("$src", sourceId.ToString());
-        cmd.Parameters.AddWithValue("$model", model);
+        cmd.Parameters.AddWithValue(ParamModel, model);
         cmd.Parameters.AddWithValue("$vec", EmbeddingVectorCodec.ToBytes(vector));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -85,7 +87,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
                 cmd.Parameters.AddWithValue("$id", item.ChunkId.ToString());
                 cmd.Parameters.AddWithValue("$doc", item.DocumentId.ToString());
                 cmd.Parameters.AddWithValue("$src", item.SourceId.ToString());
-                cmd.Parameters.AddWithValue("$model", model);
+                cmd.Parameters.AddWithValue(ParamModel, model);
                 cmd.Parameters.AddWithValue("$vec", EmbeddingVectorCodec.ToBytes(item.Vector));
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }
@@ -184,7 +186,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
                     """;
             cmd.Parameters.AddWithValue("$vec", queryBlob);
             cmd.Parameters.AddWithValue("$k", topK);
-            cmd.Parameters.AddWithValue("$model", model);
+            cmd.Parameters.AddWithValue(ParamModel, model);
             if (sourceId is not null)
                 cmd.Parameters.AddWithValue("$src", sourceId);
 
@@ -340,7 +342,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
                 cmd.Parameters.AddWithValue("$id", chunk.Id.ToString());
                 cmd.Parameters.AddWithValue("$doc", chunk.KnowledgeDocumentId.ToString());
                 cmd.Parameters.AddWithValue("$src", sourceId.ToString());
-                cmd.Parameters.AddWithValue("$model", chunk.EmbeddingModel!);
+                cmd.Parameters.AddWithValue(ParamModel, chunk.EmbeddingModel!);
                 cmd.Parameters.AddWithValue("$vec", chunk.Embedding!);
                 await cmd.ExecuteNonQueryAsync(cancellationToken);
             }

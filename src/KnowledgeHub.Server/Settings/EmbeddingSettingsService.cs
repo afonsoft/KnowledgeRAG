@@ -101,11 +101,27 @@ public sealed class EmbeddingSettingsService(
         var (maxTokens, overlapTokens) = GetChunking();
 
         var info = await secrets.GetInfoAsync(IntegrationProviders.Embeddings, cancellationToken);
-        var (hasKey, hint, keySource) = info is not null
-            ? (true, $"••••{info.KeyHint}", "store")
-            : !string.IsNullOrWhiteSpace(env.ApiKey)
-                ? (true, $"••••{(env.ApiKey.Length >= 4 ? env.ApiKey[^4..] : env.ApiKey)}", "env")
-                : (false, default(string), "none");
+        bool hasKey;
+        string? hint;
+        string keySource;
+        if (info is not null)
+        {
+            hasKey = true;
+            hint = $"••••{info.KeyHint}";
+            keySource = "store";
+        }
+        else if (!string.IsNullOrWhiteSpace(env.ApiKey))
+        {
+            hasKey = true;
+            hint = $"••••{(env.ApiKey.Length >= 4 ? env.ApiKey[^4..] : env.ApiKey)}";
+            keySource = "env";
+        }
+        else
+        {
+            hasKey = false;
+            hint = null;
+            keySource = "none";
+        }
 
         return new EmbeddingSettingsDto
         {

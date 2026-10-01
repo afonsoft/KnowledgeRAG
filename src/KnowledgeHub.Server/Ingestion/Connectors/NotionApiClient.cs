@@ -143,8 +143,10 @@ public sealed class NotionApiClient
     private async Task<JsonElement> SendAsync(
         HttpMethod method, string path, object? body, CancellationToken cancellationToken)
     {
-        for (var attempt = 0; ; attempt++)
+        var attempt = 0;
+        while (true)
         {
+            attempt++;
             await ThrottleAsync(cancellationToken);
 
             using var request = new HttpRequestMessage(method, path);
@@ -170,7 +172,7 @@ public sealed class NotionApiClient
 
             using (response)
             {
-                if (response.StatusCode == (HttpStatusCode)429 && attempt < MaxRetries)
+                if (response.StatusCode == (HttpStatusCode)429 && attempt <= MaxRetries)
                 {
                     var delay = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(1);
                     await Task.Delay(delay, cancellationToken);

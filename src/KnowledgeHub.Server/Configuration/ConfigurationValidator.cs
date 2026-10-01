@@ -14,11 +14,22 @@ namespace KnowledgeHub.Server.Configuration;
 /// </summary>
 public static class ConfigurationValidator
 {
+    private const string ProviderKey = "Provider";
+    private const string EndpointKey = "Endpoint";
+    private const string ModelKey = "Model";
+    private const string EnabledKey = "Enabled";
+    private const string PrivateEndpointKey = "PrivateEndpoint";
+    private const string TimeoutSecondsKey = "TimeoutSeconds";
+    private const string ToolsCacheSecondsKey = "ToolsCacheSeconds";
+    private const string PostgresProvider = "postgres";
+    private const string RedisProvider = "redis";
+    private const string FalseValue = "false";
+
     private static readonly HashSet<string> EmbeddingProviders = new(StringComparer.OrdinalIgnoreCase)
         { "deterministic", "ollama", "openai", "onnx" };
 
     private static readonly HashSet<string> VectorStoreProviders = new(StringComparer.OrdinalIgnoreCase)
-        { "sqlite", "sqlite-vec", "postgres" };
+        { "sqlite", "sqlite-vec", PostgresProvider };
 
     private static readonly HashSet<string> ChatProviders = new(StringComparer.OrdinalIgnoreCase)
         { "none", "ollama", "openai" };
@@ -52,7 +63,7 @@ public static class ConfigurationValidator
     {
         var warnings = new List<string>();
         var section = configuration.GetSection(CacheOptions.SectionName);
-        if (section["Provider"]?.Equals("redis", StringComparison.OrdinalIgnoreCase) == true
+        if (section[ProviderKey]?.Equals(RedisProvider, StringComparison.OrdinalIgnoreCase) == true
             && section["Redis:ConnectionString"]?.Contains("password=", StringComparison.OrdinalIgnoreCase) != true)
         {
             warnings.Add(
@@ -67,14 +78,14 @@ public static class ConfigurationValidator
     // SPEC-20260926-unified-database-provider RF-001: Database:Provider selects
     // the single backend for catalog + (by default) vector store.
     private static readonly HashSet<string> DatabaseProviders = new(StringComparer.OrdinalIgnoreCase)
-        { "auto", "postgres", "sqlite" };
+        { "auto", PostgresProvider, "sqlite" };
 
     private static void ValidateDatabase(IConfiguration cfg, List<string> problems)
     {
         var provider = cfg.GetSection("Database")["Provider"];
         if (!string.IsNullOrWhiteSpace(provider) && !DatabaseProviders.Contains(provider))
             problems.Add($"Database:Provider '{provider}' is invalid (expected: auto | postgres | sqlite)");
-        if (provider?.Equals("postgres", StringComparison.OrdinalIgnoreCase) == true
+        if (provider?.Equals(PostgresProvider, StringComparison.OrdinalIgnoreCase) == true
             && string.IsNullOrWhiteSpace(KnowledgeHub.Server.Data.CatalogDatabase.ResolvePostgresConnectionString(cfg)))
             problems.Add("Database:Provider=postgres requires Database:ConnectionString or POSTGRES_* env vars");
     }
@@ -82,17 +93,17 @@ public static class ConfigurationValidator
     private static void ValidateEmbeddings(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection(EmbeddingOptions.SectionName);
-        var provider = section["Provider"];
+        var provider = section[ProviderKey];
         if (!string.IsNullOrWhiteSpace(provider) && !EmbeddingProviders.Contains(provider))
             problems.Add($"Embeddings:Provider '{provider}' is invalid (expected: deterministic | ollama | openai | onnx)");
 
         if (provider is not null && !provider.Equals("deterministic", StringComparison.OrdinalIgnoreCase)
             && !provider.Equals("onnx", StringComparison.OrdinalIgnoreCase))
         {
-            var endpoint = section["Endpoint"];
+            var endpoint = section[EndpointKey];
             if (!IsHttpUri(endpoint))
                 problems.Add($"Embeddings:Endpoint '{endpoint}' is required and must be an absolute http(s) URI when Provider={provider}");
-            if (string.IsNullOrWhiteSpace(section["Model"]))
+            if (string.IsNullOrWhiteSpace(section[ModelKey]))
                 problems.Add($"Embeddings:Model is required when Provider={provider}");
         }
 
@@ -119,11 +130,11 @@ public static class ConfigurationValidator
     private static void ValidateVectorStore(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection("VectorStore");
-        var provider = section["Provider"];
+        var provider = section[ProviderKey];
         if (!string.IsNullOrWhiteSpace(provider) && !VectorStoreProviders.Contains(provider))
             problems.Add($"VectorStore:Provider '{provider}' is invalid (expected: sqlite | sqlite-vec | postgres)");
 
-        if (provider?.Equals("postgres", StringComparison.OrdinalIgnoreCase) == true
+        if (provider?.Equals(PostgresProvider, StringComparison.OrdinalIgnoreCase) == true
             && string.IsNullOrWhiteSpace(section["ConnectionString"]))
             problems.Add("VectorStore:ConnectionString is required when VectorStore:Provider=postgres");
 
@@ -156,80 +167,80 @@ public static class ConfigurationValidator
     private static void ValidateDeepWiki(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection(DeepWikiOptions.SectionName);
-        if (section["Enabled"]?.Equals("false", StringComparison.OrdinalIgnoreCase) == true)
+        if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
             return;
 
-        if (section["Endpoint"] is { } endpoint && !IsHttpUri(endpoint))
+        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
             problems.Add($"DeepWiki:Endpoint '{endpoint}' must be an absolute http(s) URI");
 
-        if (section["PrivateEndpoint"] is { } privateEndpoint && !IsHttpUri(privateEndpoint))
+        if (section[PrivateEndpointKey] is { } privateEndpoint && !IsHttpUri(privateEndpoint))
             problems.Add($"DeepWiki:PrivateEndpoint '{privateEndpoint}' must be an absolute http(s) URI");
 
-        if (section["TimeoutSeconds"] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
+        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
             problems.Add($"DeepWiki:TimeoutSeconds '{t}' must be a positive integer");
 
-        if (section["ToolsCacheSeconds"] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
+        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
             problems.Add($"DeepWiki:ToolsCacheSeconds '{tc}' must be a positive integer");
     }
 
     private static void ValidateFirecrawl(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection(FirecrawlOptions.SectionName);
-        if (section["Enabled"]?.Equals("false", StringComparison.OrdinalIgnoreCase) == true)
+        if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
             return;
 
-        if (section["Endpoint"] is { } endpoint && !IsHttpUri(endpoint))
+        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
             problems.Add($"Firecrawl:Endpoint '{endpoint}' must be an absolute http(s) URI");
 
-        if (section["TimeoutSeconds"] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
+        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
             problems.Add($"Firecrawl:TimeoutSeconds '{t}' must be a positive integer");
 
-        if (section["ToolsCacheSeconds"] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
+        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
             problems.Add($"Firecrawl:ToolsCacheSeconds '{tc}' must be a positive integer");
     }
 
     private static void ValidateTavily(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection(TavilyOptions.SectionName);
-        if (section["Enabled"]?.Equals("false", StringComparison.OrdinalIgnoreCase) == true)
+        if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
             return;
 
-        if (section["Endpoint"] is { } endpoint && !IsHttpUri(endpoint))
+        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
             problems.Add($"Tavily:Endpoint '{endpoint}' must be an absolute http(s) URI");
 
-        if (section["TimeoutSeconds"] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
+        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
             problems.Add($"Tavily:TimeoutSeconds '{t}' must be a positive integer");
 
-        if (section["ToolsCacheSeconds"] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
+        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
             problems.Add($"Tavily:ToolsCacheSeconds '{tc}' must be a positive integer");
     }
 
     private static void ValidateContext7(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection(Context7Options.SectionName);
-        if (section["Enabled"]?.Equals("false", StringComparison.OrdinalIgnoreCase) == true)
+        if (section[EnabledKey]?.Equals(FalseValue, StringComparison.OrdinalIgnoreCase) == true)
             return;
 
-        if (section["Endpoint"] is { } endpoint && !IsHttpUri(endpoint))
+        if (section[EndpointKey] is { } endpoint && !IsHttpUri(endpoint))
             problems.Add($"Context7:Endpoint '{endpoint}' must be an absolute http(s) URI");
 
-        if (section["TimeoutSeconds"] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
+        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
             problems.Add($"Context7:TimeoutSeconds '{t}' must be a positive integer");
 
-        if (section["ToolsCacheSeconds"] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
+        if (section[ToolsCacheSecondsKey] is { } tc && (!int.TryParse(tc, out var tcs) || tcs <= 0))
             problems.Add($"Context7:ToolsCacheSeconds '{tc}' must be a positive integer");
     }
 
     private static void ValidateCache(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection(CacheOptions.SectionName);
-        var provider = section["Provider"];
+        var provider = section[ProviderKey];
         if (!string.IsNullOrWhiteSpace(provider)
             && !provider.Equals("memory", StringComparison.OrdinalIgnoreCase)
-            && !provider.Equals("redis", StringComparison.OrdinalIgnoreCase))
+            && !provider.Equals(RedisProvider, StringComparison.OrdinalIgnoreCase))
             problems.Add($"Cache:Provider '{provider}' is invalid (expected: memory | redis)");
 
-        if (provider?.Equals("redis", StringComparison.OrdinalIgnoreCase) == true
+        if (provider?.Equals(RedisProvider, StringComparison.OrdinalIgnoreCase) == true
             && string.IsNullOrWhiteSpace(section["Redis:ConnectionString"]))
             problems.Add("Cache:Redis:ConnectionString is required when Cache:Provider=redis");
     }
@@ -237,7 +248,7 @@ public static class ConfigurationValidator
     private static void ValidateChat(IConfiguration cfg, List<string> problems)
     {
         var section = cfg.GetSection(ChatProviderOptions.SectionName);
-        var provider = section["Provider"];
+        var provider = section[ProviderKey];
         if (string.IsNullOrWhiteSpace(provider) || provider.Equals("none", StringComparison.OrdinalIgnoreCase))
             return;
         if (!ChatProviders.Contains(provider))
@@ -246,12 +257,12 @@ public static class ConfigurationValidator
             return;
         }
 
-        if (!IsHttpUri(section["Endpoint"]))
-            problems.Add($"Chat:Endpoint '{section["Endpoint"]}' is required and must be an absolute http(s) URI when Provider={provider}");
-        if (string.IsNullOrWhiteSpace(section["Model"]))
+        if (!IsHttpUri(section[EndpointKey]))
+            problems.Add($"Chat:Endpoint '{section[EndpointKey]}' is required and must be an absolute http(s) URI when Provider={provider}");
+        if (string.IsNullOrWhiteSpace(section[ModelKey]))
             problems.Add($"Chat:Model is required when Provider={provider}");
 
-        if (section["TimeoutSeconds"] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
+        if (section[TimeoutSecondsKey] is { } t && (!int.TryParse(t, out var ts) || ts <= 0))
             problems.Add($"Chat:TimeoutSeconds '{t}' must be a positive integer");
         if (section["Temperature"] is { } temp && !double.TryParse(temp, out _))
             problems.Add($"Chat:Temperature '{temp}' must be a number");
