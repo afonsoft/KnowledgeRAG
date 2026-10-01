@@ -75,6 +75,7 @@ public sealed class SqliteKnowledgeGraphStore(
         // carry a conflict/merge alias for this normalized name (entity
         // gaining a 3rd+ type, or pending adds in the same batch) — the
         // (AliasNormalized, KgNodeId) unique index would blow the save.
+        // Where-refactor not applicable — the skip predicate is awaited.
         foreach (var sibling in siblings)
         {
             if (await AliasExistsOrPendingAsync(normalized, sibling.Id, ct))
@@ -306,10 +307,8 @@ public sealed class SqliteKnowledgeGraphStore(
         HashSet<Guid> visited, Guid toId, ref bool reached)
     {
         var next = new List<Guid>();
-        foreach (var e in batch)
+        foreach (var e in batch.Where(e => visited.Add(e.ToNodeId)))
         {
-            if (!visited.Add(e.ToNodeId))
-                continue;
             parent[e.ToNodeId] = (e.FromNodeId, e);
             if (e.ToNodeId == toId)
                 reached = true;

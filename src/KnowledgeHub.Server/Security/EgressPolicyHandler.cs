@@ -172,7 +172,10 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
         if (b[0] == 169 && b[1] == 254)
             return true;
         // 0.0.0.0/8, 100.64.0.0/10 CGNAT, multicast/reserved 224.0.0.0+.
-        if (b[0] == 0 || (b[0] == 100 && b[1] >= 64 && b[1] <= 127) || b[0] >= 224)
+        var isZero = b[0] == 0;
+        var isCgnat = b[0] == 100 && b[1] >= 64 && b[1] <= 127;
+        var isMulticastOrReserved = b[0] >= 224;
+        if (isZero || isCgnat || isMulticastOrReserved)
             return true;
         if (!allowPrivate &&
             (IPAddress.IsLoopback(address)

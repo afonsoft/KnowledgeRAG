@@ -16,7 +16,7 @@ public static class UnstructuredElementRenderer
     /// <summary>Mutable render state across the element stream.</summary>
     private sealed class RenderState
     {
-        public HashSet<string> SeenFurniture = new(StringComparer.OrdinalIgnoreCase);
+        public readonly HashSet<string> SeenFurniture = new(StringComparer.OrdinalIgnoreCase);
         public int HeadingLevel = 1;
     }
 

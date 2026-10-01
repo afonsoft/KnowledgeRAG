@@ -246,7 +246,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
     internal static (IReadOnlyList<SearchResultItem> Items, bool Truncated) ApplyTokenBudget(
         IReadOnlyList<SearchResultItem> items, int maxTokens)
     {
-        var budgetChars = (long)maxTokens * 4;
+        var budgetChars = maxTokens * 4L;
         long spent = 0;
         var kept = new List<SearchResultItem>(items.Count);
         foreach (var item in items)

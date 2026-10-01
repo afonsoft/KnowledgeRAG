@@ -22,8 +22,10 @@ namespace KnowledgeHub.Tests.Unit.A2a;
 public sealed class A2aPushAndServerTests : IDisposable
 {
     private readonly string _dbPath =
-        Path.Combine(Path.GetTempPath(), $"kh-a2a-push-{Guid.NewGuid():N}.db");
+        Path.Combine(Path.GetTempPath(), StoreFileName());
     private readonly RecordingNotifier _notifier = new();
+
+    private static string StoreFileName() => $"kh-a2a-push-{Guid.NewGuid():N}.db";
 
     public A2aPushAndServerTests()
     {
@@ -71,11 +73,11 @@ public sealed class A2aPushAndServerTests : IDisposable
 
     private static CreateTaskPushNotificationConfigRequest CreateReq(
         string taskId, string id, string url) => new()
-    {
-        TaskId = taskId,
-        ConfigId = id,
-        Config = new PushNotificationConfig { Url = url, Token = "tok" }
-    };
+        {
+            TaskId = taskId,
+            ConfigId = id,
+            Config = new PushNotificationConfig { Url = url, Token = "tok" }
+        };
 
     private sealed class NullAgent : IAgentHandler
     {

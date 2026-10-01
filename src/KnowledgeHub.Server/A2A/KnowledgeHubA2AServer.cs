@@ -178,6 +178,8 @@ public sealed class KnowledgeHubA2AServer(
         {
             await pushNotifier.DispatchTerminalAsync(task, configs, CancellationToken.None);
         }
+        // codeql[cs/catch-of-all-exceptions] fire-and-forget push dispatch —
+        // any notifier failure is logged; the task is already terminal.
         catch (Exception ex)
         {
             ownLogger.LogWarning(ex, "a2a push dispatch failed for task {TaskId}", task.Id);
