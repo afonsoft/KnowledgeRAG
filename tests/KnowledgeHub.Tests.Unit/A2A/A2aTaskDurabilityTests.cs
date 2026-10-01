@@ -118,7 +118,9 @@ public sealed class A2aTaskDurabilityTests : IDisposable
         var task = MkTask("t1", "ctx-1", TaskState.Completed);
         task.History = Enumerable.Range(0, 5).Select(i => new Message
         {
-            MessageId = $"m{i}", Role = Role.User, Parts = [Part.FromText($"msg{i}")]
+            MessageId = $"m{i}",
+            Role = Role.User,
+            Parts = [Part.FromText($"msg{i}")]
         }).ToList();
         await Store().SaveTaskAsync("t1", task);
 
