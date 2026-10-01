@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / ASP.NET Core`, MCP (Streamable HTTP + SSE) |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20261001-mcp-a2a-improvements` |
-| Status | `Draft` |
-| Ticket | TBD |
+| Status | `Approved` |
+| Ticket | #441 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (recall tool surface) |
 
 ## 1. User Story
@@ -33,7 +33,7 @@
 - **RF-002 — `maxTokens` (orçamento de resposta)**: opcional (default 4096, clamp 256–32768). Trunca a lista de resultados por orçamento aproximado de tokens (chars/4) **depois** do MMR/autocut — complementa `topK` (que limita por contagem). Resposta reporta `truncatedByTokens: true` quando aplicado.
 - **RF-003 — `minScores` (pisos por estágio)**: objeto opcional `{semantic, lexical, final}`. `semantic`/`lexical` podam o braço correspondente antes do RRF; `final` filtra pós-fusão e, quando zera resultados, o `ask_knowledge` abste (reusa o caminho de abstenção do corrective-RAG — nunca sintetiza sem evidência).
 - **RF-004 — `temporalWindow` explícito**: objeto opcional `{start, end}` (ISO-8601) em `search_knowledge`. Validado por `TemporalDateParser`; quando presente, prioriza chunks/edges com `ObservedAt` na janela (boost, não filtro — paridade com hindsight) sem depender de parsing da query.
-- **RF-005 — `annotations` MCP no catálogo**: todas as tools do catálogo declaram `annotations` (`readOnlyHint: true` para search/ask/read/graph tools; `destructiveHint`/`idempotentHint` corretos para write/sync). Sem mudança de comportamento — metadata para clientes.
+- **RF-005 — `annotations` MCP no catálogo**: ✅ **já entregue** pela SPEC-20260926-mcp-sdk-alignment RF-001 — `tools/list` projeta `ToolAnnotations` (title/readOnlyHint/destructiveHint/idempotentHint/openWorldHint) a partir do catálogo (`KnowledgeHubServiceCollectionExtensions.ListToolsHandler`); todos os providers declaram os hints. Sem trabalho restante — mantido na SPEC como verificação de cobertura.
 
 ## 4. Acceptance Criteria
 

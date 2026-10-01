@@ -42,6 +42,44 @@ public static class ToolArgs
             ? el.GetBoolean()
             : null;
 
+    /// <summary>SPEC-20261001-mcp-recall-ergonomics: object-typed arg
+    /// (minScores/temporalWindow). A present non-object value is a caller
+    /// error — unknown args stay tolerated, wrong types do not (AC-5).</summary>
+    public static JsonElement? OptionalObject(ToolCallContext ctx, string name)
+    {
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        return el.ValueKind == JsonValueKind.Object
+            ? el
+            : throw new McpProtocolException($"argument '{name}' must be an object", McpErrorCode.InvalidParams);
+    }
+
+    /// <summary>Optional numeric property inside an object arg.</summary>
+    public static double? OptionalScore(JsonElement obj, string qualifiedName)
+    {
+        var prop = qualifiedName[(qualifiedName.IndexOf('.') + 1)..];
+        if (!obj.TryGetProperty(prop, out var p))
+            return null;
+        return p.ValueKind == JsonValueKind.Number
+            ? p.GetDouble()
+            : throw new McpProtocolException(
+                $"argument '{qualifiedName}' must be a number", McpErrorCode.InvalidParams);
+    }
+
+    /// <summary>Optional string property inside an object arg.</summary>
+    public static string? OptionalProp(JsonElement? obj, string qualifiedName)
+    {
+        if (obj is not { } o)
+            return null;
+        var prop = qualifiedName[(qualifiedName.IndexOf('.') + 1)..];
+        if (!o.TryGetProperty(prop, out var p))
+            return null;
+        return p.ValueKind == JsonValueKind.String
+            ? p.GetString()
+            : throw new McpProtocolException(
+                $"argument '{qualifiedName}' must be a string", McpErrorCode.InvalidParams);
+    }
+
     public static string[]? OptionalStringArray(ToolCallContext ctx, string name)
     {
         if (!TryGet(ctx, name, out var el) || el.ValueKind != JsonValueKind.Array)

@@ -146,7 +146,14 @@ public sealed class SearchService(
         var rerankEnabled = configuration.GetValue("Search:Rerank:Enabled", false);
         var diversityEnabled = configuration.GetValue("Search:Diversity:Enabled", false);
         var filtersActive = filter is { IsEmpty: false };
-        var window = topK * CandidateWindowFactor;
+        // SPEC-20261001-mcp-recall-ergonomics RF-001: budget narrows the
+        // candidate pool — low = half the usual window; mid/high keep the
+        // default pool (mid differs from high only by skipping expansion).
+        var window = filter?.Budget switch
+        {
+            "low" => Math.Max(topK, topK * CandidateWindowFactor / 2),
+            _ => topK * CandidateWindowFactor
+        };
         var rerankCap = configuration.GetValue("Search:Rerank:MaxCandidates", 20);
 
         // Fetch a wider window when filters, diversity or rerank need room to
@@ -160,8 +167,12 @@ public sealed class SearchService(
 
         // SPEC-20260924-query-expansion-hyde: expansion mode — per-call `expand`
         // filter arg wins over config; off = the classic single-query pipeline.
+        // RF-001: budget low/mid skips expansion unless the caller set `expand`
+        // explicitly — cheap calls must not pay for extra LLM expansion rounds.
         var expansionMode = filter?.Expansion
-            ?? configuration.GetValue("Search:QueryExpansion:Mode", "off");
+            ?? (filter?.SkipsExpansion == true
+                ? "off"
+                : configuration.GetValue("Search:QueryExpansion:Mode", "off"));
 
         // SPEC-20260924-graph-expanded-retrieval RF-001/RF-002: optional third
         // arm — entity-linked chunks (direct + 1-hop) fused via the same RRF.
@@ -186,13 +197,20 @@ public sealed class SearchService(
             && subQueries is not { Count: > 0 })
         {
             var queryVector = await EmbedQueryAsync(effectiveQuery, ct);
-            windowed = (await VectorSearchAsync(queryVector, fetchLimit, activeSourceIds, degraded, ct)).ToList();
+            var hits = await VectorSearchAsync(queryVector, fetchLimit, activeSourceIds, degraded, ct);
+            // RF-003: the semantic floor applies on the fast path too — the
+            // common semantic+no-expansion call must not bypass minScores.
+            if (filter?.MinScores?.Semantic is { } semanticFloor)
+                hits = hits.Where(h => h.Score >= semanticFloor).ToList();
+            windowed = hits.ToList();
         }
         else
         {
             var (vectorLabels, vectorLists, lexicalLabels, lexicalLists) =
-                await ExpandAndSearchAsync(query, effectiveQuery, mode, expansionMode,
-                    window, activeSourceIds, degraded, ct, subQueries);
+                await ExpandAndSearchAsync(query, effectiveQuery,
+                    new ArmRequest(mode, expansionMode, window,
+                        filter?.MinScores?.Semantic, filter?.MinScores?.Lexical, subQueries),
+                    activeSourceIds, degraded, ct);
 
             var graphArm = graphEnabled
                 ? await GraphRankedAsync(query, ct)
@@ -269,6 +287,14 @@ public sealed class SearchService(
         // pruning — the elbow in the score curve decides the count (≤topK).
         // SPEC-20260929-search-scope-pipeline RF-001: unfiltered searches also
         // honor the configured default — a null filter must not force "fixed".
+        // SPEC-20261001-mcp-recall-ergonomics RF-004: explicit temporal window
+        // boosts in-window hits before the elbow sees the scores (boost, not
+        // filter — paridade com o hindsight recall temporal_window).
+        var tStart = filter?.TemporalStart;
+        var tEnd = filter?.TemporalEnd;
+        if (tStart is not null || tEnd is not null)
+            final = ApplyTemporalBoost(final, tStart, tEnd);
+
         var limitMode = filter?.EffectiveLimitMode(configuration)
             ?? configuration.GetValue("Search:LimitMode", "fixed");
         if (limitMode == "autocut" && final.Count > 1)
@@ -279,6 +305,11 @@ public sealed class SearchService(
                 configuration.GetValue("Search:Autocut:MaxClamp", AutocutFilter.DefaultMaxClamp)));
             final = AutocutFilter.Apply(final, sensitivity, maxClamp);
         }
+
+        // RF-003: per-call final floor — post-fusion, post-autocut. An empty
+        // result is the honest answer (ask_knowledge abstains on it).
+        if (filter?.MinScores?.Final is { } minFinal && final.Count > 0)
+            final = final.Where(i => (i.ScoreBreakdown?.Fused ?? i.Score) >= minFinal).ToList();
 
         // SPEC-20260927-multiquery RF-002: hierarchical scope fallback — driven
         // only from the strict level (relaxLevel==0); the loop owns the cascade.
@@ -305,18 +336,48 @@ public sealed class SearchService(
 
     private const double RelaxationPenalty = 0.85;
 
-    /// <summary>
-    /// SPEC-20260927-multiquery RF-002: cascades the scope until MinResults is
-    /// met — drop pathPrefix → sourceId→its SourceType → global (still bounded by
-    /// the caller's allowed-source scope). Relaxed hits merge with the strict
-    /// ones under a 0.85^level score penalty so strict matches keep precedence.
-    /// </summary>
+    /// <summary>RF-004: recency boost — hits whose document was indexed inside
+    /// the window rank higher (boost, not filter). The boost applies to every
+    /// score axis downstream readers see — <see cref="SearchResultItem.Score"/>,
+    /// fused and rerank breakdown — so the autocut elbow and the final floor
+    /// read the same boosted curve that ordered the list.</summary>
+    private static List<SearchResultItem> ApplyTemporalBoost(
+        IReadOnlyList<SearchResultItem> items, DateTimeOffset? start, DateTimeOffset? end)
+    {
+        if (start is null && end is null)
+            return items.ToList();
+        return items
+            .Select(i => (i.IndexedAt is { } at
+                          && (start is null || at >= start)
+                          && (end is null || at <= end)
+                ? i with
+                {
+                    Score = i.Score * TemporalBoost,
+                    ScoreBreakdown = i.ScoreBreakdown is { } bd
+                        ? bd with { Fused = bd.Fused * TemporalBoost, Rerank = bd.Rerank * TemporalBoost }
+                        : null
+                }
+                : i))
+            .OrderByDescending(AutocutFilter.EffectiveScore)
+            .ToList();
+    }
+
+    /// <summary>RF-004: in-window boost factor (modest — window ranks higher
+    /// without drowning out strong out-of-window matches).</summary>
+    private const double TemporalBoost = 1.1;
+
     /// <summary>Query context for the relaxation cascade (SPEC-20260927-multiquery RF-002).</summary>
     private sealed record RelaxationQuery(
         string Query, int TopK, Guid? SourceId, ResolvedSearchFilter? Filter,
         SearchMode Mode, Auth.CallerScope Scope, string? ConversationContext,
         DegradationState Degraded, int MinResults);
 
+    /// <summary>
+    /// SPEC-20260927-multiquery RF-002: cascades the scope until MinResults is
+    /// met — drop pathPrefix → sourceId→its SourceType → global (still bounded by
+    /// the caller's allowed-source scope). Relaxed hits merge with the strict
+    /// ones under a 0.85^level score penalty so strict matches keep precedence.
+    /// </summary>
     private async Task<List<SearchResultItem>> ApplyRelaxationAsync(
         RelaxationQuery q, List<SearchResultItem> strict, CancellationToken ct)
     {
@@ -675,12 +736,11 @@ public sealed class SearchService(
         List<string?> VectorLabels, List<IReadOnlyList<Guid>> VectorLists,
         List<string?> LexicalLabels, List<IReadOnlyList<Guid>> LexicalLists)>
         ExpandAndSearchAsync(
-            string rawQuery, string effectiveQuery, SearchMode mode,
-            string expansionMode, int window,
+            string rawQuery, string effectiveQuery, ArmRequest arms,
             IReadOnlyCollection<Guid> activeSourceIds,
-            DegradationState degraded, CancellationToken ct,
-            IReadOnlyList<string>? subQueries = null)
+            DegradationState degraded, CancellationToken ct)
     {
+        var (mode, expansionMode, window, minSemantic, minLexical, subQueries) = arms;
         IReadOnlyList<string> variants = [];
         string? hydeText = null;
         if (expansionMode is "multi" or "hyde" or "both")
@@ -729,8 +789,8 @@ public sealed class SearchService(
             lexicalQueries.AddRange(subQueries.Select(q => (q, (string?)q)));
         }
 
-        // SPEC-20260929 RF-006: each arm is isolated — one failed sub-query
-        // returns an empty list for itself, the other arms still fuse.
+        // SPEC-20261001-mcp-recall-ergonomics RF-003: the semantic floor prunes
+        // the vector arm by cosine score before fusion (calibrated 0-1).
         var vectorLists = new List<IReadOnlyList<Guid>>();
         var vectorLabels = new List<string?>();
         if (mode != SearchMode.Lexical)
@@ -739,8 +799,10 @@ public sealed class SearchService(
             {
                 try
                 {
-                    return (await VectorSearchAsync(await EmbedQueryAsync(t.Text, ct), window, activeSourceIds, degraded, ct))
-                        .Select(h => h.ChunkId).ToList() as IReadOnlyList<Guid>;
+                    var hits = await VectorSearchAsync(await EmbedQueryAsync(t.Text, ct), window, activeSourceIds, degraded, ct);
+                    if (minSemantic is { } floor)
+                        hits = hits.Where(h => h.Score >= floor).ToList();
+                    return hits.Select(h => h.ChunkId).ToList() as IReadOnlyList<Guid>;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
@@ -762,7 +824,7 @@ public sealed class SearchService(
             {
                 try
                 {
-                    return await LexicalRankedAsync(q.Query, window, activeSourceIds, ct);
+                    return await LexicalRankedAsync(q.Query, window, activeSourceIds, ct, minLexical);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
@@ -779,6 +841,12 @@ public sealed class SearchService(
         return (vectorLabels, vectorLists, lexicalLabels, lexicalLists);
     }
 
+    /// <summary>Per-arm options for <see cref="ExpandAndSearchAsync"/> — mode,
+    /// window breadth and the RF-003 score floors.</summary>
+    private sealed record ArmRequest(
+        SearchMode Mode, string ExpansionMode, int Window,
+        double? MinSemantic, double? MinLexical,
+        IReadOnlyList<string>? SubQueries);
     /// <summary>
     /// SPEC-20260924-graph-expanded-retrieval: entity-link the query, expand
     /// 1-hop, return evidence chunks ranked (direct first). Empty arm when the
@@ -799,15 +867,26 @@ public sealed class SearchService(
         return (ranked, direct);
     }
 
-    /// <summary>Lexical arm call wrapped in span + duration metric.</summary>
+    /// <summary>Lexical arm call wrapped in span + duration metric.
+    /// SPEC-20261001-mcp-recall-ergonomics RF-003: <paramref name="minLexical"/>
+    /// prunes the arm as a fraction (0–1) of its best score — sign-agnostic:
+    /// FTS5 bm25 ranks more-negative-first while pg ts_rank is positive.</summary>
     private async Task<IReadOnlyList<Guid>> LexicalRankedAsync(
-        string query, int topK, IReadOnlyCollection<Guid> sourceIds, CancellationToken ct)
+        string query, int topK, IReadOnlyCollection<Guid> sourceIds, CancellationToken ct,
+        double? minLexical = null)
     {
         using var span = KnowledgeHubActivity.Start("lexical_search");
         var sw = Stopwatch.StartNew();
         try
         {
             var hits = await lexical.SearchAsync(query, topK, sourceIds, ct);
+            if (minLexical is { } floor && hits.Count > 1)
+            {
+                var best = hits[0].Bm25;
+                hits = best > 0
+                    ? hits.Where(h => h.Bm25 >= best * floor).ToList()
+                    : hits.Where(h => h.Bm25 <= best * floor).ToList();
+            }
             return hits.Select(h => h.ChunkId).ToList();
         }
         catch (Exception ex)

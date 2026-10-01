@@ -43,3 +43,12 @@
 - **Lição heredoc:** `<<'PY'` preserva `<`/`>` literal — âncoras com entidades HTML (`&lt;img&gt;`) não casam; construir âncora lendo o arquivo. E: gravar arquivo só após TODOS os asserts (evitou corrupção parcial 3×).
 - **Verificação:** 1143 unit + 308 integration local; CI completo PASS; SonarCloud gate PASS na PR e OK na main (0.3% duplicação).
 - SPECs 20261001 seguem **Draft** — aguardando aprovação do usuário para virar Epic/Issues.
+
+## Session summary (2026-10-01 cont. — SPEC mcp-recall-ergonomics IMPLEMENTADA)
+
+- Issues #440 (Epic)/#441/#442; SPECs Approved em `a5a0377` — branch `feature/Devin-20261001-mcp-recall-ergonomics`.
+- SPEC-20261001-mcp-recall-ergonomics **completa e verde**: `budget`(low=½pool+sem expansion+sem retry; mid=pool default sem expansion; high=default), `maxTokens`(clamp 256–32768, ~4 chars/token, `truncatedByTokens`), `minScores`(semantic/lexical pré-RRF + final pós-autocut → abstenção sem síntese), `temporalWindow`(boost ×1.1 em IndexedAt, não-filtro). Schemas MCP + pinned contracts + testes unit/integration.
+- Verificação: build 0/0, 1172 unit + 315/316 integration (1 flake em SettingsApiTests — timeout sob carga, passa isolado), format limpo nos arquivos da feature.
+- `docker-compose.yml` `mem_limit:8g` local — **não commitado**. Violação de format em `ConnectorIntegrityTests.cs` é pré-existente na main (PR #408).
+- Detalhes + pegadinhas de teste (EncodedPayload em fixture, autocut cortando corpus, eixo de score do temporal boost) em `.claude/memory/20261001-memory.md`.
+- SPEC a2a-task-durability (#442): não iniciada.

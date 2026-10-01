@@ -9,8 +9,8 @@
 | Stack | `.NET 10 / ASP.NET Core`, `A2A` + `A2A.AspNetCore` (1.0.0-preview2), EF Core |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20261001-mcp-a2a-improvements` |
-| Status | `Draft` |
-| Ticket | TBD |
+| Status | `Approved` |
+| Ticket | #442 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (padrão async operations) + spec A2A v1.0 |
 
 ## 1. User Story

@@ -36,7 +36,11 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "limitMode":{"type":"string","enum":["fixed","autocut"],"description":"Result limit: fixed=topK, autocut=prunes the long tail at the score elbow (default: server config)"},
           "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"},
           "subQueries":{"type":"array","items":{"type":"string"},"description":"Extra query variants searched in parallel and fused via RRF (max 4) — for multi-faceted questions"},
-          "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"}
+          "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"},
+          "budget":{"type":"string","enum":["low","mid","high"],"description":"Recall depth/cost (default high). low = half candidate pool per arm, no query expansion, no corrective retries; mid = default pool without expansion; high = full pipeline"},
+          "maxTokens":{"type":"integer","description":"Response token budget (default 4096, clamped 256-32768) — truncates the result list by ~4 chars/token after ranking; sets truncatedByTokens when applied"},
+          "minScores":{"type":"object","properties":{"semantic":{"type":"number"},"lexical":{"type":"number"},"final":{"type":"number"}},"description":"Per-stage score floors 0-1: semantic = cosine floor on each vector arm, lexical = fraction of the arm's best FTS score, final = post-fusion floor"},
+          "temporalWindow":{"type":"object","properties":{"start":{"type":"string","description":"ISO-8601"},"end":{"type":"string","description":"ISO-8601"}},"description":"Explicit recency window — documents indexed inside it rank higher (boost, not filter)"}
         },"required":["query"],
         "examples":[{"query":"what is RAG?","topK":5,"mode":"hybrid"}]}
         """)!.AsObject();
@@ -60,6 +64,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "autocutSensitivity":{"type":"integer","description":"Autocut sensitivity 1-3 — cut at the N-th abrupt score drop (default 1)"},
           "subQueries":{"type":"array","items":{"type":"string"},"description":"Extra query variants searched in parallel and fused via RRF (max 4) — for multi-faceted questions"},
           "allowRelaxation":{"type":"boolean","description":"When a strict source/tag filter yields too few results, fall back to broader scopes (source→type→global) with relaxed hits flagged (default: server config)"},
+          "budget":{"type":"string","enum":["low","mid","high"],"description":"Recall depth/cost (default high). low = half candidate pool per arm, no query expansion, no corrective retries; mid = default pool without expansion; high = full pipeline"},
+          "maxTokens":{"type":"integer","description":"Context token budget (default 4096, clamped 256-32768) — truncates the passage list by ~4 chars/token after ranking; sets truncatedByTokens when applied"},
+          "minScores":{"type":"object","properties":{"semantic":{"type":"number"},"lexical":{"type":"number"},"final":{"type":"number"}},"description":"Per-stage score floors 0-1: semantic = cosine floor on each vector arm, lexical = fraction of the arm's best FTS score, final = post-fusion floor (empty result → abstains instead of answering)"},
+          "temporalWindow":{"type":"object","properties":{"start":{"type":"string","description":"ISO-8601"},"end":{"type":"string","description":"ISO-8601"}},"description":"Explicit recency window — documents indexed inside it rank higher (boost, not filter)"},
           "enableLiveActions":{"type":"boolean","description":"Action-Augmented RAG: execute live MCP tools nominated by the question itself — or by retrieved-chunk markers when the server opts in (Agent:AllowDocumentMarkers) — then fuse outputs with document citations (default: server config)"}
         },"required":["question"],
         "examples":[{"question":"How does synchronization work?","topK":5,"generate":true}]}
@@ -87,6 +95,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             "sourceType":{"type":"string"}},"required":["chunkText","documentTitle","sourceName","score","uriReference"]}},
           "grade":{"type":"string"},"retried":{"type":"boolean"},
           "totalMatches":{"type":"integer"},"limitModeApplied":{"type":"string"},
+          "truncatedByTokens":{"type":"boolean"},
           "warnings":{"type":"array","items":{"type":"string"}}},
          "required":["results"]}
         """)!.AsObject();
@@ -95,7 +104,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         {"type":"object","properties":{
           "answer":{"type":"string"},
           "citations":{"type":"array","items":{"type":"object"}},
-          "retrievalGrade":{"type":"string"},"retried":{"type":"boolean"}}}
+          "retrievalGrade":{"type":"string"},"retried":{"type":"boolean"},
+          "truncatedByTokens":{"type":"boolean"}}}
         """)!.AsObject();
 
     private static readonly JsonObject WriteSchema = JsonNode.Parse("""
@@ -131,6 +141,12 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     // agent can decide to rephrase on its own.
                     var retrieval = ctx.Services!.GetRequiredService<CorrectiveRetrievalService>();
                     var outcome = await retrieval.RetrieveAsync(query, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
+                    // SPEC-20261001-mcp-recall-ergonomics RF-002: the token
+                    // budget truncates the ranked list post MMR/autocut/floors —
+                    // complements topK's count limit.
+                    var (bounded, truncatedByTokens) =
+                        ApplyTokenBudget(outcome.Results, ResolveMaxTokens(ctx));
+                    outcome = outcome with { Results = bounded };
                     var suggested = await DetectSuggestedActionsAsync(ctx, query, outcome, ct);
                     // Suggestions lead the text — CatalogToolAIFunction truncates
                     // long results from the end, and appended suggestions were
@@ -138,9 +154,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     return await ToolResults.Structured(
                         BuildGradeLine(retrieval, outcome)
                             + BuildSuggestedLine(suggested)
-                            + FormatHits(outcome.Results),
+                            + FormatHits(outcome.Results)
+                            + (truncatedByTokens ? "(truncated to fit maxTokens budget)" : ""),
                         BuildSearchStructured(retrieval, outcome, sourceId, filter, suggested,
-                            ctx.Services.GetRequiredService<IConfiguration>()));
+                            ctx.Services.GetRequiredService<IConfiguration>(), truncatedByTokens));
                 }
             },
             new CatalogTool
@@ -176,11 +193,6 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         return Task.FromResult(tools);
     }
 
-    /// <summary>
-    /// Resolves the optional `source` slug, `mode` and metadata-filter args
-    /// shared by search_knowledge/ask_knowledge (SPEC-20260914-hybrid-retrieval
-    /// RF-003, SPEC-20260923-retrieval-quality RF-003).
-    /// </summary>
     /// <summary>Grade hint appended to the text result when grading is on.</summary>
     private static string? BuildGradeLine(
         CorrectiveRetrievalService retrieval, CorrectiveRetrievalService.RetrievalOutcome outcome)
@@ -223,13 +235,39 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                + " — invoke as tool calls if they help answer the request";
     }
 
+    /// <summary>SPEC-20261001-mcp-recall-ergonomics RF-002: optional response
+    /// token budget — default 4096, clamped 256–32768.</summary>
+    private static int ResolveMaxTokens(ToolCallContext ctx) =>
+        Math.Clamp(ToolArgs.OptionalIntOrNull(ctx, "maxTokens") ?? 4096, 256, 32768);
+
+    /// <summary>RF-002: truncates the ranked list to a token budget (~4 chars
+    /// per token over chunk + expanded-context text). The top hit is always
+    /// kept — a lone over-budget hit beats silence.</summary>
+    internal static (IReadOnlyList<SearchResultItem> Items, bool Truncated) ApplyTokenBudget(
+        IReadOnlyList<SearchResultItem> items, int maxTokens)
+    {
+        var budgetChars = (long)maxTokens * 4;
+        long spent = 0;
+        var kept = new List<SearchResultItem>(items.Count);
+        foreach (var item in items)
+        {
+            if (kept.Count > 0
+                && spent + item.ChunkText.Length + (item.Context?.Length ?? 0) > budgetChars)
+                return (kept, true);
+            spent += item.ChunkText.Length + (item.Context?.Length ?? 0);
+            kept.Add(item);
+        }
+        return (kept, false);
+    }
+
     /// <summary>Structured payload for search_knowledge (RF-009 — structured
     /// callers get the warning field the text path appends inline).</summary>
     private static object BuildSearchStructured(
         CorrectiveRetrievalService retrieval,
         CorrectiveRetrievalService.RetrievalOutcome outcome,
         Guid? sourceId, Search.ResolvedSearchFilter filter,
-        IReadOnlyList<Bridge.ToolActionAnnotation> suggested, IConfiguration limitCfg)
+        IReadOnlyList<Bridge.ToolActionAnnotation> suggested, IConfiguration limitCfg,
+        bool truncatedByTokens)
     {
         return new
         {
@@ -239,6 +277,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             retried = outcome.Retried,
             totalMatches = outcome.Results.Count,
             limitModeApplied = filter.EffectiveLimitMode(limitCfg),
+            truncatedByTokens,
             // SPEC-20260927-multiquery RF-003: never relax silently.
             filterRelaxed = outcome.Results.Any(r => r.IsRelaxed),
             warnings = outcome.Results.All(r => r.IsRelaxed)
@@ -257,6 +296,11 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         };
     }
 
+    /// <summary>
+    /// Resolves the optional `source` slug, `mode` and metadata-filter args
+    /// shared by search_knowledge/ask_knowledge (SPEC-20260914-hybrid-retrieval
+    /// RF-003, SPEC-20260923-retrieval-quality RF-003).
+    /// </summary>
     private static async Task<(Guid? SourceId, SearchMode Mode, Search.ResolvedSearchFilter Filter)> ResolveScopeAsync(
         ToolCallContext ctx, CancellationToken ct)
     {
@@ -299,7 +343,22 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             LimitMode = ToolArgs.OptionalString(ctx, "limitMode"),
             AutocutSensitivity = ToolArgs.OptionalIntOrNull(ctx, "autocutSensitivity"),
             SubQueries = ToolArgs.OptionalStringArray(ctx, "subQueries"),
-            AllowRelaxation = ToolArgs.OptionalBool(ctx, "allowRelaxation")
+            AllowRelaxation = ToolArgs.OptionalBool(ctx, "allowRelaxation"),
+            // SPEC-20261001-mcp-recall-ergonomics RF-001/RF-003/RF-004: budget,
+            // per-stage floors and the explicit temporal window.
+            Budget = ToolArgs.OptionalString(ctx, "budget"),
+            MinScores = ToolArgs.OptionalObject(ctx, "minScores") is { } ms
+                ? new SearchMinScores
+                {
+                    Semantic = ToolArgs.OptionalScore(ms, "minScores.semantic"),
+                    Lexical = ToolArgs.OptionalScore(ms, "minScores.lexical"),
+                    Final = ToolArgs.OptionalScore(ms, "minScores.final")
+                }
+                : null,
+            TemporalStart = ToolArgs.OptionalProp(
+                ToolArgs.OptionalObject(ctx, "temporalWindow"), "temporalWindow.start"),
+            TemporalEnd = ToolArgs.OptionalProp(
+                ToolArgs.OptionalObject(ctx, "temporalWindow"), "temporalWindow.end")
         };
         return Search.ResolvedSearchFilter.TryResolve(raw, out var filter, out var error)
             ? filter
@@ -319,7 +378,14 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         var (sourceId, mode, filter) = await ResolveScopeAsync(ctx, ct);
         var retrieval = ctx.Services!.GetRequiredService<CorrectiveRetrievalService>();
         var outcome = await retrieval.RetrieveAsync(question, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
-        var results = outcome.Results;
+        // SPEC-20261001-mcp-recall-ergonomics RF-002: bound the evidence list —
+        // and thereby the synthesis context — by the caller's token budget.
+        // The outcome carries the bounded list so abstention citations and the
+        // relaxed-scope warning reflect what the caller actually receives.
+        var (bounded, truncatedByTokens) =
+            ApplyTokenBudget(outcome.Results, ResolveMaxTokens(ctx));
+        outcome = outcome with { Results = bounded };
+        var results = bounded;
 
         // SPEC-20260927-mcp-dynamic-rag-action-bridge RF-001/RF-003: execute
         // live MCP tools nominated by retrieved chunks (mcp-tool markers) or by
@@ -361,15 +427,19 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         // SPEC-20260924-corrective-rag RF-003: insufficient evidence short-circuits
         // synthesis — honest abstention, no LLM call, weak citations attached.
         if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate && !hasLiveEvidence)
+        {
+            var abstention = retrieval.BuildAbstention(question, outcome) with
+            {
+                LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions,
+                TruncatedByTokens = truncatedByTokens
+            };
             return await ToolResults.Structured(
-                retrieval.BuildAbstention(question, outcome).Answer
+                abstention.Answer
                 + (results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(results.Take(3).ToList()) : "")
                 + relaxedWarning
                 + liveCitationBlock,
-                retrieval.BuildAbstention(question, outcome) with
-                {
-                    LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions
-                });
+                abstention);
+        }
 
         if (!generate)
             return await ToolResults.Text(
@@ -392,6 +462,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     ? outcome.Grading.Grade.ToString().ToLowerInvariant()
                     : null,
                 Retried = outcome.Retried,
+                TruncatedByTokens = truncatedByTokens,
                 LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions,
                 // SPEC-20260929-live-actions-bridge-hardening RF-007: when the
                 // answer rests on live data alone (no document citations),

@@ -68,6 +68,30 @@ public sealed record SearchFilter
     /// <summary>SPEC-20260927-hierarchical-filter-relaxation-and-multiquery RF-002:
     /// per-call opt-out of the hierarchical scope fallback (default: server config).</summary>
     public bool? AllowRelaxation { get; init; }
+    /// <summary>SPEC-20261001-mcp-recall-ergonomics RF-001: search depth —
+    /// low|mid|high. Low = narrow candidate pool, no expansion, no grading
+    /// retries; mid = default pool without expansion; high (default) = full
+    /// pipeline. Null = high.</summary>
+    public string? Budget { get; init; }
+    /// <summary>RF-003: per-stage score floors — abstain instead of returning
+    /// weak evidence when the final floor empties the result set.</summary>
+    public SearchMinScores? MinScores { get; init; }
+    /// <summary>RF-004: ISO-8601 — boost hits whose document was indexed inside
+    /// the window (boost, not filter). Paired with <see cref="TemporalEnd"/>.</summary>
+    public string? TemporalStart { get; init; }
+    /// <summary>RF-004: ISO-8601 window end (inclusive).</summary>
+    public string? TemporalEnd { get; init; }
+}
+
+/// <summary>RF-003: per-stage score floors (SPEC-20261001-mcp-recall-ergonomics).
+/// `semantic` prunes the vector arm (cosine 0–1) pre-fusion; `lexical` prunes
+/// the FTS arm as a fraction of that arm's best BM25 (0–1); `final` filters
+/// post-fusion — an empty result makes ask_knowledge abstain.</summary>
+public sealed record SearchMinScores
+{
+    public double? Semantic { get; init; }
+    public double? Lexical { get; init; }
+    public double? Final { get; init; }
 }
 
 /// <summary>One ranked chunk hit from semantic search (SPEC-02 RF-004).</summary>
