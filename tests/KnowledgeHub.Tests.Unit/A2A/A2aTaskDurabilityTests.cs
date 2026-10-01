@@ -148,6 +148,53 @@ public sealed class A2aTaskDurabilityTests : IDisposable
         Assert.NotNull(await store.GetTaskAsync("new"));
     }
 
+    [Fact]
+    public async Task ListTasks_StatusTimestampAfter_Filters()
+    {
+        var store = Store();
+        await store.SaveTaskAsync("t1", MkTask("t1", "c", TaskState.Working));
+        var marker = DateTimeOffset.UtcNow;
+        await store.SaveTaskAsync("t2", MkTask("t2", "c", TaskState.Completed));
+
+        var filtered = await store.ListTasksAsync(
+            new ListTasksRequest { StatusTimestampAfter = marker });
+        Assert.Single(filtered.Tasks);
+        Assert.Equal("t2", filtered.Tasks[0].Id);
+    }
+
+    [Fact]
+    public async Task SaveTask_CapturesCallerKeyId_FromHttpContext()
+    {
+        var accessor = new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new System.Security.Claims.ClaimsPrincipal(
+                    new System.Security.Claims.ClaimsIdentity(
+                        [new System.Security.Claims.Claim(
+                            KnowledgeHub.Server.Auth.ApiKeyAuthenticationHandler
+                                .KeyIdClaim, "key-42")],
+                        "test"))
+            }
+        };
+        var store = new EfA2aTaskStore(
+            new CatalogDatabase(CatalogProvider.Sqlite, null),
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Path"] = _dbPath })
+                .Build(),
+            accessor,
+            _notifier,
+            NullLogger<EfA2aTaskStore>.Instance);
+        await store.SaveTaskAsync("t1", MkTask("t1", "c", TaskState.Working));
+
+        using var db = Open();
+        Assert.Equal("key-42", (await db.A2aTasks.SingleAsync()).CallerKeyId);
+    }
+
+    [Fact]
+    public async Task DeleteTask_Unknown_NoOp()
+        => await Store().DeleteTaskAsync("ghost"); // must not throw
+
     // ---- RF-003: push configs + terminal dispatch ------------------------
 
     private static TaskPushNotificationConfig Config(string id, string url) => new()

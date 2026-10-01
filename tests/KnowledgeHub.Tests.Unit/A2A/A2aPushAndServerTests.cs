@@ -275,6 +275,79 @@ public sealed class A2aPushAndServerTests : IDisposable
     }
 
     [Fact]
+    public async Task Dispatch_HandlerThrows_RetriesThenGivesUp()
+    {
+        var handler = new ThrowingHandler();
+        var notifier = Notifier(handler);
+
+        await notifier.DispatchTerminalAsync(
+            MkTask("t1", TaskState.Completed), [Webhook("https://hooks.example/x")],
+            CancellationToken.None);
+
+        Assert.Equal(3, handler.Attempts);
+    }
+
+    private sealed class ThrowingHandler : HttpMessageHandler
+    {
+        public int Attempts;
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Attempts++;
+            throw new HttpRequestException("connection refused");
+        }
+    }
+
+    [Fact]
+    public async Task Server_ListPushConfigs_Paginates()
+    {
+        var server = Server();
+        var store = Store();
+        await store.SaveTaskAsync("t1", MkTask("t1", TaskState.Working));
+        for (var i = 0; i < 3; i++)
+            await server.CreateTaskPushNotificationConfigAsync(
+                CreateReq("t1", $"cfg-{i}", $"https://hooks.example/{i}"));
+
+        var page1 = await server.ListTaskPushNotificationConfigAsync(
+            new ListTaskPushNotificationConfigRequest { TaskId = "t1", PageSize = 2 });
+        Assert.Equal(2, page1.Configs!.Count);
+        Assert.NotNull(page1.NextPageToken);
+        var page2 = await server.ListTaskPushNotificationConfigAsync(
+            new ListTaskPushNotificationConfigRequest
+            { TaskId = "t1", PageSize = 2, PageToken = page1.NextPageToken });
+        Assert.Single(page2.Configs!);
+        Assert.Null(page2.NextPageToken);
+    }
+
+    [Fact]
+    public void ResolveOrigin_DefaultsMcp_BackfillsKeyFromPrincipal()
+    {
+        var accessor = new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new System.Security.Claims.ClaimsPrincipal(
+                    new System.Security.Claims.ClaimsIdentity(
+                        [new System.Security.Claims.Claim(
+                            KnowledgeHub.Server.Auth.ApiKeyAuthenticationHandler.KeyIdClaim,
+                            "key-7")]))
+            }
+        };
+        var services = new ServiceCollection()
+            .AddScoped<KnowledgeHub.Server.Mcp.WriteOriginContext>()
+            .AddSingleton<IHttpContextAccessor>(accessor)
+            .BuildServiceProvider();
+        using var scope = services.CreateScope();
+
+        var origin = KnowledgeHub.Server.Mcp.ObsidianNoteWriter
+            .ResolveOrigin(scope.ServiceProvider);
+
+        Assert.NotNull(origin);
+        Assert.Equal("mcp", origin!.Channel);
+        Assert.Equal("key-7", origin.KeyId);
+    }
+
+    [Fact]
     public async Task Dispatch_NoEvidenceService_PostsUnsigned()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK);
