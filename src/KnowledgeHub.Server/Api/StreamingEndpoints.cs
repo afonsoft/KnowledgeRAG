@@ -16,99 +16,107 @@ public static class StreamingEndpoints
 {
     public static void MapStreamingApi(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/ask/stream", async (
-            HttpContext http, AskRequest request,
-            CorrectiveRetrievalService retrieval, IAnswerService answers) =>
+        app.MapPost("/api/ask/stream", AskStreamAsync)
+            .RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("llm");
+
+        app.MapPost("/api/agent/stream", AgentStreamAsync)
+            .RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("llm");
+    }
+
+    private static async Task AskStreamAsync(
+        HttpContext http, AskRequest request,
+        CorrectiveRetrievalService retrieval, IAnswerService answers)
+    {
+        if (string.IsNullOrWhiteSpace(request.Question))
         {
-            if (string.IsNullOrWhiteSpace(request.Question))
-            {
-                http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "question is required" }, http.RequestAborted);
-                return;
-            }
-            var mode = SearchEndpoints.ParseMode(request.Mode);
-            if (mode is null)
-            {
-                http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "mode must be hybrid | semantic | lexical" }, http.RequestAborted);
-                return;
-            }
-            var generate = request.Generate ?? answers.IsConfigured;
-            if (!generate || !answers.IsConfigured)
-            {
-                http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "chat provider not configured (Chat:Provider=none)" }, http.RequestAborted);
-                return;
-            }
-
-            if (!Search.ResolvedSearchFilter.TryResolve(request.Filters, out var streamFilter, out var streamFilterError))
-            {
-                http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = streamFilterError }, http.RequestAborted);
-                return;
-            }
-
-            var ct = http.RequestAborted;
-            var k = request.TopK is null or <= 0 ? SearchEndpoints.DefaultTopK : Math.Min(request.TopK.Value, SearchEndpoints.MaxTopK);
-
-            // SPEC-20260926-search-correctness-and-stream RF-002: the stream
-            // gets the same retrieve→grade→retry/abstain pipeline as POST
-            // /api/ask — previously it bypassed grading entirely.
-            var outcome = await retrieval.RetrieveAsync(
-                request.Question, k, request.SourceId, mode.Value, streamFilter, ct: ct);
-            await WriteSseAsync(http, StreamOutcome(ct), ct);
-
-            async IAsyncEnumerable<SseEvent> StreamOutcome(
-                [EnumeratorCancellation] CancellationToken cancellationToken = default)
-            {
-                yield return new SseEvent("meta", new
-                {
-                    effectiveQuery = outcome.EffectiveQuery,
-                    corrected = !string.Equals(outcome.EffectiveQuery, request.Question, StringComparison.Ordinal),
-                    retried = outcome.Retried,
-                    // RF-706: retry COUNT, not just a flag — clients and eval
-                    // need to tell 1 from 2 corrective attempts.
-                    retries = outcome.Retries,
-                    grade = retrieval.GradingEnabled
-                        ? outcome.Grading.Grade.ToString().ToLowerInvariant()
-                        : (string?)null
-                });
-
-                if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient)
-                {
-                    var abstain = retrieval.BuildAbstention(request.Question, outcome);
-                    yield return new SseEvent("abstain", abstain);
-                    // RF-705: the Playground only renders the terminal `done`
-                    // event — abstaining without it produced a blank answer.
-                    yield return new SseEvent("done", abstain);
-                    yield break;
-                }
-
-                await foreach (var e in answers
-                    .StreamAsync(request.Question, outcome.Results, cancellationToken)
-                    .WithCancellation(cancellationToken))
-                    yield return e;
-            }
-        }).RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("llm");
-
-        app.MapPost("/api/agent/stream", async (HttpContext http, AgentRequest request, IAgentService agent) =>
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = "question is required" }, http.RequestAborted);
+            return;
+        }
+        var mode = SearchEndpoints.ParseMode(request.Mode);
+        if (mode is null)
         {
-            if (string.IsNullOrWhiteSpace(request.Prompt) && request.Messages is not { Count: > 0 })
-            {
-                http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "prompt or messages[] is required" }, http.RequestAborted);
-                return;
-            }
-            if (!agent.IsConfigured)
-            {
-                http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "agent requires a chat provider (Chat:Provider)" }, http.RequestAborted);
-                return;
-            }
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = "mode must be hybrid | semantic | lexical" }, http.RequestAborted);
+            return;
+        }
+        var generate = request.Generate ?? answers.IsConfigured;
+        if (!generate || !answers.IsConfigured)
+        {
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = "chat provider not configured (Chat:Provider=none)" }, http.RequestAborted);
+            return;
+        }
 
-            var ct = http.RequestAborted;
-            await WriteSseAsync(http, agent.StreamAsync(request, ct), ct);
-        }).RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("llm");
+        if (!Search.ResolvedSearchFilter.TryResolve(request.Filters, out var streamFilter, out var streamFilterError))
+        {
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = streamFilterError }, http.RequestAborted);
+            return;
+        }
+
+        var ct = http.RequestAborted;
+        var k = request.TopK is null or <= 0 ? SearchEndpoints.DefaultTopK : Math.Min(request.TopK.Value, SearchEndpoints.MaxTopK);
+
+        // SPEC-20260926-search-correctness-and-stream RF-002: the stream
+        // gets the same retrieve→grade→retry/abstain pipeline as POST
+        // /api/ask — previously it bypassed grading entirely.
+        var outcome = await retrieval.RetrieveAsync(
+            request.Question, k, request.SourceId, mode.Value, streamFilter, ct: ct);
+        await WriteSseAsync(http, StreamAskOutcomeAsync(retrieval, answers, request.Question, outcome, ct), ct);
+    }
+
+    private static async IAsyncEnumerable<SseEvent> StreamAskOutcomeAsync(
+        CorrectiveRetrievalService retrieval, IAnswerService answers,
+        string question, CorrectiveRetrievalService.RetrievalOutcome outcome,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        yield return new SseEvent("meta", new
+        {
+            effectiveQuery = outcome.EffectiveQuery,
+            corrected = !string.Equals(outcome.EffectiveQuery, question, StringComparison.Ordinal),
+            retried = outcome.Retried,
+            // RF-706: retry COUNT, not just a flag — clients and eval
+            // need to tell 1 from 2 corrective attempts.
+            retries = outcome.Retries,
+            grade = retrieval.GradingEnabled
+                ? outcome.Grading.Grade.ToString().ToLowerInvariant()
+                : (string?)null
+        });
+
+        if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient)
+        {
+            var abstain = retrieval.BuildAbstention(question, outcome);
+            yield return new SseEvent("abstain", abstain);
+            // RF-705: the Playground only renders the terminal `done`
+            // event — abstaining without it produced a blank answer.
+            yield return new SseEvent("done", abstain);
+            yield break;
+        }
+
+        await foreach (var e in answers
+            .StreamAsync(question, outcome.Results, cancellationToken)
+            .WithCancellation(cancellationToken))
+            yield return e;
+    }
+
+    private static async Task AgentStreamAsync(HttpContext http, AgentRequest request, IAgentService agent)
+    {
+        if (string.IsNullOrWhiteSpace(request.Prompt) && request.Messages is not { Count: > 0 })
+        {
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = "prompt or messages[] is required" }, http.RequestAborted);
+            return;
+        }
+        if (!agent.IsConfigured)
+        {
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = "agent requires a chat provider (Chat:Provider)" }, http.RequestAborted);
+            return;
+        }
+
+        var ct = http.RequestAborted;
+        await WriteSseAsync(http, agent.StreamAsync(request, ct), ct);
     }
 
     /// <summary>Writes the event stream; exceptions become a terminal "error" event.</summary>

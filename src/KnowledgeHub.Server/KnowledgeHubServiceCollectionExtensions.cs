@@ -40,6 +40,29 @@ public static class KnowledgeHubServiceCollectionExtensions
         var catalog = CatalogDatabase.Resolve(configuration);
         services.AddSingleton(catalog);
 
+        AddDataAccess(services, catalog);
+        AddEmbeddings(services);
+        AddEvaluation(services);
+        AddUpstreamHttpClients(services);
+        AddSourceConnectors(services);
+        AddChatProviders(services);
+        AddAgentServices(services);
+        AddVectorStore(services);
+        AddRetrieval(services);
+        AddGraph(services);
+        AddIngestion(services);
+        AddToolCatalog(services);
+        AddSecrets(services, configuration);
+        AddUpstreamTools(services);
+        AddCaching(services, configuration);
+        AddMcpServer(services);
+        AddTelemetry(services, configuration);
+
+        return services;
+    }
+
+    private static void AddDataAccess(IServiceCollection services, CatalogDatabase catalog)
+    {
         // SPEC-20260916-performance-memory-cache RF-006: pooled contexts — one
         // DbContext allocation per request instead of a fresh graph each time.
         if (catalog.IsPostgres)
@@ -62,11 +85,26 @@ public static class KnowledgeHubServiceCollectionExtensions
                 o.UseSqlite($"Data Source={DatabasePath.Resolve(sp.GetRequiredService<IConfiguration>())}")
                     .ReplaceService<IModelCacheKeyFactory, ProviderAwareModelCacheKeyFactory>());
         }
+    }
 
+    private static void AddEmbeddings(IServiceCollection services)
+    {
         services.AddOptions<EmbeddingOptions>()
             .Configure<IConfiguration>((options, cfg) =>
                 cfg.GetSection(EmbeddingOptions.SectionName).Bind(options));
 
+        // SPEC-20260926-settings-ux-embeddings RF-004: effective options come
+        // from the EmbeddingSettings store over env. Consumers still inject
+        // IEmbeddingProvider — a delegating facade forwards to resolver.Current
+        // so /settings edits swap the provider without restart.
+        services.AddSingleton<Settings.IEmbeddingSettingsService, Settings.EmbeddingSettingsService>();
+        services.AddSingleton<IEmbeddingProviderResolver, EmbeddingProviderResolver>();
+        services.AddSingleton<IEmbeddingProvider>(sp =>
+            new DelegatingEmbeddingProvider(sp.GetRequiredService<IEmbeddingProviderResolver>()));
+    }
+
+    private static void AddEvaluation(IServiceCollection services)
+    {
         // SPEC-20260927-rag-evaluation-triad-metrics: RAG Quality Triad evaluator.
         services.AddOptions<Evaluation.RagEvaluationOptions>()
             .Configure<IConfiguration>((options, cfg) =>
@@ -75,6 +113,14 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Evaluation.IRagEvaluationEnqueuer, Evaluation.RagEvaluationEnqueuer>();
         services.AddHostedService<Evaluation.EvaluationWorker>();
 
+        // SPEC-20260923-eval-harness: read-only retrieval-quality runner.
+        services.AddScoped<Eval.EvalRunner>();
+        // SPEC-20260924-eval-regression-gate RF-003: scheduled eval + gate alerts.
+        services.AddHostedService<Eval.EvalScheduleService>();
+    }
+
+    private static void AddUpstreamHttpClients(IServiceCollection services)
+    {
         // SPEC-20260923-agent-runtime-hardening RF-004: standard resilience
         // pipeline (retry 3× exp+jitter on transient failures, per-attempt +
         // total timeouts, circuit breaker). Client.Timeout moves to Infinite so
@@ -130,7 +176,10 @@ public static class KnowledgeHubServiceCollectionExtensions
         // "restapi" client (30 s) + connector registry entries.
         services.AddHttpClient("restapi", c => c.Timeout = TimeSpan.FromSeconds(30)).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
         services.AddHttpClient("feed", c => c.Timeout = TimeSpan.FromSeconds(30)).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false }).AddHttpMessageHandler(sp => Security.EgressPolicyHandler.FromConfiguration(sp.GetRequiredService<IConfiguration>()));
+    }
 
+    private static void AddSourceConnectors(IServiceCollection services)
+    {
         // SPEC-20260914-webpage-docfile-connectors: connector registry.
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.WebPageConnector>();
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.DocumentFileConnector>();
@@ -162,15 +211,10 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.Cloud.OciStorageConnector>();
         // SPEC-20260924-gdrive-shared-link-connector.
         services.AddSingleton<Ingestion.Connectors.ISourceConnector, Ingestion.Connectors.GoogleDriveSharedConnector>();
-        // SPEC-20260926-settings-ux-embeddings RF-004: effective options come
-        // from the EmbeddingSettings store over env. Consumers still inject
-        // IEmbeddingProvider — a delegating facade forwards to resolver.Current
-        // so /settings edits swap the provider without restart.
-        services.AddSingleton<Settings.IEmbeddingSettingsService, Settings.EmbeddingSettingsService>();
-        services.AddSingleton<IEmbeddingProviderResolver, EmbeddingProviderResolver>();
-        services.AddSingleton<IEmbeddingProvider>(sp =>
-            new DelegatingEmbeddingProvider(sp.GetRequiredService<IEmbeddingProviderResolver>()));
+    }
 
+    private static void AddChatProviders(IServiceCollection services)
+    {
         // SPEC-20260914-llm-answer-synthesis RF-001: optional chat client.
         // Provider=none → GetClient() returns null; consumers use GetService.
         services.AddOptions<Chat.ChatProviderOptions>()
@@ -269,7 +313,10 @@ public static class KnowledgeHubServiceCollectionExtensions
                 sp.GetRequiredService<ILogger<AnswerService>>(),
                 sp.GetRequiredService<Evaluation.IRagEvaluationEnqueuer>());
         });
+    }
 
+    private static void AddAgentServices(IServiceCollection services)
+    {
         // SPEC-20260927-cryptographic-evidence-provenance-chain: append-only
         // receipt chain (HMAC key in the encrypted store, slot evidence:master).
         services.AddScoped<Audit.Evidence.IEvidenceChainService, Audit.Evidence.EvidenceChainService>();
@@ -301,7 +348,10 @@ public static class KnowledgeHubServiceCollectionExtensions
                 sp.GetRequiredService<IOptions<Agent.AgentOptions>>().Value.ApprovalTimeoutMinutes),
             sp.GetService<IMcpActivityFeed>()));
         services.AddScoped<IConversationService, ConversationService>();
+    }
 
+    private static void AddVectorStore(IServiceCollection services)
+    {
         services.AddScoped<IVectorStore>(sp =>
         {
             var cfg = sp.GetRequiredService<IConfiguration>();
@@ -335,7 +385,10 @@ public static class KnowledgeHubServiceCollectionExtensions
                     cfg.GetValue("Embeddings:Dimensions", 384));
             return new SqliteVectorStore(sp.GetRequiredService<KnowledgeHubDbContext>());
         });
+    }
 
+    private static void AddRetrieval(IServiceCollection services)
+    {
         services.AddScoped<IKnowledgeSourceService, KnowledgeSourceService>();
         services.AddScoped<Search.ILexicalSearchService, Search.LexicalSearchService>();
         services.AddScoped<ISearchService, SearchService>();
@@ -359,12 +412,10 @@ public static class KnowledgeHubServiceCollectionExtensions
                     sp, sp.GetRequiredService<ILogger<Search.LlmRetrievalGrader>>())
                 : new Search.HeuristicRetrievalGrader(sp.GetRequiredService<IConfiguration>()));
         services.AddScoped<CorrectiveRetrievalService>();
+    }
 
-        // SPEC-20260923-eval-harness: read-only retrieval-quality runner.
-        services.AddScoped<Eval.EvalRunner>();
-        // SPEC-20260924-eval-regression-gate RF-003: scheduled eval + gate alerts.
-        services.AddHostedService<Eval.EvalScheduleService>();
-
+    private static void AddGraph(IServiceCollection services)
+    {
         // SPEC-20260923-graph-settings-ui: runtime-editable Graph:* overrides.
         services.AddSingleton<Settings.IGraphSettingsService, Settings.GraphSettingsService>();
 
@@ -381,7 +432,10 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<Settings.IGraphSettingsService>()));
         // SPEC-20260923-prompt-injection-guard: deterministic heuristic scanner.
         services.AddSingleton<Security.IContentSanitizer, Security.ContentSanitizer>();
+    }
 
+    private static void AddIngestion(IServiceCollection services)
+    {
         services.AddSingleton<IngestionService>();
         services.AddSingleton<IIngestionService>(sp => sp.GetRequiredService<IngestionService>());
         // SPEC-20260924-async-ingestion-queue RF-001/RF-002: bounded channel +
@@ -393,14 +447,20 @@ public static class KnowledgeHubServiceCollectionExtensions
         // SPEC-20260924-hosted-services-and-serilog-logging RF-002/RF-003.
         services.AddHostedService<ScheduledSyncBackgroundService>();
         services.AddHostedService<MaintenanceBackgroundService>();
+    }
 
+    private static void AddToolCatalog(IServiceCollection services)
+    {
         // SPEC-04: dynamic MCP tool catalog + handlers + change notifier.
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.KnowledgeToolsProvider>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.SourceQueryToolsProvider>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.ObsidianToolsProvider>();
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
+    }
 
+    private static void AddSecrets(IServiceCollection services, IConfiguration configuration)
+    {
         // SPEC-20260916-firecrawl-mcp-proxy RF-004: encrypted-at-rest upstream
         // credentials. DP key ring lives next to the DB so backup.sh can ship it.
         services.AddDataProtection()
@@ -414,7 +474,10 @@ public static class KnowledgeHubServiceCollectionExtensions
                     "dataprotection-keys")));
         services.AddSingleton<Settings.IIntegrationSecretStore, Settings.IntegrationSecretStore>();
         services.AddSingleton<Settings.IIntegrationStateService, Settings.IntegrationStateService>();
+    }
 
+    private static void AddUpstreamTools(IServiceCollection services)
+    {
         // SPEC-07: DeepWiki proxy tools (ask_question / read_wiki_structure / read_wiki_contents).
         services.AddOptions<KnowledgeHub.Server.Mcp.Upstream.DeepWikiOptions>()
             .Configure<IConfiguration>((options, cfg) =>
@@ -435,6 +498,43 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<IToolProvider>(sp =>
             sp.GetRequiredService<KnowledgeHub.Server.Mcp.Upstream.FirecrawlToolsProvider>());
 
+        // SPEC-20260916-tavily-mcp-proxy: Tavily proxy tools (tavily_*).
+        services.AddOptions<KnowledgeHub.Server.Mcp.Upstream.TavilyOptions>()
+            .Configure<IConfiguration>((options, cfg) =>
+                cfg.GetSection(KnowledgeHub.Server.Mcp.Upstream.TavilyOptions.SectionName).Bind(options));
+        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.TavilyUpstreamClient>();
+        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.TavilyToolsProvider>();
+        services.AddSingleton<IToolProvider>(sp =>
+            sp.GetRequiredService<KnowledgeHub.Server.Mcp.Upstream.TavilyToolsProvider>());
+
+        // SPEC-20260922-context7-mcp-proxy: Context7 proxy tools
+        // (resolve-library-id / query-docs).
+        services.AddOptions<KnowledgeHub.Server.Mcp.Upstream.Context7Options>()
+            .Configure<IConfiguration>((options, cfg) =>
+                cfg.GetSection(KnowledgeHub.Server.Mcp.Upstream.Context7Options.SectionName).Bind(options));
+        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.Context7UpstreamClient>();
+        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.Context7ToolsProvider>();
+        services.AddSingleton<IToolProvider>(sp =>
+            sp.GetRequiredService<KnowledgeHub.Server.Mcp.Upstream.Context7ToolsProvider>());
+
+        // SPEC-20260917-mcp-proxy-source-type: generic upstream MCP proxies
+        // driven by McpProxy sources (tools re-exposed with slug prefix).
+        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.Upstream.McpProxyToolsProvider>();
+        services.AddSingleton<KnowledgeHub.Server.Mcp.ToolProviders.SettingsToolsProvider>();
+        services.AddSingleton<IToolProvider>(sp =>
+            sp.GetRequiredService<KnowledgeHub.Server.Mcp.ToolProviders.SettingsToolsProvider>());
+        services.AddSingleton<IToolProvider>(sp =>
+            new KnowledgeHub.Server.Mcp.ToolProviders.GraphToolsProvider(
+                sp.GetRequiredService<Settings.IGraphSettingsService>()));
+        // SPEC-20260927-temporal-episodic-knowledge-graph RF-005: temporal,
+        // recent-window, diverse and episodic graph search tools.
+        services.AddSingleton<IToolProvider>(sp =>
+            new KnowledgeHub.Server.Mcp.ToolProviders.TemporalGraphToolsProvider(
+                sp.GetRequiredService<Settings.IGraphSettingsService>()));
+    }
+
+    private static void AddCaching(IServiceCollection services, IConfiguration configuration)
+    {
         // SPEC-20260916-performance-memory-cache RF-005: IDistributedCache —
         // memory by default (zero-infra), Redis opt-in for shared/persistent
         // entries. Secrets never go through this store.
@@ -521,41 +621,10 @@ public static class KnowledgeHubServiceCollectionExtensions
         }
         services.AddSingleton<Caching.ICacheManagerService, Caching.CacheManagerService>();
         services.AddSingleton<Caching.IToolCacheService, Caching.ToolCacheService>();
+    }
 
-        // SPEC-20260916-tavily-mcp-proxy: Tavily proxy tools (tavily_*).
-        services.AddOptions<KnowledgeHub.Server.Mcp.Upstream.TavilyOptions>()
-            .Configure<IConfiguration>((options, cfg) =>
-                cfg.GetSection(KnowledgeHub.Server.Mcp.Upstream.TavilyOptions.SectionName).Bind(options));
-        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.TavilyUpstreamClient>();
-        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.TavilyToolsProvider>();
-        services.AddSingleton<IToolProvider>(sp =>
-            sp.GetRequiredService<KnowledgeHub.Server.Mcp.Upstream.TavilyToolsProvider>());
-
-        // SPEC-20260922-context7-mcp-proxy: Context7 proxy tools
-        // (resolve-library-id / query-docs).
-        services.AddOptions<KnowledgeHub.Server.Mcp.Upstream.Context7Options>()
-            .Configure<IConfiguration>((options, cfg) =>
-                cfg.GetSection(KnowledgeHub.Server.Mcp.Upstream.Context7Options.SectionName).Bind(options));
-        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.Context7UpstreamClient>();
-        services.AddSingleton<KnowledgeHub.Server.Mcp.Upstream.Context7ToolsProvider>();
-        services.AddSingleton<IToolProvider>(sp =>
-            sp.GetRequiredService<KnowledgeHub.Server.Mcp.Upstream.Context7ToolsProvider>());
-
-        // SPEC-20260917-mcp-proxy-source-type: generic upstream MCP proxies
-        // driven by McpProxy sources (tools re-exposed with slug prefix).
-        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.Upstream.McpProxyToolsProvider>();
-        services.AddSingleton<KnowledgeHub.Server.Mcp.ToolProviders.SettingsToolsProvider>();
-        services.AddSingleton<IToolProvider>(sp =>
-            sp.GetRequiredService<KnowledgeHub.Server.Mcp.ToolProviders.SettingsToolsProvider>());
-        services.AddSingleton<IToolProvider>(sp =>
-            new KnowledgeHub.Server.Mcp.ToolProviders.GraphToolsProvider(
-                sp.GetRequiredService<Settings.IGraphSettingsService>()));
-        // SPEC-20260927-temporal-episodic-knowledge-graph RF-005: temporal,
-        // recent-window, diverse and episodic graph search tools.
-        services.AddSingleton<IToolProvider>(sp =>
-            new KnowledgeHub.Server.Mcp.ToolProviders.TemporalGraphToolsProvider(
-                sp.GetRequiredService<Settings.IGraphSettingsService>()));
-
+    private static void AddMcpServer(IServiceCollection services)
+    {
         services.AddOptions<McpServerOptions>().Configure(options =>
         {
             options.Handlers.ListToolsHandler = async (ctx, ct) =>
@@ -589,8 +658,51 @@ public static class KnowledgeHubServiceCollectionExtensions
                 };
             };
 
-            options.Handlers.CallToolHandler = async (ctx, ct) =>
+            options.Handlers.CallToolHandler = async (ctx, ct) => await CallToolAsync(ctx, ct);
+
+            options.Handlers.ListResourcesHandler = async (ctx, ct) =>
+                await KnowledgeResourceProvider.ListAsync(ctx.Services!, ct);
+
+            options.Handlers.ReadResourceHandler = async (ctx, ct) =>
+                await KnowledgeResourceProvider.ReadAsync(ctx.Params?.Uri ?? "", ctx.Services!, ct);
+        });
+    }
+
+    private static void AddTelemetry(IServiceCollection services, IConfiguration configuration)
+    {
+        // SPEC-20260923-observability-metrics RF-003: opt-in exporters. With no
+        // Telemetry:* config the Meter/ActivitySource stay no-op listeners —
+        // zero exporter overhead and zero behavioral change.
+        services.AddSingleton<IMcpRequestMetrics, Telemetry.KnowledgeHubMetrics>();
+        // SPEC-20260925-runtime-log-level: LogLevelControl + LoggingLevelSwitch
+        // are registered in Program.cs (the switch must exist before Serilog
+        // config binds to it).
+        var telemetry = Telemetry.TelemetryOptions.FromConfiguration(configuration);
+        if (!string.IsNullOrEmpty(telemetry.OtlpEndpoint) || telemetry.Prometheus)
+        {
+            var otel = services.AddOpenTelemetry()
+                .WithMetrics(m => m
+                    .AddMeter(Telemetry.KnowledgeHubMetrics.MeterName)
+                    .AddMeter(Evaluation.RagEvaluationMetrics.MeterName)
+                    .AddAspNetCoreInstrumentation())
+                .WithTracing(t => t
+                    .AddSource(Telemetry.KnowledgeHubMetrics.MeterName)
+                    .AddAspNetCoreInstrumentation());
+            if (!string.IsNullOrEmpty(telemetry.OtlpEndpoint))
             {
+                var endpoint = new Uri(telemetry.OtlpEndpoint);
+                otel.WithMetrics(m => m.AddOtlpExporter(o => o.Endpoint = endpoint))
+                    .WithTracing(t => t.AddOtlpExporter(o => o.Endpoint = endpoint));
+            }
+            if (telemetry.Prometheus)
+                otel.WithMetrics(m => m.AddPrometheusExporter());
+        }
+    }
+
+    /// <summary>MCP CallTool pipeline: scope gate → MRTR approval → rate limit →
+    /// tool cache → handler with duration metric.</summary>
+    private static async System.Threading.Tasks.Task<CallToolResult> CallToolAsync(
+        RequestContext<CallToolRequestParams> ctx, CancellationToken ct) {
                 var catalog = ctx.Services!.GetRequiredService<IDynamicToolCatalog>();
                 var name = ctx.Params?.Name;
                 var tool = (await catalog.GetToolsAsync(ctx.Services!, ct))
@@ -692,43 +804,6 @@ public static class KnowledgeHubServiceCollectionExtensions
                     Telemetry.KnowledgeHubMetrics.ToolDuration.Record(toolSw.Elapsed.TotalMilliseconds,
                         new KeyValuePair<string, object?>("tool", name));
                 }
-            };
-
-            options.Handlers.ListResourcesHandler = async (ctx, ct) =>
-                await KnowledgeResourceProvider.ListAsync(ctx.Services!, ct);
-
-            options.Handlers.ReadResourceHandler = async (ctx, ct) =>
-                await KnowledgeResourceProvider.ReadAsync(ctx.Params?.Uri ?? "", ctx.Services!, ct);
-        });
-
-        // SPEC-20260923-observability-metrics RF-003: opt-in exporters. With no
-        // Telemetry:* config the Meter/ActivitySource stay no-op listeners —
-        // zero exporter overhead and zero behavioral change.
-        services.AddSingleton<IMcpRequestMetrics, Telemetry.KnowledgeHubMetrics>();
-        // SPEC-20260925-runtime-log-level: LogLevelControl + LoggingLevelSwitch
-        // are registered in Program.cs (the switch must exist before Serilog
-        // config binds to it).
-        var telemetry = Telemetry.TelemetryOptions.FromConfiguration(configuration);
-        if (!string.IsNullOrEmpty(telemetry.OtlpEndpoint) || telemetry.Prometheus)
-        {
-            var otel = services.AddOpenTelemetry()
-                .WithMetrics(m => m
-                    .AddMeter(Telemetry.KnowledgeHubMetrics.MeterName)
-                    .AddMeter(Evaluation.RagEvaluationMetrics.MeterName)
-                    .AddAspNetCoreInstrumentation())
-                .WithTracing(t => t
-                    .AddSource(Telemetry.KnowledgeHubMetrics.MeterName)
-                    .AddAspNetCoreInstrumentation());
-            if (!string.IsNullOrEmpty(telemetry.OtlpEndpoint))
-            {
-                var endpoint = new Uri(telemetry.OtlpEndpoint);
-                otel.WithMetrics(m => m.AddOtlpExporter(o => o.Endpoint = endpoint))
-                    .WithTracing(t => t.AddOtlpExporter(o => o.Endpoint = endpoint));
             }
-            if (telemetry.Prometheus)
-                otel.WithMetrics(m => m.AddPrometheusExporter());
-        }
 
-        return services;
-    }
 }
