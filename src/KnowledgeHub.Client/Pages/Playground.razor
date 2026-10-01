@@ -4,6 +4,7 @@
 @using KnowledgeHub.Shared.Contracts
 @inject ToolsApiClient Tools
 @inject StreamingApiClient Streaming
+@inject A2aApiClient A2a
 @inject ToastService Toast
 
 <PageTitle>Playground — Knowledge</PageTitle>
@@ -236,6 +237,84 @@
     </div>
 </div>
 
+@* SPEC-20261001-a2a-task-durability: A2A smoke test — delega uma task ao
+   endpoint /a2a (mesmo que os agentes externos usam) e faz poll do estado
+   terminal, provando durabilidade/visibilidade do task store. *@
+<Card class="mt-3">
+    <HeaderTemplate>
+        <div class="d-flex justify-content-between gap-2 align-items-center">
+            <span>Teste A2A — Agent-to-Agent <small class="text-muted">(/a2a, JSON-RPC)</small></span>
+            @if (_a2aPushEnabled is not null)
+            {
+                <Badge Color="@(_a2aPushEnabled == true ? Color.Success : Color.Secondary)">
+                    pushNotifications: @(_a2aPushEnabled == true ? "on" : "off")
+                </Badge>
+            }
+        </div>
+    </HeaderTemplate>
+    <BodyTemplate>
+        <div class="row g-3">
+            <div class="col-12 col-md-5">
+                <label class="form-label">Skill</label>
+                <Select @bind-Value="_a2aSkill" Items="_a2aSkillItems" />
+                <label class="form-label mt-2">Mensagem</label>
+                <Textarea @bind-Value="_a2aText" rows="3" placeholder="Delegue uma tarefa ao hub…" />
+                <label class="form-label mt-2">contextId <small class="text-muted">(opcional — agrupa tasks num contexto)</small></label>
+                <BootstrapInput @bind-Value="_a2aContextId" PlaceHolder="32 hex chars ou vazio" />
+                <div class="d-flex align-items-center gap-2 mt-3">
+                    <Button Color="Color.Primary" Icon="fa-solid fa-paper-plane" Text="Enviar task"
+                            TooltipText="SendMessage" IsAsync="true" OnClick="SendA2aAsync"
+                            IsDisabled="_a2aRunning || string.IsNullOrWhiteSpace(_a2aText)" />
+                    @if (!string.IsNullOrEmpty(_a2aTaskId))
+                    {
+                        <Button Color="Color.Secondary" Icon="fa-solid fa-rotate" Text="GetTask"
+                                TooltipText="GetTask" IsAsync="true" OnClick="RefreshA2aAsync" IsDisabled="_a2aRunning" />
+                        @if (!_a2aTerminal)
+                        {
+                            <Button Color="Color.Danger" Icon="fa-solid fa-ban" Text="Cancelar"
+                                    TooltipText="CancelTask" IsAsync="true" OnClick="CancelA2aAsync" IsDisabled="_a2aRunning" />
+                        }
+                    }
+                </div>
+            </div>
+            <div class="col-12 col-md-7">
+                @if (_a2aTask is null && !_a2aRunning)
+                {
+                    <div class="text-muted">Envie uma mensagem — a resposta mostra a task persistida (id, estado, artefatos).</div>
+                }
+                else
+                {
+                    @if (_a2aTaskId is not null)
+                    {
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <Badge Color="@A2aStateColor(_a2aState)">@(_a2aState ?? "?")</Badge>
+                            <code class="small text-truncate">@_a2aTaskId</code>
+                            @if (_a2aRunning)
+                            {
+                                <i class="fa-solid fa-spinner fa-spin text-primary"></i>
+                            }
+                        </div>
+                    }
+                    @foreach (var line in _a2aLines)
+                    {
+                        <pre class="mb-1" style="white-space: pre-wrap;">@line</pre>
+                    }
+                    @if (_a2aTask is not null)
+                    {
+                        <div class="mt-2">
+                            <Switch @bind-Value="_a2aShowRaw" DisplayText="JSON" ShowLabel="true" />
+                            @if (_a2aShowRaw)
+                            {
+                                <pre class="border rounded p-3 bg-light mt-2 mb-0" style="max-height: 360px; overflow: auto;">@_a2aTask.Value.ToString()</pre>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </BodyTemplate>
+</Card>
+
 @code {
     private IReadOnlyList<ToolDescriptorDto>? _tools;
     private ToolDescriptorDto? _selected;
@@ -256,7 +335,159 @@
     private bool _awaitingWriteConfirm;
     private string? _pendingArgsJson;
 
-    protected override async Task OnInitializedAsync() => await LoadToolsAsync();
+    // ---- A2A smoke test ----
+    private List<SelectedItem> _a2aSkillItems = [new("search_knowledge", "search_knowledge")];
+    private string _a2aSkill = "search_knowledge";
+    private string? _a2aText;
+    private string? _a2aContextId;
+    private bool? _a2aPushEnabled;
+    private bool _a2aRunning;
+    private JsonElement? _a2aTask;
+    private string? _a2aTaskId;
+    private string? _a2aState;
+    private bool _a2aTerminal;
+    private bool _a2aShowRaw;
+    private List<string> _a2aLines = [];
+    private static readonly TimeSpan A2aPollInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan A2aPollTimeout = TimeSpan.FromMinutes(5);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadToolsAsync(), LoadAgentCardAsync());
+    }
+
+    private async Task LoadAgentCardAsync()
+    {
+        try
+        {
+            var card = await A2a.GetAgentCardAsync();
+            if (card.TryGetProperty("capabilities", out var caps) &&
+                caps.TryGetProperty("pushNotifications", out var push))
+                _a2aPushEnabled = push.ValueKind == JsonValueKind.True;
+            if (card.TryGetProperty("skills", out var skills) && skills.ValueKind == JsonValueKind.Array)
+            {
+                var items = skills.EnumerateArray()
+                    .Where(s => s.TryGetProperty("id", out _))
+                    .Select(s => new SelectedItem(s.GetProperty("id").GetString()!,
+                        s.TryGetProperty("name", out var n) ? n.GetString() ?? s.GetProperty("id").GetString()! : s.GetProperty("id").GetString()!))
+                    .ToList();
+                if (items.Count > 0)
+                {
+                    _a2aSkillItems = items;
+                    _a2aSkill = items[0].Value;
+                }
+            }
+        }
+        catch { /* card is best-effort — fallback skill list stays */ }
+    }
+
+    private async Task SendA2aAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_a2aText)) return;
+        _a2aRunning = true;
+        _a2aTask = null;
+        _a2aTaskId = null;
+        _a2aState = null;
+        _a2aTerminal = false;
+        _a2aLines = [];
+        try
+        {
+            var task = await A2a.SendMessageAsync(_a2aSkill, _a2aText,
+                string.IsNullOrWhiteSpace(_a2aContextId) ? null : _a2aContextId.Trim());
+            ApplyA2aTask(task);
+
+            // Poll until a terminal state — tasks are durable, so GetTask stays valid.
+            var deadline = DateTime.UtcNow + A2aPollTimeout;
+            while (!_a2aTerminal && DateTime.UtcNow < deadline && _a2aTaskId is not null)
+            {
+                await Task.Delay(A2aPollInterval);
+                StateHasChanged();
+                ApplyA2aTask(await A2a.GetTaskAsync(_a2aTaskId));
+            }
+        }
+        catch (Exception ex)
+        {
+            await Toast.Error("A2A falhou", ex.Message);
+        }
+        finally
+        {
+            _a2aRunning = false;
+        }
+    }
+
+    private async Task RefreshA2aAsync()
+    {
+        if (_a2aTaskId is null) return;
+        _a2aRunning = true;
+        try
+        {
+            ApplyA2aTask(await A2a.GetTaskAsync(_a2aTaskId));
+        }
+        catch (Exception ex)
+        {
+            await Toast.Error("GetTask falhou", ex.Message);
+        }
+        finally
+        {
+            _a2aRunning = false;
+        }
+    }
+
+    private async Task CancelA2aAsync()
+    {
+        if (_a2aTaskId is null) return;
+        try
+        {
+            ApplyA2aTask(await A2a.CancelTaskAsync(_a2aTaskId));
+        }
+        catch (Exception ex)
+        {
+            await Toast.Error("CancelTask falhou", ex.Message);
+        }
+    }
+
+    private void ApplyA2aTask(JsonElement task)
+    {
+        _a2aTask = task;
+        _a2aTaskId = task.TryGetProperty("id", out var id) ? id.GetString() : _a2aTaskId;
+        _a2aState = A2aApiClient.TaskState(task);
+        _a2aTerminal = A2aApiClient.IsTerminal(_a2aState);
+        _a2aLines = ExtractA2aTexts(task).ToList();
+    }
+
+    // Renders the human-readable parts: status message + artifact parts.
+    private static IEnumerable<string> ExtractA2aTexts(JsonElement task)
+    {
+        if (task.TryGetProperty("status", out var status) &&
+            status.TryGetProperty("message", out var msg))
+            foreach (var t in PartTexts(msg))
+                yield return t;
+        if (task.TryGetProperty("artifacts", out var artifacts) && artifacts.ValueKind == JsonValueKind.Array)
+            foreach (var a in artifacts.EnumerateArray())
+            {
+                var name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
+                foreach (var t in PartTexts(a))
+                    yield return name is null ? t : $"[{name}] {t}";
+            }
+    }
+
+    private static IEnumerable<string> PartTexts(JsonElement owner)
+    {
+        if (!owner.TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array)
+            yield break;
+        foreach (var p in parts.EnumerateArray())
+            if (p.TryGetProperty("text", out var t))
+                yield return t.GetString() ?? "";
+    }
+
+    private static Color A2aStateColor(string? state) => state switch
+    {
+        "TASK_STATE_COMPLETED" => Color.Success,
+        "TASK_STATE_FAILED" or "TASK_STATE_REJECTED" => Color.Danger,
+        "TASK_STATE_CANCELED" => Color.Warning,
+        "TASK_STATE_WORKING" or "TASK_STATE_SUBMITTED" => Color.Primary,
+        _ => Color.Secondary
+    };
 
     private async Task LoadToolsAsync()
     {

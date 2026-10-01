@@ -37,6 +37,7 @@ builder.Services.AddScoped<ToolsApiClient>();
 builder.Services.AddScoped<ApprovalsApiClient>();
 builder.Services.AddScoped<ThreadsApiClient>();
 builder.Services.AddScoped<StreamingApiClient>();
+builder.Services.AddScoped<A2aApiClient>();
 builder.Services.AddScoped<SettingsApiClient>();
 builder.Services.AddScoped<EvalApiClient>();
 builder.Services.AddScoped<GraphApiClient>();
