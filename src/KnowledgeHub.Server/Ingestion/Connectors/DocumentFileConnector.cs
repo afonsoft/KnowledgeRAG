@@ -157,17 +157,30 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
     {
         public static Func<string, bool> Compile(string glob)
         {
-            var pattern = Regex.Escape(glob.Trim())
-                .Replace("\\*\\*/", "(.*/)?")   // **/  → any depth
-                .Replace("\\*\\*", ".*")        // **   → anything
-                .Replace("\\*", "[^/]*")        // *    → segment
-                .Replace("\\?", ".");
-            // {a,b} → (a|b) — Regex.Escape escapes the braces, commas pass through.
-            pattern = Regex.Replace(pattern, @"\\\{([^}]*)\\\}",
-                m => "(" + m.Groups[1].Value.Replace(",", "|") + ")",
-                RegexOptions.None, TimeSpan.FromSeconds(1));
-            var regex = new Regex($"^{pattern}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            // {a,b} groups must split before Regex.Escape (braces are not escaped).
+            var pattern = glob.Trim();
+            var sb = new System.Text.StringBuilder("^");
+            var i = 0;
+            foreach (var m in Regex.Matches(pattern, @"\{([^}]*)\}",
+                         RegexOptions.None, TimeSpan.FromSeconds(1)).Cast<Match>())
+            {
+                AppendGlobSegment(sb, pattern[i..m.Index]);
+                sb.Append('(');
+                sb.Append(string.Join('|', m.Groups[1].Value.Split(',').Select(Regex.Escape)));
+                sb.Append(')');
+                i = m.Index + m.Length;
+            }
+            AppendGlobSegment(sb, pattern[i..]);
+            sb.Append('$');
+            var regex = new Regex(sb.ToString(), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
             return path => regex.IsMatch(path.Replace('\\', '/'));
+
+            static void AppendGlobSegment(System.Text.StringBuilder sb, string literal)
+                => sb.Append(Regex.Escape(literal)
+                    .Replace("\\*\\*/", "(.*/)?")   // **/  → any depth
+                    .Replace("\\*\\*", ".*")        // **   → anything
+                    .Replace("\\*", "[^/]*")        // *    → segment
+                    .Replace("\\?", "."));
         }
     }
 }
