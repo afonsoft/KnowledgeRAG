@@ -120,18 +120,15 @@ public static class SafeCache
     /// <summary>SPEC-20260925-hybrid-cache-l1l2 RF-002: get-or-create with
     /// stampede protection — concurrent misses on a hot key share ONE producer
     /// (per-key lock); other waiters re-read the cache after the lock.</summary>
-    /// <summary>Serializer pair for <see cref="GetOrCreateAsync{T}"/> payloads.</summary>
-    public sealed record CacheCodec<T>(Func<T, byte[]> Serialize, Func<byte[], T?> Deserialize);
-
     public static async Task<T?> GetOrCreateAsync<T>(
         IDistributedCache cache, string key,
         Func<CancellationToken, Task<T?>> factory,
-        CacheCodec<T> codec,
+        Func<T, byte[]> serialize, Func<byte[], T?> deserialize,
         TimeSpan? ttl, ILogger logger, CancellationToken ct = default)
     {
         var cached = await GetAsync(cache, key, logger, ct);
         if (cached is not null)
-            return codec.Deserialize(cached);
+            return deserialize(cached);
 
         if (cache is L1L2Cache hybrid)
         {
@@ -143,10 +140,10 @@ public static class SafeCache
                 // only the winner produces, serializing the miss-fill.
                 cached = await GetAsync(cache, key, logger, ct);
                 if (cached is not null)
-                    return codec.Deserialize(cached);
+                    return deserialize(cached);
                 var produced = await factory(ct);
                 if (produced is not null)
-                    await SetAsync(cache, key, codec.Serialize(produced), ttl, logger, ct);
+                    await SetAsync(cache, key, serialize(produced), ttl, logger, ct);
                 return produced;
             }
             finally { gate.Release(); }
@@ -154,7 +151,7 @@ public static class SafeCache
 
         var produced2 = await factory(ct);
         if (produced2 is not null)
-            await SetAsync(cache, key, codec.Serialize(produced2), ttl, logger, ct);
+            await SetAsync(cache, key, serialize(produced2), ttl, logger, ct);
         return produced2;
     }
 
