@@ -17,6 +17,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Serilog;
 
+const string GeneralPolicy = "general";
+const string ReadyTag = "ready";
+
 var builder = WebApplication.CreateBuilder(args);
 
 // SPEC-20260924-hosted-services-and-serilog-logging RF-001: Serilog host
@@ -55,12 +58,12 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 // SPEC-20260914-health-checks: /health/live + /health/ready.
 builder.Services.AddHealthChecks()
-    .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"])
-    .AddCheck<EmbeddingHealthCheck>("embeddings", tags: ["ready"])
-    .AddCheck<IngestionHealthCheck>("ingestion", tags: ["ready"])
+    .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag])
+    .AddCheck<EmbeddingHealthCheck>("embeddings", tags: [ReadyTag])
+    .AddCheck<IngestionHealthCheck>("ingestion", tags: [ReadyTag])
     // SPEC-20260925-vectorstore-metrics RF-003: store down → Degraded (search
     // keeps working via FTS-only) — never Unhealthy.
-    .AddCheck<VectorStoreHealthCheck>("vectorstore", tags: ["ready"]);
+    .AddCheck<VectorStoreHealthCheck>("vectorstore", tags: [ReadyTag]);
 
 // SPEC-20260925-redis-health-and-scan-stats RF-001: Redis is degraded-not-fatal
 // (cache is fail-soft) — the check reports Degraded so ready stays 200.
@@ -73,7 +76,7 @@ if (builder.Configuration.GetValue("Cache:Provider", "memory")
             sp => new KnowledgeHub.Server.Health.RedisHealthCheck(
                 sp.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>()),
             failureStatus: Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Degraded,
-            tags: ["ready"],
+            tags: [ReadyTag],
             timeout: TimeSpan.FromSeconds(2)));
 }
 
@@ -139,7 +142,7 @@ builder.Services.AddRateLimiter(options =>
         RateLimiting(http, http.RequestServices.GetRequiredService<KnowledgeHub.Server.RateLimiting.RateLimitOptions>(), llm: true));
     options.AddPolicy("sync", http =>
         RateLimiting(http, http.RequestServices.GetRequiredService<KnowledgeHub.Server.RateLimiting.RateLimitOptions>(), llm: false, sync: true));
-    options.AddPolicy("general", http =>
+    options.AddPolicy(GeneralPolicy, http =>
         RateLimiting(http, http.RequestServices.GetRequiredService<KnowledgeHub.Server.RateLimiting.RateLimitOptions>(), llm: false));
 });
 
@@ -374,7 +377,7 @@ app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthC
 });
 app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
-    Predicate = r => r.Tags.Contains("ready")
+    Predicate = r => r.Tags.Contains(ReadyTag)
 });
 
 // SPEC-20260915-boot-cache-revalidation RF-001: the mutable boot chain
@@ -416,30 +419,30 @@ app.MapFrameworkAssetsApi();
 // SPEC-20260914-auth-login RF-006: everything operational requires an
 // authenticated principal that has cleared the password-change gate.
 // Public: /api/auth/login, /health/*, static assets + SPA fallback.
-app.MapAuthApi().RequireRateLimiting("general");
-app.MapApiKeysApi().RequireRateLimiting("general");
-app.MapSourcesApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
+app.MapAuthApi().RequireRateLimiting(GeneralPolicy);
+app.MapApiKeysApi().RequireRateLimiting(GeneralPolicy);
+app.MapSourcesApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
 app.MapIngestionApi().RequireAuthorization(AuthPolicies.Operational);
-app.MapDiagnosticsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
-app.MapSearchApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
+app.MapDiagnosticsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
+app.MapSearchApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
 app.MapAskApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("llm");
 app.MapAgentApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("llm");
-app.MapApprovalsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
-app.MapThreadsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
+app.MapApprovalsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
+app.MapThreadsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
 app.MapStreamingApi(); // RequireAuthorization + RequireRateLimiting applied per-endpoint inside (returns void)
-app.MapToolsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
-app.MapSettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
-app.MapApiKeySettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
+app.MapToolsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
+app.MapSettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
+app.MapApiKeySettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
 app.MapEvalApi().RequireAuthorization(AuthPolicies.Operational);
-app.MapEvidenceApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
+app.MapEvidenceApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
 // CookieSession: the stats payload embeds flagged questions from every caller —
 // API keys must not enumerate other users' queries (Devin Review PR #367).
 app.MapRagEvaluationApi().RequireAuthorization(AuthPolicies.CookieSession);
 // SPEC-20260928-graph-timeline-viewer RF-001: UI-only read surface over the
 // temporal/episodic knowledge graph — CookieSession like the RAG dashboard.
 app.MapGraphApi().RequireAuthorization(AuthPolicies.CookieSession);
-app.MapSecurityApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting("general");
-app.MapMcpInfoApi().RequireRateLimiting("general");
+app.MapSecurityApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
+app.MapMcpInfoApi().RequireRateLimiting(GeneralPolicy);
 // SPEC-20260923-observability-metrics RF-003: opt-in Prometheus scrape endpoint.
 if (app.Configuration.GetValue("Telemetry:Metrics:Prometheus", false))
     app.MapPrometheusScrapingEndpoint().RequireAuthorization(AuthPolicies.Operational);
@@ -453,16 +456,10 @@ try
 {
     await app.RunAsync();
 }
-catch (Exception ex) when (ex is not OperationCanceledException)
-{
-    // Bootstrap logger still active if host died before UseSerilog bound —
-    // CreateBootstrapLogger writes to console; config logger takes over after.
-    Log.Fatal(ex, "Host terminated unexpectedly");
-    throw;
-}
 finally
 {
     await Log.CloseAndFlushAsync();
 }
 
+// Marker type so WebApplicationFactory<Program> can host the app in integration tests.
 public partial class Program;

@@ -75,12 +75,12 @@ public sealed class EvalScheduleService(
 
         await using var scope = services.CreateAsyncScope();
         var runner = scope.ServiceProvider.GetRequiredService<EvalRunner>();
-        var report = await runner.RunAsync(
-            cases, datasetJson,
-            configuration.GetValue<string>("Eval:Schedule:Mode"),
-            configuration.GetValue<int?>("Eval:Schedule:TopK"),
-            configuration.GetValue<string>("Eval:Schedule:Faithfulness"),
-            compareTo: null, baselineName: baseline, gate: gate, ct: ct);
+        var report = await runner.RunAsync(cases, datasetJson,
+            new EvalRunner.EvalRunOptions(
+                Mode: configuration.GetValue<string>("Eval:Schedule:Mode"),
+                TopK: configuration.GetValue<int?>("Eval:Schedule:TopK"),
+                Faithfulness: configuration.GetValue<string>("Eval:Schedule:Faithfulness"),
+                BaselineName: baseline, Gate: gate), ct);
 
         if (report.Gate?.Status == "fail")
         {
@@ -121,7 +121,7 @@ public sealed class EvalScheduleService(
         }
         catch (JsonException ex)
         {
-            logger.LogWarning("Eval:Schedule:Gate is not valid JSON — ignored: {Message}", ex.Message);
+            logger.LogWarning(ex, "Eval:Schedule:Gate is not valid JSON — ignored");
             return null;
         }
     }

@@ -60,11 +60,9 @@ public static class MmrSelector
         if (c.Vector is null)
             return 0;
         var max = 0.0;
-        foreach (var s in selected)
+        foreach (var s in selected.Where(s => s.Vector is not null))
         {
-            if (s.Vector is null)
-                continue;
-            var sim = Cosine(c.Vector, s.Vector);
+            var sim = Cosine(c.Vector, s.Vector!);
             if (sim > max)
                 max = sim;
         }

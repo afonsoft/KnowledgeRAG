@@ -75,18 +75,17 @@ public sealed partial class LlmReranker(
                 new KeyValuePair<string, object?>("kind", "rerank"));
         }
 
-        var scores = new List<RerankScore>(candidates.Count);
-        foreach (Match m in ScoreLineRegex().Matches(response.Text ?? ""))
-        {
-            var index = int.Parse(m.Groups[1].Value) - 1;
-            if (index < 0 || index >= candidates.Count)
-                continue;
-            if (!double.TryParse(m.Groups[2].Value,
-                    System.Globalization.CultureInfo.InvariantCulture, out var score))
-                continue;
-            if (candidates[index].ChunkId is { } chunkId)
-                scores.Add(new RerankScore(chunkId, Math.Clamp(score, 0, 10)));
-        }
+        var scores = ScoreLineRegex().Matches(response.Text ?? "")
+            .Select(m => (
+                Index: int.Parse(m.Groups[1].Value) - 1,
+                Score: double.TryParse(m.Groups[2].Value,
+                    System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : double.NaN))
+            .Where(x => x.Index >= 0 && x.Index < candidates.Count && !double.IsNaN(x.Score))
+            .Select(x => candidates[x.Index].ChunkId is { } chunkId
+                ? new RerankScore(chunkId, Math.Clamp(x.Score, 0, 10))
+                : null)
+            .OfType<RerankScore>()
+            .ToList();
 
         logger.LogInformation("Rerank scored {Scored}/{Total} candidates", scores.Count, candidates.Count);
         return scores;

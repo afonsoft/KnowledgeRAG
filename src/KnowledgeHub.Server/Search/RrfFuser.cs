@@ -50,19 +50,18 @@ public static class RrfFuser
                 var rank = i + 1;
                 var contribution = 1.0 / (K + rank);
                 if (scores.TryGetValue(ranked[i], out var hit))
+                {
+                    int? BestRank(string armName, int? existing) =>
+                        arm != armName ? existing
+                            : existing is null ? rank : Math.Min(existing.Value, rank);
                     scores[ranked[i]] = hit with
                     {
-                        VectorRank = arm == "vector"
-                            ? hit.VectorRank is null ? rank : Math.Min(hit.VectorRank.Value, rank)
-                            : hit.VectorRank,
-                        LexicalRank = arm == "lexical"
-                            ? hit.LexicalRank is null ? rank : Math.Min(hit.LexicalRank.Value, rank)
-                            : hit.LexicalRank,
-                        GraphRank = arm == "graph"
-                            ? hit.GraphRank is null ? rank : Math.Min(hit.GraphRank.Value, rank)
-                            : hit.GraphRank,
+                        VectorRank = BestRank("vector", hit.VectorRank),
+                        LexicalRank = BestRank("lexical", hit.LexicalRank),
+                        GraphRank = BestRank("graph", hit.GraphRank),
                         Fused = hit.Fused + contribution
                     };
+                }
                 else
                     scores[ranked[i]] = new FusedHit(
                         ranked[i],

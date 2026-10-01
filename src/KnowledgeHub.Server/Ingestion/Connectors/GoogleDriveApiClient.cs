@@ -145,11 +145,10 @@ public sealed class GoogleDriveApiClient(HttpClient http)
         var url = $"https://drive.google.com/embeddedfolderview?id={Uri.EscapeDataString(folderId)}#list";
         var html = await http.GetStringAsync(url, ct);
         // Entries look like: <a href="https://drive.google.com/file/d/{id}/view?..." ...>{name}</a>
-        foreach (Match m in EmbeddedEntryPattern.Matches(html))
+        foreach (Match m in EmbeddedEntryPattern.Matches(html)
+                     .Where(m => !m.Groups[1].Value.Contains("/drive/folders/", StringComparison.Ordinal)))
         {
-            var isFolder = m.Groups[1].Value.Contains("/drive/folders/", StringComparison.Ordinal);
-            if (isFolder)
-                continue; // public view shows subfolders as links — recursion needs metadata anyway
+            // public view shows subfolders as links — recursion needs metadata anyway
             yield return new DriveFileMeta(
                 m.Groups[1].Value,
                 System.Net.WebUtility.HtmlDecode(m.Groups[2].Value.Trim()),
@@ -194,7 +193,7 @@ public sealed class GoogleDriveApiClient(HttpClient http)
         f.Id ?? "", f.Name ?? "", f.MimeType ?? "",
         long.TryParse(f.Size, out var sz) ? sz : null,
         f.Md5Checksum,
-        DateTimeOffset.TryParse(f.ModifiedTime, out var ts) ? ts : null);
+        DateTimeOffset.TryParse(f.ModifiedTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var ts) ? ts : null);
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 

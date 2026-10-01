@@ -67,8 +67,9 @@ public sealed class HybridCacheAndTtlTests
         var tasks = Enumerable.Range(0, 8).Select(_ =>
             SafeCache.GetOrCreateAsync<string>(cache, "hot",
                 async ct => { Interlocked.Increment(ref calls); await Task.Delay(50, ct); return "v"; },
-                v => System.Text.Encoding.UTF8.GetBytes(v),
-                b => System.Text.Encoding.UTF8.GetString(b),
+                new SafeCache.CacheCodec<string>(
+                    v => System.Text.Encoding.UTF8.GetBytes(v),
+                    b => System.Text.Encoding.UTF8.GetString(b)),
                 TimeSpan.FromMinutes(1),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance));
 

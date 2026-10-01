@@ -286,7 +286,7 @@ host_deploy() {
   if [[ "$SYSTEMD" == 1 ]]; then
     install_systemd
   else
-    info "Run: KnowledgeHub__DatabasePath=$(cd "$DATA_DIR" && pwd)/knowledgehub.db ASPNETCORE_URLS=http://+:$PORT $PREFIX/KnowledgeHub"
+    info "Run: KnowledgeHub__DatabasePath=$(cd "$DATA_DIR" && pwd)/knowledgehub.db ASPNETCORE_URLS=http://+:$PORT $PREFIX/KnowledgeHub" # NOSONAR S5332 — URL de bind local exibida ao usuário, não chamada de rede
     info "Or re-run with --systemd to install the service."
   fi
 }

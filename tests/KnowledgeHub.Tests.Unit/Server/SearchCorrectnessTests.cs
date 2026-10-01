@@ -190,10 +190,7 @@ public sealed class SearchCorrectnessTests
             NullLogger<EvalRunner>.Instance);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            runner.RunAsync(
-                [new EvalCase { Id = "c1", Question = "q" }],
-                "[{\"id\":\"c1\"}]", null, null, null, null,
-                baselineName: "golden"));
+            runner.RunAsync([new EvalCase { Id = "c1", Question = "q" }], "[{\"id\":\"c1\"}]", new EvalRunner.EvalRunOptions(BaselineName: "golden")));
         Assert.Contains("different dataset", ex.Message);
     }
 }

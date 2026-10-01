@@ -11,6 +11,8 @@ namespace KnowledgeHub.McpEngine.Activity;
 /// </summary>
 public static class McpActivityFilters
 {
+    private const string ToolsCallMethod = "tools/call";
+
     /// <summary>
     /// Request filter for <c>tools/call</c>: measures latency, captures outcome
     /// (<c>isError</c> on the result or a thrown <see cref="McpProtocolException"/>),
@@ -29,13 +31,13 @@ public static class McpActivityFilters
         {
             var result = await next(request, cancellationToken);
             var succeeded = result.IsError != true;
-            metrics?.Record("tools/call", sessionId is null ? "stateless" : "stateful", succeeded);
+            metrics?.Record(ToolsCallMethod, sessionId is null ? "stateless" : "stateful", succeeded);
             feed.Record(new McpActivityEvent
             {
                 Timestamp = DateTimeOffset.UtcNow,
                 Kind = McpActivityKind.ToolCall,
                 SessionId = sessionId,
-                Method = "tools/call",
+                Method = ToolsCallMethod,
                 ToolName = toolName,
                 DurationMs = stopwatch.Elapsed.TotalMilliseconds,
                 Succeeded = succeeded,
@@ -51,7 +53,7 @@ public static class McpActivityFilters
                 Timestamp = DateTimeOffset.UtcNow,
                 Kind = McpActivityKind.ToolCall,
                 SessionId = sessionId,
-                Method = "tools/call",
+                Method = ToolsCallMethod,
                 ToolName = toolName,
                 DurationMs = stopwatch.Elapsed.TotalMilliseconds,
                 Succeeded = false,
@@ -77,7 +79,7 @@ public static class McpActivityFilters
         // Track the session so tools/list_changed can broadcast to live clients.
         registry.Register(context.Server);
 
-        if (context.JsonRpcMessage is not JsonRpcRequest request || request.Method == "tools/call")
+        if (context.JsonRpcMessage is not JsonRpcRequest request || request.Method == ToolsCallMethod)
         {
             await next(context, cancellationToken);
             return;

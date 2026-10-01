@@ -11,16 +11,33 @@ using Microsoft.EntityFrameworkCore;
 namespace KnowledgeHub.Server.Services;
 
 /// <summary>CRUD + validation + secret redaction for knowledge sources (SPEC-02 RF-001/RF-002).</summary>
-public sealed class KnowledgeSourceService(
-    KnowledgeHubDbContext db,
-    IToolCatalogChangeNotifier catalogNotifier,
-    IIntegrationSecretStore secrets,
-    Ingestion.Staging.IStagingStorageService? staging = null,
-    VectorStore.IVectorStore? vectors = null,
-    ILogger<KnowledgeSourceService>? log = null,
-    Microsoft.Extensions.Caching.Distributed.IDistributedCache? cache = null,
-    Caching.ICacheInvalidationBus? invalidationBus = null) : IKnowledgeSourceService
+public sealed class KnowledgeSourceService : IKnowledgeSourceService
 {
+    private readonly KnowledgeHubDbContext db;
+    private readonly IToolCatalogChangeNotifier catalogNotifier;
+    private readonly IIntegrationSecretStore secrets;
+    private readonly Ingestion.Staging.IStagingStorageService? staging;
+    private readonly VectorStore.IVectorStore? vectors;
+    private readonly ILogger<KnowledgeSourceService>? log;
+    private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache? cache;
+    private readonly Caching.ICacheInvalidationBus? invalidationBus;
+
+    public KnowledgeSourceService(
+        KnowledgeHubDbContext db,
+        IToolCatalogChangeNotifier catalogNotifier,
+        IIntegrationSecretStore secrets,
+        KnowledgeSourceServiceExtras? extras = null)
+    {
+        this.db = db;
+        this.catalogNotifier = catalogNotifier;
+        this.secrets = secrets;
+        staging = extras?.Staging;
+        vectors = extras?.Vectors;
+        log = extras?.Log;
+        cache = extras?.Cache;
+        invalidationBus = extras?.InvalidationBus;
+    }
+
     private const string TokenField = "token";
     private const string ConnectionStringField = "connectionString";
     private const string ApiKeyField = "apiKey";
@@ -480,11 +497,11 @@ public sealed class KnowledgeSourceService(
         if (configuration is null)
             return $"Configuration is required for {type} (expects {string.Join(", ", RequiredKeys[type])})";
 
-        foreach (var key in RequiredKeys[type])
-        {
-            if (configuration[key] is null || string.IsNullOrWhiteSpace(configuration[key]?.GetValue<string>()))
-                return $"Configuration key '{key}' is required for {type}";
-        }
+        var missingKey = RequiredKeys[type]
+            .FirstOrDefault(key => configuration[key] is null
+                || string.IsNullOrWhiteSpace(configuration[key]?.GetValue<string>()));
+        if (missingKey is not null)
+            return $"Configuration key '{missingKey}' is required for {type}";
 
         return type switch
         {
@@ -640,11 +657,8 @@ public sealed class KnowledgeSourceService(
             if (node is null)
                 return null;
             var clone = (JsonObject)node.DeepClone();
-            foreach (var key in SensitiveKeys)
-            {
-                if (clone.ContainsKey(key))
-                    clone[key] = "***";
-            }
+            foreach (var key in SensitiveKeys.Where(clone.ContainsKey))
+                clone[key] = "***";
             return clone;
         }
         catch (JsonException)

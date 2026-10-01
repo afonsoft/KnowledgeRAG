@@ -45,6 +45,9 @@ public sealed class ToolField
 /// </summary>
 public static class ToolArgumentBuilder
 {
+    private const string TypeString = "string";
+    private const string TypeArray = "array";
+
     /// <summary>RF-001/RF-002: schema properties → ordered fields.</summary>
     public static IReadOnlyList<ToolField> ParseFields(JsonElement inputSchema)
     {
@@ -274,10 +277,10 @@ public static class ToolArgumentBuilder
         foreach (var m in nonNull)
         {
             var t = SchemaType(m);
-            labels.Add(t is "array" && IsStringItems(m) ? "string[]" : t);
+            labels.Add(t is TypeArray && IsStringItems(m) ? "string[]" : t);
             foreach (var k in ValueKindsFor(t))
                 unionKinds.Add(k);
-            unionAllowsString |= t == "string";
+            unionAllowsString |= t == TypeString;
         }
         return new ToolField
         {
@@ -298,14 +301,14 @@ public static class ToolArgumentBuilder
         maxItems = schema.TryGetProperty("maxItems", out var mi) && mi.ValueKind == JsonValueKind.Number
             ? mi.GetInt32()
             : null;
-        label = type is "array" && IsStringItems(schema) ? "string[]" : type;
+        label = type is TypeArray && IsStringItems(schema) ? "string[]" : type;
         return type switch
         {
-            "string" => ToolFieldKind.String,
+            TypeString => ToolFieldKind.String,
             "integer" => ToolFieldKind.Integer,
             "number" => ToolFieldKind.Number,
             "boolean" => ToolFieldKind.Boolean,
-            "array" when IsStringItems(schema) => ToolFieldKind.StringList,
+            TypeArray when IsStringItems(schema) => ToolFieldKind.StringList,
             _ => ToolFieldKind.Json
         };
     }
@@ -322,14 +325,14 @@ public static class ToolArgumentBuilder
         => schema.TryGetProperty("items", out var items) &&
            items.ValueKind == JsonValueKind.Object &&
            items.TryGetProperty("type", out var it) &&
-           it.ValueKind == JsonValueKind.String && it.GetString() == "string";
+           it.ValueKind == JsonValueKind.String && it.GetString() == TypeString;
 
     private static IEnumerable<JsonValueKind> ValueKindsFor(string schemaType) => schemaType switch
     {
-        "string" => [JsonValueKind.String],
+        TypeString => [JsonValueKind.String],
         "integer" or "number" => [JsonValueKind.Number],
         "boolean" => [JsonValueKind.True, JsonValueKind.False],
-        "array" => [JsonValueKind.Array],
+        TypeArray => [JsonValueKind.Array],
         "null" => [JsonValueKind.Null],
         _ => [JsonValueKind.Object]
     };
@@ -358,8 +361,11 @@ public static class ToolArgumentBuilder
         ToolFieldKind.String or ToolFieldKind.Choice => el.ValueKind == JsonValueKind.String ? el.GetString()! : el.GetRawText(),
         ToolFieldKind.Integer or ToolFieldKind.Number or ToolFieldKind.Boolean => el.GetRawText().Trim(),
         ToolFieldKind.StringList or ToolFieldKind.StringOrStringList => el.ValueKind == JsonValueKind.Array
-            ? string.Join(", ", el.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText()))
+            ? string.Join(", ", el.EnumerateArray().Select(ElemText))
             : el.ValueKind == JsonValueKind.String ? el.GetString()! : el.GetRawText(),
         _ => el.GetRawText()
     };
+
+    private static string? ElemText(JsonElement e) =>
+        e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText();
 }

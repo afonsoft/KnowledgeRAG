@@ -22,7 +22,7 @@ public static class SafeCache
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning("cache get failed for {Key} — treating as miss: {Message}", key, ex.Message);
+            logger.LogWarning(ex, "cache get failed for {Key} — treating as miss", key);
             RecordHit(key, false);
             return null;
         }
@@ -39,7 +39,7 @@ public static class SafeCache
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning("cache get failed for {Key} — treating as miss: {Message}", key, ex.Message);
+            logger.LogWarning(ex, "cache get failed for {Key} — treating as miss", key);
             RecordHit(key, false);
             return null;
         }
@@ -70,7 +70,7 @@ public static class SafeCache
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning("cache set failed for {Key} — skipping: {Message}", key, ex.Message);
+            logger.LogWarning(ex, "cache set failed for {Key} — skipping", key);
         }
     }
 
@@ -87,7 +87,7 @@ public static class SafeCache
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning("cache set failed for {Key} — skipping: {Message}", key, ex.Message);
+            logger.LogWarning(ex, "cache set failed for {Key} — skipping", key);
         }
     }
 
@@ -102,7 +102,7 @@ public static class SafeCache
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning("cache remove failed for {Key} — skipping: {Message}", key, ex.Message);
+            logger.LogWarning(ex, "cache remove failed for {Key} — skipping", key);
         }
     }
 

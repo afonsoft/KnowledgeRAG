@@ -7,7 +7,7 @@ namespace KnowledgeHub.Server.Chat;
 /// as the embedding providers (no heavy SDK dependency). Non-streaming only;
 /// streaming lands with SPEC-20260914-streaming-answers.
 /// </summary>
-public abstract class HttpChatClient(HttpClient http, ChatProviderOptions options) : IChatClient
+public abstract class HttpChatClient(HttpClient http, ChatProviderOptions options) : IChatClient // NOSONAR S3881 — HttpClient injetado pelo DI, lifetime externo
 {
     protected HttpClient Http { get; } = http;
     protected ChatProviderOptions Options { get; } = options;
@@ -28,10 +28,6 @@ public abstract class HttpChatClient(HttpClient http, ChatProviderOptions option
         catch (HttpRequestException ex)
         {
             throw new ChatProviderException($"chat provider request failed: {ex.Message}");
-        }
-        catch (ChatProviderException)
-        {
-            throw;
         }
     }
 

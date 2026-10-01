@@ -100,12 +100,8 @@ public sealed class EmbeddingSettingsService(
         var row = await FindRowAsync(cancellationToken);
         var (maxTokens, overlapTokens) = GetChunking();
 
-        var info = await secrets.GetInfoAsync(IntegrationProviders.Embeddings, cancellationToken);
-        var (hasKey, hint, keySource) = info is not null
-            ? (true, $"••••{info.KeyHint}", "store")
-            : !string.IsNullOrWhiteSpace(env.ApiKey)
-                ? (true, $"••••{(env.ApiKey.Length >= 4 ? env.ApiKey[^4..] : env.ApiKey)}", "env")
-                : (false, default(string), "none");
+        var (hasKey, last4, keySource) = await secrets.GetKeyStatusAsync(IntegrationProviders.Embeddings, env.ApiKey, cancellationToken);
+        var hint = last4 is null ? null : $"••••{last4}";
 
         return new EmbeddingSettingsDto
         {

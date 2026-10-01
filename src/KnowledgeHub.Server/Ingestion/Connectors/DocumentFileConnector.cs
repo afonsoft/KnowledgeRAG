@@ -17,7 +17,7 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
 {
     /// <summary>Extensions with a text extractor. Plain-text extensions cover
     /// code and config files (SPEC-20260923-code-aware-chunking).</summary>
-    public static readonly System.Collections.Immutable.ImmutableHashSet<string> SupportedExtensions =
+    public static readonly System.Collections.Immutable.ImmutableHashSet<string> SupportedExtensions = // NOSONAR S2386 — ImmutableHashSet é imutável
         System.Collections.Immutable.ImmutableHashSet.Create(StringComparer.OrdinalIgnoreCase,
         ".md", ".txt", ".pdf", ".docx",
         ".csv", // Google Sheets export (SPEC-20260926-ingestion-connector-integrity RF-005)
@@ -117,12 +117,8 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
     {
         using var document = PdfDocument.Open(file);
         var sb = new StringBuilder();
-        foreach (Page page in document.GetPages())
-        {
-            var text = page.Text;
-            if (!string.IsNullOrWhiteSpace(text))
-                sb.AppendLine(text).AppendLine();
-        }
+        foreach (var text in document.GetPages().Select(p => p.Text).Where(t => !string.IsNullOrWhiteSpace(t)))
+            sb.AppendLine(text).AppendLine();
         return sb.Length == 0 ? null : sb.ToString();
     }
 
@@ -144,7 +140,7 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
         foreach (var file in Directory.EnumerateFiles(root, "*", options))
         {
             var relative = Path.GetRelativePath(root, file);
-            var segments = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var segments = relative.Split(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
             if (segments.Any(s => s.StartsWith('.')))
                 continue; // hidden files/dirs excluded
             if (matcher(relative))

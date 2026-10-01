@@ -15,6 +15,8 @@ namespace KnowledgeHub.Server.Auth;
 /// </summary>
 public static class ApiKeyEndpoints
 {
+    private const string ApiKeyNotFound = "api key não encontrada";
+
     public static RouteGroupBuilder MapApiKeysApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/apikeys")
@@ -123,7 +125,7 @@ public static class ApiKeyEndpoints
         var owns = await db.ApiKeys
             .AnyAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (!owns)
-            return Results.NotFound(new { error = "api key não encontrada" });
+            return Results.NotFound(new { error = ApiKeyNotFound });
 
         var events = await db.ApiKeyUsageEvents
             .Where(e => e.ApiKeyId == id)
@@ -154,7 +156,7 @@ public static class ApiKeyEndpoints
         var key = await db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
-            return Results.NotFound(new { error = "api key não encontrada" });
+            return Results.NotFound(new { error = ApiKeyNotFound });
 
         key.RevokedAt ??= DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -174,7 +176,7 @@ public static class ApiKeyEndpoints
         var key = await db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == userId, ct);
         if (key is null)
-            return Results.NotFound(new { error = "api key não encontrada" });
+            return Results.NotFound(new { error = ApiKeyNotFound });
 
         if (string.IsNullOrEmpty(key.ProtectedKey))
             return Results.Ok(new ApiKeySecretDto(key.Id, null, false));
@@ -208,7 +210,7 @@ public static class ApiKeyEndpoints
         var key = await db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
-            return Results.NotFound(new { error = "api key não encontrada" });
+            return Results.NotFound(new { error = ApiKeyNotFound });
 
         if (body?.AllowedSourceIds is { } sourceIds && sourceIds.Count > 0)
         {
@@ -258,14 +260,12 @@ public static class ApiKeyEndpoints
         var key = await db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
-            return Results.NotFound(new { error = "api key não encontrada" });
+            return Results.NotFound(new { error = ApiKeyNotFound });
 
-        foreach (var v in new[] { body?.LlmPermits, body?.SyncPermits })
-            if (v is < 1 or > 100_000)
-                return Results.BadRequest(new { error = "permits must be 1..100000" });
-        foreach (var v in new[] { body?.LlmWindowSeconds, body?.SyncWindowSeconds })
-            if (v is < 1 or > 86_400)
-                return Results.BadRequest(new { error = "windowSeconds must be 1..86400" });
+        if (new[] { body?.LlmPermits, body?.SyncPermits }.Any(v => v is < 1 or > 100_000))
+            return Results.BadRequest(new { error = "permits must be 1..100000" });
+        if (new[] { body?.LlmWindowSeconds, body?.SyncWindowSeconds }.Any(v => v is < 1 or > 86_400))
+            return Results.BadRequest(new { error = "windowSeconds must be 1..86400" });
 
         key.LlmRateLimitPermits = body?.LlmPermits;
         key.LlmRateLimitWindowSeconds = body?.LlmWindowSeconds;
@@ -291,7 +291,7 @@ public static class ApiKeyEndpoints
         var key = await db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
-            return Results.NotFound(new { error = "api key não encontrada" });
+            return Results.NotFound(new { error = ApiKeyNotFound });
 
         key.AllowWrite = body?.AllowWrite ?? true;
         await db.SaveChangesAsync(ct);
@@ -311,7 +311,7 @@ public static class ApiKeyEndpoints
         var key = await db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
-            return Results.NotFound(new { error = "api key não encontrada" });
+            return Results.NotFound(new { error = ApiKeyNotFound });
 
         key.LlmRateLimitPermits = null;
         key.LlmRateLimitWindowSeconds = null;

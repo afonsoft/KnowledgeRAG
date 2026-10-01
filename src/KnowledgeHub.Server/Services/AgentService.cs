@@ -41,6 +41,8 @@ public sealed class AgentService(
     private McpEngine.Agents.ChainAst.IChainCompactor? Compactor => diagnostics.Compactor;
     private Audit.Evidence.IEvidenceChainService? Evidence => diagnostics.Evidence;
 
+    private const string AgentTag = "agent";
+
     private const string SystemPrompt =
         "You are the KnowledgeHub agent. Use the available tools to research the " +
         "knowledge base, then answer concisely and cite source/uri of what you used. " +
@@ -672,8 +674,8 @@ public sealed class AgentService(
         {
             Telemetry.KnowledgeHubMetrics.LlmDuration.Record(llmSw.Elapsed.TotalMilliseconds,
                 new KeyValuePair<string, object?>("provider", client.GetType().Name),
-                new KeyValuePair<string, object?>("model", "agent"),
-                new KeyValuePair<string, object?>("kind", "agent"));
+                new KeyValuePair<string, object?>("model", AgentTag),
+                new KeyValuePair<string, object?>("kind", AgentTag));
         }
     }
 
@@ -802,7 +804,7 @@ public sealed class AgentService(
         {
             ToolName = call.Name,
             ArgumentsJson = ApprovalService.MaskSensitive(argsElement).GetRawText(),
-            RequestedBy = "agent",
+            RequestedBy = AgentTag,
             Status = "pending",
             StateJson = JsonSerializer.Serialize(new SuspendState(
                 SnapshotMessages(loop.Messages),
@@ -820,7 +822,7 @@ public sealed class AgentService(
         {
             Timestamp = DateTimeOffset.UtcNow,
             Kind = McpActivityKind.ApprovalRequested,
-            Transport = "agent",
+            Transport = AgentTag,
             Method = "agent_chat",
             ToolName = call.Name
         });

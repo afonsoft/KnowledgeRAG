@@ -65,10 +65,11 @@ public static class EvalEndpoints
 
             try
             {
-                var report = await runner.RunAsync(
-                    cases, datasetJson!, request.Mode, request.TopK,
-                    request.Faithfulness, request.CompareTo,
-                    request.Baseline, request.Gate, ct);
+                var report = await runner.RunAsync(cases, datasetJson!,
+                    new EvalRunner.EvalRunOptions(
+                        Mode: request.Mode, TopK: request.TopK,
+                        Faithfulness: request.Faithfulness, CompareTo: request.CompareTo,
+                        BaselineName: request.Baseline, Gate: request.Gate), ct);
                 return Results.Ok(report);
             }
             catch (KeyNotFoundException ex)

@@ -50,7 +50,7 @@ public static class MarkdownChunker
             // Block alone exceeds the budget → hard-split on character boundary.
             if (text.Length > maxChars)
             {
-                FlushCurrent(current, chunks, overlapChars);
+                FlushCurrent(current, chunks);
                 for (var i = 0; i < text.Length; i += maxChars - overlapChars)
                 {
                     var piece = text.Substring(i, Math.Min(maxChars, text.Length - i)).Trim();
@@ -64,7 +64,7 @@ public static class MarkdownChunker
 
             if (current.Length + text.Length + 1 > maxChars && current.Length > 0)
             {
-                FlushCurrent(current, chunks, overlapChars);
+                FlushCurrent(current, chunks);
                 // overlap: seed next chunk with the tail of the previous one
                 var tail = TailOf(chunks[^1], overlapChars);
                 if (tail.Length > 0)
@@ -73,11 +73,11 @@ public static class MarkdownChunker
             current.Append(text).Append("\n\n");
         }
 
-        FlushCurrent(current, chunks, 0);
+        FlushCurrent(current, chunks);
         return chunks;
     }
 
-    private static void FlushCurrent(StringBuilder current, List<string> chunks, int _)
+    private static void FlushCurrent(StringBuilder current, List<string> chunks)
     {
         var text = current.ToString().Trim();
         if (text.Length > 0)

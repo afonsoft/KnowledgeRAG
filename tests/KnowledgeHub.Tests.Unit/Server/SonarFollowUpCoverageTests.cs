@@ -159,8 +159,8 @@ public sealed class SonarFollowUpCoverageTests
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Ingestion:Chunking:Strategy"] = "recursive" })
             .Build();
         var (kind, pieces) = await ChunkerSelector.ChunkAsync(
-            "doc.md", text, maxTokens: 100, overlapTokens: 10,
-            new KnowledgeHub.Server.Embeddings.DeterministicEmbeddingProvider(), cfg, strategy: null,
+            new ChunkerSelector.ChunkRequest("doc.md", text, 100, 10),
+            new KnowledgeHub.Server.Embeddings.DeterministicEmbeddingProvider(), cfg,
             NullLogger.Instance, CancellationToken.None);
         Assert.Equal(ChunkKind.Markdown, kind);
         Assert.NotEmpty(pieces);
