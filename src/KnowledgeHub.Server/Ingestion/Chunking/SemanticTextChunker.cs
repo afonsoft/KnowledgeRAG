@@ -61,7 +61,7 @@ public sealed class SemanticTextChunker(
     }
 
     private static readonly Regex _sentenceBoundary =
-        new(@"(?<=[.!?;])\s+|\n\s*\n", RegexOptions.Compiled);
+        new(@"(?<=[.!?;])\s+|\n\s*\n", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
     private static Regex SentenceBoundary() => _sentenceBoundary;
 
     private static double Percentile(IReadOnlyList<double> values, int p)

@@ -55,8 +55,12 @@ internal sealed class GoogleDriveGateway(
             // Public single-file links: probe Content-Disposition for the real
             // name — an id-as-name has no extension and never indexes (RF-005).
             GoogleDriveApiClient.DriveFileMeta? probed = null;
-            var m = meta ?? (probed = await client.TryGetPublicFileMetaAsync(rootId, ct))
-                ?? new GoogleDriveApiClient.DriveFileMeta(rootId, rootId, "", null, null, null);
+            var m = meta;
+            if (m is null)
+            {
+                probed = await client.TryGetPublicFileMetaAsync(rootId, ct);
+                m = probed ?? new GoogleDriveApiClient.DriveFileMeta(rootId, rootId, "", null, null, null);
+            }
             foreach (var o in Emit(m, "", probeOnly: probed is not null)) yield return o;
             yield break;
         }

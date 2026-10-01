@@ -451,7 +451,7 @@ app.MapFallbackToFile("index.html");
 
 try
 {
-    app.Run();
+    await app.RunAsync();
 }
 catch (Exception ex) when (ex is not OperationCanceledException)
 {
@@ -462,7 +462,7 @@ catch (Exception ex) when (ex is not OperationCanceledException)
 }
 finally
 {
-    Log.CloseAndFlush();
+    await Log.CloseAndFlushAsync();
 }
 
 public partial class Program;

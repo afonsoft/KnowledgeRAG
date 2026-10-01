@@ -735,8 +735,8 @@ public sealed class IngestionService(
         // SPEC-20260926-kg-alias-conflict-dedup RF-003: dedicated scope for graph
         // work — a failed graph SaveChanges must never leave the caller's
         // DbContext with poisoned Added entries that break every later save.
-        var scopeFactory = scope.ServiceProvider.GetRequiredService<IServiceScopeFactory>();
-        await using var graphScope = scopeFactory.CreateAsyncScope();
+        var innerScopeFactory = scope.ServiceProvider.GetRequiredService<IServiceScopeFactory>();
+        await using var graphScope = innerScopeFactory.CreateAsyncScope();
         var extractor = graphScope.ServiceProvider.GetService<Graph.EntityExtractor>();
         var store = graphScope.ServiceProvider.GetService<Graph.IKnowledgeGraphStore>();
         if (extractor is null || store is null)

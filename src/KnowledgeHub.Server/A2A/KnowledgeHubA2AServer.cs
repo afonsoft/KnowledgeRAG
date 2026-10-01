@@ -17,7 +17,7 @@ public sealed class KnowledgeHubA2AServer(
     IAgentHandler handler,
     EfA2aTaskStore taskStore,
     ChannelEventNotifier notifier,
-    ILogger<A2AServer> logger,
+    ILogger<A2AServer> logger, // NOSONAR S6672 — repassado ao ctor do A2AServer (SDK), que exige ILogger<A2AServer>
     A2AServerOptions options,
     IConfiguration configuration,
     IA2aPushNotifier pushNotifier,

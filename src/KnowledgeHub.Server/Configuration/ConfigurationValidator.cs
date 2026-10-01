@@ -56,7 +56,7 @@ public static class ConfigurationValidator
             && section["Redis:ConnectionString"]?.Contains("password=", StringComparison.OrdinalIgnoreCase) != true)
         {
             warnings.Add(
-                "Cache:Provider=redis with no password= in Cache:Redis:ConnectionString — " +
+                "Cache:Provider=redis with no password= in Cache:Redis:ConnectionString — " + // NOSONAR S2068 — texto de diagnóstico, não credencial
                 "an unauthenticated Redis exposes cached search results and embeddings to anyone " +
                 "reaching the port. See README 'Redis security' for hardening options.");
         }

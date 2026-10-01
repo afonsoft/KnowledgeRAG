@@ -71,7 +71,7 @@ public sealed class ObsidianToolsProvider : IToolProvider
         var path = ToolArgs.RequiredString(ctx, "path");
         var sourceSlug = ToolArgs.OptionalString(ctx, "source");
 
-        var db = ctx.Services!.GetRequiredService<KnowledgeHubDbContext>();
+        var db = ctx.Services.GetRequiredService<KnowledgeHubDbContext>();
         var vault = await ObsidianNoteWriter.ResolveVaultAsync(db, sourceSlug, ct)
             ?? throw new McpProtocolException(
                 sourceSlug is null ? "no active ObsidianVault source" : $"unknown vault slug '{sourceSlug}'",
@@ -96,7 +96,7 @@ public sealed class ObsidianToolsProvider : IToolProvider
         var tags = ToolArgs.OptionalStringArray(ctx, "tags");
         var sourceSlug = ToolArgs.OptionalString(ctx, "source");
 
-        var db = ctx.Services!.GetRequiredService<KnowledgeHubDbContext>();
+        var db = ctx.Services.GetRequiredService<KnowledgeHubDbContext>();
         var vault = await ObsidianNoteWriter.ResolveVaultAsync(db, sourceSlug, ct)
             ?? throw new McpProtocolException(
                 sourceSlug is null ? "no active ObsidianVault source" : $"unknown vault slug '{sourceSlug}'",
@@ -111,10 +111,10 @@ public sealed class ObsidianToolsProvider : IToolProvider
 
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(
-            content, tags, ObsidianNoteWriter.ResolveOrigin(ctx.Services!)), ct);
+            content, tags, ObsidianNoteWriter.ResolveOrigin(ctx.Services)), ct);
 
         var relative = Path.GetRelativePath(root, full);
-        var ingestion = ctx.Services!.GetRequiredService<IngestionService>();
+        var ingestion = ctx.Services.GetRequiredService<IngestionService>();
         await ingestion.SyncFileAsync(vault.Id, relative, ct);
 
         return await ToolResults.Text($"Wrote `{relative}` to vault '{vault.Name}' and re-indexed it.");

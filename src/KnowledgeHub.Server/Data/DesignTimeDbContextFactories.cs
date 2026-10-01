@@ -25,7 +25,7 @@ public sealed class PostgresDesignTimeDbContextFactory : IDesignTimeDbContextFac
     public PostgresKnowledgeHubDbContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<PostgresKnowledgeHubDbContext>()
-            .UseNpgsql("Host=localhost;Database=kh_design;Username=postgres;Password=postgres")
+            .UseNpgsql("Host=localhost;Database=kh_design;Username=postgres;Password=postgres") // NOSONAR S2068 — factory design-time (dotnet ef) p/ localhost, não é credencial de deploy
             .Options;
         return new PostgresKnowledgeHubDbContext(options);
     }

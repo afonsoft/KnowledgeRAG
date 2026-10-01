@@ -21,6 +21,9 @@ public sealed class FirecrawlToolsProvider(
     IOptions<FirecrawlOptions> options,
     ILogger<FirecrawlToolsProvider> logger) : IToolProvider
 {
+    private const string ToolCrawl = "firecrawl_crawl";
+    private const string IdJobExampleJson = """[{"id":"550e8400-e29b-41d4-a716-446655440000"}]""";
+
     internal const string NoKeyMessage =
         "Firecrawl API key not configured — open Settings (/settings) or set Firecrawl__ApiKey.";
 
@@ -28,7 +31,7 @@ public sealed class FirecrawlToolsProvider(
     /// keep the Playground write-confirm gate when the upstream omits hints.</summary>
     private static readonly string[] MutatingPrefixes =
     [
-        "firecrawl_crawl", "firecrawl_interact", "firecrawl_agent",
+        ToolCrawl, "firecrawl_interact", "firecrawl_agent",
         "firecrawl_monitor_", "firecrawl_feedback", "firecrawl_search_feedback"
     ];
 
@@ -53,21 +56,21 @@ public sealed class FirecrawlToolsProvider(
             ["firecrawl_scrape"] = """[{"url":"https://example.com","formats":["markdown"],"onlyMainContent":true}]""",
             ["firecrawl_search"] = """[{"query":"latest .NET 10 release notes","limit":5}]""",
             ["firecrawl_map"] = """[{"url":"https://docs.firecrawl.dev","limit":20}]""",
-            ["firecrawl_crawl"] = """[{"url":"https://docs.firecrawl.dev","limit":5}]""",
-            ["firecrawl_check_crawl_status"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000"}]""",
+            [ToolCrawl] = """[{"url":"https://docs.firecrawl.dev","limit":5}]""",
+            ["firecrawl_check_crawl_status"] = IdJobExampleJson,
             ["firecrawl_parse"] = """[{"filePath":"./report.pdf","parsers":["pdf"]}]""",
             ["firecrawl_search_feedback"] = """[{"searchId":"550e8400-e29b-41d4-a716-446655440000","rating":"good","valuableSources":[{"url":"https://example.com/article","reason":"answered the query directly"}]}]""",
             ["firecrawl_feedback"] = """[{"endpoint":"scrape","jobId":"550e8400-e29b-41d4-a716-446655440000","rating":"good","note":"extracted content was complete"}]""",
             ["firecrawl_agent"] = """[{"prompt":"Extract the pricing tiers from this page","urls":["https://www.firecrawl.dev/pricing"]}]""",
-            ["firecrawl_agent_status"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000"}]""",
+            ["firecrawl_agent_status"] = IdJobExampleJson,
             ["firecrawl_interact"] = """[{"url":"https://example.com","prompt":"Click the sign-in button"}]""",
             ["firecrawl_interact_stop"] = """[{"scrapeId":"550e8400-e29b-41d4-a716-446655440000"}]""",
             ["firecrawl_monitor_create"] = """[{"pages":["https://docs.firecrawl.dev"],"name":"docs-watch","scheduleText":"every day"}]""",
             ["firecrawl_monitor_list"] = """[{"limit":10,"offset":0}]""",
-            ["firecrawl_monitor_get"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000"}]""",
+            ["firecrawl_monitor_get"] = IdJobExampleJson,
             ["firecrawl_monitor_update"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000","body":{"name":"renamed-monitor"}}]""",
-            ["firecrawl_monitor_delete"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000"}]""",
-            ["firecrawl_monitor_run"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000"}]""",
+            ["firecrawl_monitor_delete"] = IdJobExampleJson,
+            ["firecrawl_monitor_run"] = IdJobExampleJson,
             ["firecrawl_monitor_checks"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000","limit":10}]""",
             ["firecrawl_monitor_check"] = """[{"id":"550e8400-e29b-41d4-a716-446655440000","checkId":"660e8400-e29b-41d4-a716-446655440001"}]""",
             ["firecrawl_research_search_papers"] = """[{"query":"retrieval augmented generation","k":5}]""",
@@ -290,13 +293,13 @@ public sealed class FirecrawlToolsProvider(
         },
         new CatalogTool
         {
-            Name = "firecrawl_crawl",
+            Name = ToolCrawl,
             Title = "Crawl site (Firecrawl)",
             Description = "Crawl a site/section; polls the job to a terminal state (proxied to Firecrawl — billable).",
             InputSchema = CrawlSchema,
             ReadOnly = false,
             OpenWorldHint = true,
-            Handler = (ctx, ct) => DispatchAsync("firecrawl_crawl", ctx, ct)
+            Handler = (ctx, ct) => DispatchAsync(ToolCrawl, ctx, ct)
         },
         new CatalogTool
         {

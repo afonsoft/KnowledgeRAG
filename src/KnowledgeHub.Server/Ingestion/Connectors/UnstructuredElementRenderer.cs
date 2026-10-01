@@ -43,7 +43,7 @@ public static class UnstructuredElementRenderer
         {
             case "Header":
             case "Footer":
-                AppendFurniture(sb, type!, text, state.SeenFurniture);
+                AppendFurniture(sb, type, text, state.SeenFurniture);
                 return;
             case "Title":
                 AppendTitle(sb, text, state);

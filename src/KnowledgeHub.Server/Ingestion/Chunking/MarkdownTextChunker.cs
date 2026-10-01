@@ -54,5 +54,5 @@ public sealed class MarkdownTextChunker : ITextChunker
 
     private static Regex HeaderLine() => _headerLine;
     private static readonly Regex _headerLine =
-        new(@"^(#{1,6})\s+(.+?)\s*$", RegexOptions.Compiled);
+        new(@"^(#{1,6})\s+(.+?)\s*$", RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 }

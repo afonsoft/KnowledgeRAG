@@ -193,7 +193,11 @@ public sealed class A2aTaskDurabilityTests : IDisposable
 
     [Fact]
     public async Task DeleteTask_Unknown_NoOp()
-        => await Store().DeleteTaskAsync("ghost"); // must not throw
+    {
+        var store = Store();
+        await store.DeleteTaskAsync("ghost"); // must not throw
+        Assert.Null(await store.GetTaskAsync("ghost"));
+    }
 
     // ---- RF-003: push configs + terminal dispatch ------------------------
 

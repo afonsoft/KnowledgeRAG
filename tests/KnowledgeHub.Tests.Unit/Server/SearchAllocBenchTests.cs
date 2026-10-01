@@ -64,6 +64,7 @@ public sealed class SearchAllocBenchTests(ITestOutputHelper output)
             var report = $"chunks={chunks} dims={dims} topK={topK} | old(allocated)={oldAlloc:N0}B new(allocated)={newAlloc:N0}B ratio={oldAlloc / (double)Math.Max(newAlloc, 1):F1}x";
             output.WriteLine(report);
             await File.WriteAllTextAsync("/tmp/kh-bench.txt", report);
+            Assert.True(oldAlloc > 0 && newAlloc > 0, "allocation measurements must be positive");
         }
         finally
         {

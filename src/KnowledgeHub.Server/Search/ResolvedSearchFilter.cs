@@ -58,7 +58,7 @@ public sealed record ResolvedSearchFilter(
         + (SubQueries is { Count: > 0 } sq ? $"|sub:{string.Join('|', sq)}" : "")
         + (AllowRelaxation is { } r ? $"|relax:{Convert.ToInt32(r)}" : "")
         + (Budget is null ? "" : $"|budget:{Budget}")
-        + (MinScores is { } ms ? $"|min:{MinScores.Semantic:R}|{MinScores.Lexical:R}|{MinScores.Final:R}" : "")
+        + (MinScores is { } ? $"|min:{MinScores.Semantic:R}|{MinScores.Lexical:R}|{MinScores.Final:R}" : "")
         + (TemporalStart is null ? "" : $"|tstart:{TemporalStart:O}")
         + (TemporalEnd is null ? "" : $"|tend:{TemporalEnd:O}");
 
@@ -84,7 +84,7 @@ public sealed record ResolvedSearchFilter(
         DateTimeOffset? indexedAfter = null;
         if (filter.IndexedAfter is { Length: > 0 } ia)
         {
-            if (!DateTimeOffset.TryParse(ia, out var parsedDate))
+            if (!DateTimeOffset.TryParse(ia, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedDate))
             {
                 error = $"invalid indexedAfter '{ia}' (expected ISO-8601)";
                 return false;
@@ -179,7 +179,7 @@ public sealed record ResolvedSearchFilter(
         DateTimeOffset? temporalStart = null, temporalEnd = null;
         if (filter.TemporalStart is { Length: > 0 } ts)
         {
-            if (!DateTimeOffset.TryParse(ts, out var ps))
+            if (!DateTimeOffset.TryParse(ts, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var ps))
             {
                 error = $"invalid temporalWindow.start '{ts}' (expected ISO-8601)";
                 return false;
@@ -188,7 +188,7 @@ public sealed record ResolvedSearchFilter(
         }
         if (filter.TemporalEnd is { Length: > 0 } te)
         {
-            if (!DateTimeOffset.TryParse(te, out var pe))
+            if (!DateTimeOffset.TryParse(te, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var pe))
             {
                 error = $"invalid temporalWindow.end '{te}' (expected ISO-8601)";
                 return false;

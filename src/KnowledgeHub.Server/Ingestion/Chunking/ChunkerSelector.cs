@@ -110,7 +110,7 @@ public static class ChunkerSelector
             }
         }
 
-        return (kind, For(kind).Chunk(text, maxTokens, overlapTokens));
+        return (kind, await For(kind).ChunkAsync(text, maxTokens, overlapTokens, ct));
     }
 
     /// <summary>

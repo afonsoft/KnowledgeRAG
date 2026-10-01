@@ -47,7 +47,7 @@ public sealed class SettingsToolsProvider : IToolProvider
                 {
                     var keyId = RequireApiKeySession(ctx);
                     var provider = ToolArgs.RequiredString(ctx, "provider");
-                    var service = ctx.Services!.GetRequiredService<IApiKeyChatSettingsService>();
+                    var service = ctx.Services.GetRequiredService<IApiKeyChatSettingsService>();
                     return await SaveOrRemoveIntegrationKeyAsync(service, keyId, provider, ctx, ct);
                 }
             },

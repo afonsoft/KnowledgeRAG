@@ -60,7 +60,7 @@ public sealed class PasswordGateResultHandler : IAuthorizationMiddlewareResultHa
                 .Any(r => r.Message == PasswordChangedHandler.FailureReason) == true)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return context.Response.WriteAsJsonAsync(new { error = PasswordChangedHandler.FailureReason });
+            return context.Response.WriteAsJsonAsync(new { error = PasswordChangedHandler.FailureReason }, context.RequestAborted);
         }
 
         return _default.HandleAsync(next, context, policy, authorizeResult);

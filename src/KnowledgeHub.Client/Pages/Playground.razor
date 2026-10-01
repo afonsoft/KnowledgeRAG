@@ -327,6 +327,7 @@
     private JsonElement? _result;
     private List<string> _texts = [];
     private string? _structuredAnswer;
+    private readonly System.Text.StringBuilder _agentAnswerSb = new();
     private List<CitationModel> _citations = [];
     private List<AgentStepModel> _agentSteps = [];
     private int _agentIterations;
@@ -463,12 +464,18 @@
             foreach (var t in PartTexts(msg))
                 yield return t;
         if (task.TryGetProperty("artifacts", out var artifacts) && artifacts.ValueKind == JsonValueKind.Array)
-            foreach (var a in artifacts.EnumerateArray())
-            {
-                var name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
-                foreach (var t in PartTexts(a))
-                    yield return name is null ? t : $"[{name}] {t}";
-            }
+            foreach (var t in ExtractA2aArtifactTexts(artifacts))
+                yield return t;
+    }
+
+    private static IEnumerable<string> ExtractA2aArtifactTexts(JsonElement artifacts)
+    {
+        foreach (var a in artifacts.EnumerateArray())
+        {
+            var name = a.TryGetProperty("name", out var n) ? n.GetString() : null;
+            foreach (var t in PartTexts(a))
+                yield return name is null ? t : $"[{name}] {t}";
+        }
     }
 
     private static IEnumerable<string> PartTexts(JsonElement owner)
@@ -623,6 +630,7 @@
     {
         var path = _selected!.Name == "agent_chat" ? "api/agent/stream" : "api/ask/stream";
         _result = JsonSerializer.SerializeToElement(new { });
+        _agentAnswerSb.Clear();
         _structuredAnswer = "";
         _citations = [];
         _agentSteps = [];
@@ -638,7 +646,8 @@
                 switch (msg.Event)
                 {
                     case "token":
-                        _structuredAnswer += data.GetProperty("delta").GetString();
+                        _agentAnswerSb.Append(data.GetProperty("delta").GetString());
+                        _structuredAnswer = _agentAnswerSb.ToString();
                         break;
                     case "tool_start":
                         _agentSteps.Add(new AgentStepModel
@@ -660,7 +669,8 @@
                         }
                         break;
                     case "awaiting_approval":
-                        _structuredAnswer += $"\n\n⏳ Aguardando aprovação da tool '{data.GetProperty("tool").GetString()}' — veja /approvals.";
+                        _agentAnswerSb.Append($"\n\n⏳ Aguardando aprovação da tool '{data.GetProperty("tool").GetString()}' — veja /approvals.");
+                        _structuredAnswer = _agentAnswerSb.ToString();
                         break;
                     case "done":
                         (_structuredAnswer, _citations, _agentSteps, _agentIterations, _agentLatencyMs) =
