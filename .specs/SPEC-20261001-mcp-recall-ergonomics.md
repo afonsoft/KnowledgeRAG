@@ -8,8 +8,8 @@
 | Type | `Feature` |
 | Stack | `.NET 10 / ASP.NET Core`, MCP (Streamable HTTP + SSE) |
 | Repository | `afonsoft/LangGraph-UI` |
-| Branch | `feature/Devin-20261001-mcp-a2a-improvements` |
-| Status | `Approved` |
+| Branch | `feature/Devin-20261001-mcp-recall-ergonomics` |
+| Status | `Done` |
 | Ticket | #441 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (recall tool surface) |
 
