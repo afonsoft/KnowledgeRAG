@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / ASP.NET Core`, `A2A` + `A2A.AspNetCore` (1.0.0-preview2), EF Core |
 | Repository | `afonsoft/LangGraph-UI` |
 | Branch | `feature/Devin-20261001-a2a-task-durability` |
-| Status | `Approved` |
+| Status | `Done` |
 | Ticket | #442 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (padrão async operations) + spec A2A v1.0 |
 
