@@ -20,10 +20,25 @@ public sealed record ResolvedSearchFilter(
     string? LimitMode = null,
     int? AutocutSensitivity = null,
     IReadOnlyList<string>? SubQueries = null,
-    bool? AllowRelaxation = null)
+    bool? AllowRelaxation = null,
+    string? Budget = null,
+    SearchMinScores? MinScores = null,
+    DateTimeOffset? TemporalStart = null,
+    DateTimeOffset? TemporalEnd = null)
 {
     public bool IsEmpty =>
         SourceType is null && PathPrefix is null && IndexedAfter is null && Language is null;
+
+    /// <summary>SPEC-20261001-mcp-recall-ergonomics RF-001: normalized budget
+    /// level for this call (null = high).</summary>
+    public string? Budget { get; init; } = Budget;
+    public SearchMinScores? MinScores { get; init; } = MinScores;
+    public DateTimeOffset? TemporalStart { get; init; } = TemporalStart;
+    public DateTimeOffset? TemporalEnd { get; init; } = TemporalEnd;
+
+    /// <summary>RF-001: low/mid budgets skip LLM query expansion unless the
+    /// caller sets <c>expand</c> explicitly; high keeps the configured default.</summary>
+    public bool SkipsExpansion => Budget is "low" or "mid";
 
     /// <summary>SPEC-20260927-chunk-window-retrieval-and-autocut RF-004: the limit
     /// mode that applies to this call (per-call arg → <c>Search:LimitMode</c>).</summary>
@@ -41,7 +56,11 @@ public sealed record ResolvedSearchFilter(
         + (LimitMode is null ? "" : $"|lim:{LimitMode}")
         + (AutocutSensitivity is null ? "" : $"|acs:{AutocutSensitivity}")
         + (SubQueries is { Count: > 0 } sq ? $"|sub:{string.Join('|', sq)}" : "")
-        + (AllowRelaxation is { } r ? $"|relax:{Convert.ToInt32(r)}" : "");
+        + (AllowRelaxation is { } r ? $"|relax:{Convert.ToInt32(r)}" : "")
+        + (Budget is null ? "" : $"|budget:{Budget}")
+        + (MinScores is { } ms ? $"|min:{MinScores.Semantic:R}|{MinScores.Lexical:R}|{MinScores.Final:R}" : "")
+        + (TemporalStart is null ? "" : $"|tstart:{TemporalStart:O}")
+        + (TemporalEnd is null ? "" : $"|tend:{TemporalEnd:O}");
 
     public static bool TryResolve(
         SearchFilter? filter, out ResolvedSearchFilter resolved, out string? error)
@@ -129,6 +148,59 @@ public sealed record ResolvedSearchFilter(
             .Take(4)
             .ToList();
 
+        // SPEC-20261001-mcp-recall-ergonomics RF-001/RF-003/RF-004: budget,
+        // score floors and the temporal window resolve here — fail fast with a
+        // friendly error for invalid values.
+        string? budget = null;
+        if (filter.Budget is { Length: > 0 } b)
+        {
+            if (b.ToLowerInvariant() is not ("low" or "mid" or "high"))
+            {
+                error = $"invalid budget '{filter.Budget}' (expected: low | mid | high)";
+                return false;
+            }
+            budget = b.ToLowerInvariant();
+        }
+
+        SearchMinScores? minScores = null;
+        if (filter.MinScores is { } ms)
+        {
+            if (ms is { Semantic: < 0 or > 1 }
+                || ms is { Lexical: < 0 or > 1 }
+                || ms is { Final: < 0 or > 1 })
+            {
+                error = "invalid minScores — semantic/lexical/final must be within 0-1";
+                return false;
+            }
+            minScores = ms.Semantic is null && ms.Lexical is null && ms.Final is null
+                ? null : ms;
+        }
+
+        DateTimeOffset? temporalStart = null, temporalEnd = null;
+        if (filter.TemporalStart is { Length: > 0 } ts)
+        {
+            if (!DateTimeOffset.TryParse(ts, out var ps))
+            {
+                error = $"invalid temporalWindow.start '{ts}' (expected ISO-8601)";
+                return false;
+            }
+            temporalStart = ps;
+        }
+        if (filter.TemporalEnd is { Length: > 0 } te)
+        {
+            if (!DateTimeOffset.TryParse(te, out var pe))
+            {
+                error = $"invalid temporalWindow.end '{te}' (expected ISO-8601)";
+                return false;
+            }
+            temporalEnd = pe;
+        }
+        if (temporalStart is { } s2 && temporalEnd is { } e2 && s2 > e2)
+        {
+            error = "invalid temporalWindow — start must precede end";
+            return false;
+        }
+
         resolved = new ResolvedSearchFilter(
             sourceType,
             string.IsNullOrWhiteSpace(filter.PathPrefix) ? null : filter.PathPrefix,
@@ -141,7 +213,11 @@ public sealed record ResolvedSearchFilter(
             limitMode,
             filter.AutocutSensitivity,
             subQueries is { Count: > 0 } ? subQueries : null,
-            filter.AllowRelaxation);
+            filter.AllowRelaxation,
+            budget,
+            minScores,
+            temporalStart,
+            temporalEnd);
         return true;
     }
 

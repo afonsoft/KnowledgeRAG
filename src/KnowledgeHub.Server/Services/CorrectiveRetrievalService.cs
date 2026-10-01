@@ -41,12 +41,24 @@ public sealed class CorrectiveRetrievalService(
     {
         var results = await search.SearchAsync(query, topK, sourceId, mode, filter, conversationContext, ct);
         if (!GradingEnabled)
-            return new RetrievalOutcome(results, new RetrievalGrading(RetrievalGrade.Sufficient, 0), false, query);
+            // SPEC-20261001-mcp-recall-ergonomics RF-003: a caller-set final
+            // floor that empties the result set is an abstention request even
+            // when grading is off — never synthesize without evidence.
+            return new RetrievalOutcome(results,
+                new RetrievalGrading(
+                    filter?.MinScores?.Final is not null && results.Count == 0
+                        ? RetrievalGrade.Insufficient
+                        : RetrievalGrade.Sufficient, 0),
+                false, query);
 
         var grading = await grader.GradeAsync(query, results, ct);
         var retries = 0;
         var effectiveQuery = query;
-        var maxRetries = Math.Clamp(configuration.GetValue("Search:Grading:MaxRetries", 1), 0, 2);
+        // SPEC-20261001-mcp-recall-ergonomics RF-001: budget=low never pays for
+        // a corrective retry — the grade is still reported to the caller.
+        var maxRetries = filter?.Budget == "low"
+            ? 0
+            : Math.Clamp(configuration.GetValue("Search:Grading:MaxRetries", 1), 0, 2);
 
         while (grading.Grade == RetrievalGrade.Weak && retries < maxRetries)
         {
@@ -71,6 +83,12 @@ public sealed class CorrectiveRetrievalService(
                 grading = retryGrading;
             }
         }
+
+        // RF-003: floor-emptied results force Insufficient regardless of what
+        // the grader saw (defensive — both graders already abstain on empty).
+        if (filter?.MinScores?.Final is not null && results.Count == 0
+            && grading.Grade != RetrievalGrade.Insufficient)
+            grading = grading with { Grade = RetrievalGrade.Insufficient };
 
         ActivityTag(grading, retries > 0);
         return new RetrievalOutcome(results, grading, retries > 0, effectiveQuery)

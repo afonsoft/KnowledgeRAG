@@ -61,4 +61,7 @@ public sealed record AskResponse
     /// tool executions fused into this answer — empty/null when the bridge
     /// produced none or was disabled.</summary>
     public IReadOnlyList<LiveToolExecution>? LiveToolExecutions { get; init; }
+    /// <summary>SPEC-20261001-mcp-recall-ergonomics RF-002: the retrieved
+    /// context was cut to fit the caller's maxTokens budget.</summary>
+    public bool TruncatedByTokens { get; init; }
 }
