@@ -216,8 +216,8 @@ public sealed class SearchService(
                 ? await GraphRankedAsync(query, ct)
                 : (Ranked: (IReadOnlyList<Guid>)Array.Empty<Guid>(), DirectChunks: new HashSet<Guid>());
 
-            var rankedLists = vectorLists.Select(l => ("vector", (IReadOnlyList<Guid>)l))
-                .Concat(lexicalLists.Select(l => ("lexical", (IReadOnlyList<Guid>)l)))
+            var rankedLists = vectorLists.Select(l => ("vector", l))
+                .Concat(lexicalLists.Select(l => ("lexical", l)))
                 .Concat(graphArm.Ranked.Count > 0 ? [("graph", graphArm.Ranked)] : [])
                 .ToList();
             IReadOnlyList<FusedHit> fused;
@@ -551,7 +551,7 @@ public sealed class SearchService(
         var maxPerDoc = configuration.GetValue("Search:Diversity:MaxPerDocument", 0);
 
         var ids = items.Where(i => i.ChunkId is not null).Select(i => i.ChunkId!.Value).ToList();
-        var vectors = await db.Chunks.AsNoTracking()
+        var vectorLookup = await db.Chunks.AsNoTracking()
             .Where(c => ids.Contains(c.Id) && c.Embedding != null)
             .Select(c => new { c.Id, c.Embedding })
             .ToDictionaryAsync(c => c.Id, c => c.Embedding!, ct);
@@ -560,7 +560,7 @@ public sealed class SearchService(
             i.ChunkId ?? Guid.Empty,
             i.DocumentId ?? Guid.Empty,
             i.ScoreBreakdown?.Fused ?? i.Score,
-            i.ChunkId is { } id && vectors.TryGetValue(id, out var blob)
+            i.ChunkId is { } id && vectorLookup.TryGetValue(id, out var blob)
                 ? EmbeddingVectorCodec.FromBytes(blob)
                 : null)).ToList();
 
@@ -975,7 +975,7 @@ public sealed class SearchService(
     private Task<string> GetIndexVersionAsync(CancellationToken ct) =>
         IndexVersionToken.GetAsync(cache, logger, ct);
 
-    private List<SearchResultItem>? JsonSerializerSafely(string payload)
+    private static List<SearchResultItem>? JsonSerializerSafely(string payload)
     {
         try
         {
@@ -1028,9 +1028,10 @@ public sealed class SearchService(
                 var c = byId[h.ChunkId];
                 var flagged = c.SuspicionFlags is not null;
                 if (flagged && excludeFlagged)
+                {
                     excluded++;
-                if (flagged && excludeFlagged)
                     return null;
+                }
                 // RF-003: language is metadata-derived (no column) — a set
                 // filter keeps only items whose metadata carries a match.
                 if (filter?.Language is { } lang)

@@ -19,7 +19,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
 {
     private const string TableName = "vec_chunks";
     private static readonly Regex DeclaredDimensions =
-        new(@"float\[(\d+)\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"float\[(\d+)\]", RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     private readonly KnowledgeHubDbContext _db;
     private readonly int _dimensions;
@@ -155,7 +155,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
         }
     }
 
-    private async Task<IReadOnlyList<VectorHit>> QueryAsync(
+    private static async Task<IReadOnlyList<VectorHit>> QueryAsync(
         SqliteConnection conn, float[] queryVector, string model, int topK,
         IReadOnlyCollection<Guid>? sourceIds, CancellationToken cancellationToken)
     {
@@ -219,7 +219,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
 
     private static void EnsureVectorLoaded(SqliteConnection conn)
     {
-        lock (conn)
+        lock (VecLoaded)
         {
             if (VecLoaded.TryGetValue(conn, out _))
                 return;
@@ -283,6 +283,8 @@ public sealed class SqliteVecVectorStore : IVectorStore
         }
 
         await using var create = conn.CreateCommand();
+        // NOSONAR pragma: TableName é const e _dimensions int interno; identificadores não aceitam parâmetro
+#pragma warning disable S2077
         create.CommandText = $"""
             CREATE VIRTUAL TABLE IF NOT EXISTS {TableName} USING vec0(
                 chunk_id    TEXT PRIMARY KEY,
@@ -292,6 +294,7 @@ public sealed class SqliteVecVectorStore : IVectorStore
                 embedding   FLOAT[{_dimensions}] distance_metric=cosine
             )
             """;
+#pragma warning restore S2077
         await create.ExecuteNonQueryAsync(cancellationToken);
     }
 

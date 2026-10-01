@@ -8,7 +8,7 @@ namespace KnowledgeHub.Server.Auth;
 public sealed class AuthOptions
 {
     public const string SectionName = "Auth";
-    public const string DefaultAdminPassword = "123qwe";
+    public const string DefaultAdminPassword = "123qwe"; // NOSONAR S2068 — default de primeiro boot documentado, troca obrigatória no 1º login (gate MustChangePassword)
 
     public string? AdminInitialPassword { get; set; }
     public int LockoutThreshold { get; set; } = 5;

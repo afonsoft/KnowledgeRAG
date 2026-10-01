@@ -17,13 +17,12 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
 {
     /// <summary>Extensions with a text extractor. Plain-text extensions cover
     /// code and config files (SPEC-20260923-code-aware-chunking).</summary>
-    public static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
+    public static readonly System.Collections.Immutable.ImmutableHashSet<string> SupportedExtensions =
+        System.Collections.Immutable.ImmutableHashSet.Create(StringComparer.OrdinalIgnoreCase,
         ".md", ".txt", ".pdf", ".docx",
         ".csv", // Google Sheets export (SPEC-20260926-ingestion-connector-integrity RF-005)
         ".cs", ".java", ".js", ".ts", ".py", ".go", ".rs", ".sql",
-        ".json", ".yaml", ".yml", ".xml", ".toml", ".ini", ".config"
-    };
+        ".json", ".yaml", ".yml", ".xml", ".toml", ".ini", ".config");
 
     /// <summary>Extensions read as raw text (no parser).</summary>
     private static readonly HashSet<string> PlainTextExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -50,7 +49,7 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
 
         var files = File.Exists(path)
             ? [path]
-            : EnumerateFiles(path!, matcher);
+            : EnumerateFiles(path, matcher);
 
         var documents = new List<RawDocument>();
         var warnings = new List<string>();
@@ -83,7 +82,7 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
 
                 var uri = File.Exists(path)
                     ? Path.GetFileName(file)
-                    : Path.GetRelativePath(path!, file);
+                    : Path.GetRelativePath(path, file);
                 documents.Add(new RawDocument(uri, Path.GetFileNameWithoutExtension(file), text));
             }
             catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
@@ -165,8 +164,9 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
                 .Replace("\\?", ".");
             // {a,b} → (a|b) — Regex.Escape escapes the braces, commas pass through.
             pattern = Regex.Replace(pattern, @"\\\{([^}]*)\\\}",
-                m => "(" + m.Groups[1].Value.Replace(",", "|") + ")");
-            var regex = new Regex($"^{pattern}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                m => "(" + m.Groups[1].Value.Replace(",", "|") + ")",
+                RegexOptions.None, TimeSpan.FromSeconds(1));
+            var regex = new Regex($"^{pattern}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
             return path => regex.IsMatch(path.Replace('\\', '/'));
         }
     }

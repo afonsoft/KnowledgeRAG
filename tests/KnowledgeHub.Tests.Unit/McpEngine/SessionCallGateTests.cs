@@ -30,7 +30,8 @@ public class SessionCallGateTests
     {
         var gate = new SessionCallGate(1);
         gate.Release("never-acquired"); // must not throw
-        await gate.AcquireAsync("never-acquired", CancellationToken.None);
+        var acquire = gate.AcquireAsync("never-acquired", CancellationToken.None);
+        Assert.True(acquire.IsCompleted); // gate remains usable after the stray release
     }
 
     // Covers SPEC-20260918-mcp-v2-hybrid-transport RF-004: sessionless calls
@@ -59,7 +60,8 @@ public class SessionCallGateTests
         var gate = new SessionCallGate(maxConcurrentPerSession: 1);
         await gate.AcquireAsync(null, CancellationToken.None); // fills sessionless bucket
 
-        await gate.AcquireAsync("s1", CancellationToken.None); // different bucket → immediate
+        var s1 = gate.AcquireAsync("s1", CancellationToken.None);
+        Assert.True(s1.IsCompleted); // different bucket → immediate
         gate.Release("s1");
         gate.Release(null);
     }
@@ -69,6 +71,7 @@ public class SessionCallGateTests
     {
         var gate = new SessionCallGate(1);
         gate.Release(null); // must not over-release the shared bucket
-        await gate.AcquireAsync(null, CancellationToken.None);
+        var acquire = gate.AcquireAsync(null, CancellationToken.None);
+        Assert.True(acquire.IsCompleted);
     }
 }

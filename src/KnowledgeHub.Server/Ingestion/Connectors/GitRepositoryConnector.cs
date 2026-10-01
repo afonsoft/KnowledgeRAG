@@ -127,7 +127,7 @@ public sealed class GitRepositoryConnector(
     /// <summary>Applies path prefix, glob include/exclude and the size gate;
     /// oversized-but-present files enter FailedUris (RF-007) so reconciliation
     /// keeps the already-indexed document.</summary>
-    private TreeFilterResult FilterTree(
+    private static TreeFilterResult FilterTree(
         IReadOnlyList<GitTreeEntry> tree,
         Func<string, bool>[] includeMatchers, Func<string, bool>[] excludeMatchers,
         string pathPrefix, long maxBytes, GitRepositoryRef repo, List<string> failed)
@@ -157,7 +157,7 @@ public sealed class GitRepositoryConnector(
 
     /// <summary>Downloads eligible files with fingerprint skip + post-download
     /// size enforcement (SPEC-20260929 RF-007 — GitLab Size=0 entries).</summary>
-    private async Task<List<RawDocument>> DownloadFilesAsync(
+    private static async Task<List<RawDocument>> DownloadFilesAsync(
         GitApiClient api, GitRepositoryRef repo, string? token,
         List<GitTreeEntry> eligible,
         IReadOnlyDictionary<string, string> existingFingerprints,

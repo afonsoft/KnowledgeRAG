@@ -114,6 +114,7 @@ jobs:
             /o:"afonsoft" \
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.host.url="https://sonarcloud.io" \
-            /d:sonar.cpd.exclusions="**/Migrations/**"
+            /d:sonar.cpd.exclusions="**/Migrations/**" \
+            /d:sonar.exclusions="docs/architecture/**/*.html"
           dotnet build KnowledgeHub.slnx --configuration Release
           dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"

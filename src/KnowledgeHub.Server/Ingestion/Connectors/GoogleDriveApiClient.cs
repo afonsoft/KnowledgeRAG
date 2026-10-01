@@ -30,13 +30,13 @@ public sealed class GoogleDriveApiClient(HttpClient http)
     // SPEC RF-002: accepted shared-link shapes.
     private static readonly Regex FolderPattern = new(
         @"^https?://drive\.google\.com/(?:drive/)?(?:u/\d+/)?folders/([a-zA-Z0-9_-]+)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     private static readonly Regex FilePattern = new(
         @"^https?://drive\.google\.com/file/d/([a-zA-Z0-9_-]+)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
     private static readonly Regex IdPattern = new(
         @"^https?://drive\.google\.com/.*[?&]id=([a-zA-Z0-9_-]+)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
     /// <summary>Parses a shared link into (resourceId, isFolder). False on
     /// unrecognised/invalid links — callers turn that into a 400.</summary>
@@ -54,7 +54,9 @@ public sealed class GoogleDriveApiClient(HttpClient http)
             return true;
         }
         m = FilePattern.Match(url.Trim());
-        if (m.Success || (m = IdPattern.Match(url.Trim())).Success)
+        if (!m.Success)
+            m = IdPattern.Match(url.Trim());
+        if (m.Success)
         {
             resourceId = m.Groups[1].Value;
             return true;
@@ -157,7 +159,7 @@ public sealed class GoogleDriveApiClient(HttpClient http)
 
     private static readonly Regex EmbeddedEntryPattern = new(
         @"href=""https?://drive\.google\.com/(?:file/d/|drive/folders/)([a-zA-Z0-9_-]+)[^""]*""[^>]*>\s*(?:<div[^>]*>)?([^<]+)",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        RegexOptions.Compiled | RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
 
     /// <summary>Binary download — v3 <c>?alt=media</c> with key, public
     /// <c>uc?export=download</c> without.</summary>

@@ -139,7 +139,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                     // SPEC-20260924-corrective-rag RF-004: the corrective wrapper
                     // retries weak retrievals once and surfaces the grade so the
                     // agent can decide to rephrase on its own.
-                    var retrieval = ctx.Services!.GetRequiredService<CorrectiveRetrievalService>();
+                    var retrieval = ctx.Services.GetRequiredService<CorrectiveRetrievalService>();
                     var outcome = await retrieval.RetrieveAsync(query, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
                     // SPEC-20261001-mcp-recall-ergonomics RF-002: the token
                     // budget truncates the ranked list post MMR/autocut/floors —
@@ -211,7 +211,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         ToolCallContext ctx, string query,
         CorrectiveRetrievalService.RetrievalOutcome outcome, CancellationToken ct)
     {
-        var bridgeOptions = ctx.Services!.GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
+        var bridgeOptions = ctx.Services.GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
         if (!bridgeOptions.EnableDynamicActionBridge)
             return [];
         return Bridge.ToolActionAnnotationDetector.Detect(
@@ -305,9 +305,9 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         ToolCallContext ctx, CancellationToken ct)
     {
         var modeArg = ToolArgs.OptionalString(ctx, "mode");
-        var mode = modeArg is null
-            ? SearchMode.Hybrid
-            : Enum.TryParse<SearchMode>(modeArg, ignoreCase: true, out var parsed)
+        var mode = SearchMode.Hybrid;
+        if (modeArg is not null)
+            mode = Enum.TryParse<SearchMode>(modeArg, ignoreCase: true, out var parsed)
                 ? parsed
                 : throw new McpProtocolException(
                     $"invalid mode '{modeArg}' (expected: hybrid | semantic | lexical)", McpErrorCode.InvalidParams);
@@ -317,7 +317,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         if (sourceSlug is null)
             return (null, mode, filter);
 
-        var db = ctx.Services!.GetRequiredService<KnowledgeHubDbContext>();
+        var db = ctx.Services.GetRequiredService<KnowledgeHubDbContext>();
         var active = await db.Sources.Where(s => s.IsActive).OrderBy(s => s.Name)
             .Select(s => new { s.Id, s.Name }).ToListAsync(ct);
         var slugs = ToolSlugger.Assign(active.Select(s => (s.Id, s.Name)));
@@ -376,7 +376,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         var question = ToolArgs.RequiredString(ctx, "question");
         var topK = ToolArgs.OptionalInt(ctx, "topK", 5, 50);
         var (sourceId, mode, filter) = await ResolveScopeAsync(ctx, ct);
-        var retrieval = ctx.Services!.GetRequiredService<CorrectiveRetrievalService>();
+        var retrieval = ctx.Services.GetRequiredService<CorrectiveRetrievalService>();
         var outcome = await retrieval.RetrieveAsync(question, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
         // SPEC-20261001-mcp-recall-ergonomics RF-002: bound the evidence list —
         // and thereby the synthesis context — by the caller's token budget.
@@ -409,7 +409,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         }
         var liveCitationBlock = Bridge.HybridCitationFormatter.FormatLiveCitations(liveExecutions);
 
-        var answers = ctx.Services!.GetRequiredService<IAnswerService>();
+        var answers = ctx.Services.GetRequiredService<IAnswerService>();
         var generate = ToolArgs.OptionalBool(ctx, "generate") ?? answers.IsConfigured;
 
         // SPEC-20260927-multiquery RF-003: when every piece of evidence came from
@@ -520,7 +520,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
     private static async ValueTask<CallToolResult> AgentChatAsync(
         ToolCallContext ctx, CancellationToken ct)
     {
-        var agent = ctx.Services!.GetRequiredService<IAgentService>();
+        var agent = ctx.Services.GetRequiredService<IAgentService>();
         if (!agent.IsConfigured)
             return await ToolResults.Error("agent_chat requires a chat provider (Chat:Provider)");
 
@@ -564,10 +564,10 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         var content = ToolArgs.RequiredString(ctx, "content");
         var sourceSlug = ToolArgs.OptionalString(ctx, "source");
         var tags = ToolArgs.OptionalStringArray(ctx, "tags");
-        var origin = ObsidianNoteWriter.ResolveOrigin(ctx.Services!);
+        var origin = ObsidianNoteWriter.ResolveOrigin(ctx.Services);
 
-        var db = ctx.Services!.GetRequiredService<KnowledgeHubDbContext>();
-        var ingestion = ctx.Services!.GetRequiredService<IngestionService>();
+        var db = ctx.Services.GetRequiredService<KnowledgeHubDbContext>();
+        var ingestion = ctx.Services.GetRequiredService<IngestionService>();
 
         // Resolve target source: by slug, else first active source.
         var active = await db.Sources.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync(ct);
@@ -630,17 +630,17 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(body)));
         doc2.IndexedAt = DateTimeOffset.UtcNow;
 
-        var embeddings = ctx.Services!.GetRequiredService<Embeddings.IEmbeddingProvider>();
-        var vectors = ctx.Services!.GetRequiredService<VectorStore.IVectorStore>();
+        var embeddings = ctx.Services.GetRequiredService<Embeddings.IEmbeddingProvider>();
+        var vectors = ctx.Services.GetRequiredService<VectorStore.IVectorStore>();
         // SPEC-20260923-code-aware-chunking: kind from the document URI.
-        var config = ctx.Services!.GetRequiredService<IConfiguration>();
+        var config = ctx.Services.GetRequiredService<IConfiguration>();
         var (kind, pieces) = await Ingestion.Chunking.ChunkerSelector.ChunkAsync(
             doc2.UriReference, body, 500, 50,
             embeddings, config,
             Ingestion.Chunking.ChunkerSelector.StrategyFor(target.ConfigurationJson),
             ctx.Services!.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("KnowledgeHub.write_knowledge"), ct, ctx.Services);
-        var sanitizer = ctx.Services!.GetRequiredService<Security.IContentSanitizer>();
+        var sanitizer = ctx.Services.GetRequiredService<Security.IContentSanitizer>();
         var flagged = 0;
         var newChunks = pieces.Select((p, i) =>
         {
@@ -691,7 +691,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         }
 
         // RF-004: keep the FTS index consistent with Chunks.
-        await ctx.Services!.GetRequiredService<Search.ILexicalSearchService>().ReconcileAsync(ct);
+        await ctx.Services.GetRequiredService<Search.ILexicalSearchService>().ReconcileAsync(ct);
 
         var flagNote = flagged == 0 ? "" : $"\nWarning: {flagged} chunk(s) flagged by the security scan (see /api/security/events).";
         return await ToolResults.Text(

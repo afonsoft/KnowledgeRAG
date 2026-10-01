@@ -102,7 +102,7 @@ public sealed class SqlDatabaseConnector(
         string sourceName, CancellationToken ct)
     {
         var (query, commandTimeout, maxRows, postgresReadOnlyTransaction) = spec;
-        var (idColumns, titleColumn, contentColumns, urlColumn) = mapping;
+
         var warnings = new List<string>();
         var warned = new HashSet<string>(StringComparer.Ordinal);
         var documents = new List<RawDocument>();
@@ -195,7 +195,7 @@ public sealed class SqlDatabaseConnector(
     }
 
     /// <summary>Reads rows up to maxRows; returns whether truncation occurred.</summary>
-    private async Task<bool> ReadRowsAsync(
+    private static async Task<bool> ReadRowsAsync(
         DbDataReader reader, RowContext ctx, int maxRows,
         List<RawDocument> documents, List<string> warnings,
         HashSet<string> warned, CancellationToken ct)

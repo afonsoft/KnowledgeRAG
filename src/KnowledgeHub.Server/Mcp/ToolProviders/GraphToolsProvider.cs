@@ -174,7 +174,7 @@ public sealed class GraphToolsProvider(IGraphSettingsService graphSettings) : IT
             .Select(e => e.Document)
             .Where(d => d is not null)
             .DistinctBy(d => d.Id)
-            .Select(d => new { title = d!.Title, uri = d.UriReference });
+            .Select(d => new { title = d.Title, uri = d.UriReference });
         var payload = new
         {
             component = node.Name,
@@ -192,7 +192,7 @@ public sealed class GraphToolsProvider(IGraphSettingsService graphSettings) : IT
     }
 
     private (IKnowledgeGraphStore Store, int MaxEdges) Resolve(ToolCallContext ctx) =>
-        (ctx.Services!.GetRequiredService<IKnowledgeGraphStore>(),
+        (ctx.Services.GetRequiredService<IKnowledgeGraphStore>(),
          graphSettings.GetEffective().MaxResults);
 
     private static int ClampDepth(ToolCallContext ctx, out bool clamped)
@@ -227,7 +227,7 @@ public sealed class GraphToolsProvider(IGraphSettingsService graphSettings) : IT
             })
         };
 
-    private async ValueTask<CallToolResult> UnknownComponent(
+    private static async ValueTask<CallToolResult> UnknownComponent(
         IKnowledgeGraphStore store, string component, CancellationToken ct)
     {
         var suggestions = await store.SuggestAsync(component, 5, ct);

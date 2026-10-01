@@ -137,14 +137,14 @@ public sealed partial class McpProxyToolsProvider(
         {
             var node = JsonNode.Parse(source.ConfigurationJson ?? "") as JsonObject;
             var endpoint = node?["endpoint"]?.GetValue<string>();
-            if (string.IsNullOrWhiteSpace(endpoint) || !Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            if (node is null || string.IsNullOrWhiteSpace(endpoint) || !Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
                 || (uri.Scheme != "http" && uri.Scheme != "https"))
             {
                 logger.LogWarning("mcp-proxy source {SourceId} has no valid http(s) endpoint — skipped", source.Id);
                 return null;
             }
 
-            var transport = node?["transport"]?.GetValue<string>()?.ToLowerInvariant() switch
+            var transport = node["transport"]?.GetValue<string>()?.ToLowerInvariant() switch
             {
                 null or "" or "auto" => HttpTransportMode.AutoDetect,
                 "http" => HttpTransportMode.StreamableHttp,
@@ -152,8 +152,8 @@ public sealed partial class McpProxyToolsProvider(
                 var other => InvalidTransport(other, source.Id)
             };
 
-            var prefix = node?["namePrefix"]?.GetValue<string>() ?? DefaultPrefix(source.Name);
-            var ttl = node?["toolsCacheSeconds"]?.GetValue<int>() is > 0 and var seconds ? seconds : 300;
+            var prefix = node["namePrefix"]?.GetValue<string>() ?? DefaultPrefix(source.Name);
+            var ttl = node["toolsCacheSeconds"]?.GetValue<int>() is > 0 and var seconds ? seconds : 300;
 
             return new McpProxyConfig(source.Id, endpoint, transport, prefix, ttl);
         }

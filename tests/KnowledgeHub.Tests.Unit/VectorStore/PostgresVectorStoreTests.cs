@@ -18,7 +18,9 @@ public sealed class PostgresVectorStoreTests
         // Covers RF-002: empty batch is a no-op — completes without opening a
         // connection (the fake connection string above points at nothing).
         await using var store = NewStore();
-        await store.UpsertBatchAsync([], "m");
+        var call = store.UpsertBatchAsync([], "m");
+        await call;
+        Assert.True(call.IsCompletedSuccessfully); // empty batch returns without connecting
     }
 
     [Fact]

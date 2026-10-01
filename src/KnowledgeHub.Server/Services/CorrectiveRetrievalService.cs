@@ -137,7 +137,7 @@ public sealed class CorrectiveRetrievalService(
         return sa > sb;
     }
 
-    private void ActivityTag(RetrievalGrading grading, bool retried)
+    private static void ActivityTag(RetrievalGrading grading, bool retried)
     {
         var activity = System.Diagnostics.Activity.Current;
         activity?.SetTag("search.grade", grading.Grade.ToString().ToLowerInvariant());

@@ -274,8 +274,9 @@ public sealed class ToolCacheServiceTests
         var svc = MakeService(new ThrowingCache());
 
         // When / Then
-        await svc.SetCachedResultAsync("read_file", Args(("x", "1")), OkResult());
-        // Passes if no exception is thrown
+        var call = svc.SetCachedResultAsync("read_file", Args(("x", "1")), OkResult());
+        await call;
+        Assert.True(call.IsCompletedSuccessfully); // cache failures are swallowed
     }
 
     // -------------------------------------------------------------------------

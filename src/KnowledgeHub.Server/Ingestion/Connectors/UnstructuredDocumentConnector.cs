@@ -82,7 +82,7 @@ public sealed class UnstructuredDocumentConnector(
 
         // Endpoint down for every file → fail the sync with a retry hint;
         // partial failures stay warnings so intact docs still reconcile.
-        if (documents.Count == 0 && failedUris.Count == paths.Count && paths.Count > 0)
+        if (documents.Count == 0 && failedUris.Count == paths.Count)
             throw new InvalidOperationException(
                 $"UnstructuredDocument source '{source.Name}': all {paths.Count} files failed — endpoint may be down, retry the sync later");
 

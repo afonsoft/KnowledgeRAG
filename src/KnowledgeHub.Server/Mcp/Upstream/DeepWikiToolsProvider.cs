@@ -203,7 +203,7 @@ public sealed partial class DeepWikiToolsProvider(
                 Handler = async (ctx, ct) =>
                 {
                     ValidateRepoArg(ctx, out _);
-                    var question = ToolArgs.RequiredString(ctx, "question");
+                    ToolArgs.RequiredString(ctx, "question");
                     return await CallUpstreamAsync("ask_question", ctx, ct);
                 }
             },
@@ -263,9 +263,8 @@ public sealed partial class DeepWikiToolsProvider(
 
         if (repos.Count == 0 || repos.Count > 10)
             throw new McpProtocolException("'repoName' accepts between 1 and 10 repositories", McpErrorCode.InvalidParams);
-        foreach (var repo in repos)
-            if (!RepoNamePattern().IsMatch(repo))
-                throw new McpProtocolException($"invalid repoName '{repo}' — expected owner/repo", McpErrorCode.InvalidParams);
+        if (repos.Find(r => !RepoNamePattern().IsMatch(r)) is { } bad)
+            throw new McpProtocolException($"invalid repoName '{bad}' — expected owner/repo", McpErrorCode.InvalidParams);
 
         return repos;
     }

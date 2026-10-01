@@ -103,7 +103,7 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
             foreach (var batch in items.Chunk(_options.BatchMax))
             {
                 await using var cmd = conn.CreateCommand();
-                cmd.Transaction = (NpgsqlTransaction)tx;
+                cmd.Transaction = tx;
                 cmd.CommandText = BuildBatchUpsertSql(batch.Length);
                 foreach (var item in batch)
                 {
@@ -201,8 +201,8 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
                 try
                 {
                     await using var setCmd = conn.CreateCommand();
-                    setCmd.Transaction = (NpgsqlTransaction)tx;
-                    setCmd.CommandText = $"SET LOCAL hnsw.ef_search = {_options.HnswEfSearch}";
+                    setCmd.Transaction = tx;
+                    setCmd.CommandText = $"SET LOCAL hnsw.ef_search = {_options.HnswEfSearch}"; // NOSONAR S2077 — SET não aceita parâmetros; valor int interno
                     await setCmd.ExecuteNonQueryAsync(cancellationToken);
                 }
                 catch (PostgresException)
@@ -221,15 +221,15 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
                 try
                 {
                     await using var setCmd = conn.CreateCommand();
-                    setCmd.Transaction = (NpgsqlTransaction)tx;
-                    setCmd.CommandText = $"SET LOCAL {IterativeScanGuc} = relaxed_order";
+                    setCmd.Transaction = tx;
+                    setCmd.CommandText = $"SET LOCAL {IterativeScanGuc} = relaxed_order"; // NOSONAR S2077 — nome de GUC é const interno
                     await setCmd.ExecuteNonQueryAsync(cancellationToken);
 
                     if (_options.IterativeScanMaxTuples > 0)
                     {
                         await using var maxCmd = conn.CreateCommand();
-                        maxCmd.Transaction = (NpgsqlTransaction)tx;
-                        maxCmd.CommandText = $"SET LOCAL hnsw.max_scan_tuples = {_options.IterativeScanMaxTuples}";
+                        maxCmd.Transaction = tx;
+                        maxCmd.CommandText = $"SET LOCAL hnsw.max_scan_tuples = {_options.IterativeScanMaxTuples}"; // NOSONAR S2077 — SET não aceita parâmetros; valor int interno
                         await maxCmd.ExecuteNonQueryAsync(cancellationToken);
                     }
                 }
@@ -240,7 +240,7 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
             }
 
             await using var cmd = conn.CreateCommand();
-            cmd.Transaction = (NpgsqlTransaction)tx;
+            cmd.Transaction = tx;
 
             var whereSource = sourceIds is null ? "" : " AND source_id = ANY($4)";
             cmd.CommandText = $"""
@@ -352,6 +352,8 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
 
             await using var cmd = conn.CreateCommand();
             // RF-003: metadata jsonb — additive on existing DBs via ALTER … IF NOT EXISTS.
+            // NOSONAR pragma: DDL interpola apenas _storageType (enum interno validado)
+#pragma warning disable S2077
             cmd.CommandText = $$"""
                 CREATE TABLE IF NOT EXISTS kh_embeddings (
                     chunk_id    uuid PRIMARY KEY,
@@ -367,6 +369,7 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
                 CREATE INDEX IF NOT EXISTS kh_embeddings_source_model_idx ON kh_embeddings (source_id, model);
                 CREATE INDEX IF NOT EXISTS kh_embeddings_metadata_gin_idx ON kh_embeddings USING gin (metadata);
                 """;
+#pragma warning restore S2077
             await cmd.ExecuteNonQueryAsync(cancellationToken);
             await MaybeMigrateStorageAsync(conn, cancellationToken);
             await MaybeCreateHnswIndexAsync(conn, cancellationToken);
@@ -460,7 +463,7 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
             alter.Transaction = tx;
             alter.CommandTimeout = 600; // table rewrite — give it room
             alter.CommandText =
-                $"ALTER TABLE kh_embeddings ALTER COLUMN embedding TYPE {_storageType} USING embedding::{_storageType}";
+                $"ALTER TABLE kh_embeddings ALTER COLUMN embedding TYPE {_storageType} USING embedding::{_storageType}"; // NOSONAR S2077 — _storageType é enum interno validado (vector|halfvec)
             await alter.ExecuteNonQueryAsync(ct);
 
             await tx.CommitAsync(ct);

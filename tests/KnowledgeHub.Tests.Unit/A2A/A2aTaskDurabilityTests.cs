@@ -118,7 +118,9 @@ public sealed class A2aTaskDurabilityTests : IDisposable
         var task = MkTask("t1", "ctx-1", TaskState.Completed);
         task.History = Enumerable.Range(0, 5).Select(i => new Message
         {
-            MessageId = $"m{i}", Role = Role.User, Parts = [Part.FromText($"msg{i}")]
+            MessageId = $"m{i}",
+            Role = Role.User,
+            Parts = [Part.FromText($"msg{i}")]
         }).ToList();
         await Store().SaveTaskAsync("t1", task);
 
@@ -193,7 +195,11 @@ public sealed class A2aTaskDurabilityTests : IDisposable
 
     [Fact]
     public async Task DeleteTask_Unknown_NoOp()
-        => await Store().DeleteTaskAsync("ghost"); // must not throw
+    {
+        var store = Store();
+        await store.DeleteTaskAsync("ghost"); // must not throw
+        Assert.Null(await store.GetTaskAsync("ghost"));
+    }
 
     // ---- RF-003: push configs + terminal dispatch ------------------------
 

@@ -65,7 +65,7 @@ public sealed class RestApiConnector(
 
     /// <summary>Walks the pagination loop: page 1 failure aborts the sync,
     /// later failures keep collected items, empty page ends pagination.</summary>
-    private async Task<(List<JsonElement> Items, List<string> Warnings, HashSet<string> Warned)>
+    private static async Task<(List<JsonElement> Items, List<string> Warnings, HashSet<string> Warned)>
         FetchAllPagesAsync(
             KnowledgeSource source, HttpClient http, string endpoint,
             IReadOnlyDictionary<string, string> headers, string? itemsPath,

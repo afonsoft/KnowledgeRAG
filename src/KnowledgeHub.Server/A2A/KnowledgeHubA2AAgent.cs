@@ -173,6 +173,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         }
         catch (OperationCanceledException)
         {
+            // task canceled upstream — close quietly
         }
         catch (Exception ex)
         {

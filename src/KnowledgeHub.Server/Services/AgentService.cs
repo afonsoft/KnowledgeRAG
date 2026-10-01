@@ -76,8 +76,9 @@ public sealed class AgentService(
         {
             result = await run;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            if (ex is OperationCanceledException) throw;
             failure = ex;
         }
         if (failure is not null)

@@ -23,28 +23,28 @@ public static class StreamingEndpoints
             if (string.IsNullOrWhiteSpace(request.Question))
             {
                 http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "question is required" });
+                await http.Response.WriteAsJsonAsync(new { error = "question is required" }, http.RequestAborted);
                 return;
             }
             var mode = SearchEndpoints.ParseMode(request.Mode);
             if (mode is null)
             {
                 http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "mode must be hybrid | semantic | lexical" });
+                await http.Response.WriteAsJsonAsync(new { error = "mode must be hybrid | semantic | lexical" }, http.RequestAborted);
                 return;
             }
             var generate = request.Generate ?? answers.IsConfigured;
             if (!generate || !answers.IsConfigured)
             {
                 http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "chat provider not configured (Chat:Provider=none)" });
+                await http.Response.WriteAsJsonAsync(new { error = "chat provider not configured (Chat:Provider=none)" }, http.RequestAborted);
                 return;
             }
 
             if (!Search.ResolvedSearchFilter.TryResolve(request.Filters, out var streamFilter, out var streamFilterError))
             {
                 http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = streamFilterError });
+                await http.Response.WriteAsJsonAsync(new { error = streamFilterError }, http.RequestAborted);
                 return;
             }
 
@@ -96,13 +96,13 @@ public static class StreamingEndpoints
             if (string.IsNullOrWhiteSpace(request.Prompt) && request.Messages is not { Count: > 0 })
             {
                 http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "prompt or messages[] is required" });
+                await http.Response.WriteAsJsonAsync(new { error = "prompt or messages[] is required" }, http.RequestAborted);
                 return;
             }
             if (!agent.IsConfigured)
             {
                 http.Response.StatusCode = 400;
-                await http.Response.WriteAsJsonAsync(new { error = "agent requires a chat provider (Chat:Provider)" });
+                await http.Response.WriteAsJsonAsync(new { error = "agent requires a chat provider (Chat:Provider)" }, http.RequestAborted);
                 return;
             }
 

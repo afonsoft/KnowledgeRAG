@@ -22,7 +22,7 @@ public static class ThreadEndpoints
         group.MapPut("/{id:guid}", async (Guid id, RenameThreadRequest req, IConversationService svc, CancellationToken ct) =>
             string.IsNullOrWhiteSpace(req?.Title)
                 ? Results.BadRequest(new { error = "title is required" })
-                : Results.Ok(await svc.RenameAsync(id, req!.Title, ct)));
+                : Results.Ok(await svc.RenameAsync(id, req.Title, ct)));
 
         group.MapDelete("/{id:guid}", async (Guid id, IConversationService svc, CancellationToken ct) =>
         {

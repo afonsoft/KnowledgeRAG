@@ -95,7 +95,7 @@ async function onFetch(event) {
 
     const response = await fetch(event.request);
     if (response.ok && !shouldServeIndexHtml) {
-        cache.put(request, response.clone());
+        await cache.put(request, response.clone());
     }
     return response;
 }

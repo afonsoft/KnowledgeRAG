@@ -59,22 +59,23 @@ public sealed class EmbeddingProviderResolver(
     {
         private int _refs;
         private bool _closed;
+        private readonly object _gate = new();
         private readonly TaskCompletionSource _drained =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool TryAcquire()
         {
-            lock (this) { if (_closed) return false; _refs++; return true; }
+            lock (_gate) { if (_closed) return false; _refs++; return true; }
         }
 
         public void Release()
         {
-            lock (this) { if (--_refs == 0 && _closed) _drained.TrySetResult(); }
+            lock (_gate) { if (--_refs == 0 && _closed) _drained.TrySetResult(); }
         }
 
         public Task CloseAndDrainAsync()
         {
-            lock (this) { _closed = true; if (_refs == 0) _drained.TrySetResult(); }
+            lock (_gate) { _closed = true; if (_refs == 0) _drained.TrySetResult(); }
             return _drained.Task;
         }
     }

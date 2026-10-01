@@ -51,7 +51,7 @@ public static class DatabaseStatsBuilder
             try
             {
                 await using var cmd = conn.CreateCommand();
-                cmd.CommandText = $"SELECT COUNT(*) FROM \"{et}\"";
+                cmd.CommandText = $"SELECT COUNT(*) FROM \"{et}\""; // NOSONAR S2077 — et é nome de tabela EF-mapped (metadado interno, não input)
                 var v = await cmd.ExecuteScalarAsync(ct);
                 tables.Add(new TableCountDto { Name = et!, RowCount = Convert.ToInt64(v) });
             }
@@ -98,7 +98,7 @@ public static class DatabaseStatsBuilder
         try
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"PRAGMA {name}";
+            cmd.CommandText = $"PRAGMA {name}"; // NOSONAR S2077 — name é identificador pragma de lista interna fixa
             var v = cmd.ExecuteScalar();
             return v is null ? null : Convert.ToInt64(v);
         }

@@ -21,6 +21,9 @@ public sealed class TavilyToolsProvider(
     IOptions<TavilyOptions> options,
     ILogger<TavilyToolsProvider> logger) : IToolProvider
 {
+    private const string ToolCrawl = "tavily_crawl";
+    private const string ToolResearch = "tavily_research";
+
     internal const string NoKeyMessage =
         "Tavily API key not configured — open Settings (/settings) or set Tavily__ApiKey.";
 
@@ -28,7 +31,7 @@ public sealed class TavilyToolsProvider(
     /// the Playground write-confirm gate when the upstream omits hints.</summary>
     private static readonly string[] MutatingPrefixes =
     [
-        "tavily_crawl", "tavily_research"
+        ToolCrawl, ToolResearch
     ];
 
     private readonly TavilyOptions _options = options.Value;
@@ -51,8 +54,8 @@ public sealed class TavilyToolsProvider(
             ["tavily_search"] = """[{"query":"latest .NET 10 release notes","max_results":5,"search_depth":"basic"}]""",
             ["tavily_extract"] = """[{"urls":["https://example.com"]}]""",
             ["tavily_map"] = """[{"url":"https://docs.tavily.com","max_depth":1,"limit":20}]""",
-            ["tavily_crawl"] = """[{"url":"https://docs.tavily.com","max_depth":1,"limit":5}]""",
-            ["tavily_research"] = """[{"input":"Compare .NET 10 minimal APIs vs controllers for a small team"}]"""
+            [ToolCrawl] = """[{"url":"https://docs.tavily.com","max_depth":1,"limit":5}]""",
+            [ToolResearch] = """[{"input":"Compare .NET 10 minimal APIs vs controllers for a small team"}]"""
         };
 
     private static readonly JsonObject SearchSchema = JsonNode.Parse("""
@@ -261,23 +264,23 @@ public sealed class TavilyToolsProvider(
         },
         new CatalogTool
         {
-            Name = "tavily_crawl",
+            Name = ToolCrawl,
             Title = "Crawl site (Tavily)",
             Description = "Crawl a site/section (proxied to Tavily — billable/long-running).",
             InputSchema = CrawlSchema,
             ReadOnly = false,
             OpenWorldHint = true,
-            Handler = (ctx, ct) => DispatchAsync("tavily_crawl", ctx, ct)
+            Handler = (ctx, ct) => DispatchAsync(ToolCrawl, ctx, ct)
         },
         new CatalogTool
         {
-            Name = "tavily_research",
+            Name = ToolResearch,
             Title = "Deep research (Tavily)",
             Description = "Deep research on a question (proxied to Tavily — billable/long-running).",
             InputSchema = ResearchSchema,
             ReadOnly = false,
             OpenWorldHint = true,
-            Handler = (ctx, ct) => DispatchAsync("tavily_research", ctx, ct)
+            Handler = (ctx, ct) => DispatchAsync(ToolResearch, ctx, ct)
         }
     ];
 }
