@@ -35,7 +35,7 @@
 
     .sidebar-collapse-btn:hover {
         background: rgba(255, 255, 255, 0.16);
-        color: #fff;
+        color: #fff; /* NOSONAR S7924 — white over dark sidebar; transparent bg reads as dark */
     }
 
 .nav-item {
@@ -70,7 +70,7 @@
 
         .nav-item ::deep a.active {
             background: var(--kh-accent-soft, rgba(27, 110, 194, 0.25));
-            color: #fff;
+            color: #fff; /* NOSONAR S7924 — white over accent overlay on dark sidebar */
             box-shadow: inset 3px 0 0 var(--kh-accent, #1b6ec2);
         }
 

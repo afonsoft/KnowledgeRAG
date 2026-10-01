@@ -58,12 +58,7 @@ public sealed class HierarchicalRelaxationTests
         var cache = new MemoryDistributedCache(
             Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
         var emb = new StubEmbeddings();
-        return new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
-            new ScopedVectorStore(hits, chunkSource), new DisabledLexical(), cache,
-            config ?? new ConfigurationBuilder().Build(), new PassthroughRewriter(),
-            NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(), FakeGraphSettings.Disabled,
-            NullLogger<SearchService>.Instance);
+        return new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb), new ScopedVectorStore(hits, chunkSource), new DisabledLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), FakeGraphSettings.Disabled), config ?? new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
     }
 
     private static SearchService NewRoutedSearch(KnowledgeHubDbContext db,
@@ -72,12 +67,7 @@ public sealed class HierarchicalRelaxationTests
         var cache = new MemoryDistributedCache(
             Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
         var emb = new RoutedEmbeddings();
-        return new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
-            new RoutedVectorStore(emb, route), new DisabledLexical(), cache,
-            new ConfigurationBuilder().Build(), new PassthroughRewriter(),
-            NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(), FakeGraphSettings.Disabled,
-            NullLogger<SearchService>.Instance);
+        return new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb), new RoutedVectorStore(emb, route), new DisabledLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), FakeGraphSettings.Disabled), new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
     }
 
     [Fact]
@@ -268,12 +258,7 @@ public sealed class HierarchicalRelaxationTests
         var cache = new MemoryDistributedCache(
             Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
         var emb = new StubEmbeddings();
-        return new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
-            new ScopedVectorStore(hits, chunkSource), new DisabledLexical(), cache,
-            new ConfigurationBuilder().Build(), new PassthroughRewriter(),
-            NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new ScopedTo(allowedSources), FakeGraphSettings.Disabled,
-            NullLogger<SearchService>.Instance);
+        return new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb), new ScopedVectorStore(hits, chunkSource), new DisabledLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new ScopedTo(allowedSources), FakeGraphSettings.Disabled), new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
     }
 
     private sealed class ScopedTo(Guid[] allowedSources)

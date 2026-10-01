@@ -42,6 +42,15 @@ public static class EvalEndpoints
     {
         var group = app.MapGroup("/api/eval");
 
+        MapRunEndpoints(group);
+        MapRunDetailEndpoint(group);
+        MapBaselineEndpoints(group);
+
+        return group;
+    }
+
+    private static void MapRunEndpoints(RouteGroupBuilder group)
+    {
         group.MapPost("/run", async (
             EvalRunRequest request, EvalRunner runner,
             IWebHostEnvironment env, CancellationToken ct) =>
@@ -56,10 +65,11 @@ public static class EvalEndpoints
 
             try
             {
-                var report = await runner.RunAsync(
-                    cases, datasetJson!, request.Mode, request.TopK,
-                    request.Faithfulness, request.CompareTo,
-                    request.Baseline, request.Gate, ct);
+                var report = await runner.RunAsync(cases, datasetJson!,
+                    new EvalRunner.EvalRunOptions(
+                        Mode: request.Mode, TopK: request.TopK,
+                        Faithfulness: request.Faithfulness, CompareTo: request.CompareTo,
+                        BaselineName: request.Baseline, Gate: request.Gate), ct);
                 return Results.Ok(report);
             }
             catch (KeyNotFoundException ex)
@@ -103,7 +113,10 @@ public static class EvalEndpoints
                 r.BaselineName
             }));
         });
+    }
 
+    private static void MapRunDetailEndpoint(RouteGroupBuilder group)
+    {
         group.MapGet("/runs/{id:guid}", async (
             Guid id, string? compare, KnowledgeHubDbContext db, CancellationToken ct) =>
         {
@@ -152,7 +165,10 @@ public static class EvalEndpoints
                 BaselineName = run.BaselineName
             });
         });
+    }
 
+    private static void MapBaselineEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260924-eval-regression-gate RF-001: named baselines.
         group.MapGet("/baselines", async (KnowledgeHubDbContext db, CancellationToken ct) =>
         {
@@ -193,8 +209,6 @@ public static class EvalEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { request.Name, request.RunId });
         });
-
-        return group;
     }
 
     /// <summary>

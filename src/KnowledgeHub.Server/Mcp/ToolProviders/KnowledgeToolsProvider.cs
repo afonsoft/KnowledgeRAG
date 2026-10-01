@@ -678,9 +678,9 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         // SPEC-20260923-code-aware-chunking: kind from the document URI.
         var config = ctx.Services.GetRequiredService<IConfiguration>();
         var (kind, pieces) = await Ingestion.Chunking.ChunkerSelector.ChunkAsync(
-            doc2.UriReference, body, 500, 50,
+            new Ingestion.Chunking.ChunkerSelector.ChunkRequest(doc2.UriReference, body, 500, 50,
+                Ingestion.Chunking.ChunkerSelector.StrategyFor(target.ConfigurationJson)),
             embeddings, config,
-            Ingestion.Chunking.ChunkerSelector.StrategyFor(target.ConfigurationJson),
             ctx.Services!.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("KnowledgeHub.write_knowledge"), ct, ctx.Services);
         var sanitizer = ctx.Services.GetRequiredService<Security.IContentSanitizer>();

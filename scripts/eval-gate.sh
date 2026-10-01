@@ -28,7 +28,7 @@ PY
 )
 
 AUTH=()
-if [ -n "${KH_APIKEY:-}" ]; then
+if [[ -n "${KH_APIKEY:-}" ]]; then
   AUTH=(-H "Authorization: Bearer ${KH_APIKEY}")
 fi
 
@@ -37,7 +37,7 @@ RESPONSE=$(curl -sS -w '\n%{http_code}' -X POST "${KH_URL}/api/eval/run" \
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 PAYLOAD=$(echo "$RESPONSE" | sed '$d')
 
-if [ "$HTTP_CODE" != "200" ]; then
+if [[ "$HTTP_CODE" != "200" ]]; then
   echo "eval run failed: HTTP $HTTP_CODE"
   echo "$PAYLOAD"
   exit 2
@@ -47,7 +47,7 @@ STATUS=$(echo "$PAYLOAD" | python3 -c 'import json,sys; r=json.load(sys.stdin); 
 RECALL=$(echo "$PAYLOAD" | python3 -c 'import json,sys; print(json.load(sys.stdin)["metrics"]["recallAtK"])')
 
 echo "run metrics: recall_at_k=$RECALL  gate=$STATUS"
-if [ "$STATUS" = "fail" ]; then
+if [[ "$STATUS" = "fail" ]]; then
   echo "$PAYLOAD" | python3 -c 'import json,sys; [print("  violation:", v) for v in json.load(sys.stdin)["gate"]["violations"]]'
   exit 1
 fi

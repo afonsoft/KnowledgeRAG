@@ -30,7 +30,7 @@
         var bin = atob(clean);
         var bytes = new Uint8Array(bin.length);
         for (var i = 0; i < bin.length; i++) {
-            bytes[i] = bin.charCodeAt(i);
+            bytes[i] = bin.codePointAt(i);
         }
         return bytes;
     }
@@ -44,9 +44,9 @@
         }
         var tokens = integrity.split(/\s+/);
         var hash = null;
-        for (var i = 0; i < tokens.length; i++) {
-            if (tokens[i].indexOf("sha256-") === 0) {
-                hash = tokens[i].substring(7);
+        for (const t of tokens) {
+            if (t.indexOf("sha256-") === 0) {
+                hash = t.substring(7);
                 break;
             }
         }
@@ -56,8 +56,8 @@
         return crypto.subtle.digest("SHA-256", bytes).then(function (buf) {
             var digest = new Uint8Array(buf);
             var bin = "";
-            for (var j = 0; j < digest.length; j++) {
-                bin += String.fromCharCode(digest[j]);
+            for (const b of digest) {
+                bin += String.fromCodePoint(b);
             }
             return btoa(bin) === hash;
         });
@@ -118,7 +118,7 @@
             loadBootResource: function (type, name, defaultUri, integrity) {
                 try {
                     var path = new URL(defaultUri, document.baseURI).pathname;
-                    if (path.indexOf(frameworkSegment) === -1 || path.endsWith(".js")) {
+                    if (!path.includes(frameworkSegment) || path.endsWith(".js")) {
                         return null; // default loading — proxies allow .js
                     }
                     var fileName = path.substring(path.lastIndexOf("/") + 1);

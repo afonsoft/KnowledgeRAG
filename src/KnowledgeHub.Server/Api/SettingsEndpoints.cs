@@ -18,6 +18,20 @@ public static class SettingsEndpoints
     {
         var group = app.MapGroup("/api/settings");
 
+        MapIntegrationEndpoints(group);
+        MapChatEndpoints(group);
+        MapEmbeddingEndpoints(group);
+        MapGraphEndpoints(group);
+        MapResilienceEndpoints(group);
+        MapAssistantEndpoints(group);
+        MapCacheEndpoints(group);
+        MapDiagnosticsEndpoints(group);
+
+        return group;
+    }
+
+    private static void MapIntegrationEndpoints(RouteGroupBuilder group)
+    {
         group.MapGet("/integrations", async (
             IIntegrationSecretStore store,
             IIntegrationStateService state,
@@ -89,6 +103,10 @@ public static class SettingsEndpoints
             return Results.NoContent();
         });
 
+    }
+
+    private static void MapChatEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260916-settings-chat-config RF-004: chat provider (endpoint +
         // model + API key) editable from /settings; effective immediately via
         // the service's Invalidate() — no restart.
@@ -141,6 +159,10 @@ public static class SettingsEndpoints
             return Results.Ok(await chat.TestAsync(body ?? new TestChatConnectionRequest(), ct));
         });
 
+    }
+
+    private static void MapEmbeddingEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260926-settings-ux-embeddings RF-004: embedding/indexing
         // provider (provider + endpoint + model + dims + chunking + API key)
         // editable from /settings; the resolver swaps the live provider on
@@ -271,6 +293,10 @@ public static class SettingsEndpoints
             return Results.NoContent();
         });
 
+    }
+
+    private static void MapGraphEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260923-graph-settings-ui RF-004: GraphRAG switch + tuning knobs,
         // editable from /settings; effective immediately via the service's
         // Invalidate() — no restart.
@@ -305,6 +331,10 @@ public static class SettingsEndpoints
             return Results.NoContent();
         });
 
+    }
+
+    private static void MapResilienceEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260928-resilience-tool-fallback-wiring RF-004: fallback policy
         // (mode/budget/alternates/capabilities), editable from /settings;
         // effective immediately via the service's Invalidate() — no restart.
@@ -339,6 +369,10 @@ public static class SettingsEndpoints
             return Results.NoContent();
         });
 
+    }
+
+    private static void MapAssistantEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260929-a2a-assistant-delegation RF-001: low-cost assistant provider
         // (local OpenAI-compatible or remote A2A agent) routed to cheap sub-tasks.
         group.MapGet("/assistant", async (
@@ -384,6 +418,10 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
             Results.Ok(await assistant.TestAsync(body ?? new TestAssistantConnectionRequest(), ct)));
 
+    }
+
+    private static void MapCacheEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260924-redis-cache-and-tool-caching RF-003/RF-004: Cache inspection and clear
         group.MapGet("/cache", async (
             Caching.ICacheManagerService cacheMgr,
@@ -412,6 +450,10 @@ public static class SettingsEndpoints
             return Results.NoContent();
         });
 
+    }
+
+    private static void MapDiagnosticsEndpoints(RouteGroupBuilder group)
+    {
         // SPEC-20260926-settings-tabs-database-metrics RF-002: storage snapshot
         // for the "Banco de Dados" tab — provider, sizes, PRAGMAs, entity
         // counts, migrations + vector store diagnostics (fail-soft per section).
@@ -454,9 +496,7 @@ public static class SettingsEndpoints
             });
         });
 
-        return group;
     }
-
     /// <summary>Retorna true quando o valor é uma URI absoluta http(s).</summary>
     private static bool IsHttpUri(string value) =>
         Uri.TryCreate(value, UriKind.Absolute, out var uri)
@@ -467,14 +507,9 @@ public static class SettingsEndpoints
         string provider, IIntegrationSecretStore store, IIntegrationStateService state,
         IConfiguration cfg, CancellationToken ct)
     {
-        var info = await store.GetInfoAsync(provider, ct);
         var envKey = cfg[$"{ConfigSection(provider)}:ApiKey"];
-
-        var (hasKey, hint, source) = info is not null
-            ? (true, MaskHint(provider, info.KeyHint), "store")
-            : !string.IsNullOrWhiteSpace(envKey)
-                ? (true, MaskHint(provider, envKey.Length >= 4 ? envKey[^4..] : envKey), "env")
-                : (false, null, "none");
+        var (hasKey, last4, source) = await store.GetKeyStatusAsync(provider, envKey, ct);
+        var hint = last4 is null ? null : MaskHint(provider, last4);
 
         return new IntegrationSettingsDto
         {
@@ -517,11 +552,16 @@ public static class SettingsEndpoints
     };
 
     /// <summary>Formata o hint mascarado com o prefixo do provider quando aplicável.</summary>
-    private static string MaskHint(string provider, string last4) =>
-        provider == IntegrationProviders.Firecrawl ? $"fc-••••{last4}"
-            : provider == IntegrationProviders.Tavily ? $"tvly-••••{last4}"
-            : provider == IntegrationProviders.Context7 ? $"ctx7sk-••••{last4}"
-            : $"••••{last4}";
+    private static string MaskHint(string provider, string last4)
+    {
+        if (provider == IntegrationProviders.Firecrawl)
+            return $"fc-••••{last4}";
+        if (provider == IntegrationProviders.Tavily)
+            return $"tvly-••••{last4}";
+        if (provider == IntegrationProviders.Context7)
+            return $"ctx7sk-••••{last4}";
+        return $"••••{last4}";
+    }
 
     /// <summary>Descarta a sessão upstream do provider para a próxima chamada usar a
     /// nova credencial efetiva (e, no DeepWiki, o novo endpoint), depois notifica o

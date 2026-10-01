@@ -4,6 +4,9 @@ using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Server.Settings;
 using KnowledgeHub.Shared.Contracts;
 
+// SonarQube S1075: 'https://api.notion.com' é o default configurável via connector config 'apiBaseUrl' — intencional.
+#pragma warning disable S1075
+
 namespace KnowledgeHub.Server.Ingestion.Connectors;
 
 /// <summary>
@@ -26,9 +29,6 @@ public sealed class NotionConnector(
 
     /// <summary>Secret store slug for this source's integration token.</summary>
     public static string SecretKey(Guid sourceId) => $"notion:{sourceId}";
-
-    public Task<FetchResult> FetchAsync(KnowledgeSource source, CancellationToken cancellationToken) =>
-        FetchAsync(source, new Dictionary<string, string>(), cancellationToken);
 
     /// <summary>Builds the authenticated v1 client shared by FetchAsync and the
     /// on-demand item fetch (RF-001).</summary>
@@ -88,10 +88,13 @@ public sealed class NotionConnector(
         }
         catch (NotionApiException ex)
         {
-            logger.LogWarning("Notion on-demand fetch for {PageId} failed: {Message}", pageId, ex.Message);
+            logger.LogWarning(ex, "Notion on-demand fetch for {PageId} failed", pageId);
             return null;
         }
     }
+
+    public Task<FetchResult> FetchAsync(KnowledgeSource source, CancellationToken cancellationToken) =>
+        FetchAsync(source, new Dictionary<string, string>(), cancellationToken);
 
     public async Task<FetchResult> FetchAsync(
         KnowledgeSource source,
@@ -177,7 +180,7 @@ public sealed class NotionConnector(
         }
         catch (NotionApiException ex)
         {
-            logger.LogWarning("Notion page {PageId} fetch failed: {Message}", pageId, ex.Message);
+            logger.LogWarning(ex, "Notion page {PageId} fetch failed", pageId);
             ctx.Warnings.Add($"{pageId}: {ex.Message}");
             ctx.FailedUris.Add($"notion://page/{pageId}"); // exists upstream, fetch failed — keep doc (RF-002)
         }
@@ -199,7 +202,7 @@ public sealed class NotionConnector(
         }
         catch (NotionApiException ex)
         {
-            logger.LogWarning("Notion database {DatabaseId} query failed: {Message}", databaseId, ex.Message);
+            logger.LogWarning(ex, "Notion database {DatabaseId} query failed", databaseId);
             ctx.Warnings.Add($"database {databaseId}: {ex.Message}");
             // RF-203: a failed/partial query hides rows the pipeline would then
             // DELETE as "remotely removed" — mark the listing incomplete so
@@ -245,7 +248,7 @@ public sealed class NotionConnector(
         }
         catch (NotionApiException ex)
         {
-            logger.LogWarning("Notion blocks for {PageId} failed: {Message}", id, ex.Message);
+            logger.LogWarning(ex, "Notion blocks for {PageId} failed", id);
             ctx.Warnings.Add($"{title} ({id}): {ex.Message}");
             ctx.FailedUris.Add(uri); // page exists, blocks failed — keep doc (RF-002)
             return;

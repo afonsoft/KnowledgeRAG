@@ -16,6 +16,9 @@ namespace KnowledgeHub.Server.VectorStore;
 /// </summary>
 public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
 {
+    private const string StorageVector = "vector";
+    private const string StorageHalfvec = "halfvec";
+
     internal const string HnswIndexName = "kh_embeddings_embedding_hnsw_idx";
 
     /// <summary>SPEC-20260926-pgvector-scan-and-halfvec RF-001: the iterative
@@ -32,12 +35,12 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
     private readonly SemaphoreSlim _initGate = new(1, 1);
     /// <summary>Effective storage flavour — <c>"halfvec"</c> only after the
     /// version check passes (SPEC-20260925-pgvector-halfvec RF-002).</summary>
-    private string _storageType = "vector";
+    private string _storageType = StorageVector;
 
     public PostgresVectorStore(string connectionString, int dimensions = 384, PostgresOptions? options = null)
     {
         _options = options ?? new PostgresOptions();
-        _storageType = options is null ? "vector" : _options.StorageType;
+        _storageType = options is null ? StorageVector : _options.StorageType;
         var csb = new NpgsqlConnectionStringBuilder(connectionString)
         {
             MinPoolSize = _options.MinPoolSize,
@@ -286,7 +289,7 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
     /// type — <c>halfvec_cosine_ops</c> on halfvec, <c>vector_cosine_ops</c>
     /// otherwise.</summary>
     private string OpsClass =>
-        _storageType == "halfvec" ? "halfvec_cosine_ops" : "vector_cosine_ops";
+        _storageType == StorageHalfvec ? "halfvec_cosine_ops" : "vector_cosine_ops";
 
     /// <summary>
     /// RF-001: HNSW DDL — interpolated ints only (identifiers can't be parameters).
@@ -303,7 +306,7 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
     /// SPEC-20260924-pgvector-rag-performance RF-001: Secondary support indexes on
     /// source_id, document_id, compound (source_id, model) and metadata jsonb (GIN).
     /// </summary>
-    internal static string BuildSecondaryIndexesSql() => """
+    internal static string SecondaryIndexesSql => """
         CREATE INDEX IF NOT EXISTS kh_embeddings_source_idx ON kh_embeddings (source_id);
         CREATE INDEX IF NOT EXISTS kh_embeddings_document_idx ON kh_embeddings (document_id);
         CREATE INDEX IF NOT EXISTS kh_embeddings_source_model_idx ON kh_embeddings (source_id, model);
@@ -387,18 +390,18 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
     private async Task ResolveStorageTypeAsync(NpgsqlConnection conn, CancellationToken ct)
     {
         var requested = _options.StorageType.ToLowerInvariant();
-        if (requested is not ("vector" or "halfvec"))
+        if (requested is not (StorageVector or StorageHalfvec))
             throw new InvalidOperationException(
                 $"VectorStore:Postgres:StorageType must be 'vector' or 'halfvec' (got '{_options.StorageType}')");
 
-        if (requested == "halfvec" && _dimensions > 2000)
+        if (requested == StorageHalfvec && _dimensions > 2000)
             throw new InvalidOperationException(
                 $"halfvec supports up to 2000 dims for indexed columns — configured {_dimensions}. " +
                 "Use StorageType=vector.");
 
-        if (requested == "vector")
+        if (requested == StorageVector)
         {
-            _storageType = "vector";
+            _storageType = StorageVector;
             return;
         }
 
@@ -407,10 +410,10 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
         var extVersion = await cmd.ExecuteScalarAsync(ct) as string;
         if (extVersion is null || !VersionSupported(extVersion, "0.7"))
         {
-            _storageType = "vector"; // degrade silently — writes keep working
+            _storageType = StorageVector; // degrade silently — writes keep working
             return;
         }
-        _storageType = "halfvec";
+        _storageType = StorageHalfvec;
     }
 
     /// <summary>"0.8.1" vs "0.7" — permissive numeric compare.</summary>
@@ -478,11 +481,11 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
     /// <summary>Parameter for the embedding column — HalfVector when the
     /// storage type resolved to halfvec (SPEC-20260925-pgvector-halfvec RF-001).</summary>
     private NpgsqlParameter VectorParameter(float[] v) =>
-        _storageType == "halfvec"
+        _storageType == StorageHalfvec
             ? new NpgsqlParameter
             {
                 Value = new HalfVector(new ReadOnlyMemory<Half>(v.Select(f => (Half)f).ToArray())),
-                DataTypeName = "halfvec"
+                DataTypeName = StorageHalfvec
             }
             : new NpgsqlParameter { Value = new Vector(v) };
 

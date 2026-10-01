@@ -61,7 +61,7 @@ public sealed class ToolCacheService : IToolCacheService
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            _logger.LogWarning("Failed to retrieve cached tool result for {ToolName}: {Message}", toolName, ex.Message);
+            _logger.LogWarning(ex, "Failed to retrieve cached tool result for {ToolName}", toolName);
             return null;
         }
     }
@@ -94,7 +94,7 @@ public sealed class ToolCacheService : IToolCacheService
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            _logger.LogWarning("Failed to cache tool result for {ToolName}: {Message}", toolName, ex.Message);
+            _logger.LogWarning(ex, "Failed to cache tool result for {ToolName}", toolName);
         }
     }
 

@@ -79,9 +79,9 @@ public sealed class ScheduledSyncBackgroundService(
                 logger.LogInformation("Auto-sync enqueued for source {SourceId} (interval {IntervalMinutes}min)",
                     source.Id, source.SyncIntervalMinutes ?? 30);
             }
-            catch (QueueFullException)
+            catch (QueueFullException ex)
             {
-                logger.LogWarning("Ingestion queue full — auto-sync for source {SourceId} deferred", source.Id);
+                logger.LogWarning(ex, "Ingestion queue full — auto-sync for source {SourceId} deferred", source.Id);
             }
             catch (Exception ex)
             {

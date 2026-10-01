@@ -112,50 +112,48 @@ public sealed class LexicalSearchService(
         DbConnection connection, string match, int topK,
         IReadOnlyCollection<Guid>? sourceIds, CancellationToken cancellationToken)
     {
+        await using var command = connection.CreateCommand();
+        var sourceFilter = "";
+        if (sourceIds is { Count: > 0 })
         {
-            await using var command = connection.CreateCommand();
-            var sourceFilter = "";
-            if (sourceIds is { Count: > 0 })
+            var names = new List<string>(sourceIds.Count);
+            var i = 0;
+            foreach (var id in sourceIds)
             {
-                var names = new List<string>(sourceIds.Count);
-                var i = 0;
-                foreach (var id in sourceIds)
-                {
-                    var name = $"$s{i++}";
-                    names.Add(name);
-                    AddParameter(command, name, id.ToString());
-                }
-                // EF Core stores TEXT Guids uppercase; NOCASE makes the filter format-agnostic.
-                sourceFilter = $"AND d.KnowledgeSourceId COLLATE NOCASE IN ({string.Join(", ", names)}) ";
+                var name = $"$s{i++}";
+                names.Add(name);
+                AddParameter(command, name, id.ToString());
             }
-            else if (sourceIds is { Count: 0 })
-            {
-                return [];
-            }
-
-            command.CommandText = $"""
-                SELECT c.Id, f.rank
-                FROM {TableName} f
-                JOIN Chunks c ON c.Id = f.chunk_id
-                JOIN Documents d ON c.KnowledgeDocumentId = d.Id
-                WHERE f.text MATCH $match {sourceFilter}
-                ORDER BY f.rank
-                LIMIT $limit
-                """; // NOSONAR S2077 — interpola apenas identificador const TableName e fragmento de placeholders nomeados
-            AddParameter(command, "$match", match);
-            AddParameter(command, "$limit", topK);
-
-            var hits = new List<LexicalHit>();
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                hits.Add(new LexicalHit(
-                    Guid.Parse(reader.GetString(0)),
-                    hits.Count + 1,
-                    reader.GetDouble(1)));
-            }
-            return hits;
+            // EF Core stores TEXT Guids uppercase; NOCASE makes the filter format-agnostic.
+            sourceFilter = $"AND d.KnowledgeSourceId COLLATE NOCASE IN ({string.Join(", ", names)}) ";
         }
+        else if (sourceIds is { Count: 0 })
+        {
+            return [];
+        }
+
+        command.CommandText = $"""
+            SELECT c.Id, f.rank
+            FROM {TableName} f
+            JOIN Chunks c ON c.Id = f.chunk_id
+            JOIN Documents d ON c.KnowledgeDocumentId = d.Id
+            WHERE f.text MATCH $match {sourceFilter}
+            ORDER BY f.rank
+            LIMIT $limit
+            """; // NOSONAR S2077 — interpola apenas identificador const TableName e fragmento de placeholders nomeados
+        AddParameter(command, "$match", match);
+        AddParameter(command, "$limit", topK);
+
+        var hits = new List<LexicalHit>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hits.Add(new LexicalHit(
+                Guid.Parse(reader.GetString(0)),
+                hits.Count + 1,
+                reader.GetDouble(1)));
+        }
+        return hits;
     }
 
     /// <summary>

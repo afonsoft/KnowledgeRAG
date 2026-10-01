@@ -93,9 +93,9 @@ public sealed class GitRepositoryConnector(
             eligible = eligible.Take(maxFiles).ToList();
         }
 
-        var documents = await DownloadFilesAsync(
+        var documents = await DownloadFilesAsync(new DownloadContext(
             api, repo, token, eligible, existingFingerprints, commitPrefix,
-            maxBytes, warnings, failed, cancellationToken);
+            maxBytes, warnings, failed), cancellationToken);
 
         return new FetchResult(documents, warnings,
             FailedUris: failed.Count > 0 ? failed : null,
@@ -157,13 +157,17 @@ public sealed class GitRepositoryConnector(
 
     /// <summary>Downloads eligible files with fingerprint skip + post-download
     /// size enforcement (SPEC-20260929 RF-007 — GitLab Size=0 entries).</summary>
+    private sealed record DownloadContext(
+        GitApiClient Api, GitRepositoryRef Repo, string? Token,
+        List<GitTreeEntry> Eligible, IReadOnlyDictionary<string, string> ExistingFingerprints,
+        string CommitPrefix, long MaxBytes, List<string> Warnings, List<string> Failed);
+
     private static async Task<List<RawDocument>> DownloadFilesAsync(
-        GitApiClient api, GitRepositoryRef repo, string? token,
-        List<GitTreeEntry> eligible,
-        IReadOnlyDictionary<string, string> existingFingerprints,
-        string commitPrefix, long maxBytes,
-        List<string> warnings, List<string> failed, CancellationToken ct)
+        DownloadContext ctx, CancellationToken ct)
     {
+        var (api, repo, token, eligible, existingFingerprints, commitPrefix, maxBytes, warnings, failed) =
+            (ctx.Api, ctx.Repo, ctx.Token, ctx.Eligible, ctx.ExistingFingerprints,
+             ctx.CommitPrefix, ctx.MaxBytes, ctx.Warnings, ctx.Failed);
         var documents = new List<RawDocument>();
         var oversized = 0;
         foreach (var e in eligible)
@@ -252,10 +256,14 @@ public sealed class GitRepositoryConnector(
         return (provider, owner, name, instance);
     }
 
-    private static string ProviderFromHost(string host) =>
-        host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase) ? GitProviderNames.GitLab
-        : host.Equals("github.com", StringComparison.OrdinalIgnoreCase) ? GitProviderNames.GitHub
-        : GitProviderNames.Gitea;
+    private static string ProviderFromHost(string host)
+    {
+        if (host.Equals("gitlab.com", StringComparison.OrdinalIgnoreCase))
+            return GitProviderNames.GitLab;
+        if (host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            return GitProviderNames.GitHub;
+        return GitProviderNames.Gitea;
+    }
 
     /// <summary>Owner/name must be present; provider defaults to GitHub and
     /// must be one of the supported ones.</summary>

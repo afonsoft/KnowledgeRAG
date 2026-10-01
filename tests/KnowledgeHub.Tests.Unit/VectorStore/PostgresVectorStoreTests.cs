@@ -95,11 +95,11 @@ public sealed class PostgresVectorStoreTests
     }
 
     [Fact]
-    public void BuildSecondaryIndexesSql_ContainsRequiredIndexes()
+    public void SecondaryIndexesSql_ContainsRequiredIndexes()
     {
         // Covers SPEC-20260924-pgvector-rag-performance RF-001:
         // secondary indexes on source_id, document_id, compound and metadata GIN
-        var sql = PostgresVectorStore.BuildSecondaryIndexesSql();
+        var sql = PostgresVectorStore.SecondaryIndexesSql;
         Assert.Contains("kh_embeddings_source_idx", sql);
         Assert.Contains("kh_embeddings_document_idx", sql);
         Assert.Contains("kh_embeddings_source_model_idx", sql);

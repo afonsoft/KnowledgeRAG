@@ -3,6 +3,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.AI;
 
+// SonarQube S3236: ThrowIfNullOrWhiteSpace recebe a chave de config (Chat:Endpoint (Ollama)) como mensagem, não um parâmetro caller-info — falso positivo.
+#pragma warning disable S3236
+
+// SonarQube S1075: endpoint e path 'api/chat' vêm de Chat:Endpoint/protocolo Ollama — não há URI hardcoded.
+#pragma warning disable S1075
+
 namespace KnowledgeHub.Server.Chat;
 
 /// <summary>
@@ -77,16 +83,12 @@ public sealed class OllamaChatClient : HttpChatClient
         var contents = new List<AIContent>();
         if (!string.IsNullOrEmpty(message.Content))
             contents.Add(new TextContent(message.Content));
-        foreach (var call in message.ToolCalls ?? [])
-        {
-            var arguments = new Dictionary<string, object?>();
-            if (call.Function is { } fn && fn.Arguments.ValueKind == JsonValueKind.Object)
-                arguments = fn.Arguments.Deserialize<Dictionary<string, object?>>() ?? arguments;
-            contents.Add(new FunctionCallContent(
-                Guid.NewGuid().ToString("N"),
-                call.Function?.Name ?? "",
-                arguments));
-        }
+        contents.AddRange((message.ToolCalls ?? []).Select(call => new FunctionCallContent(
+            Guid.NewGuid().ToString("N"),
+            call.Function?.Name ?? "",
+            call.Function is { } fn && fn.Arguments.ValueKind == JsonValueKind.Object
+                ? fn.Arguments.Deserialize<Dictionary<string, object?>>() ?? new Dictionary<string, object?>()
+                : new Dictionary<string, object?>())));
         return new ChatMessage(ChatRole.Assistant, contents);
     }
 

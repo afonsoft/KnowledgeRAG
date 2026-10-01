@@ -1,6 +1,12 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
+// SonarQube S3236: ThrowIfNullOrWhiteSpace recebe a chave de config (Embeddings:Endpoint (Ollama)) como mensagem, não um parâmetro caller-info — falso positivo.
+#pragma warning disable S3236
+
+// SonarQube S1075: endpoint e path 'api/embeddings' vêm de Embeddings:Endpoint/protocolo Ollama — não há URI hardcoded.
+#pragma warning disable S1075
+
 namespace KnowledgeHub.Server.Embeddings;
 
 /// <summary>

@@ -51,9 +51,11 @@ public sealed class McpToolRateLimiter : IDisposable
         if (!_options.Enabled)
             return true;
 
-        var limiter = LlmTools.Contains(toolName) ? _llm
-            : SyncTools.Contains(toolName) ? _sync
-            : null;
+        var limiter = _sync;
+        if (LlmTools.Contains(toolName))
+            limiter = _llm;
+        else if (!SyncTools.Contains(toolName))
+            limiter = null;
         if (limiter is null)
             return true;
 

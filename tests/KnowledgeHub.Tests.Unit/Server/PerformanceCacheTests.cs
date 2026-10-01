@@ -137,9 +137,7 @@ public sealed class PerformanceCacheTests
         var vectors = new CountingVectorStore(new VectorHit(chunk.Id, 0.9));
         var cache = new MemoryDistributedCache(
             Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
-        var search = new SearchService(db, embeddings, new Fakes.FixedEmbeddingProviderResolver(embeddings), vectors, new DisabledLexical(), cache,
-            new ConfigurationBuilder().Build(), new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled, NullLogger<SearchService>.Instance);
+        var search = new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, embeddings, new Fakes.FixedEmbeddingProviderResolver(embeddings), vectors, new DisabledLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled), new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
 
         var first = await search.SearchAsync("q", 5, mode: SearchMode.Semantic);
         Assert.Single(first);
@@ -181,10 +179,7 @@ public sealed class PerformanceCacheTests
         await db.SaveChangesAsync();
 
         var emb = new CountingEmbeddingProvider();
-        var search = new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
-            new CountingVectorStore(new VectorHit(chunk.Id, 0.9)), new DisabledLexical(),
-            new ThrowingCache(), new ConfigurationBuilder().Build(), new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled, NullLogger<SearchService>.Instance);
+        var search = new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb), new CountingVectorStore(new VectorHit(chunk.Id, 0.9)), new DisabledLexical(), new ThrowingCache()), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled), new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
 
         var results = await search.SearchAsync("q", 5, mode: SearchMode.Semantic);
         Assert.Single(results);

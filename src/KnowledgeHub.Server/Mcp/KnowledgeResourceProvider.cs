@@ -6,6 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 
+// SonarQube S1075: o scheme 'knowledge://' é uma constante de protocolo MCP (URI interna), não recurso remoto.
+#pragma warning disable S1075
+
 namespace KnowledgeHub.Server.Mcp;
 
 /// <summary>

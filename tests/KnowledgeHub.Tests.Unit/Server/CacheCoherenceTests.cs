@@ -205,12 +205,7 @@ public sealed class CacheCoherenceTests
         var vectors = new ThrowingVectorStore();
         var backing = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
         var cache = new RecordingCache(backing);
-        var search = new SearchService(db, emb, new KnowledgeHub.Tests.Unit.Fakes.FixedEmbeddingProviderResolver(emb),
-            vectors, new HitLexical(), cache,
-            new ConfigurationBuilder().Build(), new PassthroughRewriter(),
-            NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(),
-            KnowledgeHub.Tests.Unit.Search.FakeGraphSettings.Disabled, NullLogger<SearchService>.Instance);
+        var search = new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new KnowledgeHub.Tests.Unit.Fakes.FixedEmbeddingProviderResolver(emb), vectors, new HitLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), KnowledgeHub.Tests.Unit.Search.FakeGraphSettings.Disabled), new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
 
         await search.SearchAsync("q", 5, mode: SearchMode.Hybrid);
         await search.SearchAsync("q", 5, mode: SearchMode.Hybrid); // re-executes — no cache

@@ -107,12 +107,8 @@ public sealed class ChatSettingsService(
             && !env.Provider.Equals("none", StringComparison.OrdinalIgnoreCase);
         var row = await FindRowAsync(cancellationToken);
 
-        var info = await secrets.GetInfoAsync(IntegrationProviders.Chat, cancellationToken);
-        var (hasKey, hint, keySource) = info is not null
-            ? (true, $"••••{info.KeyHint}", "store")
-            : !string.IsNullOrWhiteSpace(env.ApiKey)
-                ? (true, $"••••{(env.ApiKey.Length >= 4 ? env.ApiKey[^4..] : env.ApiKey)}", "env")
-                : (false, (string?)null, "none");
+        var (hasKey, last4, keySource) = await secrets.GetKeyStatusAsync(IntegrationProviders.Chat, env.ApiKey, cancellationToken);
+        var hint = last4 is null ? null : $"••••{last4}";
 
         if (row is not null)
             return new ChatSettingsDto

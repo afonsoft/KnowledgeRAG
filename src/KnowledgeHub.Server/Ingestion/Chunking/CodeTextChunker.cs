@@ -132,11 +132,10 @@ public sealed partial class CodeTextChunker : ITextChunker
         if (!firstLine.StartsWith("using ", StringComparison.Ordinal)
             && !firstLine.StartsWith("namespace ", StringComparison.Ordinal))
         {
-            member = MethodNameRegex().Match(firstLine) is { Success: true } mm
-                ? mm.Groups[1].Value
-                : MemberNameRegex().Match(firstLine) is { Success: true } fm
-                    ? fm.Groups[1].Value
-                    : null;
+            var match = MethodNameRegex().Match(firstLine);
+            if (!match.Success)
+                match = MemberNameRegex().Match(firstLine);
+            member = match.Success ? match.Groups[1].Value : null;
         }
         var path = string.Join('.', new[] { ns, type, member }.Where(s => !string.IsNullOrEmpty(s)));
         return path.Length > 0 ? path : null;
@@ -190,11 +189,5 @@ public sealed partial class CodeTextChunker : ITextChunker
         return parts.Count > 0 ? parts : [text];
     }
 
-    private static int Count(string line, char ch)
-    {
-        var n = 0;
-        foreach (var c in line)
-            if (c == ch) n++;
-        return n;
-    }
+    private static int Count(string line, char ch) => line.Count(c => c == ch);
 }

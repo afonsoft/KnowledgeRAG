@@ -104,9 +104,11 @@ public sealed class LlmRetrievalGrader(
             }
             var relevant = verdicts.Count(v => v);
             var ratio = (double)relevant / verdicts.Count;
-            var grade = ratio >= 0.6 ? RetrievalGrade.Sufficient
-                : relevant == 0 ? RetrievalGrade.Insufficient
-                : RetrievalGrade.Weak;
+            var grade = RetrievalGrade.Weak;
+            if (ratio >= 0.6)
+                grade = RetrievalGrade.Sufficient;
+            else if (relevant == 0)
+                grade = RetrievalGrade.Insufficient;
             return new RetrievalGrading(grade, Math.Abs(ratio - 0.5) * 2);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)

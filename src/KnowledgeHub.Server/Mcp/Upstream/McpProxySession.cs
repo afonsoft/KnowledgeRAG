@@ -104,7 +104,7 @@ internal sealed class McpProxySession(
         }
         catch (Exception first) when (first is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            logger.LogInformation("mcp-proxy {SourceId} call failed ({Message}); reconnecting once", config.SourceId, first.Message);
+            logger.LogInformation(first, "mcp-proxy {SourceId} call failed; reconnecting once", config.SourceId);
             await ResetAsync();
             try
             {

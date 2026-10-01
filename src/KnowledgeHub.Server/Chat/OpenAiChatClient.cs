@@ -4,6 +4,12 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.AI;
 
+// SonarQube S3236: ThrowIfNullOrWhiteSpace recebe a chave de config (Chat:Endpoint (OpenAI)) como mensagem, não um parâmetro caller-info — falso positivo.
+#pragma warning disable S3236
+
+// SonarQube S1075: endpoint e path 'v1/chat/completions' vêm de Chat:Endpoint/protocolo OpenAI — não há URI hardcoded.
+#pragma warning disable S1075
+
 namespace KnowledgeHub.Server.Chat;
 
 /// <summary>

@@ -133,11 +133,9 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
             ? await GatewayOverride(source, config, cancellationToken)
             : await CreateGatewayAsync(source, config, cancellationToken);
 
-        RemoteObject? found = null;
-        await foreach (var obj in gateway.ListAsync(null, cancellationToken))
-        {
-            if (UriFor(config, obj.Key) == uriReference) { found = obj; break; }
-        }
+        var found = await gateway.ListAsync(null, cancellationToken)
+            .Where(obj => UriFor(config, obj.Key) == uriReference)
+            .FirstOrDefaultAsync(cancellationToken);
         if (found is null || found.Size <= 0 || found.Size > maxBytes)
             return null;
         var ext = Path.GetExtension(found.Key);

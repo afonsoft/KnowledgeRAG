@@ -86,11 +86,9 @@ internal sealed class GoogleDriveGateway(
         GoogleDriveApiClient.DriveFileMeta meta, string dir, bool probeOnly = false)
     {
         var key = $"{dir}{meta.Name}";
-        if (NativeMap.TryGetValue(meta.MimeType, out var native))
-        {
-            if (!key.EndsWith(native.Ext, StringComparison.OrdinalIgnoreCase))
-                key += native.Ext;
-        }
+        if (NativeMap.TryGetValue(meta.MimeType, out var native)
+            && !key.EndsWith(native.Ext, StringComparison.OrdinalIgnoreCase))
+            key += native.Ext;
         _byKey[key] = meta;
         // RF-005: fingerprint combines modifiedTime + md5Checksum (size
         // fallback — natives have no md5).

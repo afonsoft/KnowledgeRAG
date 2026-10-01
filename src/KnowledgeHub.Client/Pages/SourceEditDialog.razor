@@ -741,220 +741,41 @@
                 config["url"] = Model.Url;
                 break;
             case SourceType.RssFeed:
-                config["feedUrl"] = Model.FeedUrl;
-                if (Model.MaxItems is not null)
-                    config["maxItems"] = Model.MaxItems;
-                if (Model.FetchFullContent)
-                    config["fetchFullContent"] = true;
-                if (Model.ForceRefresh)
-                    config["forceRefresh"] = true;
+                WriteRssFeed(config);
                 break;
             case SourceType.YouTube:
-                var urlArray = ToJsonArray(Model.Urls);
-                if (urlArray.Count > 0)
-                    config["urls"] = urlArray;
-                if (!string.IsNullOrWhiteSpace(Model.Language))
-                    config["language"] = Model.Language;
-                if (Model.IncludeAutoCaptions)
-                    config["includeAutoCaptions"] = true;
-                if (Model.IncludeTimestamps)
-                    config["includeTimestamps"] = true;
-                if (Model.MaxVideos is not null)
-                    config["maxVideos"] = Model.MaxVideos;
-                if (Model.ForceRefresh)
-                    config["forceRefresh"] = true;
+                WriteYouTube(config);
                 break;
             case SourceType.RestApi:
-                config["endpoint"] = Model.Endpoint;
-                // Empty keeps the stored headers; non-empty replaces them (server
-                // moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrWhiteSpace(Model.Headers))
-                    config["headers"] = Model.Headers;
-                config["hasKey"] = Model.HasStoredKey;
-                if (!string.IsNullOrWhiteSpace(Model.ItemsPath))
-                    config["itemsPath"] = Model.ItemsPath;
-                if (!string.IsNullOrWhiteSpace(Model.TitleField))
-                    config["titleField"] = Model.TitleField;
-                var contentFields = ToJsonArray(Model.ContentFields);
-                if (contentFields.Count > 0)
-                    config["contentFields"] = contentFields;
-                if (!string.IsNullOrWhiteSpace(Model.IdField))
-                    config["idField"] = Model.IdField;
-                if (!string.IsNullOrWhiteSpace(Model.UrlField))
-                    config["urlField"] = Model.UrlField;
-                if (!string.IsNullOrWhiteSpace(Model.PageParam))
-                    config["pageParam"] = Model.PageParam;
-                if (Model.MaxPages is not null)
-                    config["maxPages"] = Model.MaxPages;
+                WriteRestApi(config);
                 break;
             case SourceType.SqlDatabase:
-                config["provider"] = Model.Provider;
-                config["query"] = Model.Query;
-                // Empty keeps the stored connection string; non-empty replaces it
-                // (server moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrEmpty(Model.ConnectionString))
-                    config["connectionString"] = Model.ConnectionString;
-                config["hasKey"] = Model.HasStoredKey;
-                if (!string.IsNullOrWhiteSpace(Model.IdColumn))
-                    config["idColumn"] = Model.IdColumn;
-                if (!string.IsNullOrWhiteSpace(Model.TitleColumn))
-                    config["titleColumn"] = Model.TitleColumn;
-                var contentColumns = ToJsonArray(Model.ContentColumns);
-                if (contentColumns.Count > 0)
-                    config["contentColumns"] = contentColumns;
-                if (!string.IsNullOrWhiteSpace(Model.UrlColumn))
-                    config["urlColumn"] = Model.UrlColumn;
-                if (Model.MaxRows is not null)
-                    config["maxRows"] = Model.MaxRows;
-                if (Model.CommandTimeoutSeconds is not null)
-                    config["commandTimeoutSeconds"] = Model.CommandTimeoutSeconds;
+                WriteSqlDatabase(config);
                 break;
             case SourceType.McpProxy:
-                config["endpoint"] = Model.Endpoint;
-                if (!string.IsNullOrWhiteSpace(Model.Transport) && Model.Transport != "auto")
-                    config["transport"] = Model.Transport;
-                if (!string.IsNullOrWhiteSpace(Model.NamePrefix))
-                    config["namePrefix"] = Model.NamePrefix;
-                // Empty keeps the stored key; non-empty replaces it (server moves
-                // the value to the encrypted store — never persisted in config).
-                if (!string.IsNullOrEmpty(Model.ApiKey))
-                    config["apiKey"] = Model.ApiKey;
+                WriteMcpProxy(config);
                 break;
             case SourceType.Notion:
-                // Empty keeps the stored token; non-empty replaces it (server
-                // moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrEmpty(Model.NotionToken))
-                    config["token"] = Model.NotionToken;
-                config["hasKey"] = Model.HasStoredKey;
-                var pageIds = ToJsonArray(Model.RootPageIds);
-                if (pageIds.Count > 0)
-                    config["rootPageIds"] = pageIds;
-                var dbIds = ToJsonArray(Model.RootDatabaseIds);
-                if (dbIds.Count > 0)
-                    config["rootDatabaseIds"] = dbIds;
-                if (Model.MaxPages is not null)
-                    config["maxPages"] = Model.MaxPages;
+                WriteNotion(config);
                 break;
             case SourceType.AwsS3:
             case SourceType.OciStorage:
-                if (Model.Type is SourceType.OciStorage)
-                    config["namespace"] = Model.Namespace;
-                config["bucketName"] = Model.BucketName;
-                config["region"] = Model.Region;
-                config["accessKeyId"] = Model.AccessKeyId;
-                if (!string.IsNullOrWhiteSpace(Model.Prefix))
-                    config["prefix"] = Model.Prefix;
-                // Empty keeps the stored secret; non-empty replaces it (server
-                // moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrEmpty(Model.SecretAccessKey))
-                    config["secretAccessKey"] = Model.SecretAccessKey;
+                WriteCloudStorage(config);
                 break;
             case SourceType.AzureFiles:
-                config["shareName"] = Model.ShareName;
-                if (!string.IsNullOrWhiteSpace(Model.DirectoryPath))
-                    config["directoryPath"] = Model.DirectoryPath;
-                if (!string.IsNullOrWhiteSpace(Model.AccountName))
-                    config["accountName"] = Model.AccountName;
-                if (!string.IsNullOrWhiteSpace(Model.Prefix))
-                    config["prefix"] = Model.Prefix;
-                // RF-004 (SPEC-20260926-ingestion-connector-integrity): classify
-                // by content, not by '=' — base64 account keys are '='-padded.
-                if (!string.IsNullOrEmpty(Model.SecretAccessKey))
-                    config[AzureCredentialClassifier.LooksLikeConnectionString(Model.SecretAccessKey)
-                        ? "connectionString" : "accountKey"] = Model.SecretAccessKey;
+                WriteAzureFiles(config);
                 break;
             case SourceType.UnstructuredDocument:
-                // SPEC-20260927-unstructured-document-parser-connector.
-                if (!string.IsNullOrWhiteSpace(Model.FolderPath))
-                    config["folderPath"] = Model.FolderPath;
-                var files = ToJsonArray(Model.Files);
-                if (files.Count > 0)
-                    config["files"] = files;
-                if (!string.IsNullOrWhiteSpace(Model.ApiUrl))
-                    config["apiUrl"] = Model.ApiUrl;
-                if (!string.IsNullOrWhiteSpace(Model.Strategy) && Model.Strategy != "auto")
-                    config["strategy"] = Model.Strategy;
-                if (Model.Coordinates)
-                    config["coordinates"] = true;
-                if (!Model.TableExtraction)
-                    config["tableExtraction"] = false;
-                if (Model.MaxFileSizeMb is not null)
-                    config["maxFileSizeMb"] = Model.MaxFileSizeMb;
-                // Empty keeps the stored key; non-empty replaces it (server
-                // moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrEmpty(Model.ApiKey))
-                    config["apiKey"] = Model.ApiKey;
-                config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.ApiKey);
+                WriteUnstructuredDocument(config);
                 break;
             case SourceType.GitRepository:
-                // SPEC-20260927-git-repository-source-connector.
-                config["provider"] = string.IsNullOrWhiteSpace(Model.GitProvider)
-                    ? "github" : Model.GitProvider;
-                if (!string.IsNullOrWhiteSpace(Model.RepoUrl))
-                    config["repoUrl"] = Model.RepoUrl;
-                if (!string.IsNullOrWhiteSpace(Model.Owner))
-                    config["owner"] = Model.Owner;
-                if (!string.IsNullOrWhiteSpace(Model.RepoName))
-                    config["name"] = Model.RepoName;
-                if (!string.IsNullOrWhiteSpace(Model.InstanceUrl))
-                    config["instanceUrl"] = Model.InstanceUrl;
-                if (!string.IsNullOrWhiteSpace(Model.Branch) && Model.Branch != "main")
-                    config["branch"] = Model.Branch;
-                if (!string.IsNullOrWhiteSpace(Model.Path))
-                    config["path"] = Model.Path;
-                var includePatterns = ToJsonArray(Model.IncludePatterns);
-                if (includePatterns.Count > 0)
-                    config["includePatterns"] = includePatterns;
-                var excludePatterns = ToJsonArray(Model.ExcludePatterns);
-                if (excludePatterns.Count > 0)
-                    config["excludePatterns"] = excludePatterns;
-                if (Model.MaxFiles is not null)
-                    config["maxFiles"] = Model.MaxFiles;
-                if (Model.MaxFileSizeBytes is not null)
-                    config["maxFileSizeBytes"] = Model.MaxFileSizeBytes;
-                if (Model.AllowPrivateHosts)
-                    config["allowPrivateHosts"] = true;
-                // Empty keeps the stored PAT; non-empty replaces it (server
-                // moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrEmpty(Model.GitToken))
-                    config["token"] = Model.GitToken;
-                config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.GitToken);
+                WriteGitRepository(config);
                 break;
             case SourceType.AudioTranscription:
-                // SPEC-20260927-audio-transcription-connector.
-                config["provider"] = string.IsNullOrWhiteSpace(Model.AudioProvider)
-                    ? "assemblyai" : Model.AudioProvider;
-                if (!string.IsNullOrWhiteSpace(Model.FolderPath))
-                    config["folderPath"] = Model.FolderPath;
-                var audioFiles = ToJsonArray(Model.Files);
-                if (audioFiles.Count > 0)
-                    config["files"] = audioFiles;
-                if (!string.IsNullOrWhiteSpace(Model.Language))
-                    config["language"] = Model.Language;
-                if (Model.AudioProvider == "whisper" && !string.IsNullOrWhiteSpace(Model.Endpoint))
-                    config["endpoint"] = Model.Endpoint;
-                if (!Model.EnableSpeakerDiarization)
-                    config["enableSpeakerDiarization"] = false;
-                if (!Model.EnableAutoChapters)
-                    config["enableAutoChapters"] = false;
-                if (Model.TimeoutMinutes is not null)
-                    config["timeoutMinutes"] = Model.TimeoutMinutes;
-                // Empty keeps the stored key; non-empty replaces it (server
-                // moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrEmpty(Model.ApiKey))
-                    config["apiKey"] = Model.ApiKey;
-                config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.ApiKey);
+                WriteAudioTranscription(config);
                 break;
             case SourceType.GoogleDrive:
-                config["sharedUrl"] = Model.SharedUrl;
-                // Empty keeps the stored key; non-empty replaces it (server
-                // moves the value to the encrypted store — never persisted).
-                if (!string.IsNullOrEmpty(Model.ApiKey))
-                    config["apiKey"] = Model.ApiKey;
-                else if (Model.HasStoredKey)
-                    config["apiKey"] = "***";
-                if (Model.MaxFiles is not null)
-                    config["maxFiles"] = Model.MaxFiles;
+                WriteGoogleDrive(config);
                 break;
         }
 
@@ -975,6 +796,248 @@
 
         return config;
     }
+
+    private void WriteRssFeed(JsonObject config)
+    {
+        config["feedUrl"] = Model.FeedUrl;
+        if (Model.MaxItems is not null)
+            config["maxItems"] = Model.MaxItems;
+        if (Model.FetchFullContent)
+            config["fetchFullContent"] = true;
+        if (Model.ForceRefresh)
+            config["forceRefresh"] = true;
+    }
+
+    private void WriteYouTube(JsonObject config)
+    {
+        var urlArray = ToJsonArray(Model.Urls);
+        if (urlArray.Count > 0)
+            config["urls"] = urlArray;
+        if (!string.IsNullOrWhiteSpace(Model.Language))
+            config["language"] = Model.Language;
+        if (Model.IncludeAutoCaptions)
+            config["includeAutoCaptions"] = true;
+        if (Model.IncludeTimestamps)
+            config["includeTimestamps"] = true;
+        if (Model.MaxVideos is not null)
+            config["maxVideos"] = Model.MaxVideos;
+        if (Model.ForceRefresh)
+            config["forceRefresh"] = true;
+    }
+
+    private void WriteRestApi(JsonObject config)
+    {
+        config["endpoint"] = Model.Endpoint;
+        // Empty keeps the stored headers; non-empty replaces them (server
+        // moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrWhiteSpace(Model.Headers))
+            config["headers"] = Model.Headers;
+        config["hasKey"] = Model.HasStoredKey;
+        if (!string.IsNullOrWhiteSpace(Model.ItemsPath))
+            config["itemsPath"] = Model.ItemsPath;
+        if (!string.IsNullOrWhiteSpace(Model.TitleField))
+            config["titleField"] = Model.TitleField;
+        var contentFields = ToJsonArray(Model.ContentFields);
+        if (contentFields.Count > 0)
+            config["contentFields"] = contentFields;
+        if (!string.IsNullOrWhiteSpace(Model.IdField))
+            config["idField"] = Model.IdField;
+        if (!string.IsNullOrWhiteSpace(Model.UrlField))
+            config["urlField"] = Model.UrlField;
+        if (!string.IsNullOrWhiteSpace(Model.PageParam))
+            config["pageParam"] = Model.PageParam;
+        if (Model.MaxPages is not null)
+            config["maxPages"] = Model.MaxPages;
+    }
+
+    private void WriteSqlDatabase(JsonObject config)
+    {
+        config["provider"] = Model.Provider;
+        config["query"] = Model.Query;
+        // Empty keeps the stored connection string; non-empty replaces it
+        // (server moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrEmpty(Model.ConnectionString))
+            config["connectionString"] = Model.ConnectionString;
+        config["hasKey"] = Model.HasStoredKey;
+        if (!string.IsNullOrWhiteSpace(Model.IdColumn))
+            config["idColumn"] = Model.IdColumn;
+        if (!string.IsNullOrWhiteSpace(Model.TitleColumn))
+            config["titleColumn"] = Model.TitleColumn;
+        var contentColumns = ToJsonArray(Model.ContentColumns);
+        if (contentColumns.Count > 0)
+            config["contentColumns"] = contentColumns;
+        if (!string.IsNullOrWhiteSpace(Model.UrlColumn))
+            config["urlColumn"] = Model.UrlColumn;
+        if (Model.MaxRows is not null)
+            config["maxRows"] = Model.MaxRows;
+        if (Model.CommandTimeoutSeconds is not null)
+            config["commandTimeoutSeconds"] = Model.CommandTimeoutSeconds;
+    }
+
+    private void WriteMcpProxy(JsonObject config)
+    {
+        config["endpoint"] = Model.Endpoint;
+        if (!string.IsNullOrWhiteSpace(Model.Transport) && Model.Transport != "auto")
+            config["transport"] = Model.Transport;
+        if (!string.IsNullOrWhiteSpace(Model.NamePrefix))
+            config["namePrefix"] = Model.NamePrefix;
+        // Empty keeps the stored key; non-empty replaces it (server moves
+        // the value to the encrypted store — never persisted in config).
+        if (!string.IsNullOrEmpty(Model.ApiKey))
+            config["apiKey"] = Model.ApiKey;
+    }
+
+    private void WriteNotion(JsonObject config)
+    {
+        // Empty keeps the stored token; non-empty replaces it (server
+        // moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrEmpty(Model.NotionToken))
+            config["token"] = Model.NotionToken;
+        config["hasKey"] = Model.HasStoredKey;
+        var pageIds = ToJsonArray(Model.RootPageIds);
+        if (pageIds.Count > 0)
+            config["rootPageIds"] = pageIds;
+        var dbIds = ToJsonArray(Model.RootDatabaseIds);
+        if (dbIds.Count > 0)
+            config["rootDatabaseIds"] = dbIds;
+        if (Model.MaxPages is not null)
+            config["maxPages"] = Model.MaxPages;
+    }
+
+    /// <summary>AwsS3 and OciStorage share the same payload shape; OCI adds
+    /// its namespace.</summary>
+    private void WriteCloudStorage(JsonObject config)
+    {
+        if (Model.Type is SourceType.OciStorage)
+            config["namespace"] = Model.Namespace;
+        config["bucketName"] = Model.BucketName;
+        config["region"] = Model.Region;
+        config["accessKeyId"] = Model.AccessKeyId;
+        if (!string.IsNullOrWhiteSpace(Model.Prefix))
+            config["prefix"] = Model.Prefix;
+        // Empty keeps the stored secret; non-empty replaces it (server
+        // moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrEmpty(Model.SecretAccessKey))
+            config["secretAccessKey"] = Model.SecretAccessKey;
+    }
+
+    private void WriteAzureFiles(JsonObject config)
+    {
+        config["shareName"] = Model.ShareName;
+        if (!string.IsNullOrWhiteSpace(Model.DirectoryPath))
+            config["directoryPath"] = Model.DirectoryPath;
+        if (!string.IsNullOrWhiteSpace(Model.AccountName))
+            config["accountName"] = Model.AccountName;
+        if (!string.IsNullOrWhiteSpace(Model.Prefix))
+            config["prefix"] = Model.Prefix;
+        // RF-004 (SPEC-20260926-ingestion-connector-integrity): classify
+        // by content, not by '=' — base64 account keys are '='-padded.
+        if (!string.IsNullOrEmpty(Model.SecretAccessKey))
+            config[AzureCredentialClassifier.LooksLikeConnectionString(Model.SecretAccessKey)
+                ? "connectionString" : "accountKey"] = Model.SecretAccessKey;
+    }
+
+    /// <summary>SPEC-20260927-unstructured-document-parser-connector.</summary>
+    private void WriteUnstructuredDocument(JsonObject config)
+    {
+        if (!string.IsNullOrWhiteSpace(Model.FolderPath))
+            config["folderPath"] = Model.FolderPath;
+        var files = ToJsonArray(Model.Files);
+        if (files.Count > 0)
+            config["files"] = files;
+        if (!string.IsNullOrWhiteSpace(Model.ApiUrl))
+            config["apiUrl"] = Model.ApiUrl;
+        if (!string.IsNullOrWhiteSpace(Model.Strategy) && Model.Strategy != "auto")
+            config["strategy"] = Model.Strategy;
+        if (Model.Coordinates)
+            config["coordinates"] = true;
+        if (!Model.TableExtraction)
+            config["tableExtraction"] = false;
+        if (Model.MaxFileSizeMb is not null)
+            config["maxFileSizeMb"] = Model.MaxFileSizeMb;
+        // Empty keeps the stored key; non-empty replaces it (server
+        // moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrEmpty(Model.ApiKey))
+            config["apiKey"] = Model.ApiKey;
+        config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.ApiKey);
+    }
+
+    /// <summary>SPEC-20260927-git-repository-source-connector.</summary>
+    private void WriteGitRepository(JsonObject config)
+    {
+        config["provider"] = string.IsNullOrWhiteSpace(Model.GitProvider)
+            ? "github" : Model.GitProvider;
+        if (!string.IsNullOrWhiteSpace(Model.RepoUrl))
+            config["repoUrl"] = Model.RepoUrl;
+        if (!string.IsNullOrWhiteSpace(Model.Owner))
+            config["owner"] = Model.Owner;
+        if (!string.IsNullOrWhiteSpace(Model.RepoName))
+            config["name"] = Model.RepoName;
+        if (!string.IsNullOrWhiteSpace(Model.InstanceUrl))
+            config["instanceUrl"] = Model.InstanceUrl;
+        if (!string.IsNullOrWhiteSpace(Model.Branch) && Model.Branch != "main")
+            config["branch"] = Model.Branch;
+        if (!string.IsNullOrWhiteSpace(Model.Path))
+            config["path"] = Model.Path;
+        var includePatterns = ToJsonArray(Model.IncludePatterns);
+        if (includePatterns.Count > 0)
+            config["includePatterns"] = includePatterns;
+        var excludePatterns = ToJsonArray(Model.ExcludePatterns);
+        if (excludePatterns.Count > 0)
+            config["excludePatterns"] = excludePatterns;
+        if (Model.MaxFiles is not null)
+            config["maxFiles"] = Model.MaxFiles;
+        if (Model.MaxFileSizeBytes is not null)
+            config["maxFileSizeBytes"] = Model.MaxFileSizeBytes;
+        if (Model.AllowPrivateHosts)
+            config["allowPrivateHosts"] = true;
+        // Empty keeps the stored PAT; non-empty replaces it (server
+        // moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrEmpty(Model.GitToken))
+            config["token"] = Model.GitToken;
+        config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.GitToken);
+    }
+
+    /// <summary>SPEC-20260927-audio-transcription-connector.</summary>
+    private void WriteAudioTranscription(JsonObject config)
+    {
+        config["provider"] = string.IsNullOrWhiteSpace(Model.AudioProvider)
+            ? "assemblyai" : Model.AudioProvider;
+        if (!string.IsNullOrWhiteSpace(Model.FolderPath))
+            config["folderPath"] = Model.FolderPath;
+        var audioFiles = ToJsonArray(Model.Files);
+        if (audioFiles.Count > 0)
+            config["files"] = audioFiles;
+        if (!string.IsNullOrWhiteSpace(Model.Language))
+            config["language"] = Model.Language;
+        if (Model.AudioProvider == "whisper" && !string.IsNullOrWhiteSpace(Model.Endpoint))
+            config["endpoint"] = Model.Endpoint;
+        if (!Model.EnableSpeakerDiarization)
+            config["enableSpeakerDiarization"] = false;
+        if (!Model.EnableAutoChapters)
+            config["enableAutoChapters"] = false;
+        if (Model.TimeoutMinutes is not null)
+            config["timeoutMinutes"] = Model.TimeoutMinutes;
+        // Empty keeps the stored key; non-empty replaces it (server
+        // moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrEmpty(Model.ApiKey))
+            config["apiKey"] = Model.ApiKey;
+        config["hasKey"] = Model.HasStoredKey || !string.IsNullOrEmpty(Model.ApiKey);
+    }
+
+    private void WriteGoogleDrive(JsonObject config)
+    {
+        config["sharedUrl"] = Model.SharedUrl;
+        // Empty keeps the stored key; non-empty replaces it (server
+        // moves the value to the encrypted store — never persisted).
+        if (!string.IsNullOrEmpty(Model.ApiKey))
+            config["apiKey"] = Model.ApiKey;
+        else if (Model.HasStoredKey)
+            config["apiKey"] = "***";
+        if (Model.MaxFiles is not null)
+            config["maxFiles"] = Model.MaxFiles;
+    }
+
 
     /// <summary>Line/comma-separated textarea → JSON string array.</summary>
     private static JsonArray ToJsonArray(string? raw) =>

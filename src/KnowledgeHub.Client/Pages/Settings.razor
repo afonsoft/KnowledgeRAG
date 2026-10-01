@@ -703,7 +703,7 @@ else
                         <div class="input-group kh-icon-btns">
                             <input type="password" class="form-control font-monospace"
                                    @bind="state.Input"
-                                   placeholder="@(item.Provider == "firecrawl" ? "fc-…" : item.Provider == "tavily" ? "tvly-…" : item.Provider == "context7" ? "ctx7sk-…" : "API key")"
+                                   placeholder="@ProviderPlaceholder(item.Provider)"
                                    autocomplete="off" />
                             <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
                                     IsAsync="true" IsDisabled="state.Saving"
@@ -1255,8 +1255,20 @@ else
             _ => _dbStats.Tables.OrderBy(t => t.RowCount)
         };
 
-    private string SortGlyph(int col) =>
-        _entitySortCol != col ? "" : _entitySortDesc ? "▾" : "▴";
+    private string SortGlyph(int col)
+    {
+        if (_entitySortCol != col)
+            return "";
+        return _entitySortDesc ? "▾" : "▴";
+    }
+
+    private static string ProviderPlaceholder(string provider) => provider switch
+    {
+        "firecrawl" => "fc-…",
+        "tavily" => "tvly-…",
+        "context7" => "ctx7sk-…",
+        _ => "API key"
+    };
 
     private static string JsonStr(System.Text.Json.JsonElement el, string name) =>
         el.TryGetProperty(name, out var p) && p.ValueKind != System.Text.Json.JsonValueKind.Null

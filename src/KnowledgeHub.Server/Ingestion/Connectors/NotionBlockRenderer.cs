@@ -14,6 +14,8 @@ public sealed record NotionBlock(JsonElement Element, IReadOnlyList<NotionBlock>
 /// </summary>
 public static class NotionBlockRenderer
 {
+    private const string TitleProp = "title";
+
     /// <summary>Renders a block tree. Nested children are indented two spaces per level.</summary>
     public static string Render(IReadOnlyList<NotionBlock> blocks)
     {
@@ -83,10 +85,10 @@ public static class NotionBlockRenderer
                 }
                 break;
             case "child_page":
-                Line(sb, indent, $"[página: {StringProp(payload, "title")}]");
+                Line(sb, indent, $"[página: {StringProp(payload, TitleProp)}]");
                 break;
             case "child_database":
-                Line(sb, indent, $"[database: {StringProp(payload, "title")}]");
+                Line(sb, indent, $"[database: {StringProp(payload, TitleProp)}]");
                 break;
             case "image":
             case "video":
@@ -155,20 +157,18 @@ public static class NotionBlockRenderer
             && page.TryGetProperty("properties", out var props)
             && props.ValueKind == JsonValueKind.Object)
         {
-            foreach (var prop in props.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == JsonValueKind.Object
+            var text = props.EnumerateObject()
+                .Where(prop => prop.Value.ValueKind == JsonValueKind.Object
                     && prop.Value.TryGetProperty("type", out var t)
                     && t.ValueKind == JsonValueKind.String
-                    && t.GetString() == "title"
-                    && prop.Value.TryGetProperty("title", out var title)
+                    && t.GetString() == TitleProp
+                    && prop.Value.TryGetProperty(TitleProp, out var title)
                     && title.ValueKind == JsonValueKind.Array)
-                {
-                    var text = string.Concat(title.EnumerateArray().Select(PlainText));
-                    if (text.Length > 0)
-                        return text;
-                }
-            }
+                .Select(prop => string.Concat(
+                    prop.Value.GetProperty(TitleProp).EnumerateArray().Select(PlainText)))
+                .FirstOrDefault(t => t.Length > 0);
+            if (text is not null)
+                return text;
         }
         return page.ValueKind == JsonValueKind.Object
             && page.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
@@ -206,7 +206,7 @@ public static class NotionBlockRenderer
 
         return type switch
         {
-            "title" or "rich_text" =>
+            TitleProp or "rich_text" =>
                 payload.ValueKind == JsonValueKind.Array
                     ? string.Concat(payload.EnumerateArray().Select(PlainText))
                     : "",
