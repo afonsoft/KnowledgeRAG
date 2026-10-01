@@ -120,6 +120,17 @@ public static class SafeCache
     /// <summary>SPEC-20260925-hybrid-cache-l1l2 RF-002: get-or-create with
     /// stampede protection — concurrent misses on a hot key share ONE producer
     /// (per-key lock); other waiters re-read the cache after the lock.</summary>
+    /// <summary>Serializer pair for <see cref="GetOrCreateAsync{T}"/> payloads.</summary>
+    public sealed record CacheCodec<T>(Func<T, byte[]> Serialize, Func<byte[], T?> Deserialize);
+
+    /// <summary>Codec-based overload of <see cref="GetOrCreateAsync{T}"/>.</summary>
+    public static Task<T?> GetOrCreateAsync<T>(
+        IDistributedCache cache, string key,
+        Func<CancellationToken, Task<T?>> factory,
+        CacheCodec<T> codec,
+        TimeSpan? ttl, ILogger logger, CancellationToken ct = default)
+        => GetOrCreateAsync(cache, key, factory, codec.Serialize, codec.Deserialize, ttl, logger, ct);
+
     public static async Task<T?> GetOrCreateAsync<T>(
         IDistributedCache cache, string key,
         Func<CancellationToken, Task<T?>> factory,
