@@ -236,6 +236,26 @@ public sealed class RecallErgonomicsTests
     }
 
     [Fact]
+    public async Task MinFinal_PerfectMatch_SurvivesNormalizedFloor()
+    {
+        // E24 RF-001: `final` floor is a normalized 0-1 scale like `semantic`
+        // and `lexical` — a hit ranked #1 on every arm normalizes to ~1.0 and
+        // must survive a high floor. Raw RRF (~2/61) would drop it.
+        var (conn, db, _, chunks) = await SeedAsync(("a", "text a", DateTimeOffset.UtcNow));
+        await using var _c = conn; await using var _d = db;
+        var lexical = new ScriptedLexical([new LexicalHit(chunks[0].Id, 1, -10)]);
+        var search = NewSearch(db,
+            new FixedVectorStore([new VectorHit(chunks[0].Id, 0.9)]), lexical);
+        var filter = Resolve(new SearchFilter
+        { MinScores = new SearchMinScores { Final = 0.9 } });
+
+        var results = await search.SearchAsync("q", 5, mode: SearchMode.Hybrid, filter: filter);
+
+        var item = Assert.Single(results);
+        Assert.Equal(chunks[0].Id, item.ChunkId);
+    }
+
+    [Fact]
     public async Task TemporalBoost_InWindowHit_RanksFirst()
     {
         // RF-004: in-window documents are boosted (×1.1), not filtered — the

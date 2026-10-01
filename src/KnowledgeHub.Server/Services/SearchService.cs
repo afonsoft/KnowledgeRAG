@@ -246,6 +246,9 @@ public sealed class SearchService(
                         foreach (var id in list)
                             expandedFrom.TryAdd(id, label);
 
+                // E24 RF-001: normalize fused to 0-1 (1.0 = rank 1 on every
+                // arm) so MinScores.Final shares the scale callers document.
+                var fusedMax = rankedLists.Count * (1.0 / (RrfFuser.K + 1));
                 breakdowns = fused.ToDictionary(
                     f => f.ChunkId,
                     f => new SearchScoreBreakdown
@@ -253,6 +256,7 @@ public sealed class SearchService(
                         VectorRank = f.VectorRank,
                         LexicalRank = f.LexicalRank,
                         Fused = f.Fused,
+                        Normalized = fusedMax > 0 ? Math.Min(1.0, f.Fused / fusedMax) : 0,
                         GraphRank = f.GraphRank,
                         ExpandedFrom = expandedFrom.GetValueOrDefault(f.ChunkId)
                     });
@@ -309,7 +313,7 @@ public sealed class SearchService(
         // RF-003: per-call final floor — post-fusion, post-autocut. An empty
         // result is the honest answer (ask_knowledge abstains on it).
         if (filter?.MinScores?.Final is { } minFinal && final.Count > 0)
-            final = final.Where(i => (i.ScoreBreakdown?.Fused ?? i.Score) >= minFinal).ToList();
+            final = final.Where(i => (i.ScoreBreakdown?.Normalized ?? i.Score) >= minFinal).ToList();
 
         // SPEC-20260927-multiquery RF-002: hierarchical scope fallback — driven
         // only from the strict level (relaxLevel==0); the loop owns the cascade.
@@ -354,7 +358,12 @@ public sealed class SearchService(
                 {
                     Score = i.Score * TemporalBoost,
                     ScoreBreakdown = i.ScoreBreakdown is { } bd
-                        ? bd with { Fused = bd.Fused * TemporalBoost, Rerank = bd.Rerank * TemporalBoost }
+                        ? bd with
+                        {
+                            Fused = bd.Fused * TemporalBoost,
+                            Normalized = Math.Min(1.0, bd.Normalized * TemporalBoost),
+                            Rerank = bd.Rerank * TemporalBoost
+                        }
                         : null
                 }
                 : i))
@@ -413,7 +422,7 @@ public sealed class SearchService(
                     RelaxedScope = next.Value.Description,
                     Score = h.Score * penalty,
                     ScoreBreakdown = h.ScoreBreakdown is { } b
-                        ? b with { Fused = b.Fused * penalty } : null
+                        ? b with { Fused = b.Fused * penalty, Normalized = b.Normalized * penalty } : null
                 });
                 added++;
             }
@@ -514,6 +523,7 @@ public sealed class SearchService(
                     VectorRank = bd.VectorRank,
                     LexicalRank = bd.LexicalRank,
                     Fused = bd.Fused,
+                    Normalized = bd.Normalized,
                     Rerank = rerank
                 }
             };
@@ -633,6 +643,7 @@ public sealed class SearchService(
         var result = items.ToList();
         var spent = 0;
         var addedChunks = 0;
+        var budgetSkipped = 0;
 
         foreach (var docGroup in expandable.GroupBy(t => t.Item.DocumentId!.Value))
         {
@@ -710,9 +721,16 @@ public sealed class SearchService(
                 }
 
                 var context = string.Join("\n\n", parts);
-                if (context.Length == 0 || spent + context.Length > budgetChars
-                    || docSpent + context.Length > docBudgetChars)
+                if (context.Length == 0)
                     continue;
+                // E24 RF-002: budget skips are observable (activity tag + log)
+                // — dropped context must not be silent.
+                if (spent + context.Length > budgetChars
+                    || docSpent + context.Length > docBudgetChars)
+                {
+                    budgetSkipped++;
+                    continue;
+                }
                 spent += context.Length;
                 docSpent += context.Length;
                 addedChunks += expanded.Count;
@@ -724,6 +742,9 @@ public sealed class SearchService(
         }
 
         Activity.Current?.SetTag("search.expansion.chunks", addedChunks);
+        Activity.Current?.SetTag("search.expansion.budget_skipped", budgetSkipped);
+        if (budgetSkipped > 0)
+            logger.LogInformation("Expansion budget skipped {Count} hits", budgetSkipped);
         return result;
     }
 
