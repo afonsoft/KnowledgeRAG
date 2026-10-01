@@ -436,6 +436,7 @@ public static class KnowledgeHubServiceCollectionExtensions
 
     private static void AddIngestion(IServiceCollection services)
     {
+        services.AddSingleton<Ingestion.IngestionServiceDeps>();
         services.AddSingleton<IngestionService>();
         services.AddSingleton<IIngestionService>(sp => sp.GetRequiredService<IngestionService>());
         // SPEC-20260924-async-ingestion-queue RF-001/RF-002: bounded channel +
