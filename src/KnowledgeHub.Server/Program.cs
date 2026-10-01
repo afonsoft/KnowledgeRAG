@@ -17,9 +17,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using Serilog;
 
-const string GeneralPolicy = "general";
-const string ReadyTag = "ready";
-
 var builder = WebApplication.CreateBuilder(args);
 
 // SPEC-20260924-hosted-services-and-serilog-logging RF-001: Serilog host
@@ -113,6 +110,9 @@ await RunHostAsync(app);
 // Marker type so WebApplicationFactory<Program> can host the app in integration tests.
 public partial class Program
 {
+    private const string GeneralPolicy = "general";
+    private const string ReadyTag = "ready";
+
     // SPEC-20260925-redis-health-and-scan-stats RF-001: Redis is degraded-not-fatal
     // (cache is fail-soft) — the check reports Degraded so ready stays 200.
     private static void AddRedisHealthCheckIfConfigured(WebApplicationBuilder builder)
