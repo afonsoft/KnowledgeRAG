@@ -96,41 +96,50 @@ public sealed class ApiKeyChatSettingsService(
             .FirstOrDefaultAsync(s => s.ApiKeyId == apiKeyId, cancellationToken);
 
         if (endpoint is null && model is null && apiKey is null)
-        {
-            if (row is not null)
-            {
-                db.ApiKeyChatSettings.Remove(row);
-                await db.SaveChangesAsync(cancellationToken);
-            }
-            await secrets.RemoveAsync($"apikey-chat-{apiKeyId:N}", cancellationToken);
-        }
+            await ClearSettingsAsync(db, row, apiKeyId, cancellationToken);
         else
-        {
-            if (row is null && (endpoint is not null || model is not null))
-            {
-                row = new ApiKeyChatSettings { ApiKeyId = apiKeyId };
-                db.ApiKeyChatSettings.Add(row);
-            }
-
-            if (row is not null)
-            {
-                if (endpoint is not null)
-                    row.Endpoint = string.IsNullOrWhiteSpace(endpoint) ? null : endpoint.Trim();
-                if (model is not null)
-                    row.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
-                row.UpdatedAt = DateTimeOffset.UtcNow;
-            }
-
-            if (row is not null)
-                await db.SaveChangesAsync(cancellationToken);
-
-            if (apiKey is not null && !string.IsNullOrWhiteSpace(apiKey))
-            {
-                await secrets.SetAsync($"apikey-chat-{apiKeyId:N}", apiKey.Trim(), cancellationToken);
-            }
-        }
+            await ApplySettingsAsync(db, row, apiKeyId, new ChatSettingsPatch(endpoint, model, apiKey), cancellationToken);
 
         Invalidate(apiKeyId);
+    }
+
+    private sealed record ChatSettingsPatch(string? Endpoint, string? Model, string? ApiKey);
+
+    private async Task ClearSettingsAsync(
+        KnowledgeHubDbContext db, ApiKeyChatSettings? row, Guid apiKeyId, CancellationToken cancellationToken)
+    {
+        if (row is not null)
+        {
+            db.ApiKeyChatSettings.Remove(row);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        await secrets.RemoveAsync($"apikey-chat-{apiKeyId:N}", cancellationToken);
+    }
+
+    private async Task ApplySettingsAsync(
+        KnowledgeHubDbContext db, ApiKeyChatSettings? row, Guid apiKeyId,
+        ChatSettingsPatch patch, CancellationToken cancellationToken)
+    {
+        if (row is null && (patch.Endpoint is not null || patch.Model is not null))
+        {
+            row = new ApiKeyChatSettings { ApiKeyId = apiKeyId };
+            db.ApiKeyChatSettings.Add(row);
+        }
+
+        if (row is not null)
+        {
+            if (patch.Endpoint is not null)
+                row.Endpoint = string.IsNullOrWhiteSpace(patch.Endpoint) ? null : patch.Endpoint.Trim();
+            if (patch.Model is not null)
+                row.Model = string.IsNullOrWhiteSpace(patch.Model) ? null : patch.Model.Trim();
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        if (patch.ApiKey is not null && !string.IsNullOrWhiteSpace(patch.ApiKey))
+        {
+            await secrets.SetAsync($"apikey-chat-{apiKeyId:N}", patch.ApiKey.Trim(), cancellationToken);
+        }
     }
 
     public async Task SaveIntegrationKeyAsync(Guid apiKeyId, string provider, string apiKey, CancellationToken cancellationToken = default)
