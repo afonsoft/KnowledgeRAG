@@ -2,8 +2,8 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `Draft` |
-| Ticket | — (aguardando aprovação para abrir Issues) |
+| Status | `Approved` |
+| Ticket | Epic [#452 (E24)](https://github.com/afonsoft/LangGraph-UI/issues/452) — slices [#463](https://github.com/afonsoft/LangGraph-UI/issues/463) (RF-001), [#464](https://github.com/afonsoft/LangGraph-UI/issues/464) (RF-002), [#465](https://github.com/afonsoft/LangGraph-UI/issues/465) (RF-003..007) |
 | Origem | qa-analyst — análise pós-merge PRs #436–#448 (relatório: `.claude/memory/qa-pr-analysis-20261001.md`) |
 
 ## Contexto
