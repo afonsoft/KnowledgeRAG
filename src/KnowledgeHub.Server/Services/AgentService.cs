@@ -37,8 +37,6 @@ public sealed class AgentService(
     AgentDiagnostics diagnostics,
     ILogger<AgentService> logger) : IAgentService
 {
-    private const string AgentTag = "agent";
-
     private IMcpActivityFeed? Feed => diagnostics.Feed;
     private McpEngine.Agents.ChainAst.IChainCompactor? Compactor => diagnostics.Compactor;
     private Audit.Evidence.IEvidenceChainService? Evidence => diagnostics.Evidence;
@@ -185,11 +183,32 @@ public sealed class AgentService(
 
         var approval = await db.Approvals.FirstOrDefaultAsync(a => a.Id == approvalId, cancellationToken)
             ?? throw new KeyNotFoundException($"approval '{approvalId}' not found");
+        await EnsureResumableAsync(approval, approvalId, allowDenied, cancellationToken);
+
+        var state = JsonSerializer.Deserialize<SuspendState>(approval.StateJson!, JsonSerializerOptions.Web)
+            ?? throw new InvalidOperationException("corrupt approval state");
+
+        var loop = await BuildLoopAsync(state.Request, RestoreMessages(state), cancellationToken, approval.ThreadId);
+        loop.Steps.AddRange(state.Steps);
+        loop.Iterations = state.Iterations;
+        loop.ToolCalls = state.ToolCalls;
+
+        await ResolvePendingCallAsync(approval, loop, state, cancellationToken);
+        await ExecuteRemainingCallsAsync(loop, state, cancellationToken);
+
+        var resumed = await RunLoopAsync(client, loop, cancellationToken);
+        return await PersistResumedTurnAsync(state, resumed, cancellationToken);
+    }
+
+    /// <summary>Status gate + atomic resume claim.</summary>
+    private async Task EnsureResumableAsync(
+        ToolApproval approval, Guid approvalId, bool allowDenied, CancellationToken ct)
+    {
         if (approval.Status == "pending" && IsExpired(approval))
         {
             approval.Status = "expired";
             approval.ResolvedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(ct);
         }
         if (approval.Status is "pending" or "expired")
             throw new ConflictException($"approval '{approvalId}' is {approval.Status}");
@@ -207,20 +226,16 @@ public sealed class AgentService(
             .Where(a => a.Id == approvalId && a.ResumedAt == null)
             .ExecuteUpdateAsync(
                 s => s.SetProperty(a => a.ResumedAt, DateTimeOffset.UtcNow),
-                cancellationToken);
+                ct);
         if (claimed == 0)
             throw new ConflictException($"approval '{approvalId}' already resumed");
         approval.ResumedAt = DateTimeOffset.UtcNow; // keep the tracked entity in sync
+    }
 
-        var state = JsonSerializer.Deserialize<SuspendState>(approval.StateJson, JsonSerializerOptions.Web)
-            ?? throw new InvalidOperationException("corrupt approval state");
-
-        var loop = await BuildLoopAsync(state.Request, RestoreMessages(state), cancellationToken, approval.ThreadId);
-        loop.Steps.AddRange(state.Steps);
-        loop.Iterations = state.Iterations;
-        loop.ToolCalls = state.ToolCalls;
-
-        // Resolve the gated call: execute approved args, or inject the denial.
+    /// <summary>Resolves the gated call: executes approved args, or injects the denial.</summary>
+    private async Task ResolvePendingCallAsync(
+        ToolApproval approval, LoopState loop, SuspendState state, CancellationToken ct)
+    {
         var pending = state.PendingCall;
         var stepSw = Stopwatch.StartNew();
         object? result;
@@ -233,14 +248,11 @@ public sealed class AgentService(
         else
         {
             var fn = loop.Functions.FirstOrDefault(f => f.Name == pending.Name);
-            var args = approval.ApprovedArgsJson is { Length: > 0 } approved
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(approved)
-                : pending.Args.Deserialize<Dictionary<string, object?>>();
             try
             {
                 result = fn is null
                     ? $"ERROR: unknown tool '{pending.Name}'"
-                    : await fn.InvokeAsync(new AIFunctionArguments(args), cancellationToken);
+                    : await fn.InvokeAsync(new AIFunctionArguments(EffectiveArgs(approval, pending)), ct);
                 isError = result?.ToString()?.StartsWith("ERROR:") == true;
             }
             catch (Exception ex)
@@ -255,19 +267,24 @@ public sealed class AgentService(
         {
             Iteration = state.Iterations,
             Tool = pending.Name,
-            ArgsSummary = Summarize(
-                approval.ApprovedArgsJson is { Length: > 0 } approvedJson
-                    ? JsonSerializer.Deserialize<Dictionary<string, object?>>(approvedJson)
-                    : pending.Args.Deserialize<Dictionary<string, object?>>()),
+            ArgsSummary = Summarize(EffectiveArgs(approval, pending)),
             IsError = isError,
             ElapsedMs = stepSw.Elapsed.TotalMilliseconds
         });
         loop.Messages.Add(new ChatMessage(ChatRole.Tool,
             [new FunctionResultContent(pending.CallId, result)]));
+    }
 
-        // RF-104: the gated call's siblings from the same model turn were
-        // suspended un-executed — answer them now so the resumed model sees
-        // every call it made.
+    private static Dictionary<string, object?>? EffectiveArgs(ToolApproval approval, StoredCall pending) =>
+        approval.ApprovedArgsJson is { Length: > 0 } approved
+            ? JsonSerializer.Deserialize<Dictionary<string, object?>>(approved)
+            : pending.Args.Deserialize<Dictionary<string, object?>>();
+
+    /// <summary>RF-104: the gated call's siblings from the same model turn were
+    /// suspended un-executed — answer them now so the resumed model sees
+    /// every call it made.</summary>
+    private async Task ExecuteRemainingCallsAsync(LoopState loop, SuspendState state, CancellationToken ct)
+    {
         foreach (var sib in state.RemainingCalls ?? [])
         {
             var sibFn = loop.Functions.FirstOrDefault(f => f.Name == sib.Name);
@@ -280,7 +297,7 @@ public sealed class AgentService(
                     ? $"ERROR: unknown tool '{sib.Name}'"
                     : await sibFn.InvokeAsync(
                         new AIFunctionArguments(sib.Args.Deserialize<Dictionary<string, object?>>()),
-                        cancellationToken);
+                        ct);
                 sibErr = sibResult?.ToString()?.StartsWith("ERROR:") == true;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -302,22 +319,23 @@ public sealed class AgentService(
             loop.Messages.Add(new ChatMessage(ChatRole.Tool,
                 [new FunctionResultContent(sib.CallId, sibResult)]));
         }
+    }
 
-        var resumed = await RunLoopAsync(client, loop, cancellationToken);
+    /// <summary>RF-103: the resume path bypassed CompleteAsync — attach the thread
+    /// and persist the turn (the suspended turn never reached the thread).</summary>
+    private async Task<AgentResponse> PersistResumedTurnAsync(
+        SuspendState state, AgentResponse resumed, CancellationToken ct)
+    {
+        if (state.Request.ThreadId is not { } resumeThreadId
+            || resumed.AwaitingApprovalId is not null)
+            return resumed;
 
-        // RF-103: the resume path bypassed CompleteAsync — attach the thread
-        // and persist the turn (the suspended turn never reached the thread).
-        if (state.Request.ThreadId is { } resumeThreadId
-            && resumed.AwaitingApprovalId is null)
-        {
-            var thread = await db.Threads.FirstOrDefaultAsync(t => t.Id == resumeThreadId, cancellationToken);
-            if (thread is not null)
-            {
-                await PersistTurnAsync(thread, state.Request, resumed, cancellationToken);
-                resumed = resumed with { ThreadId = thread.Id };
-            }
-        }
-        return resumed;
+        var thread = await db.Threads.FirstOrDefaultAsync(t => t.Id == resumeThreadId, ct);
+        if (thread is null)
+            return resumed;
+
+        await PersistTurnAsync(thread, state.Request, resumed, ct);
+        return resumed with { ThreadId = thread.Id };
     }
 
     // ---- conversation threads (SPEC-20260914-conversation-threads) -----------
@@ -423,13 +441,9 @@ public sealed class AgentService(
         });
     }
 
-    private static string DeriveTitle(string? prompt)
-    {
-        if (string.IsNullOrWhiteSpace(prompt))
-            return "nova conversa";
-        var trimmed = prompt.Trim();
-        return trimmed.Length > 60 ? trimmed[..60] + "…" : trimmed;
-    }
+    private static string DeriveTitle(string? prompt) =>
+        string.IsNullOrWhiteSpace(prompt) ? "nova conversa"
+            : prompt.Trim() is { Length: > 60 } p ? p[..60] + "…" : prompt.Trim();
 
     private bool IsExpired(ToolApproval approval) =>
         approval.CreatedAt + TimeSpan.FromMinutes(options.ApprovalTimeoutMinutes) < DateTimeOffset.UtcNow;
@@ -548,40 +562,7 @@ public sealed class AgentService(
                 await ReportProgressAsync(loop, $"iteration {loop.Iterations}/{loop.MaxIterations} — reasoning",
                     cancellationToken);
 
-                ChatResponse response;
-                using (var iterSpan = Telemetry.KnowledgeHubActivity.Start("agent_iteration"))
-                {
-                    iterSpan?.SetTag("agent.iteration", loop.Iterations);
-                    var llmSw = Stopwatch.StartNew();
-                    try
-                    {
-                        // SPEC-20260927-chain-ast-thread-compactor: repair
-                        // dangling tool calls and compact history before the
-                        // model sees it (never on the persisted transcript).
-                        if (Compactor is not null)
-                        {
-                            var ast = McpEngine.Agents.ChainAst.ChainAstParser.Parse(
-                                loop.Messages, options.ContextManagement.AutoRepairBrokenToolCalls);
-                            ast = await Compactor.CompactAsync(ast, cancellationToken);
-                            loop.Messages.Clear();
-                            loop.Messages.AddRange(ast.ToChatMessages());
-                        }
-                        response = await GetModelResponseAsync(client, loop, sink, cancellationToken);
-                    }
-                    catch (Exception ex)
-                    {
-                        Telemetry.KnowledgeHubActivity.Fail(iterSpan, ex);
-                        Telemetry.KnowledgeHubActivity.Fail(agentSpan, ex);
-                        throw;
-                    }
-                    finally
-                    {
-                        Telemetry.KnowledgeHubMetrics.LlmDuration.Record(llmSw.Elapsed.TotalMilliseconds,
-                            new KeyValuePair<string, object?>("provider", client.GetType().Name),
-                            new KeyValuePair<string, object?>("model", AgentTag),
-                            new KeyValuePair<string, object?>("kind", AgentTag));
-                    }
-                }
+                var response = await GetIterationResponseAsync(client, loop, sink, agentSpan, cancellationToken);
                 loop.Messages.AddRange(response.Messages);
 
                 var calls = response.Messages
@@ -626,65 +607,7 @@ public sealed class AgentService(
                         break;
                     }
 
-                    var fn = loop.Functions.FirstOrDefault(f => f.Name == call.Name);
-                    await ReportProgressAsync(loop,
-                        $"iteration {loop.Iterations}/{loop.MaxIterations} — calling {call.Name}",
-                        cancellationToken);
-                    await WriteEventAsync(sink, new SseEvent("tool_start",
-                        new { tool = call.Name, args = Summarize(call.Arguments) }), cancellationToken);
-                    var stepSw = Stopwatch.StartNew();
-                    using var toolSpan = Telemetry.KnowledgeHubActivity.Start("tool");
-                    toolSpan?.SetTag("tool.name", call.Name);
-                    object? result;
-                    var isError = false;
-                    try
-                    {
-                        result = fn is null
-                            ? $"ERROR: unknown tool '{call.Name}'"
-                            : await fn.InvokeAsync(ToArguments(call), cancellationToken);
-                        isError = result?.ToString()?.StartsWith("ERROR:") == true;
-                    }
-                    catch (Exception ex)
-                    {
-                        isError = true;
-                        result = $"ERROR: {ex.Message}";
-                        Telemetry.KnowledgeHubActivity.Fail(toolSpan, ex);
-                    }
-                    finally
-                    {
-                        Telemetry.KnowledgeHubMetrics.ToolDuration.Record(stepSw.Elapsed.TotalMilliseconds,
-                            new KeyValuePair<string, object?>("tool", call.Name));
-                    }
-
-                    await WriteEventAsync(sink, new SseEvent("tool_end",
-                        new { tool = call.Name, isError, elapsedMs = stepSw.Elapsed.TotalMilliseconds }), cancellationToken);
-                    loop.Steps.Add(new AgentStep
-                    {
-                        Iteration = loop.Iterations,
-                        Tool = call.Name,
-                        ArgsSummary = Summarize(call.Arguments),
-                        IsError = isError,
-                        ElapsedMs = stepSw.Elapsed.TotalMilliseconds
-                    });
-                    // SPEC-20260923-prompt-injection-guard RF-001: tool output is
-                    // untrusted data — wrap in explicit boundaries before it
-                    // re-enters the model context.
-                    if (result is string textResult && !isError)
-                        result = Security.PromptBoundary.WrapToolResult(call.Name, textResult);
-                    loop.Messages.Add(new ChatMessage(ChatRole.Tool,
-                        [new FunctionResultContent(call.CallId, result)]));
-
-                    // SPEC-20260927-cryptographic-evidence-provenance-chain
-                    // RF-002: every executed tool call emits a chained
-                    // ToolExecuted receipt (best-effort, never breaks the loop).
-                    if (Evidence is not null && loop.EvidenceSessionId is { } sess)
-                        loop.LastReceipt = await Audit.Evidence.EvidenceEmission.RecordToolAsync(
-                            new Audit.Evidence.EvidenceEmission.EmissionContext(
-                                Evidence, sess, null, logger),
-                            threadId: loop.Request.ThreadId?.ToString("N"),
-                            call.Name ?? "",
-                            Summarize(call.Arguments), result?.ToString(),
-                            loop.LastReceipt, cancellationToken);
+                    await ExecuteToolCallAsync(loop, call, sink, cancellationToken);
                 }
             }
         }
@@ -713,6 +636,111 @@ public sealed class AgentService(
             LatencyMs = sw.Elapsed.TotalMilliseconds,
             LimitReached = loop.LimitReached
         };
+    }
+
+    /// <summary>One model round-trip: chain compaction, the call itself, span +
+    /// LLM-duration metric bookkeeping.</summary>
+    private async Task<ChatResponse> GetIterationResponseAsync(
+        IChatClient client, LoopState loop, ChannelWriter<SseEvent>? sink,
+        Activity? agentSpan, CancellationToken ct)
+    {
+        using var iterSpan = Telemetry.KnowledgeHubActivity.Start("agent_iteration");
+        iterSpan?.SetTag("agent.iteration", loop.Iterations);
+        var llmSw = Stopwatch.StartNew();
+        try
+        {
+            // SPEC-20260927-chain-ast-thread-compactor: repair
+            // dangling tool calls and compact history before the
+            // model sees it (never on the persisted transcript).
+            if (Compactor is not null)
+            {
+                var ast = McpEngine.Agents.ChainAst.ChainAstParser.Parse(
+                    loop.Messages, options.ContextManagement.AutoRepairBrokenToolCalls);
+                ast = await Compactor.CompactAsync(ast, ct);
+                loop.Messages.Clear();
+                loop.Messages.AddRange(ast.ToChatMessages());
+            }
+            return await GetModelResponseAsync(client, loop, sink, ct);
+        }
+        catch (Exception ex)
+        {
+            Telemetry.KnowledgeHubActivity.Fail(iterSpan, ex);
+            Telemetry.KnowledgeHubActivity.Fail(agentSpan, ex);
+            throw;
+        }
+        finally
+        {
+            Telemetry.KnowledgeHubMetrics.LlmDuration.Record(llmSw.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("provider", client.GetType().Name),
+                new KeyValuePair<string, object?>("model", "agent"),
+                new KeyValuePair<string, object?>("kind", "agent"));
+        }
+    }
+
+    /// <summary>Executes one non-gated tool call: SSE events, step record,
+    /// prompt-boundary wrap, evidence receipt.</summary>
+    private async Task ExecuteToolCallAsync(
+        LoopState loop, FunctionCallContent call,
+        ChannelWriter<SseEvent>? sink, CancellationToken ct)
+    {
+        var fn = loop.Functions.FirstOrDefault(f => f.Name == call.Name);
+        await ReportProgressAsync(loop,
+            $"iteration {loop.Iterations}/{loop.MaxIterations} — calling {call.Name}", ct);
+        await WriteEventAsync(sink, new SseEvent("tool_start",
+            new { tool = call.Name, args = Summarize(call.Arguments) }), ct);
+        var stepSw = Stopwatch.StartNew();
+        using var toolSpan = Telemetry.KnowledgeHubActivity.Start("tool");
+        toolSpan?.SetTag("tool.name", call.Name);
+        object? result;
+        var isError = false;
+        try
+        {
+            result = fn is null
+                ? $"ERROR: unknown tool '{call.Name}'"
+                : await fn.InvokeAsync(ToArguments(call), ct);
+            isError = result?.ToString()?.StartsWith("ERROR:") == true;
+        }
+        catch (Exception ex)
+        {
+            isError = true;
+            result = $"ERROR: {ex.Message}";
+            Telemetry.KnowledgeHubActivity.Fail(toolSpan, ex);
+        }
+        finally
+        {
+            Telemetry.KnowledgeHubMetrics.ToolDuration.Record(stepSw.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("tool", call.Name));
+        }
+
+        await WriteEventAsync(sink, new SseEvent("tool_end",
+            new { tool = call.Name, isError, elapsedMs = stepSw.Elapsed.TotalMilliseconds }), ct);
+        loop.Steps.Add(new AgentStep
+        {
+            Iteration = loop.Iterations,
+            Tool = call.Name,
+            ArgsSummary = Summarize(call.Arguments),
+            IsError = isError,
+            ElapsedMs = stepSw.Elapsed.TotalMilliseconds
+        });
+        // SPEC-20260923-prompt-injection-guard RF-001: tool output is
+        // untrusted data — wrap in explicit boundaries before it
+        // re-enters the model context.
+        if (result is string textResult && !isError)
+            result = Security.PromptBoundary.WrapToolResult(call.Name, textResult);
+        loop.Messages.Add(new ChatMessage(ChatRole.Tool,
+            [new FunctionResultContent(call.CallId, result)]));
+
+        // SPEC-20260927-cryptographic-evidence-provenance-chain
+        // RF-002: every executed tool call emits a chained
+        // ToolExecuted receipt (best-effort, never breaks the loop).
+        if (Evidence is not null && loop.EvidenceSessionId is { } sess)
+            loop.LastReceipt = await Audit.Evidence.EvidenceEmission.RecordToolAsync(
+                new Audit.Evidence.EvidenceEmission.EmissionContext(
+                    Evidence, sess, null, logger),
+                threadId: loop.Request.ThreadId?.ToString("N"),
+                call.Name ?? "",
+                Summarize(call.Arguments), result?.ToString(),
+                loop.LastReceipt, ct);
     }
 
     /// <summary>
@@ -774,7 +802,7 @@ public sealed class AgentService(
         {
             ToolName = call.Name,
             ArgumentsJson = ApprovalService.MaskSensitive(argsElement).GetRawText(),
-            RequestedBy = AgentTag,
+            RequestedBy = "agent",
             Status = "pending",
             StateJson = JsonSerializer.Serialize(new SuspendState(
                 SnapshotMessages(loop.Messages),
@@ -792,7 +820,7 @@ public sealed class AgentService(
         {
             Timestamp = DateTimeOffset.UtcNow,
             Kind = McpActivityKind.ApprovalRequested,
-            Transport = AgentTag,
+            Transport = "agent",
             Method = "agent_chat",
             ToolName = call.Name
         });
@@ -824,13 +852,10 @@ public sealed class AgentService(
                 c.CallId, c.Name, c.Args.Deserialize<Dictionary<string, object?>>())));
             contents.AddRange(m.Results.Select(r => new FunctionResultContent(r.CallId, r.Result)));
             return new ChatMessage(
-                m.Role switch
-                {
-                    "assistant" => ChatRole.Assistant,
-                    "system" => ChatRole.System,
-                    "tool" => ChatRole.Tool,
-                    _ => ChatRole.User
-                },
+                m.Role == "assistant" ? ChatRole.Assistant
+                    : m.Role == "system" ? ChatRole.System
+                    : m.Role == "tool" ? ChatRole.Tool
+                    : ChatRole.User,
                 contents);
         }).ToList();
 

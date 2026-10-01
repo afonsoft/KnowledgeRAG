@@ -165,38 +165,7 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
         }
         try
         {
-            if (source.SourceType == SourceType.McpProxy)
-                await secrets.RemoveAsync(McpProxySession.SecretKey(source.Id), ct);
-            if (source.SourceType == SourceType.Notion)
-                await secrets.RemoveAsync(Ingestion.Connectors.NotionConnector.SecretKey(source.Id), ct);
-            // SPEC-20260927-restapi-sqldatabase-connectors RF-003/RF-006:
-            // stored headers/connectionString are purged with the source.
-            if (source.SourceType == SourceType.RestApi)
-                await secrets.RemoveAsync(Ingestion.Connectors.RestApiConnector.SecretKey(source.Id), ct);
-            if (source.SourceType == SourceType.SqlDatabase)
-                await secrets.RemoveAsync(Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id), ct);
-            // SPEC-20260927-unstructured-document-parser-connector.
-            if (source.SourceType == SourceType.UnstructuredDocument)
-                await secrets.RemoveAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct);
-            if (source.SourceType == SourceType.GitRepository)
-                await secrets.RemoveAsync(Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id), ct);
-            if (source.SourceType == SourceType.AudioTranscription)
-                await secrets.RemoveAsync(Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id), ct);
-            // SPEC-20260924-cloud-storage-connectors RF-006: purge cloud secrets + staging.
-            if (source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage)
-            {
-                foreach (var key in CloudSecretKeys(source.SourceType, source.Id))
-                    await secrets.RemoveAsync(key, ct);
-                if (staging is not null)
-                    await staging.CleanupStagingAsync(source.Id, ct);
-            }
-            // SPEC-20260924-gdrive-shared-link-connector RF-006/RF-008.
-            if (source.SourceType == SourceType.GoogleDrive)
-            {
-                await secrets.RemoveAsync(Ingestion.Connectors.GoogleDriveSharedConnector.SecretKey(source.Id), ct);
-                if (staging is not null)
-                    await staging.CleanupStagingAsync(source.Id, ct);
-            }
+            await PurgeConnectorArtifactsAsync(source, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -205,16 +174,55 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
 
         // RF-008: a deleted source must disappear from cached search results —
         // bump the index-version token the same way a sync does.
-        if (cache is not null)
-        {
-            await Caching.SafeCache.SetStringAsync(cache, Caching.CacheKeys.IndexVersion,
-                Guid.NewGuid().ToString("N"), null,
-                log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<KnowledgeSourceService>.Instance, ct);
-            if (invalidationBus is not null)
-                await invalidationBus.PublishAsync("index-version", ct);
-        }
+        await BumpIndexVersionAsync(ct);
         await NotifyCatalogChanged(ct);
         return ServiceResult<bool>.Ok(true);
+    }
+
+    /// <summary>Connector secrets + staging cleanup for a deleted source.</summary>
+    private async Task PurgeConnectorArtifactsAsync(KnowledgeSource source, CancellationToken ct)
+    {
+        // SPEC-20260927-restapi-sqldatabase-connectors RF-003/RF-006:
+        // stored headers/connectionString are purged with the source.
+        // SPEC-20260927-unstructured-document-parser-connector.
+        // SPEC-20260924-gdrive-shared-link-connector RF-006/RF-008.
+        var secretKey = source.SourceType switch
+        {
+            SourceType.McpProxy => McpProxySession.SecretKey(source.Id),
+            SourceType.Notion => Ingestion.Connectors.NotionConnector.SecretKey(source.Id),
+            SourceType.RestApi => Ingestion.Connectors.RestApiConnector.SecretKey(source.Id),
+            SourceType.SqlDatabase => Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id),
+            SourceType.UnstructuredDocument => Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id),
+            SourceType.GitRepository => Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id),
+            SourceType.AudioTranscription => Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id),
+            SourceType.GoogleDrive => Ingestion.Connectors.GoogleDriveSharedConnector.SecretKey(source.Id),
+            _ => null
+        };
+        if (secretKey is not null)
+            await secrets.RemoveAsync(secretKey, ct);
+
+        // SPEC-20260924-cloud-storage-connectors RF-006: purge cloud secrets + staging.
+        if (source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage)
+        {
+            foreach (var key in CloudSecretKeys(source.SourceType, source.Id))
+                await secrets.RemoveAsync(key, ct);
+        }
+        if (staging is not null
+            && source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage or SourceType.GoogleDrive)
+        {
+            await staging.CleanupStagingAsync(source.Id, ct);
+        }
+    }
+
+    private async Task BumpIndexVersionAsync(CancellationToken ct)
+    {
+        if (cache is null)
+            return;
+        await Caching.SafeCache.SetStringAsync(cache, Caching.CacheKeys.IndexVersion,
+            Guid.NewGuid().ToString("N"), null,
+            log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<KnowledgeSourceService>.Instance, ct);
+        if (invalidationBus is not null)
+            await invalidationBus.PublishAsync("index-version", ct);
     }
 
     public async Task<ServiceResult<KnowledgeSourceDto>> SetActiveAsync(Guid id, bool active, CancellationToken ct = default)
@@ -233,108 +241,79 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
     /// a config carrying no usable secret field is only valid when an encrypted
     /// secret already exists for this source — <c>hasKey:true</c> without a
     /// stored secret is rejected, otherwise the source could never sync.</summary>
-    private async Task<string?> ValidateConnectorSecretAsync(
+    private Task<string?> ValidateConnectorSecretAsync(
         KnowledgeSource source, JsonObject? configuration, CancellationToken ct)
     {
         if (configuration is null)
+            return Task.FromResult<string?>(null);
+
+        return source.SourceType switch
+        {
+            SourceType.Notion => ValidateStoredSecretAsync(configuration, ct,
+                Ingestion.Connectors.NotionConnector.SecretKey(source.Id),
+                "Configuration key 'token' is required for Notion — no stored token for this source",
+                TokenField),
+            SourceType.SqlDatabase => ValidateStoredSecretAsync(configuration, ct,
+                Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id),
+                "Configuration key 'connectionString' is required for SqlDatabase — no stored secret for this source",
+                ConnectionStringField),
+            // SPEC-20260927-restapi-sqldatabase-connectors RF-003: headers are
+            // optional, but hasKey:true without a stored secret is a stale update
+            // that could never sync.
+            SourceType.RestApi => ValidateFlaggedSecretAsync(configuration, ct,
+                Ingestion.Connectors.RestApiConnector.SecretKey(source.Id),
+                "Configuration key 'headers' marked as stored (hasKey) but no stored headers for this source",
+                HeadersField),
+            // SPEC-20260927-unstructured-document-parser-connector: apiKey is
+            // optional (self-hosted endpoints work unauthenticated) — only a stale
+            // hasKey without a stored secret is rejected.
+            SourceType.UnstructuredDocument => ValidateFlaggedSecretAsync(configuration, ct,
+                Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id),
+                "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source",
+                ApiKeyField),
+            // SPEC-20260927-git-repository-source-connector: PAT optional.
+            SourceType.GitRepository => ValidateFlaggedSecretAsync(configuration, ct,
+                Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id),
+                "Configuration key 'token' marked as stored (hasKey) but no stored PAT for this source",
+                TokenField),
+            // SPEC-20260927-audio-transcription-connector: apiKey optional.
+            SourceType.AudioTranscription => ValidateFlaggedSecretAsync(configuration, ct,
+                Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id),
+                "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source",
+                ApiKeyField),
+            SourceType.AwsS3 or SourceType.OciStorage => ValidateStoredSecretAsync(configuration, ct,
+                CloudSecretKey(source.SourceType, source.Id),
+                $"Configuration key 'secretAccessKey' is required for {source.SourceType} — no stored secret for this source",
+                "secretAccessKey"),
+            SourceType.AzureFiles => ValidateStoredSecretAsync(configuration, ct,
+                CloudSecretKey(source.SourceType, source.Id),
+                "A 'connectionString' or 'accountKey' is required for AzureFiles — no stored secret for this source",
+                ConnectionStringField, "accountKey"),
+            _ => Task.FromResult<string?>(null)
+        };
+    }
+
+    /// <summary>Required-secret check: an inline usable value or a stored secret must exist.</summary>
+    private async Task<string?> ValidateStoredSecretAsync(
+        JsonObject configuration, CancellationToken ct, string secretKey, string error,
+        params string[] configFields)
+    {
+        if (configFields.Any(f => UsableSecret(configuration, f)))
             return null;
+        return await secrets.GetAsync(secretKey, ct) is null ? error : null;
+    }
 
-        if (source.SourceType == SourceType.Notion)
-        {
-            var usable = configuration[TokenField] is JsonValue tv
-                && tv.TryGetValue<string>(out var token)
-                && token.Length > 0 && token != "***";
-            if (usable)
-                return null;
-            return await secrets.GetAsync(Ingestion.Connectors.NotionConnector.SecretKey(source.Id), ct) is null
-                ? "Configuration key 'token' is required for Notion — no stored token for this source"
-                : null;
-        }
-
-        if (source.SourceType == SourceType.SqlDatabase)
-        {
-            if (UsableSecret(configuration, ConnectionStringField))
-                return null;
-            return await secrets.GetAsync(Ingestion.Connectors.SqlDatabaseConnector.SecretKey(source.Id), ct) is null
-                ? "Configuration key 'connectionString' is required for SqlDatabase — no stored secret for this source"
-                : null;
-        }
-
-        // SPEC-20260927-restapi-sqldatabase-connectors RF-003: headers are
-        // optional, but hasKey:true without a stored secret is a stale update
-        // that could never sync.
-        if (source.SourceType == SourceType.RestApi)
-        {
-            var hasHeaders = configuration[HasKeyField] is JsonValue hv
-                && hv.TryGetValue<bool>(out var flagged) && flagged;
-            if (!hasHeaders)
-                return null;
-            // SPEC-20260929 RF-001: an inline key in the same request is
-            // write-through — persist happens after validation, so accept it.
-            if (UsableSecret(configuration, HeadersField))
-                return null;
-            return await secrets.GetAsync(Ingestion.Connectors.RestApiConnector.SecretKey(source.Id), ct) is null
-                ? "Configuration key 'headers' marked as stored (hasKey) but no stored headers for this source"
-                : null;
-        }
-
-        // SPEC-20260927-unstructured-document-parser-connector: apiKey is
-        // optional (self-hosted endpoints work unauthenticated) — only a stale
-        // hasKey without a stored secret is rejected.
-        if (source.SourceType == SourceType.UnstructuredDocument)
-        {
-            var flagged = configuration[HasKeyField] is JsonValue hv
-                && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged || UsableSecret(configuration, ApiKeyField))
-                return null;
-            return await secrets.GetAsync(Ingestion.Connectors.UnstructuredDocumentConnector.SecretKey(source.Id), ct) is null
-                ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
-                : null;
-        }
-
-        // SPEC-20260927-git-repository-source-connector: PAT optional.
-        if (source.SourceType == SourceType.GitRepository)
-        {
-            var flagged = configuration[HasKeyField] is JsonValue hv
-                && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged || UsableSecret(configuration, TokenField))
-                return null;
-            return await secrets.GetAsync(Ingestion.Connectors.GitRepositoryConnector.SecretKey(source.Id), ct) is null
-                ? "Configuration key 'token' marked as stored (hasKey) but no stored PAT for this source"
-                : null;
-        }
-
-        // SPEC-20260927-audio-transcription-connector: apiKey optional.
-        if (source.SourceType == SourceType.AudioTranscription)
-        {
-            var flagged = configuration[HasKeyField] is JsonValue hv
-                && hv.TryGetValue<bool>(out var f) && f;
-            if (!flagged || UsableSecret(configuration, ApiKeyField))
-                return null;
-            return await secrets.GetAsync(Ingestion.Connectors.AudioTranscriptionConnector.SecretKey(source.Id), ct) is null
-                ? "Configuration key 'apiKey' marked as stored (hasKey) but no stored key for this source"
-                : null;
-        }
-
-        if (source.SourceType is SourceType.AwsS3 or SourceType.OciStorage)
-        {
-            if (UsableSecret(configuration, "secretAccessKey"))
-                return null;
-            return await secrets.GetAsync(CloudSecretKey(source.SourceType, source.Id), ct) is null
-                ? $"Configuration key 'secretAccessKey' is required for {source.SourceType} — no stored secret for this source"
-                : null;
-        }
-
-        if (source.SourceType == SourceType.AzureFiles)
-        {
-            if (UsableSecret(configuration, ConnectionStringField) || UsableSecret(configuration, "accountKey"))
-                return null;
-            return await secrets.GetAsync(CloudSecretKey(source.SourceType, source.Id), ct) is null
-                ? "A 'connectionString' or 'accountKey' is required for AzureFiles — no stored secret for this source"
-                : null;
-        }
-
-        return null;
+    /// <summary>Optional-secret check: only a stale hasKey flag without an inline
+    /// or stored secret is rejected. (SPEC-20260929 RF-001: an inline key in the
+    /// same request is write-through — persist happens after validation.)</summary>
+    private async Task<string?> ValidateFlaggedSecretAsync(
+        JsonObject configuration, CancellationToken ct, string secretKey, string error, string configField)
+    {
+        var flagged = configuration[HasKeyField] is JsonValue hv
+            && hv.TryGetValue<bool>(out var f) && f;
+        if (!flagged || UsableSecret(configuration, configField))
+            return null;
+        return await secrets.GetAsync(secretKey, ct) is null ? error : null;
     }
 
     private static bool UsableSecret(JsonObject configuration, string key) =>
@@ -389,30 +368,7 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
         };
         if (configKey is not null && secretKey is not null && configuration is not null)
         {
-            var singleConfig = JsonNode.Parse(source.ConfigurationJson ?? "{}") as JsonObject ?? new JsonObject();
-            singleConfig.Remove(configKey);
-
-            if (configuration.TryGetPropertyValue(configKey, out var keyNode)
-                && keyNode?.GetValue<string>() is { } key
-                && key != "***")
-            {
-                if (key.Length == 0)
-                {
-                    await secrets.RemoveAsync(secretKey, ct);
-                    singleConfig[HasKeyField] = false;
-                }
-                else
-                {
-                    await secrets.SetAsync(secretKey, key, ct);
-                    singleConfig[HasKeyField] = true;
-                }
-            }
-            else
-            {
-                singleConfig[HasKeyField] = await secrets.GetAsync(secretKey, ct) is not null;
-            }
-
-            source.ConfigurationJson = singleConfig.ToJsonString();
+            await MoveSingleSecretAsync(source, configuration, configKey, secretKey, ct);
             return;
         }
 
@@ -422,49 +378,86 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
         if (source.SourceType is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage
             && configuration is not null)
         {
-            var fields = source.SourceType == SourceType.AzureFiles
-                ? new[] { ConnectionStringField, "accountKey" }
-                : new[] { "secretAccessKey" };
-            var cloudKey = CloudSecretKey(source.SourceType, source.Id);
-            var config = JsonNode.Parse(source.ConfigurationJson ?? "{}") as JsonObject ?? new JsonObject();
-            foreach (var f in fields)
-                config.Remove(f);
+            await MoveCloudSecretsAsync(source, configuration, ct);
+        }
+    }
 
-            var changed = fields.Any(f =>
-                configuration.TryGetPropertyValue(f, out var n)
-                && n?.GetValue<string>() is { } v && v != "***");
-            if (changed)
+    private async Task MoveSingleSecretAsync(
+        KnowledgeSource source, JsonObject configuration, string configKey, string secretKey, CancellationToken ct)
+    {
+        var singleConfig = JsonNode.Parse(source.ConfigurationJson ?? "{}") as JsonObject ?? new JsonObject();
+        singleConfig.Remove(configKey);
+
+        if (configuration.TryGetPropertyValue(configKey, out var keyNode)
+            && keyNode?.GetValue<string>() is { } key
+            && key != "***")
+        {
+            if (key.Length == 0)
             {
-                var payload = new JsonObject();
-                var anyValue = false;
-                foreach (var f in fields)
-                {
-                    if (configuration.TryGetPropertyValue(f, out var n)
-                        && n?.GetValue<string>() is { } fv
-                        && fv != "***" && fv.Length > 0)
-                    {
-                        payload[f] = fv;
-                        anyValue = true;
-                    }
-                }
-                if (anyValue)
-                {
-                    await secrets.SetAsync(cloudKey,
-                        source.SourceType == SourceType.AzureFiles ? payload.ToJsonString() : payload[fields[0]]!.GetValue<string>(), ct);
-                    config[HasKeyField] = true;
-                }
-                else
-                {
-                    await secrets.RemoveAsync(cloudKey, ct);
-                    config[HasKeyField] = false;
-                }
+                await secrets.RemoveAsync(secretKey, ct);
+                singleConfig[HasKeyField] = false;
             }
             else
             {
-                config[HasKeyField] = await secrets.GetAsync(cloudKey, ct) is not null;
+                await secrets.SetAsync(secretKey, key, ct);
+                singleConfig[HasKeyField] = true;
             }
+        }
+        else
+        {
+            singleConfig[HasKeyField] = await secrets.GetAsync(secretKey, ct) is not null;
+        }
 
-            source.ConfigurationJson = config.ToJsonString();
+        source.ConfigurationJson = singleConfig.ToJsonString();
+    }
+
+    private async Task MoveCloudSecretsAsync(KnowledgeSource source, JsonObject configuration, CancellationToken ct)
+    {
+        var fields = source.SourceType == SourceType.AzureFiles
+            ? new[] { ConnectionStringField, "accountKey" }
+            : new[] { "secretAccessKey" };
+        var cloudKey = CloudSecretKey(source.SourceType, source.Id);
+        var config = JsonNode.Parse(source.ConfigurationJson ?? "{}") as JsonObject ?? new JsonObject();
+        foreach (var f in fields)
+            config.Remove(f);
+
+        var changed = fields.Any(f =>
+            configuration.TryGetPropertyValue(f, out var n)
+            && n?.GetValue<string>() is { } v && v != "***");
+        if (changed)
+            await StoreCloudSecretAsync(source, configuration, fields, cloudKey, config, ct);
+        else
+            config[HasKeyField] = await secrets.GetAsync(cloudKey, ct) is not null;
+
+        source.ConfigurationJson = config.ToJsonString();
+    }
+
+    private async Task StoreCloudSecretAsync(
+        KnowledgeSource source, JsonObject configuration, string[] fields,
+        string cloudKey, JsonObject config, CancellationToken ct)
+    {
+        var payload = new JsonObject();
+        var anyValue = false;
+        foreach (var f in fields)
+        {
+            if (configuration.TryGetPropertyValue(f, out var n)
+                && n?.GetValue<string>() is { } fv
+                && fv != "***" && fv.Length > 0)
+            {
+                payload[f] = fv;
+                anyValue = true;
+            }
+        }
+        if (anyValue)
+        {
+            await secrets.SetAsync(cloudKey,
+                source.SourceType == SourceType.AzureFiles ? payload.ToJsonString() : payload[fields[0]]!.GetValue<string>(), ct);
+            config[HasKeyField] = true;
+        }
+        else
+        {
+            await secrets.RemoveAsync(cloudKey, ct);
+            config[HasKeyField] = false;
         }
     }
 
@@ -510,114 +503,131 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
         if (missingKey is not null)
             return $"Configuration key '{missingKey}' is required for {type}";
 
-        if (type == SourceType.GoogleDrive
-            && !Ingestion.Connectors.GoogleDriveApiClient.TryParseSharedUrl(
-                configuration["sharedUrl"]?.GetValue<string>(), out _, out _))
-            return "Configuration key 'sharedUrl' must be a Google Drive /folders/ or /file/d/ share link";
-
-        if (type == SourceType.McpProxy)
+        return type switch
         {
-            var endpoint = configuration[EndpointField]?.GetValue<string>();
-            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
-                || (uri.Scheme != "http" && uri.Scheme != HttpsScheme))
-                return "Configuration key 'endpoint' must be an absolute http(s) URI for McpProxy";
-            if (configuration["transport"]?.GetValue<string>()?.ToLowerInvariant()
-                    is not (null or "auto" or "http" or "sse"))
-                return "Configuration key 'transport' must be auto|http|sse for McpProxy";
+            SourceType.GoogleDrive => ValidateGoogleDrive(configuration),
+            SourceType.McpProxy => ValidateMcpProxy(configuration),
+            SourceType.RssFeed => ValidateRssFeed(configuration),
+            SourceType.YouTube => ValidateYouTube(configuration),
+            SourceType.RestApi => ValidateRestApi(configuration),
+            SourceType.SqlDatabase => ValidateSqlDatabase(configuration),
+            SourceType.Notion => ValidateNotion(configuration),
+            _ => null
+        };
+    }
+
+    private static string? ValidateGoogleDrive(JsonObject configuration) =>
+        Ingestion.Connectors.GoogleDriveApiClient.TryParseSharedUrl(
+            configuration["sharedUrl"]?.GetValue<string>(), out _, out _)
+            ? null
+            : "Configuration key 'sharedUrl' must be a Google Drive /folders/ or /file/d/ share link";
+
+    private static string? ValidateMcpProxy(JsonObject configuration)
+    {
+        if (RequireHttpUri(configuration, EndpointField, "McpProxy") is { } endpointError)
+            return endpointError;
+        if (configuration["transport"]?.GetValue<string>()?.ToLowerInvariant()
+                is not (null or "auto" or "http" or "sse"))
+            return "Configuration key 'transport' must be auto|http|sse for McpProxy";
+        return null;
+    }
+
+    private static string? ValidateRssFeed(JsonObject configuration) =>
+        RequireHttpUri(configuration, "feedUrl", "RssFeed");
+
+    private static string? ValidateYouTube(JsonObject configuration)
+    {
+        var language = configuration["language"]?.GetValue<string>();
+        if (language is not { Length: > 0 } lang)
+            return null;
+
+        bool valid;
+        try
+        {
+            valid = System.Text.RegularExpressions.Regex.IsMatch(
+                lang, @"^[a-zA-Z-]{2,8}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+                TimeSpan.FromMilliseconds(500));
         }
-
-        if (type == SourceType.RssFeed)
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
         {
-            var feedUrl = configuration["feedUrl"]?.GetValue<string>();
-            if (!Uri.TryCreate(feedUrl, UriKind.Absolute, out var feedUri)
-                || feedUri.Scheme is not ("http" or HttpsScheme))
-                return "Configuration key 'feedUrl' must be an absolute http(s) URI for RssFeed";
+            valid = false;
         }
+        return valid
+            ? null
+            : "Configuration key 'language' must be 2-8 chars of letters and hyphens (e.g. 'pt', 'pt-BR', 'en')";
+    }
 
-        if (type == SourceType.YouTube)
+    private static string? ValidateRestApi(JsonObject configuration)
+    {
+        if (RequireHttpUri(configuration, EndpointField, "RestApi") is { } endpointError)
+            return endpointError;
+
+        if (configuration[HeadersField] is not JsonValue headersValue
+            || !headersValue.TryGetValue<string>(out var headers)
+            || string.IsNullOrWhiteSpace(headers) || headers == "***")
+            return null;
+
+        try
         {
-            var language = configuration["language"]?.GetValue<string>();
-            if (language is { Length: > 0 } lang)
-            {
-                bool valid;
-                try
-                {
-                    valid = System.Text.RegularExpressions.Regex.IsMatch(
-                        lang, @"^[a-zA-Z-]{2,8}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant,
-                        TimeSpan.FromMilliseconds(500));
-                }
-                catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
-                {
-                    valid = false;
-                }
-                if (!valid)
-                    return "Configuration key 'language' must be 2-8 chars of letters and hyphens (e.g. 'pt', 'pt-BR', 'en')";
-            }
+            return JsonNode.Parse(headers) is JsonObject
+                ? null
+                : "Configuration key 'headers' must be a JSON object of header names to values";
         }
-
-        if (type == SourceType.RestApi)
+        catch (Exception ex) when (ex is JsonException or NotSupportedException)
         {
-            var restEndpoint = configuration[EndpointField]?.GetValue<string>();
-            if (!Uri.TryCreate(restEndpoint, UriKind.Absolute, out var restUri)
-                || restUri.Scheme is not ("http" or HttpsScheme))
-                return "Configuration key 'endpoint' must be an absolute http(s) URI for RestApi";
-
-            if (configuration[HeadersField] is JsonValue headersValue
-                && headersValue.TryGetValue<string>(out var headers)
-                && !string.IsNullOrWhiteSpace(headers) && headers != "***")
-            {
-                try
-                {
-                    if (JsonNode.Parse(headers) is not JsonObject)
-                        return "Configuration key 'headers' must be a JSON object of header names to values";
-                }
-                catch (Exception ex) when (ex is JsonException or NotSupportedException)
-                {
-                    return "Configuration key 'headers' must be valid JSON like {\"Authorization\":\"Bearer …\"}";
-                }
-            }
+            return "Configuration key 'headers' must be valid JSON like {\"Authorization\":\"Bearer …\"}";
         }
+    }
 
-        if (type == SourceType.SqlDatabase)
+    private static string? ValidateSqlDatabase(JsonObject configuration)
+    {
+        var provider = configuration["provider"]?.GetValue<string>();
+        if (provider?.ToLowerInvariant() is not ("sqlite" or "postgres"))
+            return "Configuration key 'provider' must be 'sqlite' or 'postgres' for SqlDatabase";
+
+        if (configuration["query"] is JsonValue queryValue
+            && queryValue.TryGetValue<string>(out var sqlQuery)
+            && !string.IsNullOrWhiteSpace(sqlQuery))
         {
-            var provider = configuration["provider"]?.GetValue<string>();
-            if (provider?.ToLowerInvariant() is not ("sqlite" or "postgres"))
-                return "Configuration key 'provider' must be 'sqlite' or 'postgres' for SqlDatabase";
-
-            if (configuration["query"] is JsonValue queryValue
-                && queryValue.TryGetValue<string>(out var sqlQuery)
-                && !string.IsNullOrWhiteSpace(sqlQuery))
-            {
-                var (ok, reason) = Ingestion.Connectors.SqlQueryGuard.Validate(sqlQuery);
-                if (!ok)
-                    return $"Configuration key 'query' rejected (read-only queries only): {reason}";
-            }
-        }
-
-        if (type == SourceType.Notion)
-        {
-            var tokenPresent = configuration[TokenField] is JsonValue tv
-                && tv.TryGetValue<string>(out var _);
-            var hasKey = configuration[HasKeyField] is JsonValue hk
-                && hk.TryGetValue<bool>(out var b) && b;
-            if (!tokenPresent && !hasKey)
-                return "Configuration key 'token' is required for Notion (integration token)";
-
-            var baseUrlNode = configuration["apiBaseUrl"];
-            if (baseUrlNode is not null
-                && (baseUrlNode is not JsonValue bv
-                    || !bv.TryGetValue<string>(out var baseUrl)
-                    || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var bu)
-                    || (bu.Scheme != "http" && bu.Scheme != HttpsScheme)))
-                return "Configuration key 'apiBaseUrl' must be an absolute http(s) URI for Notion";
-
-            var maxPagesNode = configuration["maxPages"];
-            if (maxPagesNode is not null
-                && (maxPagesNode is not JsonValue jv
-                    || !jv.TryGetValue<int>(out var mp) || mp is < 1 or > 1000))
-                return "Configuration key 'maxPages' must be an integer between 1 and 1000 for Notion";
+            var (ok, reason) = Ingestion.Connectors.SqlQueryGuard.Validate(sqlQuery);
+            if (!ok)
+                return $"Configuration key 'query' rejected (read-only queries only): {reason}";
         }
         return null;
+    }
+
+    private static string? ValidateNotion(JsonObject configuration)
+    {
+        var tokenPresent = configuration[TokenField] is JsonValue tv
+            && tv.TryGetValue<string>(out var _);
+        var hasKey = configuration[HasKeyField] is JsonValue hk
+            && hk.TryGetValue<bool>(out var b) && b;
+        if (!tokenPresent && !hasKey)
+            return "Configuration key 'token' is required for Notion (integration token)";
+
+        var baseUrlNode = configuration["apiBaseUrl"];
+        if (baseUrlNode is not null
+            && (baseUrlNode is not JsonValue bv
+                || !bv.TryGetValue<string>(out var baseUrl)
+                || !Uri.TryCreate(baseUrl, UriKind.Absolute, out var bu)
+                || (bu.Scheme != "http" && bu.Scheme != HttpsScheme)))
+            return "Configuration key 'apiBaseUrl' must be an absolute http(s) URI for Notion";
+
+        var maxPagesNode = configuration["maxPages"];
+        if (maxPagesNode is not null
+            && (maxPagesNode is not JsonValue jv
+                || !jv.TryGetValue<int>(out var mp) || mp is < 1 or > 1000))
+            return "Configuration key 'maxPages' must be an integer between 1 and 1000 for Notion";
+        return null;
+    }
+
+    private static string? RequireHttpUri(JsonObject configuration, string key, string typeName)
+    {
+        var raw = configuration[key]?.GetValue<string>();
+        return Uri.TryCreate(raw, UriKind.Absolute, out var uri)
+            && (uri.Scheme == "http" || uri.Scheme == HttpsScheme)
+            ? null
+            : $"Configuration key '{key}' must be an absolute http(s) URI for {typeName}";
     }
 
     private static KnowledgeSourceDto ToDto(KnowledgeSource s) => new()
