@@ -68,12 +68,18 @@ public static class ChunkerSelector
     /// Any failure falls back to the structural chunker for the classified kind —
     /// ingestion never aborts over chunking.
     /// </summary>
+    /// <summary>What to split and how — see <see cref="ChunkAsync"/>.</summary>
+    public sealed record ChunkRequest(
+        string? UriOrPath, string Text, int MaxTokens, int OverlapTokens, string? Strategy = null);
+
     public static async Task<(ChunkKind Kind, IReadOnlyList<ChunkPiece> Pieces)> ChunkAsync(
-        string? uriOrPath, string text, int maxTokens, int overlapTokens,
+        ChunkRequest request,
         Embeddings.IEmbeddingProvider embeddings, IConfiguration configuration,
-        string? strategy, ILogger logger, CancellationToken ct = default,
+        ILogger logger, CancellationToken ct = default,
         IServiceProvider? services = null)
     {
+        var (uriOrPath, text, maxTokens, overlapTokens, strategy) =
+            (request.UriOrPath, request.Text, request.MaxTokens, request.OverlapTokens, request.Strategy);
         var kind = KindFor(uriOrPath);
         var effective = strategy
             ?? configuration.GetValue("Ingestion:Chunking:Strategy", "auto");

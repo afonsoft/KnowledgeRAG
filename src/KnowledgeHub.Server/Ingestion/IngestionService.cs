@@ -19,18 +19,34 @@ namespace KnowledgeHub.Server.Ingestion;
 /// configured path, skips unchanged files by SHA-256, re-chunks + re-embeds changed
 /// files, removes documents whose files disappeared. One sync per source at a time.
 /// </summary>
-public sealed class IngestionService(
-    IServiceScopeFactory scopeFactory,
-    IEmbeddingProvider embeddings,
-    IConfiguration configuration,
-    IEnumerable<Connectors.ISourceConnector> connectors,
-    Microsoft.Extensions.Caching.Distributed.IDistributedCache cache,
-    Security.IContentSanitizer sanitizer,
-    Settings.IGraphSettingsService graphSettings,
-    Settings.IEmbeddingSettingsService embeddingSettings,
-    ILogger<IngestionService> logger,
-    Caching.ICacheInvalidationBus? invalidationBus = null) : IIngestionService
+public sealed class IngestionService : IIngestionService
 {
+    private readonly IServiceScopeFactory scopeFactory;
+    private readonly IEmbeddingProvider embeddings;
+    private readonly IConfiguration configuration;
+    private readonly IEnumerable<Connectors.ISourceConnector> connectors;
+    private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache cache;
+    private readonly Security.IContentSanitizer sanitizer;
+    private readonly Settings.IGraphSettingsService graphSettings;
+    private readonly Settings.IEmbeddingSettingsService embeddingSettings;
+    private readonly ILogger<IngestionService> logger;
+    private readonly Caching.ICacheInvalidationBus? invalidationBus;
+
+    public IngestionService(IngestionServiceDeps deps, IConfiguration configuration,
+        ILogger<IngestionService> logger, Caching.ICacheInvalidationBus? invalidationBus = null)
+    {
+        scopeFactory = deps.ScopeFactory;
+        embeddings = deps.Embeddings;
+        this.configuration = configuration;
+        connectors = deps.Connectors;
+        cache = deps.Cache;
+        sanitizer = deps.Sanitizer;
+        graphSettings = deps.GraphSettings;
+        embeddingSettings = deps.EmbeddingSettings;
+        this.logger = logger;
+        this.invalidationBus = invalidationBus;
+    }
+
     private const string SyncStatusFailed = "failed";
     private const string SyncStatusCompleted = "completed";
 
@@ -113,7 +129,8 @@ public sealed class IngestionService(
                     return new SyncResultDto { Status = "skipped", Reason = skipReason, SourceId = sourceId, DurationMs = stopwatch.Elapsed.TotalMilliseconds };
                 }
 
-                return await SyncViaConnectorAsync(source, connector, db, vectors, scope, stopwatch, options, cancellationToken);
+                return await SyncViaConnectorAsync(new ConnectorSyncContext(
+                    source, connector, db, vectors, scope, stopwatch, options), cancellationToken);
             }
 
             var root = ResolveVaultRoot(source.ConfigurationJson);
@@ -179,10 +196,8 @@ public sealed class IngestionService(
                     var note = MarkdownNoteParser.Parse(content, Path.GetFileName(file));
                     // SPEC-20260923-code-aware-chunking: kind from the file extension.
                     var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
-                        relative,
-                        note.Body,
-                        maxTokens, overlapTokens,
-                        embeddings, configuration, chunkStrategy, logger, cancellationToken, scope.ServiceProvider);
+                        new Chunking.ChunkerSelector.ChunkRequest(relative, note.Body, maxTokens, overlapTokens, chunkStrategy),
+                        embeddings, configuration, logger, cancellationToken, scope.ServiceProvider);
 
                     // RF-201: delete + replace inside a transaction — same
                     // zero-chunks-on-failure fix as the remote path.
@@ -335,16 +350,21 @@ public sealed class IngestionService(
     /// Shared pipeline for non-vault connectors: dedup by content hash, chunk,
     /// embed, remove documents no longer returned by the fetch.
     /// </summary>
+    private sealed record ConnectorSyncContext(
+        KnowledgeSource Source,
+        Connectors.ISourceConnector Connector,
+        KnowledgeHubDbContext Db,
+        IVectorStore Vectors,
+        AsyncServiceScope Scope,
+        Stopwatch Stopwatch,
+        SyncOptions? Options);
+
     private async Task<SyncResultDto> SyncViaConnectorAsync(
-        KnowledgeSource source,
-        Connectors.ISourceConnector connector,
-        KnowledgeHubDbContext db,
-        IVectorStore vectors,
-        AsyncServiceScope scope,
-        Stopwatch stopwatch,
-        SyncOptions? options,
+        ConnectorSyncContext ctx,
         CancellationToken cancellationToken)
     {
+        var (source, connector, db, vectors, scope, stopwatch, options) =
+            (ctx.Source, ctx.Connector, ctx.Db, ctx.Vectors, ctx.Scope, ctx.Stopwatch, ctx.Options);
         // SPEC-20260919-notion-connector RF-007: load existing hashes before the
         // fetch — incremental connectors use the UriReference→ContentHash map to
         // skip re-fetching unchanged remote items (Notion last_edited_time).
@@ -470,10 +490,8 @@ public sealed class IngestionService(
                         // AddRange via DbSet — see vault path above; nav reassignment after
                         // RemoveRange produces a bogus UPDATE inside the same SaveChanges batch.
                         var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
-                            raw.UriReference,
-                            text,
-                            maxTokens, overlapTokens,
-                            embeddings, configuration, chunkStrategy, logger, cancellationToken, scope.ServiceProvider);
+                            new Chunking.ChunkerSelector.ChunkRequest(raw.UriReference, text, maxTokens, overlapTokens, chunkStrategy),
+                            embeddings, configuration, logger, cancellationToken, scope.ServiceProvider);
                         newChunks = pieces
                             .Select((piece, i) => new DocumentChunk
                             {
@@ -932,13 +950,9 @@ public sealed class IngestionService(
 
             var (chunkMaxTokens, chunkOverlapTokens) = embeddingSettings.GetChunking();
             var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
-                relativePath,
-                body,
-                chunkMaxTokens,
-                chunkOverlapTokens,
-                embeddings, configuration,
-                Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson),
-                logger, cancellationToken, scope.ServiceProvider);
+                new Chunking.ChunkerSelector.ChunkRequest(relativePath, body, chunkMaxTokens,
+                    chunkOverlapTokens, Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson)),
+                embeddings, configuration, logger, cancellationToken, scope.ServiceProvider);
 
             if (doc is null)
             {

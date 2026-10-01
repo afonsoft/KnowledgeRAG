@@ -11,16 +11,33 @@ using Microsoft.EntityFrameworkCore;
 namespace KnowledgeHub.Server.Services;
 
 /// <summary>CRUD + validation + secret redaction for knowledge sources (SPEC-02 RF-001/RF-002).</summary>
-public sealed class KnowledgeSourceService(
-    KnowledgeHubDbContext db,
-    IToolCatalogChangeNotifier catalogNotifier,
-    IIntegrationSecretStore secrets,
-    Ingestion.Staging.IStagingStorageService? staging = null,
-    VectorStore.IVectorStore? vectors = null,
-    ILogger<KnowledgeSourceService>? log = null,
-    Microsoft.Extensions.Caching.Distributed.IDistributedCache? cache = null,
-    Caching.ICacheInvalidationBus? invalidationBus = null) : IKnowledgeSourceService
+public sealed class KnowledgeSourceService : IKnowledgeSourceService
 {
+    private readonly KnowledgeHubDbContext db;
+    private readonly IToolCatalogChangeNotifier catalogNotifier;
+    private readonly IIntegrationSecretStore secrets;
+    private readonly Ingestion.Staging.IStagingStorageService? staging;
+    private readonly VectorStore.IVectorStore? vectors;
+    private readonly ILogger<KnowledgeSourceService>? log;
+    private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache? cache;
+    private readonly Caching.ICacheInvalidationBus? invalidationBus;
+
+    public KnowledgeSourceService(
+        KnowledgeHubDbContext db,
+        IToolCatalogChangeNotifier catalogNotifier,
+        IIntegrationSecretStore secrets,
+        KnowledgeSourceServiceExtras? extras = null)
+    {
+        this.db = db;
+        this.catalogNotifier = catalogNotifier;
+        this.secrets = secrets;
+        staging = extras?.Staging;
+        vectors = extras?.Vectors;
+        log = extras?.Log;
+        cache = extras?.Cache;
+        invalidationBus = extras?.InvalidationBus;
+    }
+
     private const string TokenField = "token";
     private const string ConnectionStringField = "connectionString";
     private const string ApiKeyField = "apiKey";

@@ -105,10 +105,7 @@ public sealed class TelemetryTests
         var cache = new MemoryDistributedCache(
             Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
         var emb = new StubEmbeddings();
-        var search = new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
-            new StubVectorStore(new VectorHit(chunk.Id, 0.9)), new DisabledLexical(), cache,
-            new ConfigurationBuilder().Build(), new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled, NullLogger<SearchService>.Instance);
+        var search = new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb), new StubVectorStore(new VectorHit(chunk.Id, 0.9)), new DisabledLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled), new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
 
         var samples = CollectMetrics(() =>
         {
@@ -249,10 +246,7 @@ public sealed class TelemetryTests
         var cache = new MemoryDistributedCache(
             Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
         var emb = new StubEmbeddings();
-        var search = new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
-            new StubVectorStore(new VectorHit(chunk.Id, 0.9)), new DisabledLexical(), cache,
-            new ConfigurationBuilder().Build(), new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled, NullLogger<SearchService>.Instance);
+        var search = new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb), new StubVectorStore(new VectorHit(chunk.Id, 0.9)), new DisabledLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), Search.FakeGraphSettings.Enabled), new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
 
         var samples = CollectMetrics(() =>
             search.SearchAsync("sensitive user query", 5, mode: SearchMode.Semantic)
