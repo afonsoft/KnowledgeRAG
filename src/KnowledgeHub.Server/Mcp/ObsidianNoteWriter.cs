@@ -88,15 +88,56 @@ public static class ObsidianNoteWriter
         return name.Length == 0 ? "untitled" : name;
     }
 
-    /// <summary>Build note content with YAML frontmatter when tags are provided.</summary>
-    public static string WithFrontmatter(string content, string[]? tags)
+    /// <summary>Build note content with YAML frontmatter when tags are provided.
+    /// SPEC-20261001-a2a-task-durability RF-004: an <c>origin</c> block records
+    /// who wrote the document (channel, api-key id, optional caller agent).</summary>
+    public static string WithFrontmatter(string content, string[]? tags, WriteOriginContext? origin = null)
     {
-        if (tags is not { Length: > 0 })
+        if (tags is not { Length: > 0 } && origin is null)
             return content;
-        var fm = new StringBuilder("---\ntags:");
-        foreach (var tag in tags)
-            fm.Append("\n  - ").Append(tag.Replace('"', ' ').Trim());
-        fm.Append("\n---\n\n");
+        var fm = new StringBuilder("---\n");
+        if (tags is { Length: > 0 })
+        {
+            fm.Append("tags:");
+            foreach (var tag in tags)
+                fm.Append("\n  - ").Append(tag.Replace('"', ' ').Trim());
+            fm.Append('\n');
+        }
+        if (origin is not null)
+        {
+            fm.Append("origin:")
+                .Append("\n  channel: ").Append(YamlString(origin.Channel))
+                .Append("\n  at: ").Append(YamlString(DateTimeOffset.UtcNow.ToString("O")));
+            if (origin.KeyId is { } keyId)
+                fm.Append("\n  keyId: ").Append(YamlString(keyId));
+            if (origin.AgentName is { } agent)
+                fm.Append("\n  agentName: ").Append(YamlString(agent));
+            fm.Append('\n');
+        }
+        fm.Append("---\n\n");
         return fm + content;
     }
+
+    /// <summary>SPEC-20261001-a2a-task-durability RF-004: resolves the ambient
+    /// <see cref="WriteOriginContext"/> for write tools — defaults to
+    /// channel <c>mcp</c>; backfills the key id from the caller's
+    /// authenticated principal when the transport didn't set one.</summary>
+    public static WriteOriginContext? ResolveOrigin(IServiceProvider services)
+    {
+        var origin = services.GetService<WriteOriginContext>();
+        if (origin is null)
+            return null;
+        if (origin.KeyId is null)
+        {
+            origin.KeyId = services.GetService<IHttpContextAccessor>()
+                ?.HttpContext?.User
+                .FindFirst(Auth.ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
+        }
+        return origin;
+    }
+
+    /// <summary>YAML double-quoted scalar — escapes backslashes and quotes so
+    /// caller-controlled values can't break the frontmatter block.</summary>
+    private static string YamlString(string value) =>
+        $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
 }

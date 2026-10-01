@@ -40,6 +40,8 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<AssistantSettings> AssistantSettings => Set<AssistantSettings>();
     /// <summary>SPEC-20260926-mcp-sdk-alignment RF-004: durable MCP task handles.</summary>
     public DbSet<McpTask> McpTasks => Set<McpTask>();
+    /// <summary>SPEC-20261001-a2a-task-durability RF-001: durable A2A tasks.</summary>
+    public DbSet<A2aTask> A2aTasks => Set<A2aTask>();
     /// <summary>SPEC-20260927-rag-evaluation-triad-metrics: persisted triad scores.</summary>
     public DbSet<RagEvaluationEntity> RagEvaluations => Set<RagEvaluationEntity>();
     // SPEC-20260927-cryptographic-evidence-provenance-chain: append-only
@@ -321,6 +323,18 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.Property(t => t.Status).IsRequired().HasMaxLength(24);
             e.Property(t => t.StatusMessage).HasMaxLength(500);
             e.HasIndex(t => t.Status);
+        });
+
+        modelBuilder.Entity<A2aTask>(e =>
+        {
+            e.HasKey(t => t.TaskId);
+            e.Property(t => t.TaskId).HasMaxLength(80);
+            e.Property(t => t.ContextId).IsRequired().HasMaxLength(80);
+            e.Property(t => t.State).IsRequired().HasMaxLength(24);
+            e.Property(t => t.CallerKeyId).HasMaxLength(80);
+            e.HasIndex(t => t.ContextId);
+            e.HasIndex(t => t.State);
+            e.HasIndex(t => t.LastUpdatedAt);
         });
 
         modelBuilder.Entity<RagEvaluationEntity>(e =>

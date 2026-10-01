@@ -129,6 +129,17 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
         request.Headers.Authorization = null;
     }
 
+    /// <summary>SPEC-20261001-a2a-task-durability RF-003: validates a URL
+    /// against the same egress rules without sending a request — used to
+    /// screen A2A push webhook URLs at registration time.</summary>
+    public static async Task<bool> IsBlockedAsync(
+        Uri uri, bool allowPrivateNetworks, CancellationToken cancellationToken = default)
+    {
+        if (uri.Scheme is not ("http" or "https"))
+            return true;
+        return await IsBlockedHostAsync(uri.Host, allowPrivateNetworks, cancellationToken);
+    }
+
     private static async Task<bool> IsBlockedHostAsync(
         string host, bool allowPrivate, CancellationToken ct)
     {

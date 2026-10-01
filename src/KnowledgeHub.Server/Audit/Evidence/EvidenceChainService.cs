@@ -118,6 +118,10 @@ public sealed class EvidenceChainService(
         // the export read and this check can't invalidate the reported set.
         EvidenceChainVerifier.Verify(receipts, await LoadOrCreateKeyAsync(ct));
 
+    /// <inheritdoc/>
+    public async Task<string> SignPayloadAsync(string payload, CancellationToken ct) =>
+        $"hmac-sha256:{await SignAsync(payload, ct)}";
+
     /// <summary>Canonical digest over the signed fields (signature excluded).</summary>
     public static string ComputeDigest(EvidenceReceipt r)
     {
