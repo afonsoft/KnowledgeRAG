@@ -18,8 +18,11 @@ public class McpRecallErgonomicsTests : IClassFixture<McpRecallErgonomicsTests.F
     /// <summary>Host with a stub IChatClient — ask_knowledge can synthesize.</summary>
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-ergo-{Guid.NewGuid():N}.db");
-        public string Vault { get; } = Path.Combine(Path.GetTempPath(), $"vault-ergo-{Guid.NewGuid():N}");
+        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), DbFileName());
+        public string Vault { get; } = Path.Combine(Path.GetTempPath(), VaultDirName());
+
+        private static string DbFileName() => $"kh-ergo-{Guid.NewGuid():N}.db";
+        private static string VaultDirName() => $"vault-ergo-{Guid.NewGuid():N}";
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -33,7 +36,10 @@ public class McpRecallErgonomicsTests : IClassFixture<McpRecallErgonomicsTests.F
                     Enumerable.Range(0, 110).Select(j => $"doc{i}term{j}")));
             var i2 = 0;
             foreach (var body in bodies)
-                File.WriteAllText(Path.Combine(Vault, $"ergo{i2++}.md"), $"# Ergo{i2}\n\n{body}");
+            {
+                var note = $"ergo{i2++}.md";
+                File.WriteAllText(Path.Combine(Vault, note), $"# Ergo{i2}\n\n{body}");
+            }
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {

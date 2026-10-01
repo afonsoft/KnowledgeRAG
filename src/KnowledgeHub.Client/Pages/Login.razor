@@ -169,12 +169,16 @@
             }
 
             AuthState.SetUser(new MeResponse(result.Value.Username, result.Value.MustChangePassword));
-            // ReturnUrl vem da query string — sanitize para path relativo
-            // ("/" + "//evil.com" seria redirect scheme-relative).
+            // ReturnUrl vem da query string — sanitize para path local:
+            // sem scheme ("javascript:") e sem '%' (que o browser decodifica
+            // para '/', reconstruindo "//evil.com" após o TrimStart).
             var returnPath = ReturnUrl?.Replace('\\', '/').TrimStart('/');
+            if (returnPath is not null
+                && (returnPath.Contains(':') || returnPath.Contains('%')))
+                returnPath = null;
             Nav.NavigateTo(result.Value.MustChangePassword
-                ? "/change-password"
-                : "/" + (returnPath ?? ""));
+                ? "change-password"
+                : returnPath ?? "");
         }
         finally
         {

@@ -171,10 +171,12 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
                     AgentMessage($"working — {skill} ({sw.Elapsed.TotalSeconds:F0}s)", contextId), ct);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            // task canceled upstream — close quietly
+            logger?.LogTrace(ex, "a2a progress heartbeat canceled");
         }
+        // codeql[cs/catch-of-all-exceptions] background heartbeat — must not
+        // take the agent turn down; logged at Debug.
         catch (Exception ex)
         {
             logger?.LogDebug(ex, "a2a progress heartbeat stopped");

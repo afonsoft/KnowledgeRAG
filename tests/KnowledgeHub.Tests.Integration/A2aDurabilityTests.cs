@@ -215,7 +215,8 @@ public class A2aDurabilityTests
                 try
                 {
                     var ctx = await listener.GetContextAsync();
-                    var body = await new StreamReader(ctx.Request.InputStream).ReadToEndAsync();
+                    using var reader = new StreamReader(ctx.Request.InputStream);
+                    var body = await reader.ReadToEndAsync();
                     received.Writer.TryWrite((
                         ctx.Request.Url!.AbsolutePath,
                         ctx.Request.Headers["X-KH-Signature"],
@@ -225,6 +226,8 @@ public class A2aDurabilityTests
                         ctx.Request.Url.AbsolutePath == "/fail" ? 500 : 200;
                     ctx.Response.Close();
                 }
+                // Stop() races the accept loop — listener-down errors are
+                // the expected shutdown path.
                 catch (Exception) when (!listener.IsListening) { }
                 catch (HttpListenerException) { }
             }
@@ -247,8 +250,8 @@ public class A2aDurabilityTests
             Assert.False(created.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object,
                 $"push config create failed: {created.GetRawText()}");
 
-            var hit = await received.Reader.ReadAsync(
-                new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var hit = await received.Reader.ReadAsync(timeout.Token);
             Assert.Equal("/ok", hit.Path);
             Assert.Equal("tok-1", hit.Token);
             Assert.Contains(taskId, hit.Body);
@@ -297,7 +300,8 @@ public class A2aDurabilityTests
         finally
         {
             listener.Stop();
-            try { await loop; } catch { /* listener stopped */ }
+            try { await loop; }
+            catch (Exception) when (!listener.IsListening) { /* stopped */ }
         }
     }
 
