@@ -28,8 +28,8 @@ public static class ChainAstParser
     /// <summary>Mutable parser state shared by the per-role handlers.</summary>
     private sealed class ParserState
     {
-        public ChainAst Ast = new();
-        public List<ChatMessage> Orphans = [];
+        public readonly ChainAst Ast = new();
+        public readonly List<ChatMessage> Orphans = [];
         public ChainSection? Section;
         public BodyPair? Open;
 

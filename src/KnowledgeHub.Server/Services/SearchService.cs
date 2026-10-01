@@ -294,10 +294,7 @@ public sealed class SearchService(
         // SPEC-20261001-mcp-recall-ergonomics RF-004: explicit temporal window
         // boosts in-window hits before the elbow sees the scores (boost, not
         // filter — paridade com o hindsight recall temporal_window).
-        var tStart = filter?.TemporalStart;
-        var tEnd = filter?.TemporalEnd;
-        if (tStart is not null || tEnd is not null)
-            final = ApplyTemporalBoost(final, tStart, tEnd);
+        final = ApplyTemporalBoost(final, filter?.TemporalStart, filter?.TemporalEnd);
 
         var limitMode = filter?.EffectiveLimitMode(configuration)
             ?? configuration.GetValue("Search:LimitMode", "fixed");
@@ -345,6 +342,8 @@ public sealed class SearchService(
     /// score axis downstream readers see — <see cref="SearchResultItem.Score"/>,
     /// fused and rerank breakdown — so the autocut elbow and the final floor
     /// read the same boosted curve that ordered the list.</summary>
+    /// <remarks>The null-window early return lives here (not at the caller)
+    /// so the helper is safe to call unconditionally.</remarks>
     private static List<SearchResultItem> ApplyTemporalBoost(
         IReadOnlyList<SearchResultItem> items, DateTimeOffset? start, DateTimeOffset? end)
     {

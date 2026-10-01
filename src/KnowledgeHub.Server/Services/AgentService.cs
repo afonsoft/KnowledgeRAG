@@ -524,6 +524,8 @@ public sealed class AgentService(
         {
             await report(message, ct);
         }
+        // codeql[cs/catch-of-all-exceptions] caller-supplied progress
+        // callback — its failure must not abort the agent loop.
         catch (Exception ex)
         {
             logger.LogDebug(ex, "agent progress callback failed — continuing");
