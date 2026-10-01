@@ -17,6 +17,10 @@ public sealed record SearchScoreBreakdown
     public int? VectorRank { get; init; }
     public int? LexicalRank { get; init; }
     public double Fused { get; init; }
+    /// <summary>Fused normalized to 0–1 where 1.0 = ranked #1 on every fused
+    /// arm (denominator = numArms/(K+1)). Scale used by `MinScores.Final`.
+    /// 0 when no fused ranking produced the hit.</summary>
+    public double Normalized { get; init; }
     /// <summary>Reranker score (0–10) when Search:Rerank:Enabled
     /// (SPEC-20260923-retrieval-quality RF-002).</summary>
     public double? Rerank { get; init; }
@@ -86,7 +90,9 @@ public sealed record SearchFilter
 /// <summary>RF-003: per-stage score floors (SPEC-20261001-mcp-recall-ergonomics).
 /// `semantic` prunes the vector arm (cosine 0–1) pre-fusion; `lexical` prunes
 /// the FTS arm as a fraction of that arm's best BM25 (0–1); `final` filters
-/// post-fusion — an empty result makes ask_knowledge abstain.</summary>
+/// post-fusion against the normalized fused score (0–1, see
+/// <see cref="SearchScoreBreakdown.Normalized"/>) — an empty result makes
+/// ask_knowledge abstain.</summary>
 public sealed record SearchMinScores
 {
     public double? Semantic { get; init; }
