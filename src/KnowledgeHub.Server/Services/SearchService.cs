@@ -35,6 +35,19 @@ public sealed class SearchService(
     Settings.IGraphSettingsService graphSettings,
     ILogger<SearchService> logger) : ISearchService
 {
+    /// <summary>Grouped-dependency convenience ctor (S107): the retrieval and
+    /// pipeline param objects in <c>SearchServiceDeps.cs</c> unpack to the
+    /// primary ctor.</summary>
+    public SearchService(SearchRetrievalDeps retrieval, SearchPipelineDeps pipeline,
+        IConfiguration configuration, ILogger<SearchService> logger)
+        : this(retrieval.Db, retrieval.Embeddings, retrieval.EmbeddingsResolver,
+            retrieval.Vectors, retrieval.Lexical, retrieval.Cache,
+            configuration, pipeline.Rewriter, pipeline.Expander,
+            pipeline.GraphLinker, pipeline.Reranker, pipeline.CallerScope,
+            pipeline.GraphSettings, logger)
+    {
+    }
+
     private const int CandidateWindowFactor = 4;
     // TTLs: region policy (emb:/search: prefixes) — SPEC-20260925-cache-region-ttl-policies.
 
