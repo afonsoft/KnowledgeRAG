@@ -3,6 +3,7 @@
 | Campo | Valor |
 |-------|-------|
 | Status | Approved |
+| Ticket | Epic [#451 (E23)](https://github.com/afonsoft/LangGraph-UI/issues/451) — slices #453–#462 (RF-01..RF-10) |
 | Origem | Skill sonarqube-autofix (sessão 2026-10-01) |
 | Pré-requisito | nenhum — aplicável em fatias independentes |
 
