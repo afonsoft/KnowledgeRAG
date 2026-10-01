@@ -256,18 +256,9 @@ public sealed class ReviewBacklogTests
             sc.AddDbContext<KnowledgeHubDbContext>(b => b.UseSqlite(conn.ConnectionString));
             var sp = sc.BuildServiceProvider();
 
-            var ingestion = new IngestionService(
-                sp.GetRequiredService<IServiceScopeFactory>(),
-                new FakeEmbedder(),
-                new ConfigurationBuilder().Build(),
-                connectors: [],
-                new FakeDistCache(),
-                new NoopSanitizer(),
-                new FakeGraphSettings(),
-                // RF-207 in action: MaxTokens=0 now throws inside the chunker —
-                // and RF-201's transaction must preserve the old chunks.
-                new ChunkingSettings(0, 0),
-                NullLogger<IngestionService>.Instance);
+            var ingestion = new IngestionService(new IngestionServiceDeps(sp.GetRequiredService<IServiceScopeFactory>(), new FakeEmbedder(), [], new FakeDistCache(), new NoopSanitizer(), new FakeGraphSettings(), // RF-207 in action: MaxTokens=0 now throws inside the chunker —
+                                                                                                                                                                                                                    // and RF-201's transaction must preserve the old chunks.
+                new ChunkingSettings(0, 0)), new ConfigurationBuilder().Build(), NullLogger<IngestionService>.Instance);
 
             var srcId = await db_src(opts);
             await ingestion.SyncAsync(srcId, new SyncOptions { ForceReindex = true });

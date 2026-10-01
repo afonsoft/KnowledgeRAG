@@ -19,22 +19,42 @@ namespace KnowledgeHub.Server.Services;
 /// sets are cached in <see cref="IDistributedCache"/> — result keys embed the
 /// index-version token so any sync invalidates them.
 /// </summary>
-public sealed class SearchService(
-    KnowledgeHubDbContext db,
-    IEmbeddingProvider embeddings,
-    IEmbeddingProviderResolver embeddingsResolver,
-    IVectorStore vectors,
-    ILexicalSearchService lexical,
-    IDistributedCache cache,
-    IConfiguration configuration,
-    IQueryRewriter rewriter,
-    IQueryExpander expander,
-    Graph.GraphEntityLinker graphLinker,
-    IReranker reranker,
-    Auth.ICallerScopeProvider callerScope,
-    Settings.IGraphSettingsService graphSettings,
-    ILogger<SearchService> logger) : ISearchService
+public sealed class SearchService : ISearchService
 {
+    private readonly KnowledgeHubDbContext db;
+    private readonly IEmbeddingProvider embeddings;
+    private readonly IEmbeddingProviderResolver embeddingsResolver;
+    private readonly IVectorStore vectors;
+    private readonly ILexicalSearchService lexical;
+    private readonly IDistributedCache cache;
+    private readonly IConfiguration configuration;
+    private readonly IQueryRewriter rewriter;
+    private readonly IQueryExpander expander;
+    private readonly Graph.GraphEntityLinker graphLinker;
+    private readonly IReranker reranker;
+    private readonly Auth.ICallerScopeProvider callerScope;
+    private readonly Settings.IGraphSettingsService graphSettings;
+    private readonly ILogger<SearchService> logger;
+
+    public SearchService(SearchRetrievalDeps retrieval, SearchPipelineDeps pipeline,
+        IConfiguration configuration, ILogger<SearchService> logger)
+    {
+        db = retrieval.Db;
+        embeddings = retrieval.Embeddings;
+        embeddingsResolver = retrieval.EmbeddingsResolver;
+        vectors = retrieval.Vectors;
+        lexical = retrieval.Lexical;
+        cache = retrieval.Cache;
+        this.configuration = configuration;
+        rewriter = pipeline.Rewriter;
+        expander = pipeline.Expander;
+        graphLinker = pipeline.GraphLinker;
+        reranker = pipeline.Reranker;
+        callerScope = pipeline.CallerScope;
+        graphSettings = pipeline.GraphSettings;
+        this.logger = logger;
+    }
+
     private const int CandidateWindowFactor = 4;
     // TTLs: region policy (emb:/search: prefixes) — SPEC-20260925-cache-region-ttl-policies.
 
@@ -82,7 +102,7 @@ public sealed class SearchService(
             }
 
             var degraded = new DegradationState();
-            var results = await ExecuteAsync(query, topK, sourceId, mode, filter, scope, conversationContext, degraded, ct);
+            var results = await ExecuteAsync(new SearchInvocation(query, topK, sourceId, mode, filter, scope, conversationContext, degraded), ct);
             // RF-005: a result produced while a search arm was degraded is
             // served but never cached — a transient vector-store outage must
             // not poison the result cache for the normal TTL.
@@ -103,12 +123,17 @@ public sealed class SearchService(
         }
     }
 
+    private sealed record SearchInvocation(
+        string Query, int TopK, Guid? SourceId, SearchMode Mode,
+        ResolvedSearchFilter? Filter, Auth.CallerScope Scope,
+        string? ConversationContext, DegradationState Degraded, int RelaxLevel = 0);
+
     private async Task<IReadOnlyList<SearchResultItem>> ExecuteAsync(
-        string query, int topK, Guid? sourceId,
-        SearchMode mode, ResolvedSearchFilter? filter,
-        Auth.CallerScope scope, string? conversationContext,
-        DegradationState degraded, CancellationToken ct, int relaxLevel = 0)
+        SearchInvocation inv, CancellationToken ct)
     {
+        var (query, topK, sourceId, mode, filter, scope, conversationContext, degraded, relaxLevel) =
+            (inv.Query, inv.TopK, inv.SourceId, inv.Mode, inv.Filter, inv.Scope,
+             inv.ConversationContext, inv.Degraded, inv.RelaxLevel);
         var activeSourceIds = sourceId is null
             ? await db.Sources.Where(s => s.IsActive).Select(s => s.Id).ToListAsync(ct)
             : [sourceId.Value];
@@ -414,8 +439,8 @@ public sealed class SearchService(
             curSourceId = next.Value.SourceId;
             curFilter = next.Value.Filter;
 
-            var hits = await ExecuteAsync(query, topK, curSourceId, mode, curFilter,
-                scope, conversationContext, degraded, ct, relaxLevel: level);
+            var hits = await ExecuteAsync(new SearchInvocation(query, topK, curSourceId, mode, curFilter,
+                scope, conversationContext, degraded, RelaxLevel: level), ct);
             var penalty = Math.Pow(RelaxationPenalty, level);
             var added = 0;
             foreach (var h in hits)
@@ -991,7 +1016,7 @@ public sealed class SearchService(
                     throw;
                 }
             },
-            EmbeddingVectorCodec.ToBytes, EmbeddingVectorCodec.FromBytes,
+            new SafeCache.CacheCodec<float[]>(EmbeddingVectorCodec.ToBytes, EmbeddingVectorCodec.FromBytes),
             ttl: null, logger, ct);
         return vector!; // factory never returns null (provider throws instead)
     }

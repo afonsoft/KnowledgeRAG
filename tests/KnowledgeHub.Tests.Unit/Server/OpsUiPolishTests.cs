@@ -182,13 +182,11 @@ public sealed class OpsUiPolishTests
         var runner = new EvalRunner(new SlowSearch(), services, db,
             NullLogger<EvalRunner>.Instance);
 
-        var report = await runner.RunAsync(
-            [new EvalCase
+        var report = await runner.RunAsync([new EvalCase
             {
                 Id = "c1", Question = "q",
                 ExpectedTextMarkers = ["a"] // triggers the (slow) faith path
-            }],
-            "[{\"id\":\"c1\"}]", null, null, "keyword", null);
+            }], "[{\"id\":\"c1\"}]", new EvalRunner.EvalRunOptions(Faithfulness: "keyword"));
 
         var result = Assert.Single(report.Results);
         Assert.NotNull(result.LatencyMs);

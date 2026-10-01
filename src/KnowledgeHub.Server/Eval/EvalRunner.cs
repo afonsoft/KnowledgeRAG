@@ -27,22 +27,29 @@ public sealed class EvalRunner(
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private const int DefaultTopK = 10;
 
+    /// <summary>Run knobs for <see cref="RunAsync"/> — all optional; omitted
+    /// fields fall back to eval defaults or the case's own values.</summary>
+    public sealed record EvalRunOptions(
+        string? Mode = null, int? TopK = null, string? Faithfulness = null,
+        Guid? CompareTo = null, string? BaselineName = null,
+        IReadOnlyList<EvalGateRule>? Gate = null);
+
     public async Task<EvalReport> RunAsync(
         IReadOnlyList<EvalCase> cases, string datasetJson,
-        string? mode, int? topK, string? faithfulness, Guid? compareTo,
-        string? baselineName = null, IReadOnlyList<EvalGateRule>? gate = null,
-        CancellationToken ct = default)
+        EvalRunOptions? options = null, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
         var startedAt = DateTimeOffset.UtcNow;
-        var defaultMode = ParseMode(mode) ?? SearchMode.Hybrid;
-        var defaultK = topK is > 0 ? topK.Value : DefaultTopK;
-        var faith = faithfulness?.ToLowerInvariant() ?? "none";
+        var defaultMode = ParseMode(options?.Mode) ?? SearchMode.Hybrid;
+        var defaultK = options?.TopK is > 0 ? options.TopK.Value : DefaultTopK;
+        var faith = options?.Faithfulness?.ToLowerInvariant() ?? "none";
 
         var datasetHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(datasetJson)));
 
         // SPEC-20260924-eval-regression-gate RF-001: named baseline resolves to
         // its run id — and pins the dataset fingerprint.
+        var baselineName = options?.BaselineName;
+        var compareTo = options?.CompareTo;
         if (baselineName is { } bn)
         {
             var baseline = await db.EvalBaselines.AsNoTracking()
@@ -114,7 +121,7 @@ public sealed class EvalRunner(
 
         // RF-001: gate evaluation on the computed metrics.
         EvalGateResult? gateResult = null;
-        if (gate is { Count: > 0 })
+        if (options?.Gate is { Count: > 0 } gate)
             gateResult = EvaluateGate(gate, metrics, latency, report.DurationMs, baselineName);
 
         db.EvalRuns.Add(new EvalRun

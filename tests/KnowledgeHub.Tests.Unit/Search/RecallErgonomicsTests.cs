@@ -172,13 +172,7 @@ public sealed class RecallErgonomicsTests
         var cache = new MemoryDistributedCache(
             Microsoft.Extensions.Options.Options.Create(new MemoryDistributedCacheOptions()));
         var emb = new StubEmbeddings();
-        return new SearchService(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb),
-            vectors, lexical ?? new DisabledLexical(), cache,
-            config ?? new ConfigurationBuilder().Build(), new PassthroughRewriter(),
-            expander ?? NoOpExpander.Instance,
-            new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance),
-            NoOpReranker.Instance, new UnrestrictedScope(), FakeGraphSettings.Disabled,
-            NullLogger<SearchService>.Instance);
+        return new SearchService(new KnowledgeHub.Server.Services.SearchRetrievalDeps(db, emb, new Fakes.FixedEmbeddingProviderResolver(emb), vectors, lexical ?? new DisabledLexical(), cache), new KnowledgeHub.Server.Services.SearchPipelineDeps(new PassthroughRewriter(), expander ?? NoOpExpander.Instance, new GraphEntityLinker(db, NullLogger<GraphEntityLinker>.Instance), NoOpReranker.Instance, new UnrestrictedScope(), FakeGraphSettings.Disabled), config ?? new ConfigurationBuilder().Build(), NullLogger<SearchService>.Instance);
     }
 
     [Fact]

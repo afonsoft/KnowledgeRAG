@@ -284,14 +284,15 @@ public sealed class ConnectorIntegrityTests : IDisposable
 
     private IngestionService NewIngestion(ISourceConnector connector, FakeSanitizer? sanitizer = null,
         IDistributedCache? cache = null, FakeBus? bus = null) =>
-        new(_sp.GetRequiredService<IServiceScopeFactory>(),
+        new(new IngestionServiceDeps(
+            _sp.GetRequiredService<IServiceScopeFactory>(),
             new FakeEmbeddings(),
-            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build(),
             [connector],
             cache ?? new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())),
             sanitizer ?? new FakeSanitizer(),
             new FakeGraphSettings(),
-            new FakeEmbeddingSettings(),
+            new FakeEmbeddingSettings()),
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build(),
             NullLogger<IngestionService>.Instance,
             bus);
 
@@ -316,17 +317,17 @@ public sealed class ConnectorIntegrityTests : IDisposable
 
     private static KnowledgeDocument MakeDoc(Guid sourceId, string uri, string content,
         string hash, string chunkerConfigHash = "x") => new()
-    {
-        Id = Guid.NewGuid(),
-        KnowledgeSourceId = sourceId,
-        Title = "t",
-        UriReference = uri,
-        RawContent = content,
-        ContentHash = hash,
-        ChunkerVersion = ServerChunking.ChunkerSelector.CurrentVersion,
-        ChunkerConfigHash = chunkerConfigHash,
-        IndexedAt = DateTimeOffset.UtcNow
-    };
+        {
+            Id = Guid.NewGuid(),
+            KnowledgeSourceId = sourceId,
+            Title = "t",
+            UriReference = uri,
+            RawContent = content,
+            ContentHash = hash,
+            ChunkerVersion = ServerChunking.ChunkerSelector.CurrentVersion,
+            ChunkerConfigHash = chunkerConfigHash,
+            IndexedAt = DateTimeOffset.UtcNow
+        };
 
     private async Task SeedDocAsync(Guid sourceId, string uri, string content, string hash)
     {
@@ -554,8 +555,7 @@ public sealed class ConnectorIntegrityTests : IDisposable
         var vectors = new StubVectorStore();
         var cache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
         var bus = new FakeBus();
-        var svc = new KnowledgeHub.Server.Services.KnowledgeSourceService(
-            db, new FakeNotifier(), new FakeSecrets(), null, vectors, null, cache, bus);
+        var svc = new KnowledgeHub.Server.Services.KnowledgeSourceService(db, new FakeNotifier(), new FakeSecrets(), new KnowledgeHub.Server.Services.KnowledgeSourceServiceExtras(null, vectors, null, cache, bus));
 
         var result = await svc.DeleteAsync(source.Id);
 

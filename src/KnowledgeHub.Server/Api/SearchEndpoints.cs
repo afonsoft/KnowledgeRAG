@@ -7,6 +7,25 @@ namespace KnowledgeHub.Server.Api;
 /// <summary>Unified semantic search endpoint (SPEC-02 RF-004).</summary>
 public static class SearchEndpoints
 {
+    /// <summary>Flat query-string contract for GET /api/search — grouped via
+    /// [AsParameters] to keep the handler under the 7-parameter guideline (S107).</summary>
+    public sealed class SearchQueryParams
+    {
+        public string? Query { get; init; }
+        public int? TopK { get; init; }
+        public Guid? SourceId { get; init; }
+        public string? Mode { get; init; }
+        public string? SourceType { get; init; }
+        public string? PathPrefix { get; init; }
+        public string? IndexedAfter { get; init; }
+        public string? Language { get; init; }
+        public int? WindowSize { get; init; }
+        public string? LimitMode { get; init; }
+        public int? AutocutSensitivity { get; init; }
+        public string[]? SubQueries { get; init; }
+        public bool? AllowRelaxation { get; init; }
+    }
+
     public const int DefaultTopK = 5;
     public const int MaxTopK = 50;
 
@@ -15,17 +34,15 @@ public static class SearchEndpoints
         var group = app.MapGroup("/api/search");
 
         group.MapGet("/", async (
-            ISearchService svc, IConfiguration config, string? query, int? topK, Guid? sourceId,
-            string? mode, string? sourceType, string? pathPrefix, string? indexedAfter,
-            string? language, int? windowSize, string? limitMode, int? autocutSensitivity,
-            string[]? subQueries, bool? allowRelaxation,
+            ISearchService svc, IConfiguration config,
+            [AsParameters] SearchQueryParams q,
             CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(query))
+            if (string.IsNullOrWhiteSpace(q.Query))
                 return Results.BadRequest(new { error = "query is required" });
 
             // Default "semantic" preserves pre-hybrid API behavior; tools default to hybrid.
-            var searchMode = ParseMode(mode);
+            var searchMode = ParseMode(q.Mode);
             if (searchMode is null)
                 return Results.BadRequest(new { error = "mode must be hybrid | semantic | lexical" });
 
@@ -33,21 +50,21 @@ public static class SearchEndpoints
             if (!Search.ResolvedSearchFilter.TryResolve(
                     new SearchFilter
                     {
-                        SourceType = sourceType,
-                        PathPrefix = pathPrefix,
-                        IndexedAfter = indexedAfter,
-                        Language = language,
-                        WindowSize = windowSize,
-                        LimitMode = limitMode,
-                        AutocutSensitivity = autocutSensitivity,
-                        SubQueries = subQueries,
-                        AllowRelaxation = allowRelaxation
+                        SourceType = q.SourceType,
+                        PathPrefix = q.PathPrefix,
+                        IndexedAfter = q.IndexedAfter,
+                        Language = q.Language,
+                        WindowSize = q.WindowSize,
+                        LimitMode = q.LimitMode,
+                        AutocutSensitivity = q.AutocutSensitivity,
+                        SubQueries = q.SubQueries,
+                        AllowRelaxation = q.AllowRelaxation
                     }, out var filter, out var error))
                 return Results.BadRequest(new { error });
 
-            var k = topK is null or <= 0 ? DefaultTopK : Math.Min(topK.Value, MaxTopK);
-            var results = await svc.SearchAsync(query, k, sourceId, searchMode.Value, filter, ct: ct);
-            return Results.Ok(Enrich(results, filter, sourceId, config));
+            var k = q.TopK is null or <= 0 ? DefaultTopK : Math.Min(q.TopK.Value, MaxTopK);
+            var results = await svc.SearchAsync(q.Query, k, q.SourceId, searchMode.Value, filter, ct: ct);
+            return Results.Ok(Enrich(results, filter, q.SourceId, config));
         });
 
         // SPEC-20260923-retrieval-quality §5: POST variant accepting a filters object.

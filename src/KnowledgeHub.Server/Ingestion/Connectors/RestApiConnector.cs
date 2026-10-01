@@ -46,7 +46,7 @@ public sealed class RestApiConnector(
 
         var http = httpClientFactory.CreateClient("restapi");
         var (items, warnings, warned) = await FetchAllPagesAsync(
-            source, http, endpoint, headers, itemsPath, pageParam, maxPages, cancellationToken);
+            source, http, new PageFetchPlan(endpoint, headers, itemsPath, pageParam, maxPages), cancellationToken);
 
         var documents = new List<RawDocument>(items.Count);
         for (var i = 0; i < items.Count; i++)
@@ -65,12 +65,16 @@ public sealed class RestApiConnector(
 
     /// <summary>Walks the pagination loop: page 1 failure aborts the sync,
     /// later failures keep collected items, empty page ends pagination.</summary>
+    private sealed record PageFetchPlan(
+        string Endpoint, IReadOnlyDictionary<string, string> Headers, string? ItemsPath,
+        string? PageParam, int MaxPages);
+
     private static async Task<(List<JsonElement> Items, List<string> Warnings, HashSet<string> Warned)>
         FetchAllPagesAsync(
-            KnowledgeSource source, HttpClient http, string endpoint,
-            IReadOnlyDictionary<string, string> headers, string? itemsPath,
-            string? pageParam, int maxPages, CancellationToken ct)
+            KnowledgeSource source, HttpClient http, PageFetchPlan plan, CancellationToken ct)
     {
+        var (endpoint, headers, itemsPath, pageParam, maxPages) =
+            (plan.Endpoint, plan.Headers, plan.ItemsPath, plan.PageParam, plan.MaxPages);
         var items = new List<JsonElement>();
         var warnings = new List<string>();
         var warned = new HashSet<string>(StringComparer.Ordinal);
