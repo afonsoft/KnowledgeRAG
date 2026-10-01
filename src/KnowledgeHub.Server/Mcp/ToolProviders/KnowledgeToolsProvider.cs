@@ -385,12 +385,73 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         var (bounded, truncatedByTokens) =
             ApplyTokenBudget(outcome.Results, ResolveMaxTokens(ctx));
         outcome = outcome with { Results = bounded };
-        var results = bounded;
 
-        // SPEC-20260927-mcp-dynamic-rag-action-bridge RF-001/RF-003: execute
-        // live MCP tools nominated by retrieved chunks (mcp-tool markers) or by
-        // the question itself — inside the caller's scope (catalog is already
-        // scope-filtered) — then fuse outputs as clearly-labelled live context.
+        var live = await ExecuteLiveActionsAsync(ctx, question, bounded, ct);
+
+        var answers = ctx.Services.GetRequiredService<IAnswerService>();
+        var generate = ToolArgs.OptionalBool(ctx, "generate") ?? answers.IsConfigured;
+
+        // SPEC-20260927-multiquery RF-003: when every piece of evidence came from
+        // a relaxed scope, the response must say so — never relax silently.
+        var relaxedWarning = outcome.Results.Count > 0 && outcome.Results.All(r => r.IsRelaxed)
+            ? "\n\n(evidence found outside the strict requested scope)"
+            : null;
+
+        var ask = new AskContext(question, outcome, live.Results, live,
+            truncatedByTokens, relaxedWarning);
+
+        // SPEC-20260924-corrective-rag RF-003: insufficient evidence short-circuits
+        // synthesis — honest abstention, no LLM call, weak citations attached.
+        if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate && !live.HasEvidence)
+            return await BuildAbstentionResult(retrieval, ask);
+
+        if (!generate)
+            return await ToolResults.Text(
+                FormatAnswerContext(question, live.Results) + relaxedWarning + live.CitationBlock);
+
+        if (!answers.IsConfigured)
+        {
+            // RF risk mitigation: generate requested but no provider — raw context + warning.
+            return await ToolResults.Text(
+                FormatAnswerContext(question, live.Results) + relaxedWarning
+                + "\n\n(warning: no chat provider configured — returning raw context)");
+        }
+
+        try
+        {
+            return await SynthesizeAnswerAsync(ctx, retrieval, answers, ask, ct);
+        }
+        catch (Chat.ChatProviderException ex)
+        {
+            return await ToolResults.Error($"answer generation failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Everything the abstention/synthesis paths need beyond the call
+    /// context — keeps their signatures under the 7-arg ceiling.</summary>
+    private sealed record AskContext(
+        string Question,
+        CorrectiveRetrievalService.RetrievalOutcome Outcome,
+        IReadOnlyList<SearchResultItem> Results,
+        LiveActionsResult Live,
+        bool TruncatedByTokens,
+        string? RelaxedWarning);
+
+    /// <summary>Live-action executions plus the evidence list they produced.</summary>
+    private sealed record LiveActionsResult(
+        IReadOnlyList<LiveToolExecution> Executions,
+        IReadOnlyList<SearchResultItem> Results,
+        string CitationBlock,
+        bool HasEvidence);
+
+    /// <summary>SPEC-20260927-mcp-dynamic-rag-action-bridge RF-001/RF-003: execute
+    /// live MCP tools nominated by retrieved chunks (mcp-tool markers) or by
+    /// the question itself — inside the caller's scope (catalog is already
+    /// scope-filtered) — then fuse outputs as clearly-labelled live context.</summary>
+    private static async Task<LiveActionsResult> ExecuteLiveActionsAsync(
+        ToolCallContext ctx, string question,
+        IReadOnlyList<SearchResultItem> results, CancellationToken ct)
+    {
         var agentOptions = ctx.Services.GetRequiredService<IOptions<Agent.AgentOptions>>().Value;
         var enableLiveActions = ToolArgs.OptionalBool(ctx, "enableLiveActions")
             ?? agentOptions.EnableDynamicActionBridge;
@@ -409,110 +470,92 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         }
         var liveCitationBlock = Bridge.HybridCitationFormatter.FormatLiveCitations(liveExecutions);
 
-        var answers = ctx.Services.GetRequiredService<IAnswerService>();
-        var generate = ToolArgs.OptionalBool(ctx, "generate") ?? answers.IsConfigured;
-
-        // SPEC-20260927-multiquery RF-003: when every piece of evidence came from
-        // a relaxed scope, the response must say so — never relax silently.
-        var relaxedWarning = outcome.Results.Count > 0 && outcome.Results.All(r => r.IsRelaxed)
-            ? "\n\n(evidence found outside the strict requested scope)"
-            : null;
-
         // SPEC-20260929-live-actions-bridge-hardening RF-005: live tool output
         // IS evidence — an "insufficient" document grade must not discard it.
         // Abstain only when there is no live context to synthesize from.
         var hasLiveEvidence = liveExecutions.Any(e =>
             !e.IsError && !string.IsNullOrWhiteSpace(e.OutputPreview));
 
-        // SPEC-20260924-corrective-rag RF-003: insufficient evidence short-circuits
-        // synthesis — honest abstention, no LLM call, weak citations attached.
-        if (outcome.Grading.Grade == Search.RetrievalGrade.Insufficient && generate && !hasLiveEvidence)
-        {
-            var abstention = retrieval.BuildAbstention(question, outcome) with
-            {
-                LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions,
-                TruncatedByTokens = truncatedByTokens
-            };
-            return await ToolResults.Structured(
-                abstention.Answer
-                + (results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(results.Take(3).ToList()) : "")
-                + relaxedWarning
-                + liveCitationBlock,
-                abstention);
-        }
+        return new LiveActionsResult(liveExecutions, results, liveCitationBlock, hasLiveEvidence);
+    }
 
-        if (!generate)
-            return await ToolResults.Text(
-                FormatAnswerContext(question, results) + relaxedWarning + liveCitationBlock);
-
-        if (!answers.IsConfigured)
+    private static async ValueTask<CallToolResult> BuildAbstentionResult(
+        CorrectiveRetrievalService retrieval, AskContext ask)
+    {
+        var abstention = retrieval.BuildAbstention(ask.Question, ask.Outcome) with
         {
-            // RF risk mitigation: generate requested but no provider — raw context + warning.
-            return await ToolResults.Text(
-                FormatAnswerContext(question, results) + relaxedWarning
-                + "\n\n(warning: no chat provider configured — returning raw context)");
-        }
+            LiveToolExecutions = ask.Live.Executions.Count == 0 ? null : ask.Live.Executions,
+            TruncatedByTokens = ask.TruncatedByTokens
+        };
+        return await ToolResults.Structured(
+            abstention.Answer
+            + (ask.Results.Count > 0 ? "\n\nClosest passages:\n" + FormatHits(ask.Results.Take(3).ToList()) : "")
+            + ask.RelaxedWarning
+            + ask.Live.CitationBlock,
+            abstention);
+    }
 
-        try
+    private static async ValueTask<CallToolResult> SynthesizeAnswerAsync(
+        ToolCallContext ctx, CorrectiveRetrievalService retrieval,
+        IAnswerService answers, AskContext ask, CancellationToken ct)
+    {
+        var rawAnswer = await answers.AnswerAsync(ask.Question, ask.Results, ct);
+        var answer = rawAnswer with
         {
-            var rawAnswer = await answers.AnswerAsync(question, results, ct);
-            var answer = rawAnswer with
-            {
-                RetrievalGrade = retrieval.GradingEnabled
-                    ? outcome.Grading.Grade.ToString().ToLowerInvariant()
-                    : null,
-                Retried = outcome.Retried,
-                TruncatedByTokens = truncatedByTokens,
-                LiveToolExecutions = liveExecutions.Count == 0 ? null : liveExecutions,
-                // SPEC-20260929-live-actions-bridge-hardening RF-007: when the
-                // answer rests on live data alone (no document citations),
-                // expose the executions as pseudo-citations so consumers can
-                // still see what grounded the response. Failed executions are
-                // not evidence — they never become citations (devin-review
-                // #402/#413).
-                Citations = rawAnswer.Citations.Count == 0 && liveExecutions.Any(e => !e.IsError)
-                    ? liveExecutions.Where(e => !e.IsError).Select((e, i) => new CitationDto
-                    {
-                        Index = i + 1,
-                        Source = "live-mcp",
-                        Title = $"[Live Tool: {e.ToolName}]",
-                        Uri = $"live://tool/{e.ToolName}",
-                        Score = 1.0
-                    }).ToList()
-                    : rawAnswer.Citations
-            };
-            // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002:
-            // QuerySubmitted → ChunksRetrieved → AnswerSynthesized receipts,
-            // keyed by the caller's API key (or "mcp" for cookie sessions).
-            var apiKeyId = CallerIdentity.TryGetApiKeyId(ctx)?.ToString("N");
-            await Audit.Evidence.EvidenceEmission.RecordAskAsync(
-                new Audit.Evidence.EvidenceEmission.EmissionContext(
-                    ctx.Services.GetService<Audit.Evidence.IEvidenceChainService>(),
-                    $"mcp:{apiKeyId ?? "session"}", apiKeyId,
-                    ctx.Services.GetService<ILoggerFactory>()?.CreateLogger("EvidenceEmission")),
-                question, results, answer.Answer ?? "", ct);
-            var text = new StringBuilder(answer.Answer + relaxedWarning);
-            if (answer.Citations.Count > 0)
-            {
-                text.Append("\n\nCitations:");
-                foreach (var c in answer.Citations)
+            RetrievalGrade = retrieval.GradingEnabled
+                ? ask.Outcome.Grading.Grade.ToString().ToLowerInvariant()
+                : null,
+            Retried = ask.Outcome.Retried,
+            TruncatedByTokens = ask.TruncatedByTokens,
+            LiveToolExecutions = ask.Live.Executions.Count == 0 ? null : ask.Live.Executions,
+            // SPEC-20260929-live-actions-bridge-hardening RF-007: when the
+            // answer rests on live data alone (no document citations),
+            // expose the executions as pseudo-citations so consumers can
+            // still see what grounded the response. Failed executions are
+            // not evidence — they never become citations (devin-review
+            // #402/#413).
+            Citations = rawAnswer.Citations.Count == 0 && ask.Live.Executions.Any(e => !e.IsError)
+                ? ask.Live.Executions.Where(e => !e.IsError).Select((e, i) => new CitationDto
                 {
-                    text.Append("\n[").Append(c.Index).Append("] ")
-                        .Append(c.Title).Append(" — ").Append(c.Source)
-                        .Append(c.Path is not null ? " (path: " : " (")
-                        .Append(c.Path ?? c.Uri).Append(')');
-                    if (c.SuspicionFlags is not null)
-                        text.Append(" [flagged: ").Append(c.SuspicionFlags).Append(']');
-                    if (c.Components is { Count: > 0 } comps)
-                        text.Append(" [components: ").Append(string.Join(", ", comps)).Append(']');
-                }
-            }
-            text.Append(liveCitationBlock);
-            return await ToolResults.Structured(text.ToString(), answer);
-        }
-        catch (Chat.ChatProviderException ex)
+                    Index = i + 1,
+                    Source = "live-mcp",
+                    Title = $"[Live Tool: {e.ToolName}]",
+                    Uri = $"live://tool/{e.ToolName}",
+                    Score = 1.0
+                }).ToList()
+                : rawAnswer.Citations
+        };
+        // SPEC-20260927-cryptographic-evidence-provenance-chain RF-002:
+        // QuerySubmitted → ChunksRetrieved → AnswerSynthesized receipts,
+        // keyed by the caller's API key (or "mcp" for cookie sessions).
+        var apiKeyId = CallerIdentity.TryGetApiKeyId(ctx)?.ToString("N");
+        await Audit.Evidence.EvidenceEmission.RecordAskAsync(
+            new Audit.Evidence.EvidenceEmission.EmissionContext(
+                ctx.Services.GetService<Audit.Evidence.IEvidenceChainService>(),
+                $"mcp:{apiKeyId ?? "session"}", apiKeyId,
+                ctx.Services.GetService<ILoggerFactory>()?.CreateLogger("EvidenceEmission")),
+            ask.Question, ask.Results, answer.Answer ?? "", ct);
+        var text = new StringBuilder(answer.Answer + ask.RelaxedWarning);
+        AppendCitations(text, answer.Citations);
+        text.Append(ask.Live.CitationBlock);
+        return await ToolResults.Structured(text.ToString(), answer);
+    }
+
+    private static void AppendCitations(StringBuilder text, IReadOnlyList<CitationDto> citations)
+    {
+        if (citations.Count == 0)
+            return;
+        text.Append("\n\nCitations:");
+        foreach (var c in citations)
         {
-            return await ToolResults.Error($"answer generation failed: {ex.Message}");
+            text.Append("\n[").Append(c.Index).Append("] ")
+                .Append(c.Title).Append(" — ").Append(c.Source)
+                .Append(c.Path is not null ? " (path: " : " (")
+                .Append(c.Path ?? c.Uri).Append(')');
+            if (c.SuspicionFlags is not null)
+                text.Append(" [flagged: ").Append(c.SuspicionFlags).Append(']');
+            if (c.Components is { Count: > 0 } comps)
+                text.Append(" [components: ").Append(string.Join(", ", comps)).Append(']');
         }
     }
 

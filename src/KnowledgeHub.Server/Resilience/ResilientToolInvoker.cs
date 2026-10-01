@@ -34,63 +34,84 @@ public static class ResilientToolInvoker
 
     private static Func<ToolCallContext, CancellationToken, ValueTask<CallToolResult>> WrapHandler(
         CatalogTool tool, IReadOnlyDictionary<string, CatalogTool> catalog) =>
-        async (ctx, ct) =>
+        (ctx, ct) => InvokeWithFallbackAsync(tool, catalog, ctx, ct);
+
+    private static async ValueTask<CallToolResult> InvokeWithFallbackAsync(
+        CatalogTool tool, IReadOnlyDictionary<string, CatalogTool> catalog,
+        ToolCallContext ctx, CancellationToken ct)
+    {
+        var engine = ctx.Services?.GetService<IFallbackPolicyEngine>();
+        var registry = ctx.Services?.GetService<ToolCapabilityRegistry>();
+        if (engine is null || registry is null || engine.Mode is FallbackMode.Disabled)
+            return await tool.Handler(ctx, ct);
+
+        var logger = ctx.Services?.GetService<ILoggerFactory>()
+            ?.CreateLogger("KnowledgeHub.Resilience.ToolFallback");
+        var env = new FallbackEnv(registry, catalog, catalog.Keys.ToList(),
+            new HashSet<string>(StringComparer.Ordinal) { tool.Name },
+            ctx.Arguments, logger);
+        var current = tool;
+        var currentArgs = ctx.Arguments;
+        var attempt = 0;
+
+        while (true)
         {
-            var engine = ctx.Services?.GetService<IFallbackPolicyEngine>();
-            var registry = ctx.Services?.GetService<ToolCapabilityRegistry>();
-            if (engine is null || registry is null || engine.Mode is FallbackMode.Disabled)
-                return await tool.Handler(ctx, ct);
+            ct.ThrowIfCancellationRequested();
+            var step = await AttemptAsync(env, engine, current, ctx, currentArgs, attempt, ct);
+            if (step.Result is { } result)
+                return result;
+            current = step.NextTool!;
+            currentArgs = step.NextArgs;
+            attempt++;
+        }
+    }
 
-            var logger = ctx.Services?.GetService<ILoggerFactory>()
-                ?.CreateLogger("KnowledgeHub.Resilience.ToolFallback");
-            var env = new FallbackEnv(registry, catalog, catalog.Keys.ToList(),
-                new HashSet<string>(StringComparer.Ordinal) { tool.Name },
-                ctx.Arguments, logger);
-            var current = tool;
-            var currentArgs = ctx.Arguments;
-            var attempt = 0;
+    /// <summary>One invocation attempt: run the current handler; on a transient
+    /// failure (thrown or IsError) pick the next fallback candidate. A null
+    /// <see cref="FallbackStep.Result"/> means "advance to NextTool".</summary>
+    private static async ValueTask<FallbackStep> AttemptAsync(
+        FallbackEnv env, IFallbackPolicyEngine engine, CatalogTool current,
+        ToolCallContext ctx, IDictionary<string, System.Text.Json.JsonElement>? args,
+        int attempt, CancellationToken ct)
+    {
+        CallToolResult result;
+        try
+        {
+            result = await current.Handler(ctx with { Arguments = args }, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException
+                                   || !ct.IsCancellationRequested)
+        {
+            var decision = engine.Evaluate(ex, "tools", attempt, ct);
+            var (nextTool, nextArgs) = AdvanceFallback(env, current.Name,
+                "exception", decision.Reason, decision.ShouldFallback, ex);
+            if (nextTool is null)
+                throw;
+            return new FallbackStep(null, nextTool, nextArgs);
+        }
 
-            while (true)
-            {
-                ct.ThrowIfCancellationRequested();
-                CallToolResult result;
-                try
-                {
-                    result = await current.Handler(
-                        ctx with { Arguments = currentArgs }, ct);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException
-                                           || !ct.IsCancellationRequested)
-                {
-                    var decision = engine.Evaluate(ex, "tools", attempt, ct);
-                    var (nextTool, nextArgs) = AdvanceFallback(env, current.Name,
-                        "exception", decision.Reason, decision.ShouldFallback, ex);
-                    if (nextTool is null)
-                        throw;
-                    current = nextTool;
-                    currentArgs = nextArgs;
-                    attempt++;
-                    continue;
-                }
+        if (result.IsError != true)
+            return new FallbackStep(result, null, null);
 
-                if (result.IsError != true)
-                    return result;
+        var text = ExtractText(result);
+        if (ToolErrorClassifier.Classify(text) is not ToolErrorClassifier.ToolErrorClass.Transient)
+            return new FallbackStep(result, null, null); // permanent/unknown errors surface as-is
 
-                var text = ExtractText(result);
-                if (ToolErrorClassifier.Classify(text) is not ToolErrorClassifier.ToolErrorClass.Transient)
-                    return result; // permanent/unknown errors surface as-is
+        var reason = ToolErrorClassifier.ReasonFor(text);
+        var decision2 = engine.EvaluateReason(reason, "tools", attempt, ct);
+        var (nextTool2, nextArgs2) = AdvanceFallback(env, current.Name,
+            "isError", reason, decision2.ShouldFallback, null);
+        return nextTool2 is null
+            ? new FallbackStep(result, null, null)
+            : new FallbackStep(null, nextTool2, nextArgs2);
+    }
 
-                var reason = ToolErrorClassifier.ReasonFor(text);
-                var decision2 = engine.EvaluateReason(reason, "tools", attempt, ct);
-                var (nextTool2, nextArgs2) = AdvanceFallback(env, current.Name,
-                    "isError", reason, decision2.ShouldFallback, null);
-                if (nextTool2 is null)
-                    return result;
-                current = nextTool2;
-                currentArgs = nextArgs2;
-                attempt++;
-            }
-        };
+    /// <summary>Outcome of one <see cref="AttemptAsync"/>: either a final result
+    /// to surface, or the next candidate and its mapped arguments.</summary>
+    private sealed record FallbackStep(
+        CallToolResult? Result,
+        CatalogTool? NextTool,
+        IDictionary<string, System.Text.Json.JsonElement>? NextArgs);
 
     /// <summary>Fallback environment shared across attempts.</summary>
     private sealed record FallbackEnv(

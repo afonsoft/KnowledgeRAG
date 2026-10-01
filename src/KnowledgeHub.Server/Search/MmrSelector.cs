@@ -31,20 +31,7 @@ public static class MmrSelector
 
         while (selected.Count < topK && pool.Count > 0)
         {
-            Candidate? best = null;
-            var bestMmr = double.NegativeInfinity;
-            foreach (var c in pool)
-            {
-                if (maxPerDocument > 0 && perDoc.GetValueOrDefault(c.DocumentId) >= maxPerDocument)
-                    continue;
-                var rel = maxScore > 0 ? c.Score / maxScore : 0;
-                var mmr = lambda * rel - (1 - lambda) * MaxSimilarity(c, selected);
-                if (mmr > bestMmr)
-                {
-                    bestMmr = mmr;
-                    best = c;
-                }
-            }
+            var best = PickBest(pool, selected, perDoc, lambda, maxScore, maxPerDocument);
             if (best is null)
                 break; // every remaining candidate hit the per-document quota
             pool.Remove(best);
@@ -53,6 +40,29 @@ public static class MmrSelector
         }
 
         return selected.Select(c => c.ChunkId).ToList();
+    }
+
+    /// <summary>One MMR round: the quota-eligible candidate with the highest
+    /// marginal score, or null when the quota rules every candidate out.</summary>
+    private static Candidate? PickBest(
+        List<Candidate> pool, List<Candidate> selected,
+        Dictionary<Guid, int> perDoc, double lambda, double maxScore, int maxPerDocument)
+    {
+        Candidate? best = null;
+        var bestMmr = double.NegativeInfinity;
+        foreach (var c in pool)
+        {
+            if (maxPerDocument > 0 && perDoc.GetValueOrDefault(c.DocumentId) >= maxPerDocument)
+                continue;
+            var rel = maxScore > 0 ? c.Score / maxScore : 0;
+            var mmr = lambda * rel - (1 - lambda) * MaxSimilarity(c, selected);
+            if (mmr > bestMmr)
+            {
+                bestMmr = mmr;
+                best = c;
+            }
+        }
+        return best;
     }
 
     private static double MaxSimilarity(Candidate c, List<Candidate> selected)

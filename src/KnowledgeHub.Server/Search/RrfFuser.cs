@@ -35,42 +35,47 @@ public static class RrfFuser
         var scores = new Dictionary<Guid, FusedHit>();
 
         foreach (var (arm, ranked) in lists)
-            Accumulate(ranked, arm);
+            Accumulate(scores, ranked, arm);
 
         return scores.Values
             .OrderByDescending(h => h.Fused)
             .ThenBy(h => h.ChunkId)
             .Take(topK)
             .ToList();
+    }
 
-        void Accumulate(IReadOnlyList<Guid> ranked, string arm)
+    private static void Accumulate(
+        Dictionary<Guid, FusedHit> scores, IReadOnlyList<Guid> ranked, string arm)
+    {
+        for (var i = 0; i < ranked.Count; i++)
         {
-            for (var i = 0; i < ranked.Count; i++)
-            {
-                var rank = i + 1;
-                var contribution = 1.0 / (K + rank);
-                if (scores.TryGetValue(ranked[i], out var hit))
-                    scores[ranked[i]] = hit with
-                    {
-                        VectorRank = arm == "vector"
-                            ? hit.VectorRank is null ? rank : Math.Min(hit.VectorRank.Value, rank)
-                            : hit.VectorRank,
-                        LexicalRank = arm == "lexical"
-                            ? hit.LexicalRank is null ? rank : Math.Min(hit.LexicalRank.Value, rank)
-                            : hit.LexicalRank,
-                        GraphRank = arm == "graph"
-                            ? hit.GraphRank is null ? rank : Math.Min(hit.GraphRank.Value, rank)
-                            : hit.GraphRank,
-                        Fused = hit.Fused + contribution
-                    };
-                else
-                    scores[ranked[i]] = new FusedHit(
-                        ranked[i],
-                        arm == "vector" ? rank : null,
-                        arm == "lexical" ? rank : null,
-                        contribution,
-                        arm == "graph" ? rank : null);
-            }
+            var rank = i + 1;
+            scores[ranked[i]] = scores.TryGetValue(ranked[i], out var hit)
+                ? MergeRank(hit, arm, rank)
+                : NewHit(ranked[i], arm, rank);
         }
     }
+
+    /// <summary>Adds this arm's contribution and records the best rank the hit
+    /// achieved on this arm.</summary>
+    private static FusedHit MergeRank(FusedHit hit, string arm, int rank) =>
+        hit with
+        {
+            VectorRank = arm == "vector" ? MinRank(hit.VectorRank, rank) : hit.VectorRank,
+            LexicalRank = arm == "lexical" ? MinRank(hit.LexicalRank, rank) : hit.LexicalRank,
+            GraphRank = arm == "graph" ? MinRank(hit.GraphRank, rank) : hit.GraphRank,
+            Fused = hit.Fused + Contribution(rank)
+        };
+
+    private static FusedHit NewHit(Guid chunkId, string arm, int rank) =>
+        new(chunkId,
+            arm == "vector" ? rank : null,
+            arm == "lexical" ? rank : null,
+            Contribution(rank),
+            arm == "graph" ? rank : null);
+
+    private static double Contribution(int rank) => 1.0 / (K + rank);
+
+    private static int MinRank(int? existing, int rank) =>
+        existing is null ? rank : Math.Min(existing.Value, rank);
 }
