@@ -5,6 +5,48 @@ context — see `.agents/skills/orchestrator/SKILL.md` Phase 8.
 
 ---
 
+## Session — 2026-10-01 (orchestrator + QA chain)
+
+**Scope**: Execução sequencial das skills pedidas pelo owner —
+orchestrator → qa-analyst → sonarqube-autofix → quality-test-implementation —
+após a entrega da SPEC-20261001-a2a-task-durability (#442) e merges #445–#448.
+
+**Decisions**:
+- qa-analyst: 10 PRs (#436–#448), ~37 comentários de bots triados —
+  4 ATENDIDO, 3 OBSOLETO, ~30 PENDENTES (2 semânticos reais + ~27 nits
+  CodeQL triviais + 1 issue SonarCloud). SPEC-20261001-pr-review-follow-ups
+  (Draft) aguardando aprovação do owner antes de /create-issues.
+- sonarqube-autofix: 1364 issues baixadas via API (`componentKeys`, ps=500).
+  1036 eram do `docs/architecture/*.html` gerado pelo archify → exclusão
+  no sonarscanner (code-quality.yml). 116 fixes diretos em 55 arquivos
+  (PR #449); 212 restantes agrupados na SPEC-20261001-sonarqube-backlog-
+  cleanup (Approved, RF-01..RF-10) para hand-off /execute-specs.
+- `// NOSONAR` na linha de abertura de `$$"""` raw string quebra o parse
+  (CS1002/CS8997) → `#pragma warning disable S2077`/`restore` ao redor.
+- quality-test-implementation: baseline 20,17% (Release, 1245 unit).
+  36 testes novos cobrindo os caminhos do autofix; os testes acharam um
+  bug real — `GlobMatcher` `{a,b}` nunca casava (Regex.Escape não escapa
+  `{}`) — corrigido fazendo split dos grupos antes do escape. PR #450.
+- Settings Assistente (A2A): endpoint/model default = provider do chat
+  quando sem config salva; toggle Habilitado → `Switch` (mesmo do GraphRAG).
+
+**Delivered**: PRs #449 (sonar autofix) e #450 (tests + glob fix + settings);
+`.sonar_devin_auto_fix/` com board/notas/metrics (gitignored); SPEC backlog
+cleanup Approved; qa-pr-analysis-20261001.md; README coverage table +
+CHANGELOG atualizados.
+
+**Remaining**: aprovação do owner p/ /create-issues das 2 SPECs novas;
+rota minFinal vs escala RRF (RF-001) é o fix semântico mais valioso
+pendente; redeploy docker p/ imagem com #448/#449/#450.
+
+**Lessons**:
+- SonarCloud API usa `componentKeys` (não `components`); `inNewCodePeriod`
+  no filtro de issues retorna o backlog todo, não só new code.
+- VM env vaza `Database__Provider`/`GameHub_Database__Provider` nos testes
+  → `env -u ...` antes de `dotnet test`.
+- `CacheManagerServiceTests.ClearAllAsync_WithZeroKeys` flaky em Debug
+  full-suite (cache in-memory compartilhado), passa isolado e em Release.
+
 ## Session — 2026-09-28 (orchestrator reconcile)
 
 **Scope**: Resume orchestrator após a fila pentagi/Verba (#262–#281) —

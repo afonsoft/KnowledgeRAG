@@ -7,10 +7,10 @@
 ## Session
 
 - **started_at**: `2026-09-13`
-- **current_phase**: `Phase 7` (Epic #383 100% entregue — S1–S5 mergeadas; Epic fechada; 10 SPECs Draft do review-corpus em PR #395 aguardando aprovação)
+- **current_phase**: `Phase 8` (QA chain 2026-10-01: qa-analyst + sonarqube-autofix + quality-test-implementation; PRs #449/#450; 2 SPECs novas aguardando aprovação do owner p/ /create-issues)
 - **repository**: `afonsoft/LangGraph-UI`
 - **branch**: `main` (`7577d08`) — protegida (PR + status checks obrigatórios)
-- **last_updated**: `2026-09-29`
+- **last_updated**: `2026-10-01`
 
 ---
 
@@ -52,9 +52,9 @@
 ### Pending Tasks
 
 ```yaml
-# Fila vazia — backlog zerado em 2026-09-19 (main f282c43) e reconciliado em
-# 2026-09-28: PRs #135–#142 mergeadas, release v0.0.2 reparada, fila
-# pentagi/Verba (#262–#281) 100% mergeada em main via PRs #364–#381.
+# Fila vazia — aguardando aprovação do owner para /create-issues de:
+#   - .specs/SPEC-20261001-pr-review-follow-ups.md (Draft — gate qa-analyst)
+#   - .specs/SPEC-20261001-sonarqube-backlog-cleanup.md (Approved — RF-01..RF-10)
 ```
 
 ### Completed Tasks
@@ -388,6 +388,8 @@
 | 11 | ~~orchestrator_stats/memory stale~~ — PR #140 mergeada; resincronizado 2026-09-28 | SPEC-20260918-orchestrator-state-sync | T1 | done |
 | 12 | ~~compose override example sem bloco Chat__*~~ — PR #139 mergeada | SPEC-20260918-compose-override-chat-example | T1 | done |
 | 13 | ~~Botões sem texto/ícone~~ — PR #136 mergeada; #134 fechada | Issue #134 | T1 | done |
+| 14 | SonarCloud backlog 1364→212 — exclusão archify HTML + 116 fixes (PR #449); restantes na SPEC-20261001-sonarqube-backlog-cleanup | sonarqube-autofix 2026-10-01 | T2 | pr-aberta |
+| 15 | PR-review follow-ups (~30 pendências; 2 semânticos — minFinal/RRF, truncate-sem-sinal) — SPEC Draft aguardando aprovação | qa-analyst 2026-10-01 | T2 | aguardando-owner |
 
 ---
 
@@ -399,9 +401,9 @@
 
 ## Metrics
 
-- **tasks_started**: `51` (anteriores + Epic #383: 5 slices #384–#388 + Epic #383)
-- **tasks_completed**: `46`
+- **tasks_started**: `55` (anteriores + QA chain 2026-10-01: qa-analyst, sonarqube-autofix, quality-tests, settings-assistant-default)
+- **tasks_completed**: `49`
 - **tasks_blocked**: `0`
-- **human_interventions**: `11`
-- **validation_failures**: `3` (compose empty env → TASK-010/PR #52; format gate red on main → TASK-011/PR #87; NU1403 ILLink re-publish → lockfile regen em #135)
+- **human_interventions**: `13` (gate /create-issues qa-analyst pendente; +1 anterior)
+- **validation_failures**: `4` (+1: flake `ClearAllAsync_WithZeroKeys` em Debug full-suite — passa isolado/Release)
 - **estimated_remaining_minutes**: `0`
