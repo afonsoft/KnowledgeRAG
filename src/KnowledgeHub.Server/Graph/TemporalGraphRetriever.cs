@@ -170,11 +170,15 @@ public sealed class TemporalGraphRetriever(
             .Concat(linked)
             .Distinct()
             .ToList();
+        var unscoped = db.KgNodes.AsNoTracking();
+        if (start is { } startAt)
+            unscoped = unscoped.Where(n => n.ObservedAt >= startAt);
+        if (end is { } endAt)
+            unscoped = unscoped.Where(n => n.ObservedAt <= endAt);
+        if (allowedNodes is not null)
+            unscoped = unscoped.Where(n => allowedNodes.Contains(n.Id));
         var nodes = nodeIds.Count == 0
-            ? await db.KgNodes.AsNoTracking()
-                .Where(n => (start == null || n.ObservedAt >= start)
-                    && (end == null || n.ObservedAt <= end)
-                    && (allowedNodes == null || allowedNodes.Contains(n.Id)))
+            ? await unscoped
                 .OrderByDescending(n => n.ObservedAt)
                 .Take(maxResults)
                 .ToListAsync(ct)

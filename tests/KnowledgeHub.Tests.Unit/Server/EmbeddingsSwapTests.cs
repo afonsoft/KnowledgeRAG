@@ -108,8 +108,8 @@ public sealed class EmbeddingsSwapTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir.FullName, "models", "all-MiniLM-L6-v2");
-            if (File.Exists(Path.Combine(candidate, "model.onnx")))
+            var candidate = Path.Join(dir.FullName, "models", "all-MiniLM-L6-v2");
+            if (File.Exists(Path.Join(candidate, "model.onnx")))
                 return candidate;
             dir = dir.Parent;
         }

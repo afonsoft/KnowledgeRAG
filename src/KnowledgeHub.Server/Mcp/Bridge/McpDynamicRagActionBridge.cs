@@ -141,11 +141,11 @@ public static class McpDynamicRagActionBridge
         if (tool.InputSchema.TryGetPropertyValue("required", out var markerReq)
             && markerReq is JsonArray requiredParams)
         {
-            foreach (var param in requiredParams)
+            foreach (var name in requiredParams
+                .Select(param => param?.GetValue<string>())
+                .Where(n => n is not null))
             {
-                if (param?.GetValue<string>() is not { } name)
-                    continue;
-                if (!markerArgs.TryGetValue(name, out var value)
+                if (!markerArgs.TryGetValue(name!, out var value)
                     || (value.ValueKind == JsonValueKind.String
                         && string.IsNullOrWhiteSpace(value.GetString())))
                     return null;

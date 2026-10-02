@@ -272,6 +272,11 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         IReadOnlyList<Bridge.ToolActionAnnotation> suggested, IConfiguration limitCfg,
         bool truncatedByTokens)
     {
+        // SPEC-20260927-multiquery RF-003: never relax silently.
+        IReadOnlyList<string>? warnings = outcome.Results.All(r => r.IsRelaxed)
+            && outcome.Results.Count > 0
+                ? ["evidence found outside the strict requested scope"]
+                : null;
         return new
         {
             results = outcome.Results,
@@ -281,12 +286,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             totalMatches = outcome.Results.Count,
             limitModeApplied = filter.EffectiveLimitMode(limitCfg),
             truncatedByTokens,
-            // SPEC-20260927-multiquery RF-003: never relax silently.
             filterRelaxed = outcome.Results.Any(r => r.IsRelaxed),
-            warnings = outcome.Results.All(r => r.IsRelaxed)
-                && outcome.Results.Count > 0
-                    ? (IReadOnlyList<string>)["evidence found outside the strict requested scope"]
-                    : null,
+            warnings,
             originalFilter = Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
             appliedFilter = outcome.Results.FirstOrDefault(r => r.IsRelaxed)?.RelaxedScope
                 ?? Search.ResolvedSearchFilter.DescribeScope(sourceId, filter),
@@ -606,11 +607,12 @@ public sealed class KnowledgeToolsProvider : IToolProvider
     private static async ValueTask<CallToolResult> WriteKnowledgeAsync(
         ToolCallContext ctx, CancellationToken ct)
     {
-        var title = ToolArgs.RequiredString(ctx, "title");
-        var content = ToolArgs.RequiredString(ctx, "content");
+        var note = new NoteWrite(
+            ToolArgs.RequiredString(ctx, "title"),
+            ToolArgs.RequiredString(ctx, "content"),
+            ToolArgs.OptionalStringArray(ctx, "tags"),
+            ObsidianNoteWriter.ResolveOrigin(ctx.Services));
         var sourceSlug = ToolArgs.OptionalString(ctx, "source");
-        var tags = ToolArgs.OptionalStringArray(ctx, "tags");
-        var origin = ObsidianNoteWriter.ResolveOrigin(ctx.Services);
 
         var db = ctx.Services.GetRequiredService<KnowledgeHubDbContext>();
         var ingestion = ctx.Services.GetRequiredService<IngestionService>();
@@ -629,29 +631,44 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         if (ObsidianNoteWriter.IsReadOnly(target))
             return await ToolResults.Error($"source '{target.Name}' is read-only");
 
-        if (target.SourceType == SourceType.ObsidianVault)
-        {
-            var root = IngestionService.ResolveVaultRoot(target.ConfigurationJson)
-                ?? throw new McpProtocolException("vault source has no configured path", McpErrorCode.InvalidParams);
-            var relative = ObsidianNoteWriter.TitleToFileName(title);
-            var full = ObsidianNoteWriter.SafePath(root, relative, forWrite: true);
+        return target.SourceType == SourceType.ObsidianVault
+            ? await WriteToVaultAsync(ctx, db, ingestion, target, note, ct)
+            : await WriteToDocumentAsync(ctx, db, target, slugs[target.Id], note, ct);
+    }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(content, tags, origin), ct);
+    private sealed record NoteWrite(
+        string Title, string Content, string[]? Tags, WriteOriginContext? Origin);
 
-            var relPath = Path.GetRelativePath(root, full);
-            await ingestion.SyncFileAsync(target.Id, relPath, ct);
+    private static async ValueTask<CallToolResult> WriteToVaultAsync(
+        ToolCallContext ctx, KnowledgeHubDbContext db, IngestionService ingestion,
+        Domain.Entities.KnowledgeSource target, NoteWrite note, CancellationToken ct)
+    {
+        var root = IngestionService.ResolveVaultRoot(target.ConfigurationJson)
+            ?? throw new McpProtocolException("vault source has no configured path", McpErrorCode.InvalidParams);
+        var relative = ObsidianNoteWriter.TitleToFileName(note.Title);
+        var full = ObsidianNoteWriter.SafePath(root, relative, forWrite: true);
 
-            var doc = await db.Documents.AsNoTracking()
-                .FirstOrDefaultAsync(d => d.KnowledgeSourceId == target.Id && d.UriReference == relPath, ct);
-            var chunkCount = doc is null ? 0
-                : await db.Chunks.CountAsync(c => c.KnowledgeDocumentId == doc.Id, ct);
-            return await ToolResults.Text(
-                $"Wrote `{relPath}` to vault '{target.Name}'.\nDocument id: {doc?.Id}\nChunks indexed: {chunkCount}");
-        }
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(note.Content, note.Tags, note.Origin), ct);
 
-        // Non-vault source: persist + index an in-place KnowledgeDocument.
-        var uriRef = $"knowledge://{slugs[target.Id]}/{ObsidianNoteWriter.TitleToFileName(title)}.md";
+        var relPath = Path.GetRelativePath(root, full);
+        await ingestion.SyncFileAsync(target.Id, relPath, ct);
+
+        var doc = await db.Documents.AsNoTracking()
+            .FirstOrDefaultAsync(d => d.KnowledgeSourceId == target.Id && d.UriReference == relPath, ct);
+        var chunkCount = doc is null ? 0
+            : await db.Chunks.CountAsync(c => c.KnowledgeDocumentId == doc.Id, ct);
+        return await ToolResults.Text(
+            $"Wrote `{relPath}` to vault '{target.Name}'.\nDocument id: {doc?.Id}\nChunks indexed: {chunkCount}");
+    }
+
+    /// <summary>Non-vault source: persist + index an in-place KnowledgeDocument.</summary>
+    private static async ValueTask<CallToolResult> WriteToDocumentAsync(
+        ToolCallContext ctx, KnowledgeHubDbContext db,
+        Domain.Entities.KnowledgeSource target, string targetSlug,
+        NoteWrite note, CancellationToken ct)
+    {
+        var uriRef = $"knowledge://{targetSlug}/{ObsidianNoteWriter.TitleToFileName(note.Title)}.md";
         var doc2 = await db.Documents.Include(d => d.Chunks)
             .FirstOrDefaultAsync(d => d.KnowledgeSourceId == target.Id && d.UriReference == uriRef, ct);
         if (doc2 is null)
@@ -659,18 +676,18 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             doc2 = new Domain.Entities.KnowledgeDocument
             {
                 KnowledgeSourceId = target.Id,
-                Title = title,
+                Title = note.Title,
                 UriReference = uriRef
             };
             db.Documents.Add(doc2);
         }
         else
         {
-            doc2.Title = title;
+            doc2.Title = note.Title;
             db.Chunks.RemoveRange(doc2.Chunks);
         }
 
-        var body = ObsidianNoteWriter.WithFrontmatter(content, tags, origin);
+        var body = ObsidianNoteWriter.WithFrontmatter(note.Content, note.Tags, note.Origin);
         doc2.RawContent = body;
         doc2.ContentHash = Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(body)));
@@ -703,7 +720,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                 SectionPath = p.SectionPath,
                 MetadataJson = p.MetadataJson,
                 EnrichedText = Ingestion.ContextEnricher.Compose(
-                    target.Name, title, p.SectionPath ?? p.SymbolPath, p.Text,
+                    target.Name, note.Title, p.SectionPath ?? p.SymbolPath, p.Text,
                     config.GetValue("Ingestion:ContextualEnrichment", "structural"),
                     config.GetValue("Ingestion:ContextualEnrichment:MinTokens", 40)),
                 SuspicionFlags = flags.Count == 0 ? null : string.Join(',', flags)
@@ -741,7 +758,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
 
         var flagNote = flagged == 0 ? "" : $"\nWarning: {flagged} chunk(s) flagged by the security scan (see /api/security/events).";
         return await ToolResults.Text(
-            $"Stored '{title}' in source '{target.Name}'.\nDocument id: {doc2.Id}\nChunks indexed: {newChunks.Count}{flagNote}");
+            $"Stored '{note.Title}' in source '{target.Name}'.\nDocument id: {doc2.Id}\nChunks indexed: {newChunks.Count}{flagNote}");
     }
 
     internal static string FormatHits(IReadOnlyList<SearchResultItem> results)

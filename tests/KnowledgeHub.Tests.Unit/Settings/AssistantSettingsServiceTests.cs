@@ -212,7 +212,7 @@ public sealed class AssistantSettingsServiceTests : IDisposable
 
         var main = new StubChatClient("main");
         var wrapped = provider.ForSubtask("grade", main);
-        var deco = Assert.IsType<AssistantFallbackChatClient>(wrapped);
+        Assert.IsType<AssistantFallbackChatClient>(wrapped);
         Assert.Same(main, provider.ForSubtask("rewrite", main));
     }
 

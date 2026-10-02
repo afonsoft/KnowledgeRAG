@@ -107,7 +107,8 @@ public class AutocutSearchApiTests : IClassFixture<AutocutSearchApiTests.Fixture
         }
         finally
         {
-            try { Directory.Delete(dir, recursive: true); } catch (IOException) { }
+            try { Directory.Delete(dir, recursive: true); }
+            catch (IOException ioEx) { _ = ioEx.Message; /* best-effort temp cleanup */ }
         }
     }
 }

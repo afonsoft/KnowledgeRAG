@@ -174,10 +174,9 @@ public static class ResilientToolInvoker
         foreach (var name in probe.Registry.CandidateToolNames(probe.Current, probe.Available)
             .Where(n => !probe.Visited.Contains(n)))
         {
-            if (!probe.Catalog.TryGetValue(name, out var candidate))
+            // never substitute a tool missing from the catalog or write-capable
+            if (!probe.Catalog.TryGetValue(name, out var candidate) || !candidate.ReadOnly)
                 continue;
-            if (!candidate.ReadOnly)
-                continue; // never substitute a write-capable tool
             if (!MapArgs(candidate, probe.OriginalArgs, out mappedArgs))
                 continue; // schema-incompatible — args would be meaningless
             next = candidate;

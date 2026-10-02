@@ -19,7 +19,7 @@ namespace KnowledgeHub.Server.Services;
 /// sets are cached in <see cref="IDistributedCache"/> — result keys embed the
 /// index-version token so any sync invalidates them.
 /// </summary>
-public sealed class SearchService(
+public sealed class SearchService( // NOSONAR S107 — DI resolve o ctor flat; construção manual/testes usam o deps-ctor agrupado abaixo
     KnowledgeHubDbContext db,
     IEmbeddingProvider embeddings,
     IEmbeddingProviderResolver embeddingsResolver,
@@ -142,7 +142,7 @@ public sealed class SearchService(
 
         var items = await HydrateTrackedAsync(windowed, breakdowns, filter, ct);
         items = await ApplyDiversityAsync(items, topK, ct);
-        var final = await ApplyFinalTrimAsync(query, items, breakdowns, topK, filter, plan, ct);
+        var final = await ApplyFinalTrimAsync(query, items, topK, filter, plan, ct);
 
         final = await RelaxIfShortAsync(inv, final, ct);
         return await ApplyContextExpansionAsync(final, filter, ct);
@@ -350,8 +350,7 @@ public sealed class SearchService(
     /// <summary>Post-hydration trim: optional rerank, temporal boost, autocut
     /// elbow and the final score floor.</summary>
     private async Task<List<SearchResultItem>> ApplyFinalTrimAsync(
-        string query, List<SearchResultItem> items,
-        IReadOnlyDictionary<Guid, SearchScoreBreakdown>? breakdowns, int topK,
+        string query, List<SearchResultItem> items, int topK,
         ResolvedSearchFilter? filter, FetchPlan plan, CancellationToken ct)
     {
         var final = (!plan.RerankEnabled || items.Count <= 1)
@@ -491,10 +490,8 @@ public sealed class SearchService(
                     scope, conversationContext, degraded, level), ct);
             var penalty = Math.Pow(RelaxationPenalty, level);
             var added = 0;
-            foreach (var h in hits)
+            foreach (var h in hits.Where(h => h.ChunkId is not { } cid || seen.Add(cid)))
             {
-                if (h.ChunkId is { } cid && !seen.Add(cid))
-                    continue;
                 relaxed.Add(h with
                 {
                     IsRelaxed = true,
@@ -866,10 +863,9 @@ public sealed class SearchService(
             // Whole parent section minus the hits themselves, capped —
             // ExpandedChunkIndices only lists chunks fully delivered.
             var used = 0;
-            foreach (var t in sectionTexts)
+            foreach (var t in sectionTexts
+                .Where(t => !hitChunkIndexes.Contains(t.Idx) && t.Text != item.ChunkText))
             {
-                if (hitChunkIndexes.Contains(t.Idx) || t.Text == item.ChunkText)
-                    continue;
                 if (used + t.Text.Length + 2 > maxParentChars)
                     break;
                 parts.Add(t.Text);
@@ -966,24 +962,24 @@ public sealed class SearchService(
         switch (expansionMode)
         {
             case "multi":
-                vectorTexts.AddRange(variants.Select(v => (v, (string?)v)));
-                lexicalQueries.AddRange(variants.Select(v => (v, (string?)v)));
+                vectorTexts.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
+                lexicalQueries.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
                 break;
             case "hyde" or "both" when hydeText is not null:
                 vectorTexts.Clear();
                 vectorTexts.Add((hydeText, "hyde"));
                 if (expansionMode == "both")
-                    lexicalQueries.AddRange(variants.Select(v => (v, (string?)v)));
+                    lexicalQueries.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
                 break;
             case "both":
-                lexicalQueries.AddRange(variants.Select(v => (v, (string?)v)));
+                lexicalQueries.AddRange(variants.Select<string, (string, string?)>(v => (v, v)));
                 break;
         }
 
         if (subQueries is { Count: > 0 })
         {
-            vectorTexts.AddRange(subQueries.Select(q => (q, (string?)q)));
-            lexicalQueries.AddRange(subQueries.Select(q => (q, (string?)q)));
+            vectorTexts.AddRange(subQueries.Select<string, (string, string?)>(q => (q, q)));
+            lexicalQueries.AddRange(subQueries.Select<string, (string, string?)>(q => (q, q)));
         }
         return (vectorTexts, lexicalQueries);
     }
@@ -1010,7 +1006,7 @@ public sealed class SearchService(
                 logger.LogWarning(ex, "Search arm failed (label {Label}) — continuing",
                     ForLog(t.Label) ?? "primary");
                 degraded.Any = true; // RF-005: never cache a result built on a failed arm
-                return (IReadOnlyList<Guid>)[];
+                return Array.Empty<Guid>();
             }
         });
         return (await Task.WhenAll(tasks)).ToList();
@@ -1032,7 +1028,7 @@ public sealed class SearchService(
                 logger.LogWarning(ex, "Lexical arm failed (label {Label}) — continuing",
                     ForLog(q.Label) ?? "primary");
                 degraded.Any = true; // RF-005: never cache a result built on a failed arm
-                return (IReadOnlyList<Guid>)[];
+                return Array.Empty<Guid>();
             }
         });
         return (await Task.WhenAll(tasks)).ToList();
@@ -1202,7 +1198,23 @@ public sealed class SearchService(
             .Join(db.Documents, c => c.KnowledgeDocumentId, d => d.Id,
                 (c, d) => new { c.Id, c.TextContent, c.SuspicionFlags, c.ChunkKind, c.SymbolPath, c.SectionPath, c.ChunkIndex, DocId = d.Id, d.Title, d.UriReference, d.IndexedAt, d.KnowledgeSourceId })
             .Join(db.Sources, x => x.KnowledgeSourceId, s => s.Id,
-                (x, s) => new { x.Id, x.TextContent, x.SuspicionFlags, x.ChunkKind, x.SymbolPath, x.SectionPath, x.ChunkIndex, x.DocId, x.Title, x.UriReference, x.IndexedAt, x.KnowledgeSourceId, SourceName = s.Name, s.SourceType });
+                (x, s) => new HydratedChunk
+                {
+                    Id = x.Id,
+                    TextContent = x.TextContent,
+                    SuspicionFlags = x.SuspicionFlags,
+                    ChunkKind = x.ChunkKind,
+                    SymbolPath = x.SymbolPath,
+                    SectionPath = x.SectionPath,
+                    ChunkIndex = x.ChunkIndex,
+                    DocId = x.DocId,
+                    Title = x.Title,
+                    UriReference = x.UriReference,
+                    IndexedAt = x.IndexedAt,
+                    KnowledgeSourceId = x.KnowledgeSourceId,
+                    SourceName = s.Name,
+                    SourceType = s.SourceType
+                });
         if (filter?.SourceType is { } st)
             query = query.Where(x => x.SourceType == st);
         if (filter?.PathPrefix is { } pp)
@@ -1222,41 +1234,7 @@ public sealed class SearchService(
             : 0;
         var items = hits
             .Where(h => byId.ContainsKey(h.ChunkId))
-            .Select(h =>
-            {
-                var c = byId[h.ChunkId];
-                if (c.SuspicionFlags is not null && excludeFlagged)
-                {
-                    return null;
-                }
-                // RF-003: language is metadata-derived (no column) — a set
-                // filter keeps only items whose metadata carries a match.
-                if (filter?.Language is { } lang)
-                {
-                    var meta = BuildMetadata(c.SourceType, c.UriReference, c.ChunkKind, c.SymbolPath);
-                    if (!meta.TryGetValue("language", out var l) ||
-                        !l.Equals(lang, StringComparison.OrdinalIgnoreCase))
-                        return null;
-                }
-                return new SearchResultItem
-                {
-                    ChunkText = c.TextContent,
-                    DocumentTitle = c.Title,
-                    SourceName = c.SourceName,
-                    SourceId = c.KnowledgeSourceId,
-                    SourceType = c.SourceType,
-                    Score = h.Score,
-                    UriReference = c.UriReference,
-                    ScoreBreakdown = breakdowns?.GetValueOrDefault(h.ChunkId),
-                    SuspicionFlags = c.SuspicionFlags,
-                    SectionPath = c.SectionPath,
-                    ChunkId = c.Id,
-                    DocumentId = c.DocId,
-                    ChunkIndex = c.ChunkIndex,
-                    Metadata = BuildMetadata(c.SourceType, c.UriReference, c.ChunkKind, c.SymbolPath),
-                    IndexedAt = c.IndexedAt
-                };
-            })
+            .Select(h => ProjectHit(h, byId[h.ChunkId], breakdowns, filter, excludeFlagged))
             .OfType<SearchResultItem>()
             .ToList();
 
@@ -1264,6 +1242,63 @@ public sealed class SearchService(
             logger.LogInformation("Excluded {Count} flagged chunk(s) from search context", excluded);
         await AttachComponentsAsync(items, ct);
         return items;
+    }
+
+    /// <summary>Flat row produced by the chunk×document×source hydration join.</summary>
+    private sealed class HydratedChunk
+    {
+        public Guid Id { get; init; }
+        public required string TextContent { get; init; }
+        public string? SuspicionFlags { get; init; }
+        public required string ChunkKind { get; init; }
+        public string? SymbolPath { get; init; }
+        public string? SectionPath { get; init; }
+        public int ChunkIndex { get; init; }
+        public Guid DocId { get; init; }
+        public required string Title { get; init; }
+        public required string UriReference { get; init; }
+        public DateTimeOffset IndexedAt { get; init; }
+        public Guid KnowledgeSourceId { get; init; }
+        public required string SourceName { get; init; }
+        public SourceType SourceType { get; init; }
+    }
+
+    /// <summary>Maps one hydrated chunk join row to a result item — returns null
+    /// when the row is filtered out post-rank (flagged chunk or language miss).</summary>
+    private static SearchResultItem? ProjectHit(
+        VectorHit h, HydratedChunk c,
+        IReadOnlyDictionary<Guid, SearchScoreBreakdown>? breakdowns,
+        ResolvedSearchFilter? filter, bool excludeFlagged)
+    {
+        if (c.SuspicionFlags is not null && excludeFlagged)
+            return null;
+        // RF-003: language is metadata-derived (no column) — a set
+        // filter keeps only items whose metadata carries a match.
+        if (filter?.Language is { } lang)
+        {
+            var meta = BuildMetadata(c.SourceType, c.UriReference, c.ChunkKind, c.SymbolPath);
+            if (!meta.TryGetValue("language", out var l) ||
+                !l.Equals(lang, StringComparison.OrdinalIgnoreCase))
+                return null;
+        }
+        return new SearchResultItem
+        {
+            ChunkText = c.TextContent,
+            DocumentTitle = c.Title,
+            SourceName = c.SourceName,
+            SourceId = c.KnowledgeSourceId,
+            SourceType = c.SourceType,
+            Score = h.Score,
+            UriReference = c.UriReference,
+            ScoreBreakdown = breakdowns?.GetValueOrDefault(h.ChunkId),
+            SuspicionFlags = c.SuspicionFlags,
+            SectionPath = c.SectionPath,
+            ChunkId = c.Id,
+            DocumentId = c.DocId,
+            ChunkIndex = c.ChunkIndex,
+            Metadata = BuildMetadata(c.SourceType, c.UriReference, c.ChunkKind, c.SymbolPath),
+            IndexedAt = c.IndexedAt
+        };
     }
 
     /// <summary>SPEC-20260924-graph-tool-discovery RF-001: attaches the

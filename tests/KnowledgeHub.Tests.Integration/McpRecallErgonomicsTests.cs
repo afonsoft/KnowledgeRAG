@@ -18,8 +18,8 @@ public class McpRecallErgonomicsTests : IClassFixture<McpRecallErgonomicsTests.F
     /// <summary>Host with a stub IChatClient — ask_knowledge can synthesize.</summary>
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), DbFileName());
-        public string Vault { get; } = Path.Combine(Path.GetTempPath(), VaultDirName());
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), DbFileName());
+        public string Vault { get; } = Path.Join(Path.GetTempPath(), VaultDirName());
 
         private static string DbFileName() => $"kh-ergo-{Guid.NewGuid():N}.db";
         private static string VaultDirName() => $"vault-ergo-{Guid.NewGuid():N}";
@@ -38,7 +38,7 @@ public class McpRecallErgonomicsTests : IClassFixture<McpRecallErgonomicsTests.F
             foreach (var body in bodies)
             {
                 var note = $"ergo{i2++}.md";
-                File.WriteAllText(Path.Combine(Vault, note), $"# Ergo{i2}\n\n{body}");
+                File.WriteAllText(Path.Join(Vault, note), $"# Ergo{i2}\n\n{body}");
             }
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>

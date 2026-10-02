@@ -50,10 +50,9 @@ public static class MmrSelector
     {
         Candidate? best = null;
         var bestMmr = double.NegativeInfinity;
-        foreach (var c in pool)
+        foreach (var c in pool.Where(
+            c => maxPerDocument <= 0 || perDoc.GetValueOrDefault(c.DocumentId) < maxPerDocument))
         {
-            if (maxPerDocument > 0 && perDoc.GetValueOrDefault(c.DocumentId) >= maxPerDocument)
-                continue;
             var rel = maxScore > 0 ? c.Score / maxScore : 0;
             var mmr = lambda * rel - (1 - lambda) * MaxSimilarity(c, selected);
             if (mmr > bestMmr)
@@ -69,14 +68,10 @@ public static class MmrSelector
     {
         if (c.Vector is null)
             return 0;
-        var max = 0.0;
-        foreach (var s in selected.Where(s => s.Vector is not null))
-        {
-            var sim = Cosine(c.Vector, s.Vector!);
-            if (sim > max)
-                max = sim;
-        }
-        return max;
+        return selected.Where(s => s.Vector is not null)
+            .Select(s => Cosine(c.Vector, s.Vector!))
+            .DefaultIfEmpty(0.0)
+            .Max();
     }
 
     private static double Cosine(float[] a, float[] b)

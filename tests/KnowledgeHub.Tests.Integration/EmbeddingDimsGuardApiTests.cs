@@ -122,15 +122,15 @@ public class EmbeddingDimsGuardApiTests : IClassFixture<EmbeddingDimsGuardApiTes
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var candidate = Path.Combine(dir.FullName, "models", "all-MiniLM-L6-v2");
-            var model = Path.Combine(candidate, "model.onnx");
-            var vocab = Path.Combine(candidate, "vocab.txt");
+            var candidate = Path.Join(dir.FullName, "models", "all-MiniLM-L6-v2");
+            var model = Path.Join(candidate, "model.onnx");
+            var vocab = Path.Join(candidate, "vocab.txt");
             if (File.Exists(model) && File.Exists(vocab))
             {
-                var target = Path.Combine(Path.GetTempPath(), $"kh-onnx-{Guid.NewGuid():N}");
+                var target = Path.Join(Path.GetTempPath(), $"kh-onnx-{Guid.NewGuid():N}");
                 Directory.CreateDirectory(target);
-                File.Copy(model, Path.Combine(target, "model.onnx"));
-                File.Copy(vocab, Path.Combine(target, "vocab.txt"));
+                File.Copy(model, Path.Join(target, "model.onnx"));
+                File.Copy(vocab, Path.Join(target, "vocab.txt"));
                 return target;
             }
             dir = dir.Parent;

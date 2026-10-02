@@ -481,10 +481,10 @@
     private static IEnumerable<string> PartTexts(JsonElement owner)
     {
         if (!owner.TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array)
-            yield break;
-        foreach (var p in parts.EnumerateArray())
-            if (p.TryGetProperty("text", out var t))
-                yield return t.GetString() ?? "";
+            return [];
+        return parts.EnumerateArray()
+            .Where(p => p.TryGetProperty("text", out _))
+            .Select(p => p.GetProperty("text").GetString() ?? "");
     }
 
     private static Color A2aStateColor(string? state) => state switch
@@ -566,18 +566,8 @@
         }
 
         // Assemble the arguments JSON from the form fields (schema-driven coercion).
-        var args = new Dictionary<string, JsonElement>();
-        foreach (var f in _fields)
-        {
-            if (!ToolArgumentBuilder.TryBuildArgument(f, f.TextValue, out var value, out var error))
-            {
-                var hint = f.Placeholder is not null ? $" — ex.: {f.Placeholder}" : "";
-                await Toast.Error($"Valor inválido em '{f.Name}'", $"{error}{hint}");
-                return;
-            }
-            if (value.ValueKind != JsonValueKind.Undefined)
-                args[f.Name] = value;
-        }
+        var args = await BuildArgsAsync();
+        if (args is null) return;
 
         // RF-003: mutating tools invoked from the UI require an explicit
         // inline confirmation carrying the assembled args (HITL gate).
@@ -603,17 +593,7 @@
         try
         {
             var result = await Tools.CallAsync(_selected.Name, JsonSerializer.Serialize(args));
-            _result = result;
-            _isError = IsTrue(result, "isError");
-            _texts = result.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array
-                ? content.EnumerateArray()
-                    .Where(c => c.ValueKind == JsonValueKind.Object &&
-                        c.TryGetProperty("type", out var t) && t.GetString() == "text")
-                    .Select(c => c.TryGetProperty("text", out var tx) ? tx.GetString() ?? "" : "")
-                    .ToList()
-                : [];
-            (_structuredAnswer, _citations, _agentSteps, _agentIterations, _agentLatencyMs) = ParseStructured(result);
-            _elapsedMs = sw.Elapsed.TotalMilliseconds;
+            ApplyResult(result, sw);
         }
         catch (Exception ex)
         {
@@ -623,6 +603,40 @@
         {
             _running = false;
         }
+    }
+
+    /// <summary>Coerces every form field through the schema-driven builder;
+    /// returns null after reporting the first invalid field.</summary>
+    private async Task<Dictionary<string, JsonElement>?> BuildArgsAsync()
+    {
+        var args = new Dictionary<string, JsonElement>();
+        foreach (var f in _fields)
+        {
+            if (!ToolArgumentBuilder.TryBuildArgument(f, f.TextValue, out var value, out var error))
+            {
+                var hint = f.Placeholder is not null ? $" — ex.: {f.Placeholder}" : "";
+                await Toast.Error($"Valor inválido em '{f.Name}'", $"{error}{hint}");
+                return null;
+            }
+            if (value.ValueKind != JsonValueKind.Undefined)
+                args[f.Name] = value;
+        }
+        return args;
+    }
+
+    private void ApplyResult(JsonElement result, System.Diagnostics.Stopwatch sw)
+    {
+        _result = result;
+        _isError = IsTrue(result, "isError");
+        _texts = result.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array
+            ? content.EnumerateArray()
+                .Where(c => c.ValueKind == JsonValueKind.Object &&
+                    c.TryGetProperty("type", out var t) && t.GetString() == "text")
+                .Select(c => c.TryGetProperty("text", out var tx) ? tx.GetString() ?? "" : "")
+                .ToList()
+            : [];
+        (_structuredAnswer, _citations, _agentSteps, _agentIterations, _agentLatencyMs) = ParseStructured(result);
+        _elapsedMs = sw.Elapsed.TotalMilliseconds;
     }
 
     /// <summary>Consumes the SSE endpoint; returns false when nothing arrived (caller falls back).</summary>
@@ -728,43 +742,52 @@
             !sc.TryGetProperty("answer", out var a) || a.ValueKind != JsonValueKind.String)
             return (null, [], [], 0, 0);
 
-        var steps = new List<AgentStepModel>();
-        if (sc.TryGetProperty("steps", out var st) && st.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var s in st.EnumerateArray())
-            {
-                if (s.ValueKind != JsonValueKind.Object) continue;
-                steps.Add(new AgentStepModel
-                {
-                    Iteration = s.TryGetProperty("iteration", out var it) ? it.GetInt32() : 0,
-                    Tool = s.TryGetProperty("tool", out var tn) ? tn.GetString() ?? "" : "",
-                    ArgsSummary = s.TryGetProperty("argsSummary", out var ag) ? ag.GetString() ?? "" : "",
-                    IsError = IsTrue(s, "isError"),
-                    ElapsedMs = s.TryGetProperty("elapsedMs", out var em) ? em.GetDouble() : 0
-                });
-            }
-        }
-
+        var steps = ParseSteps(sc);
         var iterations = sc.TryGetProperty("iterations", out var itr) ? itr.GetInt32() : 0;
         var latencyMs = sc.TryGetProperty("latencyMs", out var lm) ? lm.GetDouble() : 0;
-        var citations = new List<CitationModel>();
-        if (sc.TryGetProperty("citations", out var cs) && cs.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var c in cs.EnumerateArray())
-            {
-                if (c.ValueKind != JsonValueKind.Object) continue;
-                citations.Add(new CitationModel
-                {
-                    Index = c.TryGetProperty("index", out var i) ? i.GetInt32() : 0,
-                    Source = c.TryGetProperty("source", out var s) ? s.GetString() ?? "" : "",
-                    Title = c.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "",
-                    Uri = c.TryGetProperty("uri", out var u) ? u.GetString() ?? "" : "",
-                    SuspicionFlags = c.TryGetProperty("suspicionFlags", out var sf)
-                        && sf.ValueKind == JsonValueKind.String ? sf.GetString() : null
-                });
-            }
-        }
+        var citations = ParseCitations(sc);
         return (a.GetString(), citations, steps, iterations, latencyMs);
+    }
+
+    private static List<AgentStepModel> ParseSteps(JsonElement sc)
+    {
+        var steps = new List<AgentStepModel>();
+        if (!sc.TryGetProperty("steps", out var st) || st.ValueKind != JsonValueKind.Array)
+            return steps;
+        foreach (var s in st.EnumerateArray())
+        {
+            if (s.ValueKind != JsonValueKind.Object) continue;
+            steps.Add(new AgentStepModel
+            {
+                Iteration = s.TryGetProperty("iteration", out var it) ? it.GetInt32() : 0,
+                Tool = s.TryGetProperty("tool", out var tn) ? tn.GetString() ?? "" : "",
+                ArgsSummary = s.TryGetProperty("argsSummary", out var ag) ? ag.GetString() ?? "" : "",
+                IsError = IsTrue(s, "isError"),
+                ElapsedMs = s.TryGetProperty("elapsedMs", out var em) ? em.GetDouble() : 0
+            });
+        }
+        return steps;
+    }
+
+    private static List<CitationModel> ParseCitations(JsonElement sc)
+    {
+        var citations = new List<CitationModel>();
+        if (!sc.TryGetProperty("citations", out var cs) || cs.ValueKind != JsonValueKind.Array)
+            return citations;
+        foreach (var c in cs.EnumerateArray())
+        {
+            if (c.ValueKind != JsonValueKind.Object) continue;
+            citations.Add(new CitationModel
+            {
+                Index = c.TryGetProperty("index", out var i) ? i.GetInt32() : 0,
+                Source = c.TryGetProperty("source", out var s) ? s.GetString() ?? "" : "",
+                Title = c.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "",
+                Uri = c.TryGetProperty("uri", out var u) ? u.GetString() ?? "" : "",
+                SuspicionFlags = c.TryGetProperty("suspicionFlags", out var sf)
+                    && sf.ValueKind == JsonValueKind.String ? sf.GetString() : null
+            });
+        }
+        return citations;
     }
 
     private sealed record AgentStepModel

@@ -26,12 +26,9 @@ public static class MarkdownChunker
         var chunks = new List<string>();
         var current = new StringBuilder();
 
-        foreach (var block in SplitIntoBlocks(body, maxChars))
+        foreach (var text in SplitIntoBlocks(body, maxChars)
+            .Select(b => b.Trim()).Where(t => t.Length > 0))
         {
-            var text = block.Trim();
-            if (text.Length == 0)
-                continue;
-
             // Block alone exceeds the budget → hard-split on character boundary.
             if (text.Length > maxChars)
             {

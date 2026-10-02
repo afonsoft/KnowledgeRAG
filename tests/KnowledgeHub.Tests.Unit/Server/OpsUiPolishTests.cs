@@ -170,7 +170,7 @@ public sealed class OpsUiPolishTests
     [Fact]
     public async Task Eval_LatencyMs_MeasuresSearch_NotAnswerTime()
     {
-        var conn = new SqliteConnection("Data Source=:memory:");
+        await using var conn = new SqliteConnection("Data Source=:memory:");
         await conn.OpenAsync();
         var db = new KnowledgeHubDbContext(
             new DbContextOptionsBuilder<KnowledgeHubDbContext>().UseSqlite(conn).Options);
@@ -215,7 +215,7 @@ public sealed class OpsUiPolishTests
     [Fact]
     public async Task Diagnostics_SqliteVec_ReportsVec0_NotHnsw()
     {
-        var conn = new SqliteConnection("Data Source=:memory:");
+        await using var conn = new SqliteConnection("Data Source=:memory:");
         await conn.OpenAsync();
         var db = new KnowledgeHubDbContext(
             new DbContextOptionsBuilder<KnowledgeHubDbContext>().UseSqlite(conn).Options);

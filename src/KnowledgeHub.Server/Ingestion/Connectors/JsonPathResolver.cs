@@ -19,9 +19,8 @@ public static class JsonPathResolver
             return root;
 
         var current = root;
-        foreach (var rawSegment in path.Split('.'))
+        foreach (var segment in path.Split('.').Select(s => s.Trim()))
         {
-            var segment = rawSegment.Trim();
             if (segment.Length == 0)
                 return null;
 

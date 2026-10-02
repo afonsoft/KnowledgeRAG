@@ -125,8 +125,8 @@ public static class ConfigurationValidator
     private static void ValidateOnnxArtifacts(IConfigurationSection section, List<string> problems)
     {
         var dir = section["ModelPath"] is { Length: > 0 } p ? p : OnnxEmbeddingProvider.DefaultModelDirectory;
-        if (!File.Exists(Path.Combine(dir, OnnxEmbeddingProvider.ModelFileName))
-            || !File.Exists(Path.Combine(dir, OnnxEmbeddingProvider.VocabFileName)))
+        if (!File.Exists(Path.Join(dir, OnnxEmbeddingProvider.ModelFileName))
+            || !File.Exists(Path.Join(dir, OnnxEmbeddingProvider.VocabFileName)))
             problems.Add(
                 $"Embeddings:Provider=onnx requires {OnnxEmbeddingProvider.ModelFileName} and " +
                 $"{OnnxEmbeddingProvider.VocabFileName} under '{Path.GetFullPath(dir)}' " +

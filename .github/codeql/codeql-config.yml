@@ -1,9 +1,10 @@
-# CodeQL configuration — picked up automatically by codeql-action/init.
-# SPEC-20260929-codeql-quality-debt: generated sources under obj/ are build
-# artifacts (RegexGenerator, source-generated code) — findings there are
-# unfixable noise, not real debt.
 name: "KnowledgeHub CodeQL config"
 
+# SPEC-20261002-static-analysis-residual (E27-S3, #505): build outputs and
+# source-generated files (obj/**/generated, bin/) carry analyzer noise the
+# repo cannot act on — scan real sources only.
 paths-ignore:
   - "**/obj/**"
   - "**/bin/**"
+  - "**/*.g.cs"
+  - "**/Migrations/**"

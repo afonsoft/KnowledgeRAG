@@ -73,9 +73,9 @@ public sealed class IngestionProgressFeed : IIngestionProgressFeed
     private void Prune()
     {
         var cutoff = DateTimeOffset.UtcNow - TerminalRetention;
-        foreach (var kv in _lastEvent)
-            if (kv.Value.Event.Status != "running" && kv.Value.StoredAt < cutoff)
-                _lastEvent.TryRemove(kv.Key, out _);
+        foreach (var kv in _lastEvent
+            .Where(kv => kv.Value.Event.Status != "running" && kv.Value.StoredAt < cutoff))
+            _lastEvent.TryRemove(kv.Key, out _);
 
         if (_lastEvent.Count > MaxTrackedJobs)
             foreach (var kv in _lastEvent

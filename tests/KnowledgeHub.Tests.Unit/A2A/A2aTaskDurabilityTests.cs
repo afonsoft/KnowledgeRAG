@@ -19,7 +19,7 @@ namespace KnowledgeHub.Tests.Unit.A2a;
 public sealed class A2aTaskDurabilityTests : IDisposable
 {
     private readonly string _dbPath =
-        Path.Combine(Path.GetTempPath(), StoreFileName());
+        Path.Join(Path.GetTempPath(), StoreFileName());
     private readonly RecordingNotifier _notifier = new();
 
     private static string StoreFileName() => $"kh-a2a-store-{Guid.NewGuid():N}.db";
