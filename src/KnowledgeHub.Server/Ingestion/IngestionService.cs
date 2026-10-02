@@ -1063,7 +1063,7 @@ public sealed class IngestionService : IIngestionService
             await ctx.Db.SaveChangesAsync(cancellationToken);
         }
 
-        var full = Path.GetFullPath(Path.Combine(root!, relativePath));
+        var full = Path.GetFullPath(Path.Join(root!, relativePath));
         if (!full.StartsWith(root!, StringComparison.OrdinalIgnoreCase))
             return; // path traversal — ignore
 

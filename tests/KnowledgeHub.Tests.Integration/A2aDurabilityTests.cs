@@ -228,8 +228,8 @@ public class A2aDurabilityTests
                 }
                 // Stop() races the accept loop — listener-down errors are
                 // the expected shutdown path.
-                catch (Exception) when (!listener.IsListening) { }
-                catch (HttpListenerException) { }
+                catch (Exception) when (!listener.IsListening) { break; }
+                catch (HttpListenerException hle) { _ = hle.ErrorCode; }
             }
         });
         try

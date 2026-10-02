@@ -135,7 +135,7 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
     private async Task<string?> DownloadExtractAsync(
         ObjectLoopContext ctx, RemoteObject obj, string uri, string ext, CancellationToken ct)
     {
-        var localPath = Path.Combine(ctx.StagingDir, Sanitize(obj.Key));
+        var localPath = Path.Join(ctx.StagingDir, Sanitize(obj.Key));
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);

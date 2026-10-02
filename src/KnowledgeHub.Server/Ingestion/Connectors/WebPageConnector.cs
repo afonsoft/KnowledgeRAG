@@ -123,10 +123,10 @@ public sealed class WebPageConnector(
 
         if (depth >= crawl.CrawlDepth)
             return;
-        foreach (var link in HtmlTextExtractor.ExtractLinks(html, page))
+        foreach (var link in HtmlTextExtractor.ExtractLinks(html, page)
+            .Where(link => visited.Add(link) && visited.Count <= crawl.MaxPages))
         {
-            if (visited.Add(link) && visited.Count <= crawl.MaxPages)
-                queue.Enqueue((new Uri(link), depth + 1));
+            queue.Enqueue((new Uri(link), depth + 1));
         }
     }
 

@@ -179,11 +179,12 @@ public sealed class EgressPolicyHandler(bool allowPrivateNetworks = false) : Del
         var isMulticastOrReserved = b[0] >= 224;
         if (isZero || isCgnat || isMulticastOrReserved)
             return true;
-        if (!allowPrivate &&
-            (IPAddress.IsLoopback(address)
-             || b[0] == 10
-             || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
-             || (b[0] == 192 && b[1] == 168)))
+        // RFC1918 + loopback only when private nets are denied.
+        var isPrivateV4 = IPAddress.IsLoopback(address)
+            || b[0] == 10
+            || (b[0] == 172 && b[1] is >= 16 and <= 31)
+            || (b[0] == 192 && b[1] == 168);
+        if (!allowPrivate && isPrivateV4)
             return true;
         return false;
     }

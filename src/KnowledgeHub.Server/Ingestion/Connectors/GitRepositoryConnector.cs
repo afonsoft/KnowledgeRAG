@@ -165,17 +165,14 @@ public sealed class GitRepositoryConnector(
     private static async Task<List<RawDocument>> DownloadFilesAsync(
         DownloadContext ctx, CancellationToken ct)
     {
-        var (api, repo, token, eligible, existingFingerprints, commitPrefix, maxBytes, warnings, failed) =
-            (ctx.Api, ctx.Repo, ctx.Token, ctx.Eligible, ctx.ExistingFingerprints,
-             ctx.CommitPrefix, ctx.MaxBytes, ctx.Warnings, ctx.Failed);
         var documents = new List<RawDocument>();
         var oversized = 0;
-        foreach (var e in eligible)
+        foreach (var e in ctx.Eligible)
         {
-            var fingerprint = $"{commitPrefix}{e.Path}:{e.BlobSha}";
-            var uri = $"git://{repo.Provider}/{repo.Owner}/{repo.Name}@{repo.Branch}:{e.Path}";
+            var fingerprint = $"{ctx.CommitPrefix}{e.Path}:{e.BlobSha}";
+            var uri = $"git://{ctx.Repo.Provider}/{ctx.Repo.Owner}/{ctx.Repo.Name}@{ctx.Repo.Branch}:{e.Path}";
 
-            if (existingFingerprints.TryGetValue(uri, out var prev) && prev == fingerprint)
+            if (ctx.ExistingFingerprints.TryGetValue(uri, out var prev) && prev == fingerprint)
             {
                 documents.Add(new RawDocument(uri, "", "", prev));
                 continue;
@@ -183,27 +180,27 @@ public sealed class GitRepositoryConnector(
 
             try
             {
-                var text = await api.GetFileTextAsync(repo, e.Path, token, ct);
+                var text = await ctx.Api.GetFileTextAsync(ctx.Repo, e.Path, ctx.Token, ct);
                 // SPEC-20260929 RF-007: GitLab tree entries carry Size=0 — the
                 // pre-download gate can't fire; enforce the limit on content.
                 // FailedUris keeps the previously-indexed document alive.
-                if (e.Size <= 0 && System.Text.Encoding.UTF8.GetByteCount(text) > maxBytes)
+                if (e.Size <= 0 && System.Text.Encoding.UTF8.GetByteCount(text) > ctx.MaxBytes)
                 {
                     oversized++;
-                    warnings.Add($"{e.Path}: skipped — over maxFileSizeBytes (post-download check)");
-                    failed.Add(uri);
+                    ctx.Warnings.Add($"{e.Path}: skipped — over maxFileSizeBytes (post-download check)");
+                    ctx.Failed.Add(uri);
                     continue;
                 }
                 documents.Add(new RawDocument(uri, Path.GetFileName(e.Path), text, fingerprint));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                warnings.Add($"{e.Path}: {ex.Message}");
-                failed.Add(uri);
+                ctx.Warnings.Add($"{e.Path}: {ex.Message}");
+                ctx.Failed.Add(uri);
             }
         }
         if (oversized > 0)
-            warnings.Add($"{oversized} file(s) skipped — over maxFileSizeBytes (post-download)");
+            ctx.Warnings.Add($"{oversized} file(s) skipped — over maxFileSizeBytes (post-download)");
         return documents;
     }
 

@@ -103,13 +103,16 @@ public static class NotionBlockRenderer
                 break;
             default:
                 var prefix = type == "to_do"
-                    ? IsChecked(payload) ? "- [x] " : "- [ ] "
+                    ? ToDoPrefix(payload)
                     : TextPrefixes.GetValueOrDefault(type);
                 if (prefix is not null)
                     Line(sb, indent, prefix + RichText(payload));
                 break;
         }
     }
+
+    private static string ToDoPrefix(JsonElement payload) =>
+        IsChecked(payload) ? "- [x] " : "- [ ] ";
 
     private static bool IsChecked(JsonElement payload) =>
         payload.ValueKind == JsonValueKind.Object
@@ -239,25 +242,31 @@ public static class NotionBlockRenderer
     /// <summary>Scalar/label property types; null when the type is structured.</summary>
     private static string? ScalarPropertyValue(string type, JsonElement payload) => type switch
     {
-        TitleProp or "rich_text" =>
-            payload.ValueKind == JsonValueKind.Array
-                ? string.Concat(payload.EnumerateArray().Select(PlainText))
-                : "",
+        TitleProp or "rich_text" => RichTextConcat(payload),
         "number" => payload.ValueKind == JsonValueKind.Number ? payload.GetRawText() : "",
-        "select" or "status" =>
-            payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? "" : "",
-        "date" => payload.ValueKind == JsonValueKind.Object
-            ? string.Join(" → ", new[] { StringProp(payload, "start"), StringProp(payload, "end") }
-                .Where(v => v is not null))
-            : "",
+        "select" or "status" => NamedProp(payload, ""),
+        "date" => DateRangeProp(payload),
         "checkbox" => payload.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? payload.GetBoolean().ToString() : "",
         "url" or "email" or "phone_number" or "created_time" or "last_edited_time" =>
             Text(payload) ?? "",
-        "created_by" or "last_edited_by" =>
-            payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? "(user)" : "",
+        "created_by" or "last_edited_by" => NamedProp(payload, "(user)"),
         _ => null
     };
+
+    private static string RichTextConcat(JsonElement payload) =>
+        payload.ValueKind == JsonValueKind.Array
+            ? string.Concat(payload.EnumerateArray().Select(PlainText))
+            : "";
+
+    private static string NamedProp(JsonElement payload, string fallback) =>
+        payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? fallback : "";
+
+    private static string DateRangeProp(JsonElement payload) =>
+        payload.ValueKind == JsonValueKind.Object
+            ? string.Join(" → ", new[] { StringProp(payload, "start"), StringProp(payload, "end") }
+                .Where(v => v is not null))
+            : "";
 
     /// <summary>Array/reference property types; degrades to <c>(unsupported)</c>.</summary>
     private static string StructuredPropertyValue(string type, JsonElement payload) => type switch

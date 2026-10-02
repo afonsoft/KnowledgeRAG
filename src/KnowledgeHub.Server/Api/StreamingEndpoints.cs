@@ -173,7 +173,8 @@ public static class StreamingEndpoints
         finally
         {
             await stop.CancelAsync();
-            try { await heartbeat; } catch { /* heartbeat already faulted/stopped */ } // NOSONAR — nada a observar: o heartbeat só existe p/ manter a conexão viva
+            try { await heartbeat; } // NOSONAR — nada a observar: o heartbeat só existe p/ manter a conexão viva
+            catch (Exception hbEx) { _ = hbEx.Message; /* heartbeat already faulted/stopped */ }
         }
     }
 }

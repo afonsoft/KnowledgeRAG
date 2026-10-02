@@ -32,16 +32,16 @@ public sealed class A2aAgentTests
 
     private static CatalogTool Tool(string name, bool readOnly = true,
         Func<ToolCallContext, CancellationToken, ValueTask<CallToolResult>>? handler = null) => new()
-    {
-        Name = name,
-        Description = "stub",
-        InputSchema = new System.Text.Json.Nodes.JsonObject(),
-        ReadOnly = readOnly,
-        Handler = handler ?? ((ctx, ct) => ValueTask.FromResult(new CallToolResult
         {
-            Content = [new TextContentBlock { Text = $"ok-{name}" }]
-        }))
-    };
+            Name = name,
+            Description = "stub",
+            InputSchema = new System.Text.Json.Nodes.JsonObject(),
+            ReadOnly = readOnly,
+            Handler = handler ?? ((ctx, ct) => ValueTask.FromResult(new CallToolResult
+            {
+                Content = [new TextContentBlock { Text = $"ok-{name}" }]
+            }))
+        };
 
     private static Dictionary<string, JsonElement> Meta(string skill, string? agentName = null)
     {
@@ -54,18 +54,18 @@ public sealed class A2aAgentTests
     private static RequestContext Context(
         string? taskId = null, string skill = "search_knowledge",
         string? agentName = null, string text = "go") => new()
-    {
-        TaskId = taskId ?? string.Empty,
-        ContextId = "ctx-1",
-        StreamingResponse = false,
-        Message = new Message
         {
-            Role = A2ARole.User,
-            MessageId = "m1",
-            Parts = [Part.FromText(text)],
-            Metadata = Meta(skill, agentName)
-        }
-    };
+            TaskId = taskId ?? string.Empty,
+            ContextId = "ctx-1",
+            StreamingResponse = false,
+            Message = new Message
+            {
+                Role = A2ARole.User,
+                MessageId = "m1",
+                Parts = [Part.FromText(text)],
+                Metadata = Meta(skill, agentName)
+            }
+        };
 
     private static (KnowledgeHubA2AAgent Agent, ServiceProvider Provider, IServiceScope Scope)
         Build(IReadOnlyList<CatalogTool> tools, CallerScope? scope = null,

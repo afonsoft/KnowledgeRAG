@@ -703,32 +703,33 @@ public static class KnowledgeHubServiceCollectionExtensions
     /// <summary>MCP CallTool pipeline: scope gate → MRTR approval → rate limit →
     /// tool cache → handler with duration metric.</summary>
     private static async System.Threading.Tasks.Task<CallToolResult> CallToolAsync(
-        RequestContext<CallToolRequestParams> ctx, CancellationToken ct) {
-                var name = ctx.Params?.Name;
-                var (tool, denied) = await ResolveMcpToolAsync(ctx, name, ct);
-                if (denied is not null)
-                    return denied;
+        RequestContext<CallToolRequestParams> ctx, CancellationToken ct)
+    {
+        var name = ctx.Params?.Name;
+        var (tool, denied) = await ResolveMcpToolAsync(ctx, name, ct);
+        if (denied is not null)
+            return denied;
 
-                if (await WriteGateDeniedAsync(ctx, tool!, name, ct) is { } writeDenied)
-                    return writeDenied;
+        if (await WriteGateDeniedAsync(ctx, tool!, name, ct) is { } writeDenied)
+            return writeDenied;
 
-                // RF-003 (SPEC-20260926-mcp-sdk-alignment): MRTR — a retry
-                // carrying requestState+inputResponses resolves the pending
-                // approval (and executes the stored call on accept). A gated
-                // write tool under an elicitation-capable client is answered
-                // with resultType:"input_required" instead of running blind.
-                if (Mcp.MrtrApproval.IsRetry(ctx))
-                    return await Mcp.MrtrApproval.ResumeAsync(ctx, tool!, ct);
+        // RF-003 (SPEC-20260926-mcp-sdk-alignment): MRTR — a retry
+        // carrying requestState+inputResponses resolves the pending
+        // approval (and executes the stored call on accept). A gated
+        // write tool under an elicitation-capable client is answered
+        // with resultType:"input_required" instead of running blind.
+        if (Mcp.MrtrApproval.IsRetry(ctx))
+            return await Mcp.MrtrApproval.ResumeAsync(ctx, tool!, ct);
 
-                if (Mcp.MrtrApproval.RequiresApproval(ctx.Services!, tool!)
-                    && Mcp.MrtrApproval.ClientSupportsElicitation(ctx))
-                    throw await Mcp.MrtrApproval.CreateAsync(ctx, tool!, ct);
+        if (Mcp.MrtrApproval.RequiresApproval(ctx.Services!, tool!)
+            && Mcp.MrtrApproval.ClientSupportsElicitation(ctx))
+            throw await Mcp.MrtrApproval.CreateAsync(ctx, tool!, ct);
 
-                if (RateLimitedResult(ctx, name) is { } limited)
-                    return limited;
+        if (RateLimitedResult(ctx, name) is { } limited)
+            return limited;
 
-                return await InvokeMcpToolAsync(ctx, tool!, name, ct);
-            }
+        return await InvokeMcpToolAsync(ctx, tool!, name, ct);
+    }
 
     /// <summary>Catalog resolution: a tool hidden by the key's scope gets a
     /// friendly isError + audit row; genuinely unknown names stay

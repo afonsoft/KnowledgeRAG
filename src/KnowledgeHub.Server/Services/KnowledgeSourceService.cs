@@ -438,15 +438,14 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
     {
         var payload = new JsonObject();
         var anyValue = false;
-        foreach (var f in fields)
+        var entries = fields
+            .Select(f => (Field: f, Value: configuration.TryGetPropertyValue(f, out var n)
+                ? n?.GetValue<string>() : null))
+            .Where(x => x.Value is { Length: > 0 } && x.Value != "***");
+        foreach (var (f, fv) in entries)
         {
-            if (configuration.TryGetPropertyValue(f, out var n)
-                && n?.GetValue<string>() is { } fv
-                && fv != "***" && fv.Length > 0)
-            {
-                payload[f] = fv;
-                anyValue = true;
-            }
+            payload[f] = fv;
+            anyValue = true;
         }
         if (anyValue)
         {
