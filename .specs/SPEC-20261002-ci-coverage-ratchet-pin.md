@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `In Review` — PR [#509](https://github.com/afonsoft/LangGraph-UI/pull/509) |
+| Status | `Done` — mergeado via PR [#509](https://github.com/afonsoft/LangGraph-UI/pull/509) (2026-10-02) |
 | Ticket | Epic [#503 (E27)](https://github.com/afonsoft/LangGraph-UI/issues/503) — slice [#504](https://github.com/afonsoft/LangGraph-UI/issues/504) (RF-001..003) |
 | Origem | gap-analysis — relatório `.claude/memory/gap-analysis-20261002-r2.md` |
 
