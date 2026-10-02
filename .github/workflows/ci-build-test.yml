@@ -208,6 +208,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout Code
@@ -218,7 +219,12 @@ jobs:
         with:
           name: unit-coverage-xml
 
+      # main is PR-required — a direct `git push` is rejected by branch
+      # protection. Raise via a persistent PR branch instead; merging it
+      # updates the baseline (auto-deleted on merge, recreated next raise).
       - name: Raise Baseline When Improved
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           XML=$(find . -name "coverage.cobertura.xml" | head -1)
           if [ -z "$XML" ]; then echo "coverage xml not found — skipping ratchet"; exit 0; fi
@@ -229,9 +235,17 @@ jobs:
             echo "$RATE" > .ci/coverage-baseline.txt
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b chore/coverage-baseline-ratchet
             git add .ci/coverage-baseline.txt
-            git commit -m "chore(ci): raise coverage baseline to ${RATE}% [skip ci]"
-            git push
+            git commit -m "chore(ci): raise coverage baseline to ${RATE}%"
+            git push -f origin chore/coverage-baseline-ratchet
+            if gh pr list --head chore/coverage-baseline-ratchet --state open --json number --jq '.[0].number' | grep -q .; then
+              echo "baseline PR already open — branch updated to ${RATE}%"
+            else
+              gh pr create --base main --head chore/coverage-baseline-ratchet \
+                --title "chore(ci): raise coverage baseline to ${RATE}%" \
+                --body "Auto-raised by Coverage Baseline Ratchet — measured ${RATE}% vs baseline ${BASELINE}%. Merging updates \`.ci/coverage-baseline.txt\`; the branch is recreated on the next improvement."
+            fi
           else
             echo "coverage did not improve — baseline unchanged"
           fi
