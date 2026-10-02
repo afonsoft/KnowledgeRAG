@@ -40,6 +40,7 @@ FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS runtime
 
 # curl for HEALTHCHECK; base image already ships non-root `app` user (uid 1654).
 RUN apt-get update \
+ && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/* \
  && mkdir -p /data && chown app:app /data
