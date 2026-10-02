@@ -92,26 +92,29 @@ public static class HtmlTextExtractor
     {
         foreach (var child in node.ChildNodes)
         {
-            switch (child.NodeType)
-            {
-                case HtmlNodeType.Text:
-                    sb.Append(HtmlEntity.DeEntitize(child.InnerText));
-                    break;
-                case HtmlNodeType.Element:
-                    {
-                        var tag = child.Name;
-                        if (tag.StartsWith('h') && tag.Length == 2 && char.IsDigit(tag[1]))
-                            sb.Append('\n').Append('#', tag[1] - '0').Append(' ');
-                        if (tag is "li")
-                            sb.Append("\n- ");
-                        Render(child, sb);
-                        if (tag is "p" or "div" or "section" or "article" or "br" or "tr" or "table" or "ul" or "ol" or "blockquote"
-                            || (tag.StartsWith('h') && tag.Length == 2 && char.IsDigit(tag[1])))
-                            sb.Append("\n\n");
-                        break;
-                    }
-            }
+            if (child.NodeType == HtmlNodeType.Text)
+                sb.Append(HtmlEntity.DeEntitize(child.InnerText));
+            else if (child.NodeType == HtmlNodeType.Element)
+                RenderElement(child, sb);
         }
+    }
+
+    private static bool IsHeading(string tag) =>
+        tag.StartsWith('h') && tag.Length == 2 && char.IsDigit(tag[1]);
+
+    /// <summary>Renders one element: heading/list markers before its children,
+    /// a paragraph break after block-level tags.</summary>
+    private static void RenderElement(HtmlNode node, StringBuilder sb)
+    {
+        var tag = node.Name;
+        var heading = IsHeading(tag);
+        if (heading)
+            sb.Append('\n').Append('#', tag[1] - '0').Append(' ');
+        if (tag is "li")
+            sb.Append("\n- ");
+        Render(node, sb);
+        if (heading || tag is "p" or "div" or "section" or "article" or "br" or "tr" or "table" or "ul" or "ol" or "blockquote")
+            sb.Append("\n\n");
     }
 
     private static string CollapseWhitespace(string text)

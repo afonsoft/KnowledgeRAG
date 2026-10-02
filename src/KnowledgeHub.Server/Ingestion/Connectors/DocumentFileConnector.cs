@@ -53,45 +53,58 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
 
         var documents = new List<RawDocument>();
         var warnings = new List<string>();
+        var singleFile = File.Exists(path);
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                var info = new FileInfo(file);
-                if (info.Length == 0 || info.Length > maxBytes)
-                {
-                    logger.LogWarning("Skipping {File}: size {Bytes} outside 1..{Max} bytes", file, info.Length, maxBytes);
-                    warnings.Add($"{Path.GetFileName(file)}: size outside limit");
-                    continue;
-                }
-                if (!SupportedExtensions.Contains(info.Extension))
-                {
-                    logger.LogWarning("Skipping {File}: extension '{Ext}' not supported", file, info.Extension);
-                    warnings.Add($"{Path.GetFileName(file)}: unsupported extension '{info.Extension}'");
-                    continue;
-                }
-
-                var text = await ExtractTextAsync(file, info.Extension, cancellationToken);
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    logger.LogWarning("Skipping {File}: no extractable text", file);
-                    warnings.Add($"{Path.GetFileName(file)}: no extractable text");
-                    continue;
-                }
-
-                var uri = File.Exists(path)
-                    ? Path.GetFileName(file)
-                    : Path.GetRelativePath(path, file);
-                documents.Add(new RawDocument(uri, Path.GetFileNameWithoutExtension(file), text));
-            }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
-            {
-                logger.LogWarning(ex, "Failed to extract {File} — skipped", file);
-                warnings.Add($"{Path.GetFileName(file)}: {ex.Message}");
-            }
+            var doc = await TryExtractAsync(file, path, singleFile, maxBytes, warnings, cancellationToken);
+            if (doc is not null)
+                documents.Add(doc);
         }
         return new FetchResult(documents, warnings);
+    }
+
+    /// <summary>Reads one file into a RawDocument; rejections land in warnings,
+    /// never abort the fetch. <paramref name="singleFile"/> keeps the URI flat
+    /// when the source points at a file rather than a directory.</summary>
+    private async Task<RawDocument?> TryExtractAsync(
+        string file, string root, bool singleFile, long maxBytes,
+        List<string> warnings, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var info = new FileInfo(file);
+            var name = Path.GetFileName(file);
+            if (info.Length == 0 || info.Length > maxBytes)
+            {
+                logger.LogWarning("Skipping {File}: size {Bytes} outside 1..{Max} bytes", file, info.Length, maxBytes);
+                warnings.Add($"{name}: size outside limit");
+                return null;
+            }
+            if (!SupportedExtensions.Contains(info.Extension))
+            {
+                logger.LogWarning("Skipping {File}: extension '{Ext}' not supported", file, info.Extension);
+                warnings.Add($"{name}: unsupported extension '{info.Extension}'");
+                return null;
+            }
+
+            var text = await ExtractTextAsync(file, info.Extension, cancellationToken);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                logger.LogWarning("Skipping {File}: no extractable text", file);
+                warnings.Add($"{name}: no extractable text");
+                return null;
+            }
+
+            var uri = singleFile ? name : Path.GetRelativePath(root, file);
+            return new RawDocument(uri, Path.GetFileNameWithoutExtension(file), text);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Failed to extract {File} — skipped", file);
+            warnings.Add($"{Path.GetFileName(file)}: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>Extracts text for one file — used by the incremental watcher path too.</summary>

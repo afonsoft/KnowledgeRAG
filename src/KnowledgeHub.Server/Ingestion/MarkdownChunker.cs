@@ -23,9 +23,36 @@ public static class MarkdownChunker
         var maxChars = maxTokens * CharsPerToken;
         var overlapChars = Math.Min(overlapTokens * CharsPerToken, maxChars / 2);
 
-        var sections = SplitOnHeaders(body);
+        var chunks = new List<string>();
+        var current = new StringBuilder();
+
+        foreach (var block in SplitIntoBlocks(body, maxChars))
+        {
+            var text = block.Trim();
+            if (text.Length == 0)
+                continue;
+
+            // Block alone exceeds the budget → hard-split on character boundary.
+            if (text.Length > maxChars)
+            {
+                FlushCurrent(current, chunks);
+                HardSplit(text, maxChars, overlapChars, chunks);
+                continue;
+            }
+
+            AppendWithOverlap(current, chunks, text, maxChars, overlapChars);
+        }
+
+        FlushCurrent(current, chunks);
+        return chunks;
+    }
+
+    /// <summary>Header sections → paragraph blocks; oversized sections split on
+    /// paragraph boundaries.</summary>
+    private static List<string> SplitIntoBlocks(string body, int maxChars)
+    {
         var paragraphs = new List<string>();
-        foreach (var section in sections)
+        foreach (var section in SplitOnHeaders(body))
         {
             if (section.Length <= maxChars)
             {
@@ -37,44 +64,36 @@ public static class MarkdownChunker
                     paragraphs.Add(para);
             }
         }
+        return paragraphs;
+    }
 
-        var chunks = new List<string>();
-        var current = new StringBuilder();
-
-        foreach (var block in paragraphs)
+    /// <summary>Slices an oversized block on character boundaries with overlap.</summary>
+    private static void HardSplit(string text, int maxChars, int overlapChars, List<string> chunks)
+    {
+        for (var i = 0; i < text.Length; i += maxChars - overlapChars)
         {
-            var text = block.Trim();
-            if (text.Length == 0)
-                continue;
-
-            // Block alone exceeds the budget → hard-split on character boundary.
-            if (text.Length > maxChars)
-            {
-                FlushCurrent(current, chunks);
-                for (var i = 0; i < text.Length; i += maxChars - overlapChars)
-                {
-                    var piece = text.Substring(i, Math.Min(maxChars, text.Length - i)).Trim();
-                    if (piece.Length > 0)
-                        chunks.Add(piece);
-                    if (i + maxChars >= text.Length)
-                        break;
-                }
-                continue;
-            }
-
-            if (current.Length + text.Length + 1 > maxChars && current.Length > 0)
-            {
-                FlushCurrent(current, chunks);
-                // overlap: seed next chunk with the tail of the previous one
-                var tail = TailOf(chunks[^1], overlapChars);
-                if (tail.Length > 0)
-                    current.Append(tail).Append("\n\n");
-            }
-            current.Append(text).Append("\n\n");
+            var piece = text.Substring(i, Math.Min(maxChars, text.Length - i)).Trim();
+            if (piece.Length > 0)
+                chunks.Add(piece);
+            if (i + maxChars >= text.Length)
+                break;
         }
+    }
 
-        FlushCurrent(current, chunks);
-        return chunks;
+    /// <summary>Appends a block; when it would overflow the budget, flushes the
+    /// current chunk and seeds the next with the previous chunk's tail.</summary>
+    private static void AppendWithOverlap(
+        StringBuilder current, List<string> chunks, string text, int maxChars, int overlapChars)
+    {
+        if (current.Length + text.Length + 1 > maxChars && current.Length > 0)
+        {
+            FlushCurrent(current, chunks);
+            // overlap: seed next chunk with the tail of the previous one
+            var tail = TailOf(chunks[^1], overlapChars);
+            if (tail.Length > 0)
+                current.Append(tail).Append("\n\n");
+        }
+        current.Append(text).Append("\n\n");
     }
 
     private static void FlushCurrent(StringBuilder current, List<string> chunks)
