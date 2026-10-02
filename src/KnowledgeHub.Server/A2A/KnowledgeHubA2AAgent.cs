@@ -121,24 +121,38 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         var (success, parts, resultJson) = await work;
         await heartbeat;
 
-        await updater.AddArtifactAsync(parts, artifactId: $"art_{route.Skill}",
-            name: route.Skill, lastChunk: true, cancellationToken: ct);
+        await CompleteTaskAsync(updater, route.Skill, context.ContextId, success, parts, ct);
+        await RecordEvidenceAsync(services, route, context, success, resultJson, logger, ct);
+    }
+
+    private static async Task CompleteTaskAsync(
+        TaskUpdater updater, string skill, string? contextId,
+        bool success, List<Part> parts, CancellationToken ct)
+    {
+        await updater.AddArtifactAsync(parts, artifactId: $"art_{skill}",
+            name: skill, lastChunk: true, cancellationToken: ct);
         var done = AgentMessage(
             parts.FirstOrDefault(p => p.Text is not null)?.Text ?? (success ? "done" : "failed"),
-            context.ContextId);
+            contextId);
         if (success)
             await updater.CompleteAsync(done, ct);
         else
             await updater.FailAsync(done, ct);
 
         RecordOutcome(success ? "ok" : "error");
+    }
 
+    /// <summary>RF-005 evidence receipt for the delegated tool call.</summary>
+    private async Task RecordEvidenceAsync(
+        IServiceProvider services, InvocationRoute route, RequestContext context,
+        bool success, string? resultJson, ILogger? logger, CancellationToken ct)
+    {
         var apiKeyId = http.HttpContext?.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
         await EvidenceEmission.RecordToolAsync(
             new EvidenceEmission.EmissionContext(
                 services.GetService<IEvidenceChainService>(), $"a2a:{context.ContextId}", apiKeyId, logger),
             threadId: context.TaskId,
-            route.Skill,
+            route.Skill!,
             route.Arguments is null ? null : JsonSerializer.Serialize(route.Arguments),
             resultJson, parent: null, ct);
     }
@@ -189,28 +203,47 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         Func<string, CancellationToken, ValueTask>? progress = null)
     {
         var catalog = services.GetRequiredService<IDynamicToolCatalog>();
-        var tool = (await catalog.GetToolsAsync(services, ct))
-            .FirstOrDefault(t => t.Name == skill);
+        var (tool, denial) = await ResolveToolAsync(catalog, services, skill, span, ct);
         if (tool is null)
-        {
-            var exists = (await catalog.GetUnfilteredToolsAsync(services, ct))
-                .Any(t => t.Name == skill);
-            var msg = exists
-                ? $"skill '{skill}' is not available for this credential"
-                : $"unknown skill '{skill}'";
-            span?.SetTag(SpanOutcomeTag, exists ? "denied" : "unknown");
-            return (false, [Part.FromText(msg)], null);
-        }
+            return (false, [Part.FromText(denial!)], null);
 
-        var scope = services.GetService<ICallerScopeProvider>() is { } p
-            ? await p.GetAsync(ct) : CallerScope.Unrestricted;
-        if (!tool.ReadOnly && !scope.AllowWrite)
+        if (await WriteDeniedAsync(services, tool, ct))
         {
             span?.SetTag(SpanOutcomeTag, "denied");
             return (false, [Part.FromText($"skill '{skill}' requires write access")], null);
         }
 
         return await CallToolAsync(services, tool, args, span, ct, progress);
+    }
+
+    /// <summary>Resolves the catalog tool; when it does not resolve, returns the
+    /// denial message distinguishing "unknown skill" from "denied by credential"
+    /// and tags the span accordingly.</summary>
+    private static async Task<(CatalogTool? Tool, string? Denial)> ResolveToolAsync(
+        IDynamicToolCatalog catalog, IServiceProvider services, string skill,
+        Activity? span, CancellationToken ct)
+    {
+        var tool = (await catalog.GetToolsAsync(services, ct))
+            .FirstOrDefault(t => t.Name == skill);
+        if (tool is not null)
+            return (tool, null);
+
+        var exists = (await catalog.GetUnfilteredToolsAsync(services, ct))
+            .Any(t => t.Name == skill);
+        span?.SetTag(SpanOutcomeTag, exists ? "denied" : "unknown");
+        return (null, exists
+            ? $"skill '{skill}' is not available for this credential"
+            : $"unknown skill '{skill}'");
+    }
+
+    private static async Task<bool> WriteDeniedAsync(
+        IServiceProvider services, CatalogTool tool, CancellationToken ct)
+    {
+        if (tool.ReadOnly)
+            return false;
+        var scope = services.GetService<ICallerScopeProvider>() is { } p
+            ? await p.GetAsync(ct) : CallerScope.Unrestricted;
+        return !scope.AllowWrite;
     }
 
     /// <summary>Invokes the catalog handler and maps content/structured content

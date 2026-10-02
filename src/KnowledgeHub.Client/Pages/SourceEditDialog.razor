@@ -630,58 +630,68 @@
     public string? Validate()
     {
         if (string.IsNullOrWhiteSpace(Model.Name)) return "Nome é obrigatório";
-        return Model.Type switch
-        {
-            SourceType.ObsidianVault or SourceType.DocumentFile
-                when string.IsNullOrWhiteSpace(Model.Path) => "Caminho é obrigatório",
-            SourceType.WebPage
-                when string.IsNullOrWhiteSpace(Model.Url) => "URL é obrigatória",
-            SourceType.RssFeed
-                when string.IsNullOrWhiteSpace(Model.FeedUrl) => "URL do feed é obrigatória",
-            SourceType.YouTube
-                when string.IsNullOrWhiteSpace(Model.Urls) => "URLs são obrigatórias (uma por linha)",
-            SourceType.RestApi or SourceType.McpProxy
-                when string.IsNullOrWhiteSpace(Model.Endpoint) => "Endpoint é obrigatório",
-            SourceType.SqlDatabase
-                when string.IsNullOrWhiteSpace(Model.Query) => "Query é obrigatória",
-            SourceType.SqlDatabase
-                when string.IsNullOrEmpty(Model.ConnectionString) && !Model.HasStoredKey
-                => "Connection string é obrigatória (em branco mantém a armazenada)",
-            SourceType.Notion
-                when string.IsNullOrEmpty(Model.NotionToken) && !Model.HasStoredKey
-                => "Integration token é obrigatório",
-            SourceType.UnstructuredDocument
-                when string.IsNullOrWhiteSpace(Model.FolderPath)
-                  && string.IsNullOrWhiteSpace(Model.Files)
-                => "Informe uma pasta ou ao menos um arquivo",
-            SourceType.GitRepository
-                when string.IsNullOrWhiteSpace(Model.RepoUrl)
-                  && (string.IsNullOrWhiteSpace(Model.Owner) || string.IsNullOrWhiteSpace(Model.RepoName))
-                => "Informe a URL do repositório ou owner + nome",
-            SourceType.AudioTranscription
-                when string.IsNullOrWhiteSpace(Model.FolderPath)
-                  && string.IsNullOrWhiteSpace(Model.Files)
-                => "Informe uma pasta ou ao menos um arquivo de áudio",
-            SourceType.AwsS3 or SourceType.OciStorage
-                when string.IsNullOrWhiteSpace(Model.BucketName)
-                  || string.IsNullOrWhiteSpace(Model.Region)
-                  || string.IsNullOrWhiteSpace(Model.AccessKeyId)
-                => "Bucket, região e access key são obrigatórios",
-            SourceType.OciStorage
-                when string.IsNullOrWhiteSpace(Model.Namespace)
-                => "Namespace é obrigatório para OCI",
-            SourceType.AwsS3 or SourceType.OciStorage
-                when string.IsNullOrEmpty(Model.SecretAccessKey) && !Model.HasStoredKey
-                => "Secret access key é obrigatória",
-            SourceType.AzureFiles
-                when string.IsNullOrWhiteSpace(Model.ShareName)
-                => "Share name é obrigatório",
-            SourceType.AzureFiles
-                when string.IsNullOrEmpty(Model.SecretAccessKey) && !Model.HasStoredKey
-                => "Connection string ou account key é obrigatória",
-            _ => null
-        };
+        return ValidateSingleFields() ?? ValidateCompoundFields();
     }
+
+    /// <summary>Single required field per source type.</summary>
+    private string? ValidateSingleFields() => Model.Type switch
+    {
+        SourceType.ObsidianVault or SourceType.DocumentFile
+            when string.IsNullOrWhiteSpace(Model.Path) => "Caminho é obrigatório",
+        SourceType.WebPage
+            when string.IsNullOrWhiteSpace(Model.Url) => "URL é obrigatória",
+        SourceType.RssFeed
+            when string.IsNullOrWhiteSpace(Model.FeedUrl) => "URL do feed é obrigatória",
+        SourceType.YouTube
+            when string.IsNullOrWhiteSpace(Model.Urls) => "URLs são obrigatórias (uma por linha)",
+        SourceType.RestApi or SourceType.McpProxy
+            when string.IsNullOrWhiteSpace(Model.Endpoint) => "Endpoint é obrigatório",
+        SourceType.SqlDatabase
+            when string.IsNullOrWhiteSpace(Model.Query) => "Query é obrigatória",
+        SourceType.OciStorage
+            when string.IsNullOrWhiteSpace(Model.Namespace)
+            => "Namespace é obrigatório para OCI",
+        SourceType.AzureFiles
+            when string.IsNullOrWhiteSpace(Model.ShareName)
+            => "Share name é obrigatório",
+        _ => null
+    };
+
+    /// <summary>Compound requirements — alternative fields, stored-secret
+    /// fallbacks and multi-field groups.</summary>
+    private string? ValidateCompoundFields() => Model.Type switch
+    {
+        SourceType.SqlDatabase
+            when string.IsNullOrEmpty(Model.ConnectionString) && !Model.HasStoredKey
+            => "Connection string é obrigatória (em branco mantém a armazenada)",
+        SourceType.Notion
+            when string.IsNullOrEmpty(Model.NotionToken) && !Model.HasStoredKey
+            => "Integration token é obrigatório",
+        SourceType.UnstructuredDocument
+            when string.IsNullOrWhiteSpace(Model.FolderPath)
+              && string.IsNullOrWhiteSpace(Model.Files)
+            => "Informe uma pasta ou ao menos um arquivo",
+        SourceType.GitRepository
+            when string.IsNullOrWhiteSpace(Model.RepoUrl)
+              && (string.IsNullOrWhiteSpace(Model.Owner) || string.IsNullOrWhiteSpace(Model.RepoName))
+            => "Informe a URL do repositório ou owner + nome",
+        SourceType.AudioTranscription
+            when string.IsNullOrWhiteSpace(Model.FolderPath)
+              && string.IsNullOrWhiteSpace(Model.Files)
+            => "Informe uma pasta ou ao menos um arquivo de áudio",
+        SourceType.AwsS3 or SourceType.OciStorage
+            when string.IsNullOrWhiteSpace(Model.BucketName)
+              || string.IsNullOrWhiteSpace(Model.Region)
+              || string.IsNullOrWhiteSpace(Model.AccessKeyId)
+            => "Bucket, região e access key são obrigatórios",
+        SourceType.AwsS3 or SourceType.OciStorage
+            when string.IsNullOrEmpty(Model.SecretAccessKey) && !Model.HasStoredKey
+            => "Secret access key é obrigatória",
+        SourceType.AzureFiles
+            when string.IsNullOrEmpty(Model.SecretAccessKey) && !Model.HasStoredKey
+            => "Connection string ou account key é obrigatória",
+        _ => null
+    };
 
     /// <summary>Config keys owned by this form — removed before re-adding so stale keys don't survive a type switch.</summary>
     private static readonly string[] ManagedKeys =

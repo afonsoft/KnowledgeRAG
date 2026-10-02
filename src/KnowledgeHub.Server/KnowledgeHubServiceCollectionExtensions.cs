@@ -704,49 +704,13 @@ public static class KnowledgeHubServiceCollectionExtensions
     /// tool cache → handler with duration metric.</summary>
     private static async System.Threading.Tasks.Task<CallToolResult> CallToolAsync(
         RequestContext<CallToolRequestParams> ctx, CancellationToken ct) {
-                var catalog = ctx.Services!.GetRequiredService<IDynamicToolCatalog>();
                 var name = ctx.Params?.Name;
-                var tool = (await catalog.GetToolsAsync(ctx.Services!, ct))
-                    .FirstOrDefault(t => t.Name == name);
-                if (tool is null)
-                {
-                    // SPEC-20260923-source-authorization RF-004: a tool hidden
-                    // by the key's scope gets a friendly isError + audit row;
-                    // genuinely unknown names stay MethodNotFound.
-                    var exists = (await catalog.GetUnfilteredToolsAsync(ctx.Services!, ct))
-                        .Any(t => t.Name == name);
-                    if (!exists)
-                        throw new McpProtocolException($"unknown tool '{name}'", McpErrorCode.MethodNotFound);
+                var (tool, denied) = await ResolveMcpToolAsync(ctx, name, ct);
+                if (denied is not null)
+                    return denied;
 
-                    await Auth.ScopeAudit.RecordToolDeniedAsync(ctx.Services!, name!, ct);
-                    return new CallToolResult
-                    {
-                        IsError = true,
-                        Content = [new ModelContextProtocol.Protocol.TextContentBlock
-                        {
-                            Text = $"tool '{name}' is not available for this credential"
-                        }]
-                    };
-                }
-
-                // Per-key write gate: read-only credentials get an informative
-                // isError instead of the write executing — the tool stays
-                // visible in tools/list so clients can discover it.
-                var callScope = ctx.Services!.GetService<Auth.ICallerScopeProvider>() is { } scopeProvider
-                    ? await scopeProvider.GetAsync(ct)
-                    : Auth.CallerScope.Unrestricted;
-                if (!tool.ReadOnly && !callScope.AllowWrite)
-                {
-                    await Auth.ScopeAudit.RecordToolDeniedAsync(ctx.Services!, name!, ct);
-                    return new CallToolResult
-                    {
-                        IsError = true,
-                        Content = [new ModelContextProtocol.Protocol.TextContentBlock
-                        {
-                            Text = $"tool '{name}' requires write access — this credential is read-only"
-                        }]
-                    };
-                }
+                if (await WriteGateDeniedAsync(ctx, tool!, name, ct) is { } writeDenied)
+                    return writeDenied;
 
                 // RF-003 (SPEC-20260926-mcp-sdk-alignment): MRTR — a retry
                 // carrying requestState+inputResponses resolves the pending
@@ -754,57 +718,124 @@ public static class KnowledgeHubServiceCollectionExtensions
                 // write tool under an elicitation-capable client is answered
                 // with resultType:"input_required" instead of running blind.
                 if (Mcp.MrtrApproval.IsRetry(ctx))
-                    return await Mcp.MrtrApproval.ResumeAsync(ctx, tool, ct);
+                    return await Mcp.MrtrApproval.ResumeAsync(ctx, tool!, ct);
 
-                if (Mcp.MrtrApproval.RequiresApproval(ctx.Services!, tool)
+                if (Mcp.MrtrApproval.RequiresApproval(ctx.Services!, tool!)
                     && Mcp.MrtrApproval.ClientSupportsElicitation(ctx))
-                    throw await Mcp.MrtrApproval.CreateAsync(ctx, tool, ct);
+                    throw await Mcp.MrtrApproval.CreateAsync(ctx, tool!, ct);
 
-                // SPEC-20260923-rate-limiting RF-003: LLM-spending / write tools
-                // are charged per caller — over-limit yields a friendly isError
-                // result (JSON-RPC has no 429).
-                var limiter = ctx.Services!.GetRequiredService<RateLimiting.McpToolRateLimiter>();
-                var http = ctx.Services!.GetService<IHttpContextAccessor>()?.HttpContext;
-                if (!limiter.TryAcquire(name!, http, out var retryAfter))
-                    return new CallToolResult
-                    {
-                        IsError = true,
-                        Content = [new ModelContextProtocol.Protocol.TextContentBlock
-                        {
-                            Text = $"rate limited — retry in {retryAfter}s"
-                        }]
-                    };
+                if (RateLimitedResult(ctx, name) is { } limited)
+                    return limited;
 
-                var toolCache = ctx.Services!.GetService<Caching.IToolCacheService>();
-                if (toolCache is not null && toolCache.IsCacheable(name!, tool.ReadOnly))
-                {
-                    var cached = await toolCache.GetCachedResultAsync(name!, ctx.Params?.Arguments, ct);
-                    if (cached is not null)
-                        return cached;
-                }
-
-                var toolSw = System.Diagnostics.Stopwatch.StartNew();
-                try
-                {
-                    var result = await tool.Handler(
-                        new KnowledgeHub.Server.Mcp.ToolCallContext
-                        {
-                            Services = ctx.Services!,
-                            Arguments = ctx.Params?.Arguments
-                        }, ct);
-
-                    if (toolCache is not null && toolCache.IsCacheable(name!, tool.ReadOnly))
-                    {
-                        await toolCache.SetCachedResultAsync(name!, ctx.Params?.Arguments, result, ct);
-                    }
-
-                    return result;
-                }
-                finally
-                {
-                    Telemetry.KnowledgeHubMetrics.ToolDuration.Record(toolSw.Elapsed.TotalMilliseconds,
-                        new KeyValuePair<string, object?>("tool", name));
-                }
+                return await InvokeMcpToolAsync(ctx, tool!, name, ct);
             }
+
+    /// <summary>Catalog resolution: a tool hidden by the key's scope gets a
+    /// friendly isError + audit row; genuinely unknown names stay
+    /// MethodNotFound (SPEC-20260923-source-authorization RF-004).</summary>
+    private static async System.Threading.Tasks.Task<(CatalogTool? Tool, CallToolResult? Denied)>
+        ResolveMcpToolAsync(RequestContext<CallToolRequestParams> ctx, string? name, CancellationToken ct)
+    {
+        var catalog = ctx.Services!.GetRequiredService<IDynamicToolCatalog>();
+        var tool = (await catalog.GetToolsAsync(ctx.Services!, ct))
+            .FirstOrDefault(t => t.Name == name);
+        if (tool is not null)
+            return (tool, null);
+
+        var exists = (await catalog.GetUnfilteredToolsAsync(ctx.Services!, ct))
+            .Any(t => t.Name == name);
+        if (!exists)
+            throw new McpProtocolException($"unknown tool '{name}'", McpErrorCode.MethodNotFound);
+
+        await Auth.ScopeAudit.RecordToolDeniedAsync(ctx.Services!, name!, ct);
+        return (null, new CallToolResult
+        {
+            IsError = true,
+            Content = [new ModelContextProtocol.Protocol.TextContentBlock
+            {
+                Text = $"tool '{name}' is not available for this credential"
+            }]
+        });
+    }
+
+    /// <summary>Per-key write gate: read-only credentials get an informative
+    /// isError instead of the write executing — the tool stays visible in
+    /// tools/list so clients can discover it.</summary>
+    private static async System.Threading.Tasks.Task<CallToolResult?> WriteGateDeniedAsync(
+        RequestContext<CallToolRequestParams> ctx, CatalogTool tool, string? name, CancellationToken ct)
+    {
+        var callScope = ctx.Services!.GetService<Auth.ICallerScopeProvider>() is { } scopeProvider
+            ? await scopeProvider.GetAsync(ct)
+            : Auth.CallerScope.Unrestricted;
+        if (tool.ReadOnly || callScope.AllowWrite)
+            return null;
+
+        await Auth.ScopeAudit.RecordToolDeniedAsync(ctx.Services!, name!, ct);
+        return new CallToolResult
+        {
+            IsError = true,
+            Content = [new ModelContextProtocol.Protocol.TextContentBlock
+            {
+                Text = $"tool '{name}' requires write access — this credential is read-only"
+            }]
+        };
+    }
+
+    /// <summary>SPEC-20260923-rate-limiting RF-003: LLM-spending / write tools
+    /// are charged per caller — over-limit yields a friendly isError result
+    /// (JSON-RPC has no 429).</summary>
+    private static CallToolResult? RateLimitedResult(
+        RequestContext<CallToolRequestParams> ctx, string? name)
+    {
+        var limiter = ctx.Services!.GetRequiredService<RateLimiting.McpToolRateLimiter>();
+        var http = ctx.Services!.GetService<IHttpContextAccessor>()?.HttpContext;
+        if (limiter.TryAcquire(name!, http, out var retryAfter))
+            return null;
+        return new CallToolResult
+        {
+            IsError = true,
+            Content = [new ModelContextProtocol.Protocol.TextContentBlock
+            {
+                Text = $"rate limited — retry in {retryAfter}s"
+            }]
+        };
+    }
+
+    /// <summary>Tool cache lookup + handler invocation with duration metric;
+    /// cacheable results are stored for subsequent calls.</summary>
+    private static async System.Threading.Tasks.Task<CallToolResult> InvokeMcpToolAsync(
+        RequestContext<CallToolRequestParams> ctx, CatalogTool tool, string? name, CancellationToken ct)
+    {
+        var toolCache = ctx.Services!.GetService<Caching.IToolCacheService>();
+        if (toolCache is not null && toolCache.IsCacheable(name!, tool.ReadOnly))
+        {
+            var cached = await toolCache.GetCachedResultAsync(name!, ctx.Params?.Arguments, ct);
+            if (cached is not null)
+                return cached;
+        }
+
+        var toolSw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var result = await tool.Handler(
+                new KnowledgeHub.Server.Mcp.ToolCallContext
+                {
+                    Services = ctx.Services!,
+                    Arguments = ctx.Params?.Arguments
+                }, ct);
+
+            if (toolCache is not null && toolCache.IsCacheable(name!, tool.ReadOnly))
+            {
+                await toolCache.SetCachedResultAsync(name!, ctx.Params?.Arguments, result, ct);
+            }
+
+            return result;
+        }
+        finally
+        {
+            Telemetry.KnowledgeHubMetrics.ToolDuration.Record(toolSw.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("tool", name));
+        }
+    }
 
 }
