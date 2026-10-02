@@ -212,6 +212,7 @@ jobs:
     permissions:
       contents: read
       actions: write
+      issues: write
 
     steps:
       - name: Checkout Code
@@ -222,9 +223,10 @@ jobs:
         with:
           name: unit-coverage-xml
 
-      # Baseline lives in the COVERAGE_BASELINE repository variable —
-      # updated via API. PRs can't carry the raise (bot-authored PRs get no
-      # workflow runs, so required checks never report).
+      # Baseline lives in the COVERAGE_BASELINE repository variable.
+      # GITHUB_TOKEN can't write Actions variables (403) — when the API write is
+      # denied we surface the raise via a tracking issue instead of failing, so
+      # main stays green and the bump is a one-click manual step.
       - name: Raise Baseline When Improved
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -236,9 +238,19 @@ jobs:
           BASELINE=${BASELINE:-$(cat .ci/coverage-baseline.txt 2>/dev/null || echo "0")}
           echo "measured ${RATE}% vs baseline ${BASELINE}%"
           if python3 -c "import sys; sys.exit(0 if float('$RATE') > float('$BASELINE') else 1)"; then
-            gh api "repos/${GITHUB_REPOSITORY}/actions/variables/COVERAGE_BASELINE" -X PATCH -f value="$RATE" \
-              || gh api "repos/${GITHUB_REPOSITORY}/actions/variables" -X POST -f name=COVERAGE_BASELINE -f value="$RATE"
-            echo "::notice::coverage baseline raised ${BASELINE}% -> ${RATE}%"
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/variables/COVERAGE_BASELINE" -X PATCH -f value="$RATE" 2>/dev/null \
+              || gh api "repos/${GITHUB_REPOSITORY}/actions/variables" -X POST -f name=COVERAGE_BASELINE -f value="$RATE" 2>/dev/null; then
+              echo "::notice::coverage baseline raised ${BASELINE}% -> ${RATE}%"
+            else
+              echo "::warning::coverage improved ${BASELINE}% -> ${RATE}% but GITHUB_TOKEN cannot write repo variables — opening tracking issue"
+              BODY="Measured coverage on main is **${RATE}%** (baseline ${BASELINE}%). Update the \`COVERAGE_BASELINE\` repository variable in Settings → Secrets and variables → Actions → Variables, then close this issue."
+              OPEN_ISSUE=$(gh issue list --state open --search "in:title coverage baseline raise" --json number --jq '.[0].number')
+              if [ -n "$OPEN_ISSUE" ]; then
+                gh issue comment "$OPEN_ISSUE" --body "$BODY"
+              else
+                gh issue create --title "chore: coverage baseline raise needed" --body "$BODY"
+              fi
+            fi
           else
             echo "coverage did not improve — baseline unchanged"
           fi
