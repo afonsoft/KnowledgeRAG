@@ -141,7 +141,7 @@ flowchart TB
 | | `IMcpActivityFeed` | Ring buffer (500) → SignalR broadcast |
 | | Telemetry | `System.Diagnostics` `Meter`/`ActivitySource` → OTLP/Prometheus opt-in |
 | Storage | SQLite `knowledgehub.db` | Catalog, documents, chunks (FTS5), vectors (default), knowledge graph, settings, eval runs, security events, A2A tasks — beside the executable |
-| | PostgreSQL + pgvector | Optional vector backend (catalog stays in SQLite) — HNSW, `halfvec` storage, iterative filtered scans; host/external instances reached via `.env`-composed `POSTGRES_*` connection string |
+| | PostgreSQL + pgvector | Optional unified backend — `Database:Provider=postgres` moves **both** catalog EF and vector store to Postgres (AD-0014); `sqlite` keeps both local. HNSW, `halfvec` storage, iterative filtered scans; host/external instances via `.env`-composed `POSTGRES_*` |
 | | Redis | Optional `IDistributedCache` backend |
 | External | Upstream MCP proxies | DeepWiki (public + private), Firecrawl, Tavily, Context7 — secrets encrypted at rest |
 | | Cloud storage | AWS S3, Azure Files, OCI Object Storage (S3-compatible), Google Drive — staged ingestion with ETag diffs, secrets in the integration-secret store |
@@ -293,7 +293,7 @@ flowchart LR
 
     DEV["docker compose build<br/>or dotnet publish -r <RID>"] -->|produces| EXE
 
-    subgraph Net["One port (default :8080 container / :5000 dev)"]
+    subgraph Net["One port (default :8080 container / :5009 dev)"]
         R1["/            → SPA + deep links"]
         R2["/api/*       → REST (auth)"]
         R3["/mcp         → Streamable HTTP"]
@@ -303,6 +303,7 @@ flowchart LR
         R5["/hubs/mcp    → SignalR"]
         R6["/metrics     → Prometheus (opt-in)"]
         R7["/healthz     → liveness"]
+        R8["/framework-assets/{stem}/{ext} → _framework mirror<br/>(proxy-safe boot)"]
     end
     EXE --- Net
 
@@ -311,7 +312,7 @@ flowchart LR
     classDef net fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px,color:darkblue
     class EXE bin
     class DB,LOGV,EXT,CFG,PG2,RDS data
-    class R1,R2,R3,R4,R4B,R4C,R5,R6,R7 net
+    class R1,R2,R3,R4,R4B,R4C,R5,R6,R7,R8 net
 ```
 
 - `docker compose up -d` builds `knowledgehub:latest`; `./data` persists SQLite + uploads, `./logs` persists the Serilog file sink (pre-create both as uid 1654); EF migrations run at startup (`DatabaseMigrator`).
