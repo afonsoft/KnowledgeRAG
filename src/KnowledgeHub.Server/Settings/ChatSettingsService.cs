@@ -246,6 +246,20 @@ public sealed class ChatSettingsService(
         }
     }
 
+    /// <summary>Lista os ids de modelos do endpoint efetivo (ou do override do
+    /// form) via <see cref="ProviderModelProbe"/> — alimenta o combobox de
+    /// model da aba Chat do /settings.</summary>
+    public Task<ProviderModelsResponse> ListModelsAsync(
+        string? endpointOverride, CancellationToken cancellationToken = default)
+    {
+        var effective = Current().Options;
+        var endpoint = !string.IsNullOrWhiteSpace(endpointOverride)
+            ? endpointOverride.Trim()
+            : effective.Endpoint;
+        var http = probeFactory?.Invoke() ?? httpFactory.CreateClient("chat");
+        return ProviderModelProbe.ListAsync(http, endpoint, effective.ApiKey, cancellationToken);
+    }
+
     /// <summary>Retorna true/false quando o corpo do probe é uma lista de modelos
     /// estilo OpenAI e um model foi informado; null quando não dá para avaliar.</summary>
     private static async Task<bool?> CheckModelListedAsync(

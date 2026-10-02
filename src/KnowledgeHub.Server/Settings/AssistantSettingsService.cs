@@ -23,6 +23,7 @@ public sealed class AssistantSettingsService(
     IServiceScopeFactory scopeFactory,
     IHttpClientFactory httpFactory,
     IAssistantChatClientProvider provider,
+    IChatSettingsService chatSettings,
     ILogger<AssistantSettingsService> logger)
     : SingleRowSettingsStore<AssistantSettings>(scopeFactory), IAssistantSettingsService
 {
@@ -141,7 +142,7 @@ public sealed class AssistantSettingsService(
         var endpoint = !string.IsNullOrWhiteSpace(request.Endpoint) ? request.Endpoint.Trim() : dto.Endpoint;
         var apiKey = !string.IsNullOrWhiteSpace(request.ApiKey)
             ? request.ApiKey.Trim()
-            : await secrets.GetAsync(IntegrationProviders.Assistant, cancellationToken) ?? envOptions.Value.ApiKey;
+            : await ResolveApiKeyAsync(endpoint, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(endpoint))
             return new TestChatConnectionResponse { Ok = false, LatencyMs = 0, Detail = "endpoint is required" };
@@ -198,6 +199,38 @@ public sealed class AssistantSettingsService(
             return new TestChatConnectionResponse { Ok = false, LatencyMs = sw.ElapsedMilliseconds, Detail = "connection failed" };
         }
     }
+
+    /// <summary>Lists model ids for the assistant combo (Settings → Assistente):
+    /// probes GET {endpoint}/v1/models with the assistant key (store → env).
+    /// Endpoint resolution mirrors <see cref="TestAsync"/> — request override,
+    /// then the effective config.</summary>
+    public async Task<ProviderModelsResponse> ListModelsAsync(
+        string? endpointOverride, CancellationToken cancellationToken = default)
+    {
+        var dto = await DescribeAsync(cancellationToken);
+        var endpoint = !string.IsNullOrWhiteSpace(endpointOverride) ? endpointOverride.Trim() : dto.Endpoint;
+        var apiKey = await ResolveApiKeyAsync(endpoint, cancellationToken);
+        var http = httpFactory.CreateClient("chat");
+        return await ProviderModelProbe.ListAsync(http, endpoint, apiKey, cancellationToken);
+    }
+
+    /// <summary>Resolves the assistant key: own store → Assistant:ApiKey env.
+    /// When the probed endpoint is the same as the chat provider's, the chat
+    /// key applies too (same provider) — but the chat key is NEVER sent to a
+    /// different endpoint.</summary>
+    private async Task<string?> ResolveApiKeyAsync(string? endpoint, CancellationToken ct)
+    {
+        var key = await secrets.GetAsync(IntegrationProviders.Assistant, ct)
+            ?? envOptions.Value.ApiKey;
+        if (!string.IsNullOrEmpty(key))
+            return key;
+        var chat = chatSettings.GetEffectiveOptions();
+        return IsSameEndpoint(endpoint, chat.Endpoint) ? chat.ApiKey : null;
+    }
+
+    internal static bool IsSameEndpoint(string? a, string? b) =>
+        !string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b)
+        && string.Equals(a.Trim().TrimEnd('/'), b.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
 
     private static string[]? ParseRoute(string? json)
     {

@@ -150,6 +150,19 @@ public static class SettingsEndpoints
             return Results.Ok(await chat.TestAsync(body ?? new TestChatConnectionRequest(), ct));
         });
 
+        // Model combobox: live probe of {endpoint}/v1/models with the effective
+        // key — ?endpoint= lets the form list models before saving.
+        group.MapGet("/chat/models", async (
+            string? endpoint,
+            IChatSettingsService chat,
+            CancellationToken ct) =>
+        {
+            if (!string.IsNullOrEmpty(endpoint) && !IsHttpUri(endpoint))
+                return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+
+            return Results.Ok(await chat.ListModelsAsync(endpoint, ct));
+        });
+
     }
 
     private static void MapEmbeddingEndpoints(RouteGroupBuilder group)
@@ -347,6 +360,19 @@ public static class SettingsEndpoints
             Settings.IAssistantSettingsService assistant,
             CancellationToken ct) =>
             Results.Ok(await assistant.TestAsync(body ?? new TestAssistantConnectionRequest(), ct)));
+
+        // Model combobox for the assistant card — probes {endpoint}/v1/models
+        // with the assistant key (store → env); ?endpoint= mirrors the chat one.
+        group.MapGet("/assistant/models", async (
+            string? endpoint,
+            Settings.IAssistantSettingsService assistant,
+            CancellationToken ct) =>
+        {
+            if (!string.IsNullOrEmpty(endpoint) && !IsHttpUri(endpoint))
+                return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+
+            return Results.Ok(await assistant.ListModelsAsync(endpoint, ct));
+        });
 
     }
 

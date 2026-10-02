@@ -250,6 +250,74 @@ public sealed class ChatSettingsServiceTests : IDisposable
         Assert.Equal("HTTP 401", result.Detail);
     }
 
+    /// <summary>Sem endpoint no override nem na config efetiva, a listagem falha rápido.</summary>
+    [Fact]
+    public async Task ListModels_BlankEndpoint_RequiresEndpoint()
+    {
+        var result = await Sut().ListModelsAsync(null);
+
+        Assert.False(result.Ok);
+        Assert.Equal("endpoint is required", result.Detail);
+        Assert.Empty(result.Models);
+    }
+
+    /// <summary>O probe de modelos devolve os ids do formato OpenAI (data[].id)
+    /// com o Bearer da key efetiva; o override do form vence a config.</summary>
+    [Fact]
+    public async Task ListModels_Probe_ReturnsIds_WithEffectiveKey()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK,
+            """{"data":[{"id":"m1"},{"id":"m2"},{"id":"m1"}]}""");
+        var sut = Sut(EnvOpenAi(apiKey: "sk-env-1234"), probe: () => new HttpClient(handler));
+
+        var res = await sut.ListModelsAsync("https://stub.local");
+
+        Assert.True(res.Ok);
+        Assert.Equal(["m1", "m2"], res.Models);
+        Assert.Equal("Bearer sk-env-1234", handler.LastAuth);
+    }
+
+    /// <summary>Formato nativo do Ollama (models[].name) também popula o combo.</summary>
+    [Fact]
+    public async Task ListModels_OllamaNativeShape_ReturnsNames()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK,
+            """{"models":[{"name":"llama3.1:8b"},{"model":"qwen3:4b"}]}""");
+        var sut = Sut(probe: () => new HttpClient(handler));
+
+        var res = await sut.ListModelsAsync("http://ollama.local");
+
+        Assert.True(res.Ok);
+        Assert.Equal(["llama3.1:8b", "qwen3:4b"], res.Models);
+    }
+
+    /// <summary>Sem override, a lista usa o endpoint da config efetiva (env).</summary>
+    [Fact]
+    public async Task ListModels_NoOverride_UsesEffectiveEndpoint()
+    {
+        var handler = new StubHandler(HttpStatusCode.OK, """{"data":[{"id":"env-m"}]}""");
+        var sut = Sut(EnvOpenAi(endpoint: "https://env.test"), probe: () => new HttpClient(handler));
+
+        var res = await sut.ListModelsAsync(null);
+
+        Assert.True(res.Ok);
+        Assert.Equal(["env-m"], res.Models);
+    }
+
+    /// <summary>Resposta não-2xx do provider vira lista vazia com detalhe sanitizado.</summary>
+    [Fact]
+    public async Task ListModels_NonSuccess_SanitizedDetail()
+    {
+        var sut = Sut(probe: () => new HttpClient(
+            new StubHandler(HttpStatusCode.Unauthorized, """{"error":"bad key"}""")));
+
+        var res = await sut.ListModelsAsync("https://stub.local");
+
+        Assert.False(res.Ok);
+        Assert.Equal("HTTP 401", res.Detail);
+        Assert.Empty(res.Models);
+    }
+
     /// <summary>O DTO serializado nunca contém a key — só o hint mascarado dos 4 últimos caracteres.</summary>
     [Fact]
     public async Task Describe_NeverEchoesApiKey()

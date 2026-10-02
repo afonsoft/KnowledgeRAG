@@ -40,4 +40,9 @@ public interface IChatSettingsService
     /// <summary>Sonda GET {endpoint}/v1/models com a key resolvível; campos
     /// vazios do request caem na config efetiva. Não persiste nada.</summary>
     Task<TestChatConnectionResponse> TestAsync(TestChatConnectionRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Lista os ids de modelos via GET {endpoint}/v1/models com a key
+    /// efetiva; <paramref name="endpointOverride"/> (query) vence a config —
+    /// a UI chama com o endpoint digitado no form. Não persiste nada.</summary>
+    Task<ProviderModelsResponse> ListModelsAsync(string? endpointOverride, CancellationToken cancellationToken = default);
 }
