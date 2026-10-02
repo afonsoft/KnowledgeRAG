@@ -579,39 +579,8 @@ public sealed class AgentService(
                     break;
                 }
 
-                for (var i = 0; i < calls.Count; i++)
-                {
-                    var call = calls[i];
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    // HITL gate: mutating tool → suspend into a pending approval.
-                    if (loop.ToolsByName.TryGetValue(call.Name, out var gated) && RequiresApproval(gated))
-                    {
-                        var approval = await SuspendAsync(loop, call, calls.Skip(i + 1).ToList(), cancellationToken);
-                        logger.LogInformation("agent_chat awaiting approval {ApprovalId} for {Tool}", approval.Id, call.Name);
-                        return new AgentResponse
-                        {
-                            Answer = $"awaiting approval for tool '{call.Name}'",
-                            Steps = loop.Steps,
-                            ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
-                            Iterations = loop.Iterations,
-                            LatencyMs = sw.Elapsed.TotalMilliseconds,
-                            LimitReached = false,
-                            AwaitingApprovalId = approval.Id,
-                            PendingTool = call.Name,
-                            PendingArgsJson = approval.ArgumentsJson
-                        };
-                    }
-
-                    loop.ToolCalls++;
-                    if (loop.ToolCalls > options.MaxToolCalls)
-                    {
-                        loop.LimitReached = true;
-                        break;
-                    }
-
-                    await ExecuteToolCallAsync(loop, call, sink, cancellationToken);
-                }
+                if (await DispatchCallsAsync(loop, calls, sw, sink, cancellationToken) is { } pending)
+                    return pending;
             }
         }
         finally
@@ -639,6 +608,49 @@ public sealed class AgentService(
             LatencyMs = sw.Elapsed.TotalMilliseconds,
             LimitReached = loop.LimitReached
         };
+    }
+
+    /// <summary>Executes one iteration's tool calls; returns an early
+    /// <see cref="AgentResponse"/> only when the loop suspends into a pending
+    /// HITL approval — null otherwise.</summary>
+    private async Task<AgentResponse?> DispatchCallsAsync(
+        LoopState loop, List<FunctionCallContent> calls, Stopwatch sw,
+        ChannelWriter<SseEvent>? sink, CancellationToken cancellationToken)
+    {
+        for (var i = 0; i < calls.Count; i++)
+        {
+            var call = calls[i];
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // HITL gate: mutating tool → suspend into a pending approval.
+            if (loop.ToolsByName.TryGetValue(call.Name, out var gated) && RequiresApproval(gated))
+            {
+                var approval = await SuspendAsync(loop, call, calls.Skip(i + 1).ToList(), cancellationToken);
+                logger.LogInformation("agent_chat awaiting approval {ApprovalId} for {Tool}", approval.Id, call.Name);
+                return new AgentResponse
+                {
+                    Answer = $"awaiting approval for tool '{call.Name}'",
+                    Steps = loop.Steps,
+                    ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
+                    Iterations = loop.Iterations,
+                    LatencyMs = sw.Elapsed.TotalMilliseconds,
+                    LimitReached = false,
+                    AwaitingApprovalId = approval.Id,
+                    PendingTool = call.Name,
+                    PendingArgsJson = approval.ArgumentsJson
+                };
+            }
+
+            loop.ToolCalls++;
+            if (loop.ToolCalls > options.MaxToolCalls)
+            {
+                loop.LimitReached = true;
+                break;
+            }
+
+            await ExecuteToolCallAsync(loop, call, sink, cancellationToken);
+        }
+        return null;
     }
 
     /// <summary>One model round-trip: chain compaction, the call itself, span +

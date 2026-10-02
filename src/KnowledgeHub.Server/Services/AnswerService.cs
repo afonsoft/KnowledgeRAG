@@ -164,41 +164,11 @@ public sealed partial class AnswerService(
             MaxOutputTokens = options.MaxTokens
         };
 
-        var streamed = new List<AIContent>();
-        IAsyncEnumerable<ChatResponseUpdate>? updates = null;
-        try
-        {
-            updates = client.GetStreamingResponseAsync(messages, chatOptions, cancellationToken);
-        }
-        catch (NotSupportedException) { /* provider cannot stream — fallback below */ }
+        var stream = new StreamState();
+        await foreach (var ev in StreamTokensAsync(client, messages, chatOptions, stream, cancellationToken))
+            yield return ev;
 
-        string? model = null;
-        if (updates is not null)
-        {
-            await foreach (var update in updates.WithCancellation(cancellationToken))
-            {
-                model ??= update.ModelId;
-                foreach (var content in update.Contents)
-                {
-                    streamed.Add(content);
-                    if (content is TextContent { Text.Length: > 0 } text)
-                        yield return new SseEvent("token", new { delta = text.Text });
-                }
-            }
-        }
-        else
-        {
-            var response = await client.GetResponseAsync(messages, chatOptions, cancellationToken);
-            model = response.ModelId;
-            foreach (var m in response.Messages)
-                streamed.AddRange(m.Contents);
-            var text = response.Text?.Trim() ?? "";
-            // Pseudo-stream: emit the whole answer in ~24-char deltas.
-            for (var i = 0; i < text.Length; i += 24)
-                yield return new SseEvent("token", new { delta = text[i..Math.Min(i + 24, text.Length)] });
-        }
-
-        var answer = string.Concat(streamed.OfType<TextContent>().Select(c => c.Text)).Trim();
+        var answer = string.Concat(stream.Contents.OfType<TextContent>().Select(c => c.Text)).Trim();
         if (answer.Length == 0)
             throw new ChatProviderException("chat provider returned an empty answer");
 
@@ -208,7 +178,54 @@ public sealed partial class AnswerService(
         evaluationEnqueuer.TryEnqueue(Guid.NewGuid().ToString("N"), question, chunks, answer);
 
         yield return new SseEvent("done",
-            Result(answer, ExtractCitations(answer, context), model ?? options.Model, sw));
+            Result(answer, ExtractCitations(answer, context), stream.Model ?? options.Model, sw));
+    }
+
+    /// <summary>Accumulates the model id + every streamed content item while
+    /// token events flow to the caller.</summary>
+    private sealed class StreamState
+    {
+        public List<AIContent> Contents { get; } = [];
+        public string? Model { get; set; }
+    }
+
+    /// <summary>Yields "token" events — native streaming when the provider
+    /// supports it, otherwise a pseudo-stream of ~24-char deltas from the
+    /// buffered response.</summary>
+    private async IAsyncEnumerable<SseEvent> StreamTokensAsync(
+        IChatClient client, List<ChatMessage> messages, ChatOptions chatOptions,
+        StreamState stream, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        IAsyncEnumerable<ChatResponseUpdate>? updates = null;
+        try
+        {
+            updates = client.GetStreamingResponseAsync(messages, chatOptions, cancellationToken);
+        }
+        catch (NotSupportedException) { /* provider cannot stream — fallback below */ }
+
+        if (updates is not null)
+        {
+            await foreach (var update in updates.WithCancellation(cancellationToken))
+            {
+                stream.Model ??= update.ModelId;
+                foreach (var content in update.Contents)
+                {
+                    stream.Contents.Add(content);
+                    if (content is TextContent { Text.Length: > 0 } text)
+                        yield return new SseEvent("token", new { delta = text.Text });
+                }
+            }
+            yield break;
+        }
+
+        var response = await client.GetResponseAsync(messages, chatOptions, cancellationToken);
+        stream.Model = response.ModelId;
+        foreach (var m in response.Messages)
+            stream.Contents.AddRange(m.Contents);
+        var fullText = response.Text?.Trim() ?? "";
+        // Pseudo-stream: emit the whole answer in ~24-char deltas.
+        for (var i = 0; i < fullText.Length; i += 24)
+            yield return new SseEvent("token", new { delta = fullText[i..Math.Min(i + 24, fullText.Length)] });
     }
 
     public static string BuildUserPrompt(string question, IReadOnlyList<SearchResultItem> context)

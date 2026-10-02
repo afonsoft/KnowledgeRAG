@@ -74,41 +74,49 @@ public sealed class EntityExtractor(
         {
             using var doc = JsonDocument.Parse(text[start..(end + 1)]);
             var root = doc.RootElement;
-            var entities = new List<ExtractedEntity>();
-            var relations = new List<ExtractedRelation>();
-
-            if (root.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var e in ents.EnumerateArray())
-                {
-                    var name = e.TryGetProperty("name", out var n) ? n.GetString() : null;
-                    if (string.IsNullOrWhiteSpace(name))
-                        continue;
-                    var type = e.TryGetProperty("type", out var t) ? t.GetString() : null;
-                    entities.Add(new ExtractedEntity(name, type));
-                }
-            }
-
-            if (root.TryGetProperty("relations", out var rels) && rels.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var r in rels.EnumerateArray())
-                {
-                    var from = r.TryGetProperty("from", out var f) ? f.GetString() : null;
-                    var to = r.TryGetProperty("to", out var t) ? t.GetString() : null;
-                    if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
-                        continue;
-                    var kind = r.TryGetProperty("kind", out var k) ? k.GetString() : null;
-                    var evidence = r.TryGetProperty("evidence", out var ev) && ev.TryGetInt32(out var idx)
-                        ? idx : 0;
-                    relations.Add(new ExtractedRelation(from, to, kind, evidence));
-                }
-            }
-
-            return new ExtractionResult(entities, relations);
+            return new ExtractionResult(ParseEntities(root), ParseRelations(root));
         }
         catch (JsonException)
         {
             return null;
         }
     }
+
+    private static List<ExtractedEntity> ParseEntities(JsonElement root)
+    {
+        var entities = new List<ExtractedEntity>();
+        if (!root.TryGetProperty("entities", out var ents) || ents.ValueKind != JsonValueKind.Array)
+            return entities;
+        foreach (var e in ents.EnumerateArray())
+        {
+            var name = GetString(e, "name");
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+            entities.Add(new ExtractedEntity(name, GetString(e, "type")));
+        }
+        return entities;
+    }
+
+    private static List<ExtractedRelation> ParseRelations(JsonElement root)
+    {
+        var relations = new List<ExtractedRelation>();
+        if (!root.TryGetProperty("relations", out var rels) || rels.ValueKind != JsonValueKind.Array)
+            return relations;
+        foreach (var r in rels.EnumerateArray())
+        {
+            var from = GetString(r, "from");
+            var to = GetString(r, "to");
+            if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+                continue;
+            relations.Add(new ExtractedRelation(from, to, GetString(r, "kind"), GetEvidence(r)));
+        }
+        return relations;
+    }
+
+    private static string? GetString(JsonElement el, string property)
+        => el.TryGetProperty(property, out var v) ? v.GetString() : null;
+
+    private static int GetEvidence(JsonElement relation)
+        => relation.TryGetProperty("evidence", out var ev) && ev.TryGetInt32(out var idx)
+            ? idx : 0;
 }

@@ -120,26 +120,38 @@ public sealed class ApiKeyChatSettingsService(
         KnowledgeHubDbContext db, ApiKeyChatSettings? row, Guid apiKeyId,
         ChatSettingsPatch patch, CancellationToken cancellationToken)
     {
+        await UpsertSettingsRowAsync(db, row, apiKeyId, patch, cancellationToken);
+
+        if (patch.ApiKey is not null && !string.IsNullOrWhiteSpace(patch.ApiKey))
+        {
+            await secrets.SetAsync($"apikey-chat-{apiKeyId:N}", patch.ApiKey.Trim(), cancellationToken);
+        }
+    }
+
+    private static async Task UpsertSettingsRowAsync(
+        KnowledgeHubDbContext db, ApiKeyChatSettings? row, Guid apiKeyId,
+        ChatSettingsPatch patch, CancellationToken cancellationToken)
+    {
         if (row is null && (patch.Endpoint is not null || patch.Model is not null))
         {
             row = new ApiKeyChatSettings { ApiKeyId = apiKeyId };
             db.ApiKeyChatSettings.Add(row);
         }
 
-        if (row is not null)
-        {
-            if (patch.Endpoint is not null)
-                row.Endpoint = string.IsNullOrWhiteSpace(patch.Endpoint) ? null : patch.Endpoint.Trim();
-            if (patch.Model is not null)
-                row.Model = string.IsNullOrWhiteSpace(patch.Model) ? null : patch.Model.Trim();
-            row.UpdatedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        if (row is null)
+            return;
 
-        if (patch.ApiKey is not null && !string.IsNullOrWhiteSpace(patch.ApiKey))
-        {
-            await secrets.SetAsync($"apikey-chat-{apiKeyId:N}", patch.ApiKey.Trim(), cancellationToken);
-        }
+        ApplyPatch(row, patch);
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void ApplyPatch(ApiKeyChatSettings row, ChatSettingsPatch patch)
+    {
+        if (patch.Endpoint is not null)
+            row.Endpoint = string.IsNullOrWhiteSpace(patch.Endpoint) ? null : patch.Endpoint.Trim();
+        if (patch.Model is not null)
+            row.Model = string.IsNullOrWhiteSpace(patch.Model) ? null : patch.Model.Trim();
     }
 
     public async Task SaveIntegrationKeyAsync(Guid apiKeyId, string provider, string apiKey, CancellationToken cancellationToken = default)
