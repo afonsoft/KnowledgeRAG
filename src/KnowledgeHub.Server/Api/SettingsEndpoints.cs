@@ -532,7 +532,7 @@ public static class SettingsEndpoints
         if (ValidateOnnxModel(body) is { } badOnnx)
             return badOnnx;
 
-        var provider = body.Provider!.Trim().ToLowerInvariant();
+        var provider = body.Provider.Trim().ToLowerInvariant();
         await emb.SaveAsync(body with { Provider = provider }, ct);
         return Results.NoContent();
     }
@@ -583,7 +583,7 @@ public static class SettingsEndpoints
     /// would silently produce garbage vectors.</summary>
     private static IResult? ValidateOnnxModel(SaveEmbeddingSettingsRequest body)
     {
-        var provider = body.Provider!.Trim().ToLowerInvariant();
+        var provider = body.Provider.Trim().ToLowerInvariant();
         if (provider != "onnx")
             return null;
         var requestedDims = body.Dimensions;

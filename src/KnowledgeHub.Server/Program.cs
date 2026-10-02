@@ -110,6 +110,8 @@ await RunHostAsync(app);
 // Marker type so WebApplicationFactory<Program> can host the app in integration tests.
 public partial class Program
 {
+    protected Program() { }
+
     private const string GeneralPolicy = "general";
     private const string ReadyTag = "ready";
 

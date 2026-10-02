@@ -5,6 +5,9 @@ namespace KnowledgeHub.Server.Embeddings;
 /// <summary>float[] ↔ little-endian byte[] codec for BLOB persistence (SPEC-02).</summary>
 public static class EmbeddingVectorCodec
 {
+    /// <summary>Codec pair for <see cref="Caching.SafeCache.GetOrCreateAsync{T}"/> embedding cache entries.</summary>
+    public static readonly Caching.SafeCache.CacheCodec<float[]> Codec = new(ToBytes, FromBytes);
+
     public static byte[] ToBytes(float[] vector)
     {
         var bytes = new byte[vector.Length * sizeof(float)];

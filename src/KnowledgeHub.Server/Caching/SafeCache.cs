@@ -123,23 +123,15 @@ public static class SafeCache
     /// <summary>Serializer pair for <see cref="GetOrCreateAsync{T}"/> payloads.</summary>
     public sealed record CacheCodec<T>(Func<T, byte[]> Serialize, Func<byte[], T?> Deserialize);
 
-    /// <summary>Codec-based overload of <see cref="GetOrCreateAsync{T}"/>.</summary>
-    public static Task<T?> GetOrCreateAsync<T>(
+    public static async Task<T?> GetOrCreateAsync<T>(
         IDistributedCache cache, string key,
         Func<CancellationToken, Task<T?>> factory,
         CacheCodec<T> codec,
         TimeSpan? ttl, ILogger logger, CancellationToken ct = default)
-        => GetOrCreateAsync(cache, key, factory, codec.Serialize, codec.Deserialize, ttl, logger, ct);
-
-    public static async Task<T?> GetOrCreateAsync<T>(
-        IDistributedCache cache, string key,
-        Func<CancellationToken, Task<T?>> factory,
-        Func<T, byte[]> serialize, Func<byte[], T?> deserialize,
-        TimeSpan? ttl, ILogger logger, CancellationToken ct = default)
     {
         var cached = await GetAsync(cache, key, logger, ct);
         if (cached is not null)
-            return deserialize(cached);
+            return codec.Deserialize(cached);
 
         if (cache is L1L2Cache hybrid)
         {
@@ -151,10 +143,10 @@ public static class SafeCache
                 // only the winner produces, serializing the miss-fill.
                 cached = await GetAsync(cache, key, logger, ct);
                 if (cached is not null)
-                    return deserialize(cached);
+                    return codec.Deserialize(cached);
                 var produced = await factory(ct);
                 if (produced is not null)
-                    await SetAsync(cache, key, serialize(produced), ttl, logger, ct);
+                    await SetAsync(cache, key, codec.Serialize(produced), ttl, logger, ct);
                 return produced;
             }
             finally { gate.Release(); }
@@ -162,7 +154,7 @@ public static class SafeCache
 
         var produced2 = await factory(ct);
         if (produced2 is not null)
-            await SetAsync(cache, key, serialize(produced2), ttl, logger, ct);
+            await SetAsync(cache, key, codec.Serialize(produced2), ttl, logger, ct);
         return produced2;
     }
 

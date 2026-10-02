@@ -140,7 +140,7 @@ public sealed partial class DocumentFileConnector(ILogger<DocumentFileConnector>
         foreach (var file in Directory.EnumerateFiles(root, "*", options))
         {
             var relative = Path.GetRelativePath(root, file);
-            var segments = relative.Split(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+            var segments = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             if (segments.Any(s => s.StartsWith('.')))
                 continue; // hidden files/dirs excluded
             if (matcher(relative))

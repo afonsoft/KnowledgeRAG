@@ -59,11 +59,11 @@ public sealed class IngestionWorker(
             await using var scope = scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
             var orphans = await db.IngestionJobs
-                .Where(j => j.Status == "queued" || j.Status == "running")
+                .Where(j => j.Status == StatusQueued || j.Status == StatusRunning)
                 .ToListAsync(ct);
             foreach (var job in orphans)
             {
-                job.Status = "failed";
+                job.Status = StatusFailed;
                 job.Error = "interrupted by restart";
                 job.FinishedAt = DateTimeOffset.UtcNow;
             }
@@ -75,7 +75,7 @@ public sealed class IngestionWorker(
                 // progress feed must see the sweep close the row.
                 foreach (var job in orphans)
                     progressFeed.Publish(new IngestionProgressEvent(
-                        job.Id, job.SourceId, "failed",
+                        job.Id, job.SourceId, StatusFailed,
                         job.DocsProcessed, job.DocsSkipped, job.DocsFailed,
                         job.ChunksCreated, job.FinishedAt!.Value));
                 logger.LogWarning("Marked {Count} orphaned ingestion job(s) as failed", orphans.Count);
@@ -94,7 +94,7 @@ public sealed class IngestionWorker(
         var ingestion = scope.ServiceProvider.GetRequiredService<IIngestionService>();
 
         var job = await db.IngestionJobs.FirstOrDefaultAsync(j => j.Id == jobId, stoppingToken);
-        if (job is null || job.Status != "queued")
+        if (job is null || job.Status != StatusQueued)
         {
             // "cancelled" is expected (cancel endpoint fires before dequeue);
             // anything else drops the job with no trace — log it.
@@ -105,7 +105,7 @@ public sealed class IngestionWorker(
             return;
         }
 
-        job.Status = "running";
+        job.Status = StatusRunning;
         job.StartedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(stoppingToken);
         // SPEC-20260924-hosted-services-and-serilog-logging RF-004: structured
@@ -123,7 +123,7 @@ public sealed class IngestionWorker(
             latest = p;
             // SPEC-20260925-job-progress-feed: push throttled ticks to subscribers.
             progressFeed.Publish(new IngestionProgressEvent(
-                jobId, job.SourceId, "running",
+                jobId, job.SourceId, StatusRunning,
                 p.Processed, p.Skipped, p.Failed, p.ChunksCreated, DateTimeOffset.UtcNow));
         });
         var flushEverySeconds = Math.Max(2,
@@ -145,11 +145,11 @@ public sealed class IngestionWorker(
             jobSpan?.SetTag("job.kind", job.Kind);
             jobSpan?.SetTag("job.source_id", job.SourceId.ToString());
             var result = await ingestion.SyncAsync(job.SourceId, options, jobCt);
-            job.Status = result.Status == "failed" ? "failed" : "done";
+            job.Status = result.Status == StatusFailed ? StatusFailed : "done";
             // SPEC-20260926-job-error-details RF-001/RF-004: persist per-doc
             // failures and enrich the generic failure reason with a real digest.
             job.WarningsJson = SerializeWarnings(result.Warnings);
-            job.Error = result.Status == "failed"
+            job.Error = result.Status == StatusFailed
                 ? EnrichError(result.Reason, result.Warnings, result.DocumentsFailed)
                 : null;
             job.DocsProcessed = result.DocumentsProcessed;
@@ -165,13 +165,13 @@ public sealed class IngestionWorker(
         // jobCt too — record it distinctly instead of "The operation was canceled."
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            job.Status = "failed";
+            job.Status = StatusFailed;
             job.Error = "interrupted by shutdown/restart";
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Ingestion job {JobId} failed", jobId);
-            job.Status = "failed";
+            job.Status = StatusFailed;
             job.Error = ExceptionDigest.Describe(ex);
         }
         finally
@@ -195,8 +195,8 @@ public sealed class IngestionWorker(
     }
 
     /// <summary>SPEC-20260926-ingestion-jobs-test-deflake: a crash between
-    /// dequeue and the persisted "running" transition strands the row as
-    /// "queued" — the channel write is consumed, dedup pins it as Existing
+    /// dequeue and the persisted StatusRunning transition strands the row as
+    /// StatusQueued — the channel write is consumed, dedup pins it as Existing
     /// forever, and subscribers never see a terminal event. Repair: if the row
     /// is still queued/running, persist failed + publish the terminal event.</summary>
     private async Task FailStrandedJobAsync(Guid jobId, Exception crash)
@@ -207,14 +207,14 @@ public sealed class IngestionWorker(
             var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
             var job = await db.IngestionJobs.FirstOrDefaultAsync(
                 j => j.Id == jobId, CancellationToken.None);
-            if (job is null || job.Status is not ("queued" or "running"))
+            if (job is null || job.Status is not (StatusQueued or StatusRunning))
                 return;
-            job.Status = "failed";
+            job.Status = StatusFailed;
             job.Error = $"worker error before terminal state — {ExceptionDigest.Describe(crash)}";
             job.FinishedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(CancellationToken.None);
             progressFeed.Publish(new IngestionProgressEvent(
-                jobId, job.SourceId, "failed",
+                jobId, job.SourceId, StatusFailed,
                 job.DocsProcessed, job.DocsSkipped, job.DocsFailed, job.ChunksCreated,
                 DateTimeOffset.UtcNow));
         }
@@ -237,7 +237,7 @@ public sealed class IngestionWorker(
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
                 await db.IngestionJobs
-                    .Where(j => j.Id == jobId && j.Status == "running")
+                    .Where(j => j.Id == jobId && j.Status == StatusRunning)
                     .ExecuteUpdateAsync(u => u
                         .SetProperty(j => j.DocsProcessed, p.Processed)
                         .SetProperty(j => j.DocsSkipped, p.Skipped)

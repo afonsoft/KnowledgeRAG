@@ -1065,7 +1065,7 @@ public sealed class IngestionService : IIngestionService
 
     private static bool IsExcluded(string relativePath)
     {
-        var segments = relativePath.Split(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return segments.Any(s => s.StartsWith('.') || s.Equals(".obsidian", StringComparison.OrdinalIgnoreCase));
     }
 

@@ -443,9 +443,13 @@ public sealed class AgentService(
         });
     }
 
-    private static string DeriveTitle(string? prompt) =>
-        string.IsNullOrWhiteSpace(prompt) ? "nova conversa"
-            : prompt.Trim() is { Length: > 60 } p ? p[..60] + "…" : prompt.Trim();
+    private static string DeriveTitle(string? prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+            return "nova conversa";
+        var title = prompt.Trim();
+        return title.Length > 60 ? title[..60] + "…" : title;
+    }
 
     private bool IsExpired(ToolApproval approval) =>
         approval.CreatedAt + TimeSpan.FromMinutes(options.ApprovalTimeoutMinutes) < DateTimeOffset.UtcNow;
@@ -854,10 +858,13 @@ public sealed class AgentService(
                 c.CallId, c.Name, c.Args.Deserialize<Dictionary<string, object?>>())));
             contents.AddRange(m.Results.Select(r => new FunctionResultContent(r.CallId, r.Result)));
             return new ChatMessage(
-                m.Role == "assistant" ? ChatRole.Assistant
-                    : m.Role == "system" ? ChatRole.System
-                    : m.Role == "tool" ? ChatRole.Tool
-                    : ChatRole.User,
+                m.Role switch
+                {
+                    "assistant" => ChatRole.Assistant,
+                    "system" => ChatRole.System,
+                    "tool" => ChatRole.Tool,
+                    _ => ChatRole.User
+                },
                 contents);
         }).ToList();
 
