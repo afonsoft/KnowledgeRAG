@@ -2,8 +2,8 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | Approved |
-| Ticket | a preencher pelo /create-issues (epic E25) |
+| Status | Done |
+| Ticket | Epic [#480 (E25)](https://github.com/afonsoft/LangGraph-UI/issues/480) — slices #481–#486 (RF-01..RF-06) |
 | Origem | Skill sonarqube-autofix (sessão 2026-10-02, run 2) |
 | Pré-requisito | SPEC-20261001-sonarqube-backlog-cleanup (E23) — ondas #470–#479 mergeadas |
 
