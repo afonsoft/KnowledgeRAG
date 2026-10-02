@@ -14,7 +14,7 @@ public class ThreadsApiTests : IClassFixture<ThreadsApiTests.Fixture>, IClassFix
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-threads-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-threads-{Guid.NewGuid():N}.db");
         public AgentApiTests.ScriptedChatClient Chat { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -32,7 +32,7 @@ public class ThreadsApiTests : IClassFixture<ThreadsApiTests.Fixture>, IClassFix
     /// <summary>Same fixture with a tiny context window so history overflows fast.</summary>
     public sealed class TinyWindowFixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-threads-tiny-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-threads-tiny-{Guid.NewGuid():N}.db");
         public AgentApiTests.ScriptedChatClient Chat { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)

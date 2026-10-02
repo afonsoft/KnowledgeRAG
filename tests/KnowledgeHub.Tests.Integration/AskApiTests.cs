@@ -16,7 +16,7 @@ public class AskApiTests : IClassFixture<AskApiTests.Fixture>, IClassFixture<Ask
     /// <summary>Host with a stub IChatClient — simulates a configured chat provider.</summary>
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-ask-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-ask-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -38,7 +38,7 @@ public class AskApiTests : IClassFixture<AskApiTests.Fixture>, IClassFixture<Ask
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-asknone-{Guid.NewGuid():N}.db")
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-asknone-{Guid.NewGuid():N}.db")
                 }));
         }
     }
@@ -53,18 +53,18 @@ public class AskApiTests : IClassFixture<AskApiTests.Fixture>, IClassFixture<Ask
         _factory = factory;
         _noChat = noChat;
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"ask-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"ask-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); } catch { }
+        try { Directory.Delete(_dir, recursive: true); } catch (Exception ex) { _ = ex.Message; }
     }
 
     private async Task<Guid> SeedSource(string token)
     {
-        var file = Path.Combine(_dir, $"{token}.txt");
+        var file = Path.Join(_dir, $"{token}.txt");
         await File.WriteAllTextAsync(file, $"knowledge about {token}");
         var response = await _client.PostAsJsonAsync("/api/sources", new
         {
@@ -163,10 +163,10 @@ public class AskApiTests : IClassFixture<AskApiTests.Fixture>, IClassFixture<Ask
     {
         // Covers SPEC-20260922-tool-descriptions-en-us RF-003/AC: citation.path is
         // the vault-relative path read_document accepts; text shows (path: …).
-        var vault = Path.Combine(_dir, $"vault{Guid.NewGuid():N}");
+        var vault = Path.Join(_dir, $"vault{Guid.NewGuid():N}");
         Directory.CreateDirectory(vault);
         var token = $"VAULTTOKEN{Guid.NewGuid():N}";
-        await File.WriteAllTextAsync(Path.Combine(vault, "note.md"), $"body about {token}");
+        await File.WriteAllTextAsync(Path.Join(vault, "note.md"), $"body about {token}");
         var name = $"v{Guid.NewGuid():N}"; // separator-free name slugifies to itself
         var src = await _client.PostAsJsonAsync("/api/sources", new
         {
@@ -237,7 +237,7 @@ public class AskApiTests : IClassFixture<AskApiTests.Fixture>, IClassFixture<Ask
     public async Task Ask_NoProvider_DefaultFallsBackToContext()
     {
         var client = await TestAuth.LoginAsync(_noChat);
-        var file = Path.Combine(_dir, "nochat.txt");
+        var file = Path.Join(_dir, "nochat.txt");
         await File.WriteAllTextAsync(file, "NOCHATTOKEN body");
         var src = await client.PostAsJsonAsync("/api/sources", new
         {

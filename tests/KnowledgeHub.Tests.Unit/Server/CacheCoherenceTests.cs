@@ -105,7 +105,7 @@ public sealed class CacheCoherenceTests
             TimeSpan.FromMinutes(1), NullLogger<L1L2Cache>.Instance);
         await l1l2.SetAsync("hot", "v"u8.ToArray(), new DistributedCacheEntryOptions());
         var manager = new RecordingManager();
-        var sub = new InvalidationSubscriber(bus, l1l2, NullLogger<InvalidationSubscriber>.Instance, manager);
+        using var sub = new InvalidationSubscriber(bus, l1l2, NullLogger<InvalidationSubscriber>.Instance, manager);
 
         bus.Fire("cache-clear");
         for (var i = 0; i < 100 && manager.Clears == 0; i++)
@@ -113,7 +113,6 @@ public sealed class CacheCoherenceTests
 
         Assert.Equal(1, manager.Clears);
         Assert.Null(l1.Get("hot")); // L1 compacted — L2 path is exercised via manager
-        sub.Dispose();
     }
 
     // ---- RF-005: degraded vector-arm result is not cached ----
@@ -185,7 +184,7 @@ public sealed class CacheCoherenceTests
     [Fact]
     public async Task Search_DegradedVectorArm_NotCached()
     {
-        var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+        await using var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
         await conn.OpenAsync();
         var options = new DbContextOptionsBuilder<KnowledgeHubDbContext>()
             .UseSqlite(conn).Options;

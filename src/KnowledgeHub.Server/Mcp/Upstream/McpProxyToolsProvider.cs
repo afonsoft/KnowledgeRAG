@@ -45,11 +45,11 @@ public sealed partial class McpProxyToolsProvider(
 
         var tools = new List<CatalogTool>();
         var activeFingerprints = new Dictionary<Guid, string>();
-        foreach (var source in sources)
+        foreach (var (source, config) in sources
+            .Select(s => (Source: s, Config: ParseConfig(s)))
+            .Where(x => x.Config is not null))
         {
-            if (ParseConfig(source) is not { } config)
-                continue;
-            activeFingerprints[source.Id] = config.Fingerprint;
+            activeFingerprints[source.Id] = config!.Fingerprint;
 
             var session = await GetSessionAsync(config, cancellationToken);
             foreach (var proto in await session.GetToolsAsync(cancellationToken))

@@ -165,10 +165,9 @@ public sealed class SqliteKnowledgeGraphStore(
             return 0;
         var now = DateTime.UtcNow;
         var added = 0;
-        foreach (var edge in batch)
+        // provenance is non-negotiable — EvidenceChunkId.Empty is skipped
+        foreach (var edge in batch.Where(e => e.EvidenceChunkId != Guid.Empty))
         {
-            if (edge.EvidenceChunkId == Guid.Empty)
-                continue; // provenance is non-negotiable
 
             // Re-observation of the identical fact: bump ObservedAt only.
             var identical = await FindIdenticalAsync(edge, ct);

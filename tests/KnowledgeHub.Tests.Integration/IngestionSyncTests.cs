@@ -12,7 +12,7 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-ing-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-ing-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -32,7 +32,7 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
     public IngestionSyncTests(Fixture factory)
     {
         _client = TestAuth.Login(factory);
-        _vault = Path.Combine(Path.GetTempPath(), $"vault-{Guid.NewGuid():N}");
+        _vault = Path.Join(Path.GetTempPath(), $"vault-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_vault);
     }
 
@@ -57,9 +57,9 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
     [Fact]
     public async Task Sync_IndexesMarkdownFiles_WithChunks()
     {
-        await File.WriteAllTextAsync(Path.Combine(_vault, "a.md"), "# Nota A\n\nconteúdo sobre arquitetura limpa");
-        await File.WriteAllTextAsync(Path.Combine(_vault, "b.md"), "---\ntags: [x]\n---\n# Nota B\n\noutro conteúdo");
-        await File.WriteAllTextAsync(Path.Combine(_vault, "c.md"), "sem header");
+        await File.WriteAllTextAsync(Path.Join(_vault, "a.md"), "# Nota A\n\nconteúdo sobre arquitetura limpa");
+        await File.WriteAllTextAsync(Path.Join(_vault, "b.md"), "---\ntags: [x]\n---\n# Nota B\n\noutro conteúdo");
+        await File.WriteAllTextAsync(Path.Join(_vault, "c.md"), "sem header");
 
         var source = await CreateVaultSource();
         var response = await _client.PostAsync($"/api/sources/{source.Id}/sync?wait=true", null);
@@ -77,7 +77,7 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
     [Fact]
     public async Task Sync_UnchangedFile_IsSkipped_AndDeletedFile_IsRemoved()
     {
-        var file = Path.Combine(_vault, "keep.md");
+        var file = Path.Join(_vault, "keep.md");
         await File.WriteAllTextAsync(file, "# Keep\n\nestável");
         var source = await CreateVaultSource();
 
@@ -99,11 +99,11 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
     [Fact]
     public async Task Sync_ObsidianDirAndHiddenDirs_AreExcluded()
     {
-        Directory.CreateDirectory(Path.Combine(_vault, ".obsidian"));
-        Directory.CreateDirectory(Path.Combine(_vault, ".hidden"));
-        await File.WriteAllTextAsync(Path.Combine(_vault, ".obsidian", "config.md"), "secret");
-        await File.WriteAllTextAsync(Path.Combine(_vault, ".hidden", "x.md"), "hidden");
-        await File.WriteAllTextAsync(Path.Combine(_vault, "visible.md"), "# V\n\nok");
+        Directory.CreateDirectory(Path.Join(_vault, ".obsidian"));
+        Directory.CreateDirectory(Path.Join(_vault, ".hidden"));
+        await File.WriteAllTextAsync(Path.Join(_vault, ".obsidian", "config.md"), "secret");
+        await File.WriteAllTextAsync(Path.Join(_vault, ".hidden", "x.md"), "hidden");
+        await File.WriteAllTextAsync(Path.Join(_vault, "visible.md"), "# V\n\nok");
 
         var source = await CreateVaultSource();
         var result = await (await _client.PostAsync($"/api/sources/{source.Id}/sync?wait=true", null))
@@ -115,7 +115,7 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
     [Fact]
     public async Task Sync_MissingPath_ReturnsFailed_AndRecordsStatusOnSource()
     {
-        var missing = Path.Combine(Path.GetTempPath(), $"gone-{Guid.NewGuid():N}");
+        var missing = Path.Join(Path.GetTempPath(), $"gone-{Guid.NewGuid():N}");
         var response = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"gone-{Guid.NewGuid():N}",
@@ -137,7 +137,7 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
         Directory.CreateDirectory(missing);
         try
         {
-            await File.WriteAllTextAsync(Path.Combine(missing, "back.md"), "# Back\n\nmount recovered");
+            await File.WriteAllTextAsync(Path.Join(missing, "back.md"), "# Back\n\nmount recovered");
             var result2 = await (await _client.PostAsync($"/api/sources/{source.Id}/sync?wait=true", null))
                 .Content.ReadFromJsonAsync<SyncResultDto>();
             Assert.Equal("completed", result2!.Status);
@@ -155,9 +155,9 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
     [Fact]
     public async Task Search_ReturnsRankedResults_AfterSync()
     {
-        await File.WriteAllTextAsync(Path.Combine(_vault, "vectors.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "vectors.md"),
             "# Busca Vetorial\n\nembeddings vetores similaridade cosseno busca semântica");
-        await File.WriteAllTextAsync(Path.Combine(_vault, "cake.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "cake.md"),
             "# Bolo\n\nreceita de bolo de chocolate com farinha");
 
         var source = await CreateVaultSource();

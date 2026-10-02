@@ -18,12 +18,12 @@ public sealed class StagingStorageService : IStagingStorageService
         var custom = config["Staging:Path"];
         _baseStagingPath = !string.IsNullOrWhiteSpace(custom)
             ? Path.GetFullPath(custom)
-            : Path.Combine(AppContext.BaseDirectory, "data", "staging");
+            : Path.Join(AppContext.BaseDirectory, "data", "staging");
     }
 
     public string GetStagingDirectory(Guid sourceId)
     {
-        var path = Path.Combine(_baseStagingPath, sourceId.ToString("N"));
+        var path = Path.Join(_baseStagingPath, sourceId.ToString("N"));
         Directory.CreateDirectory(path);
         return path;
     }
@@ -32,7 +32,7 @@ public sealed class StagingStorageService : IStagingStorageService
     {
         try
         {
-            var path = Path.Combine(_baseStagingPath, sourceId.ToString("N"));
+            var path = Path.Join(_baseStagingPath, sourceId.ToString("N"));
             if (Directory.Exists(path))
             {
                 Directory.Delete(path, recursive: true);

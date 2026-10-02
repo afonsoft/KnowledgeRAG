@@ -96,7 +96,7 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
             Name = request.Name,
             Description = request.Description,
             SourceType = request.Type,
-            ConfigurationJson = request.Configuration?.ToJsonString(),
+            ConfigurationJson = request.Configuration!.ToJsonString(),
             IsActive = request.IsActive,
             AutoSyncEnabled = request.AutoSyncEnabled,
             SyncIntervalMinutes = request.SyncIntervalMinutes
@@ -126,7 +126,7 @@ public sealed class KnowledgeSourceService : IKnowledgeSourceService
 
         source.Name = request.Name;
         source.Description = request.Description;
-        source.ConfigurationJson = request.Configuration?.ToJsonString();
+        source.ConfigurationJson = request.Configuration!.ToJsonString();
         source.IsActive = request.IsActive;
         source.AutoSyncEnabled = request.AutoSyncEnabled;
         source.SyncIntervalMinutes = request.SyncIntervalMinutes;

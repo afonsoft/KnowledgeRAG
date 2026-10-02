@@ -15,7 +15,7 @@ public class StagingStorageServiceTests : IDisposable
 
     public StagingStorageServiceTests()
     {
-        _tempRoot = Path.Combine(Path.GetTempPath(), "kh_staging_test_" + Guid.NewGuid().ToString("N"));
+        _tempRoot = Path.Join(Path.GetTempPath(), "kh_staging_test_" + Guid.NewGuid().ToString("N"));
         _config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -29,7 +29,7 @@ public class StagingStorageServiceTests : IDisposable
     {
         if (Directory.Exists(_tempRoot))
         {
-            try { Directory.Delete(_tempRoot, recursive: true); } catch { /* ignore */ }
+            try { Directory.Delete(_tempRoot, recursive: true); } catch (Exception ex) { _ = ex.Message; }
         }
     }
 
@@ -48,7 +48,7 @@ public class StagingStorageServiceTests : IDisposable
     {
         var sourceId = Guid.NewGuid();
         var dir = _service.GetStagingDirectory(sourceId);
-        var subFile = Path.Combine(dir, "test.txt");
+        var subFile = Path.Join(dir, "test.txt");
         await File.WriteAllTextAsync(subFile, "hello staging");
 
         Assert.True(File.Exists(subFile));

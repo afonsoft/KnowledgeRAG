@@ -227,7 +227,7 @@ public static class EvalEndpoints
         var dir = new DirectoryInfo(contentRoot);
         for (var i = 0; i < 5 && dir is not null; i++, dir = dir.Parent)
         {
-            var candidate = Path.Combine(dir.FullName, "tests", "eval", $"{trimmed}.json");
+            var candidate = Path.Join(dir.FullName, "tests", "eval", $"{trimmed}.json");
             if (File.Exists(candidate))
                 return (File.ReadAllText(candidate), null);
         }

@@ -18,7 +18,7 @@ public class RetrievalQualityTests : IClassFixture<RetrievalQualityTests.Fixture
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-rq-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-rq-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -34,7 +34,7 @@ public class RetrievalQualityTests : IClassFixture<RetrievalQualityTests.Fixture
     /// candidate by position — the LAST candidate gets the highest score.</summary>
     public sealed class RerankFixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-rr-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-rr-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -79,16 +79,16 @@ public class RetrievalQualityTests : IClassFixture<RetrievalQualityTests.Fixture
         _factory = factory;
         _rerank = rerank;
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"rq-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"rq-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
     private async Task SeedBoth(string token)
     {
         // DocumentFile source with a unique token.
-        var docDir = Path.Combine(_dir, "docs");
+        var docDir = Path.Join(_dir, "docs");
         Directory.CreateDirectory(docDir);
-        await File.WriteAllTextAsync(Path.Combine(docDir, "f.txt"), $"docfile content {token}");
+        await File.WriteAllTextAsync(Path.Join(docDir, "f.txt"), $"docfile content {token}");
         var s1 = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"rqf-{Guid.NewGuid():N}",
@@ -100,9 +100,9 @@ public class RetrievalQualityTests : IClassFixture<RetrievalQualityTests.Fixture
         await _client.PostAsync($"/api/sources/{src1.Id}/sync?wait=true", null);
 
         // Obsidian vault source with the same token.
-        var vault = Path.Combine(_dir, "vault");
+        var vault = Path.Join(_dir, "vault");
         Directory.CreateDirectory(vault);
-        await File.WriteAllTextAsync(Path.Combine(vault, "n.md"), $"vault note {token}");
+        await File.WriteAllTextAsync(Path.Join(vault, "n.md"), $"vault note {token}");
         var s2 = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"rqv-{Guid.NewGuid():N}",
@@ -180,12 +180,12 @@ public class RetrievalQualityTests : IClassFixture<RetrievalQualityTests.Fixture
     public async Task RerankEnabled_ReordersAndPopulatesBreakdown()
     {
         var client = await TestAuth.LoginAsync(_rerank);
-        var dir = Path.Combine(Path.GetTempPath(), $"rr-{Guid.NewGuid():N}");
+        var dir = Path.Join(Path.GetTempPath(), $"rr-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         var token = $"RRTOK{Guid.NewGuid():N}";
         // Several matching docs → a real candidate window to reorder.
         for (var i = 0; i < 4; i++)
-            await File.WriteAllTextAsync(Path.Combine(dir, $"d{i}.txt"), $"{token} document {i}");
+            await File.WriteAllTextAsync(Path.Join(dir, $"d{i}.txt"), $"{token} document {i}");
         var src = await client.PostAsJsonAsync("/api/sources", new
         {
             name = $"rr-{Guid.NewGuid():N}",

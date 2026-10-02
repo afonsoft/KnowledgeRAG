@@ -470,7 +470,7 @@ public static class KnowledgeHubServiceCollectionExtensions
             // keeps stored secrets decryptable across deployments.
             .SetApplicationName("KnowledgeHub")
             .PersistKeysToFileSystem(new DirectoryInfo(
-                Path.Combine(
+                Path.Join(
                     Path.GetDirectoryName(DatabasePath.Resolve(configuration))!,
                     "dataprotection-keys")));
         services.AddSingleton<Settings.IIntegrationSecretStore, Settings.IntegrationSecretStore>();

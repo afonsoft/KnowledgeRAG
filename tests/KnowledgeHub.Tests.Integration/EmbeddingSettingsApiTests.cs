@@ -17,7 +17,7 @@ public class EmbeddingSettingsApiTests : IClassFixture<EmbeddingSettingsApiTests
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-embsettings-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-embsettings-{Guid.NewGuid():N}.db"),
                     ["Embeddings:Provider"] = "deterministic",
                     ["Embeddings:Dimensions"] = "384"
                 }));

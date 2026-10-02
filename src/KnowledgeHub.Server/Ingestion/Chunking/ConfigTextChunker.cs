@@ -158,8 +158,9 @@ public sealed partial class ConfigTextChunker : ITextChunker
             if (root is null)
                 return null;
             return root.Elements()
-                .Select(el => ((string?)$"<{root.Name.LocalName}><{el.Name.LocalName}>",
-                    $"<{root.Name.LocalName}>\n{el}"))
+                .Select<System.Xml.Linq.XElement, (string?, string)>(el =>
+                    ($"<{root.Name.LocalName}><{el.Name.LocalName}>",
+                        $"<{root.Name.LocalName}>\n{el}"))
                 .ToList();
         }
         catch (XmlException)

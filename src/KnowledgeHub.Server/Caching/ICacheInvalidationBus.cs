@@ -68,7 +68,7 @@ public sealed class RedisInvalidationBus : ICacheInvalidationBus
                 if (parts is not [var origin, var topic] || origin == _instanceId)
                     return;
                 try { Received?.Invoke(this, topic); }
-                catch (Exception ex) { _logger.LogWarning(ex, "invalidation handler failed for {Topic}", topic); }
+                catch (Exception ex) { _logger.LogWarning(ex, "invalidation handler failed for {Topic}", LogSafe(topic)); }
             });
         }
         catch (Exception ex)
@@ -88,7 +88,11 @@ public sealed class RedisInvalidationBus : ICacheInvalidationBus
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "publish invalidation {Topic} failed — other replicas keep stale L1 until TTL", topic);
+            _logger.LogWarning(ex, "publish invalidation {Topic} failed — other replicas keep stale L1 until TTL", LogSafe(topic));
         }
     }
+
+    // topic can carry channel-originated content — strip line breaks before
+    // it reaches the rendered log message (log forging).
+    private static string LogSafe(string value) => value.ReplaceLineEndings("_");
 }

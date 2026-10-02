@@ -14,7 +14,7 @@ public class FrameworkAssetsTests
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-test-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-test-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -218,7 +218,7 @@ public class FrameworkAssetsTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/plain", response.Content.Headers.ContentType?.MediaType);
         Assert.Contains("immutable", response.Headers.CacheControl?.ToString());
-        var expected = new MemoryStream();
+        await using var expected = new MemoryStream();
         await file.CreateReadStream().CopyToAsync(expected);
         Assert.Equal(expected.ToArray(), Convert.FromBase64String(await response.Content.ReadAsStringAsync()));
     }

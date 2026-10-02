@@ -67,7 +67,7 @@ public static class ObsidianNoteWriter
         if (forWrite && !normalized.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             normalized += ".md";
 
-        var full = Path.GetFullPath(Path.Combine(vaultRoot, normalized));
+        var full = Path.GetFullPath(Path.Join(vaultRoot, normalized));
         var rootWithSep = vaultRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(full, vaultRoot, StringComparison.OrdinalIgnoreCase))

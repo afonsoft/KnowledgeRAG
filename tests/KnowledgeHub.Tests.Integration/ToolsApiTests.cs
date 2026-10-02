@@ -13,8 +13,8 @@ public class ToolsApiTests : IClassFixture<ToolsApiTests.Fixture>
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-toolsapi-{Guid.NewGuid():N}.db");
-        public string Vault { get; } = Path.Combine(Path.GetTempPath(), $"vault-toolsapi-{Guid.NewGuid():N}");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-toolsapi-{Guid.NewGuid():N}.db");
+        public string Vault { get; } = Path.Join(Path.GetTempPath(), $"vault-toolsapi-{Guid.NewGuid():N}");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {

@@ -134,10 +134,10 @@ public class ContentSanitizerTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         for (var i = 0; i < 8 && dir is not null; i++, dir = dir.Parent)
         {
-            var candidate = Path.Combine(dir.FullName, "tests", "eval", name);
+            var candidate = Path.Join(dir.FullName, "tests", "eval", name);
             if (File.Exists(candidate))
                 return candidate;
-            candidate = Path.Combine(dir.FullName, "eval", name);
+            candidate = Path.Join(dir.FullName, "eval", name);
             if (File.Exists(candidate))
                 return candidate;
         }

@@ -13,13 +13,13 @@ namespace KnowledgeHub.Tests.Unit.Server.Ingestion;
 // text extraction, and URI schemes.
 public sealed class CloudConnectorTests : IDisposable
 {
-    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"kh_cloud_test_{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"kh_cloud_test_{Guid.NewGuid():N}");
 
     public void Dispose()
     {
         if (Directory.Exists(_tempRoot))
         {
-            try { Directory.Delete(_tempRoot, recursive: true); } catch { }
+            try { Directory.Delete(_tempRoot, recursive: true); } catch (Exception ex) { _ = ex.Message; }
         }
     }
 
@@ -27,7 +27,7 @@ public sealed class CloudConnectorTests : IDisposable
     {
         public string GetStagingDirectory(Guid sourceId)
         {
-            var dir = Path.Combine(root, sourceId.ToString("N"));
+            var dir = Path.Join(root, sourceId.ToString("N"));
             Directory.CreateDirectory(dir);
             return dir;
         }
@@ -77,7 +77,7 @@ public sealed class CloudConnectorTests : IDisposable
     {
         var c = new AwsS3Connector(
             new McpProxySourceServiceTests.FakeSecretStore(),
-            new FakeStaging(Path.Combine(Path.GetTempPath(), $"kh_cloud_test_{Guid.NewGuid():N}")),
+            new FakeStaging(Path.Join(Path.GetTempPath(), $"kh_cloud_test_{Guid.NewGuid():N}")),
             NullLogger<AwsS3Connector>.Instance);
         c.GatewayOverride = (_, _, _) => Task.FromResult<IRemoteObjectGateway>(gw);
         return c;

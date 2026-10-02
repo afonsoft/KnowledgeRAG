@@ -143,8 +143,8 @@ public sealed class EvalScheduleService(
                 report.Metrics,
                 report.Latency
             }, Json);
-            await httpClientFactory.CreateClient("eval-notify")
-                .PostAsync(url, new StringContent(payload, System.Text.Encoding.UTF8, "application/json"), ct);
+            using var content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
+            await httpClientFactory.CreateClient("eval-notify").PostAsync(url, content, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {

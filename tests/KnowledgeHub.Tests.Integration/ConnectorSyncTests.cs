@@ -13,7 +13,7 @@ public class ConnectorSyncTests : IClassFixture<ConnectorSyncTests.Fixture>, IDi
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-conn-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-conn-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -31,13 +31,13 @@ public class ConnectorSyncTests : IClassFixture<ConnectorSyncTests.Fixture>, IDi
     public ConnectorSyncTests(Fixture factory)
     {
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"docs-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"docs-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); } catch { }
+        try { Directory.Delete(_dir, recursive: true); } catch (Exception ex) { _ = ex.Message; }
     }
 
     private async Task<KnowledgeSourceDto> CreateSource(object configuration, string type = "DocumentFile")
@@ -60,9 +60,9 @@ public class ConnectorSyncTests : IClassFixture<ConnectorSyncTests.Fixture>, IDi
     [Fact]
     public async Task DocumentFile_DirSync_IndexesSupported_AndWarnsOnUnsupported()
     {
-        await File.WriteAllTextAsync(Path.Combine(_dir, "notes.md"), "# Notes\n\nunique marker DIRTOKEN77");
-        await File.WriteAllTextAsync(Path.Combine(_dir, "readme.txt"), "plain text file body");
-        await File.WriteAllTextAsync(Path.Combine(_dir, "data.bin"), "\x00\x01 binary");
+        await File.WriteAllTextAsync(Path.Join(_dir, "notes.md"), "# Notes\n\nunique marker DIRTOKEN77");
+        await File.WriteAllTextAsync(Path.Join(_dir, "readme.txt"), "plain text file body");
+        await File.WriteAllTextAsync(Path.Join(_dir, "data.bin"), "\x00\x01 binary");
 
         var source = await CreateSource(new { path = _dir });
         var result = await Sync(source.Id);
@@ -83,7 +83,7 @@ public class ConnectorSyncTests : IClassFixture<ConnectorSyncTests.Fixture>, IDi
     [Fact]
     public async Task DocumentFile_ChangeAndDelete_PropagateOnResync()
     {
-        var file = Path.Combine(_dir, "mutable.txt");
+        var file = Path.Join(_dir, "mutable.txt");
         await File.WriteAllTextAsync(file, "version one V1TOKEN");
         var source = await CreateSource(new { path = _dir });
         await Sync(source.Id);
@@ -139,7 +139,7 @@ public class ConnectorSyncTests : IClassFixture<ConnectorSyncTests.Fixture>, IDi
     public async Task DocumentFile_Pdf_IsIndexed()
     {
         // Minimal PDF built with PdfPig's writer.
-        var pdfPath = Path.Combine(_dir, "doc.pdf");
+        var pdfPath = Path.Join(_dir, "doc.pdf");
         var builder = new UglyToad.PdfPig.Writer.PdfDocumentBuilder();
         var page = builder.AddPage(UglyToad.PdfPig.Content.PageSize.A4);
         var font = builder.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica);

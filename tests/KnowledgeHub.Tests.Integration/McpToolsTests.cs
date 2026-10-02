@@ -13,13 +13,13 @@ public class McpToolsTests : IClassFixture<McpToolsTests.Fixture>
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-tools-{Guid.NewGuid():N}.db");
-        public string Vault { get; } = Path.Combine(Path.GetTempPath(), $"vault-tools-{Guid.NewGuid():N}");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-tools-{Guid.NewGuid():N}.db");
+        public string Vault { get; } = Path.Join(Path.GetTempPath(), $"vault-tools-{Guid.NewGuid():N}");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             Directory.CreateDirectory(Vault);
-            File.WriteAllText(Path.Combine(Vault, "nota.md"),
+            File.WriteAllText(Path.Join(Vault, "nota.md"),
                 "# Nota de Teste\n\nconteúdo sobre embeddings vetores e busca semântica profunda");
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -164,7 +164,7 @@ public class McpToolsTests : IClassFixture<McpToolsTests.Fixture>
         Assert.True(noteResult.GetProperty("isError").GetBoolean());
         Assert.Contains("read-only",
             noteResult.GetProperty("content")[0].GetProperty("text").GetString());
-        Assert.False(File.Exists(Path.Combine(_factory.Vault, "blocked-note.md")));
+        Assert.False(File.Exists(Path.Join(_factory.Vault, "blocked-note.md")));
 
         var kwResult = await mcp.SendAsync("tools/call", new
         {
@@ -174,7 +174,7 @@ public class McpToolsTests : IClassFixture<McpToolsTests.Fixture>
         Assert.True(kwResult.GetProperty("isError").GetBoolean());
         Assert.Contains("read-only",
             kwResult.GetProperty("content")[0].GetProperty("text").GetString());
-        Assert.False(File.Exists(Path.Combine(_factory.Vault, "Blocked.md")));
+        Assert.False(File.Exists(Path.Join(_factory.Vault, "Blocked.md")));
     }
 
     [Fact]

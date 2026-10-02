@@ -27,7 +27,7 @@ public class IngestionJobsApiTests : IClassFixture<IngestionJobsApiTests.Fixture
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-jobs-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-jobs-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
         {
@@ -47,15 +47,15 @@ public class IngestionJobsApiTests : IClassFixture<IngestionJobsApiTests.Fixture
     {
         _factory = factory;
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"jobs-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"jobs-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
-    public void Dispose() { try { Directory.Delete(_dir, recursive: true); } catch { } }
+    public void Dispose() { try { Directory.Delete(_dir, recursive: true); } catch (Exception ex) { _ = ex.Message; } }
 
     private async Task<KnowledgeSourceDto> SeedSource()
     {
-        await File.WriteAllTextAsync(Path.Combine(_dir, $"doc-{Guid.NewGuid():N}.txt"), "job test content");
+        await File.WriteAllTextAsync(Path.Join(_dir, $"doc-{Guid.NewGuid():N}.txt"), "job test content");
         var response = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"jobs-{Guid.NewGuid():N}",

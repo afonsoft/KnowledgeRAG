@@ -21,7 +21,7 @@ public class RateLimitTests : IClassFixture<RateLimitTests.Fixture>, IClassFixtu
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-rl-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-rl-{Guid.NewGuid():N}.db"),
                     ["RateLimiting:LlmPermitLimit"] = "2",
                     ["RateLimiting:LlmWindowSeconds"] = "3600",
                     ["RateLimiting:GeneralPermitLimit"] = "500"
@@ -36,7 +36,7 @@ public class RateLimitTests : IClassFixture<RateLimitTests.Fixture>, IClassFixtu
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-rloff-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-rloff-{Guid.NewGuid():N}.db"),
                     ["RateLimiting:Enabled"] = "false",
                     ["RateLimiting:LlmPermitLimit"] = "1"
                 }));

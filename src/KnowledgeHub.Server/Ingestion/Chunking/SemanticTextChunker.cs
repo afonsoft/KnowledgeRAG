@@ -127,6 +127,6 @@ public sealed class SemanticTextChunker(
             na += a[i] * a[i];
             nb += b[i] * b[i];
         }
-        return na == 0 || nb == 0 ? 0 : dot / (Math.Sqrt(na) * Math.Sqrt(nb));
+        return na <= 0 || nb <= 0 ? 0 : dot / (Math.Sqrt(na) * Math.Sqrt(nb));
     }
 }

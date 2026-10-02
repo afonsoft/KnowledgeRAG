@@ -8,3 +8,5 @@ paths-ignore:
   - "**/bin/**"
   - "**/*.g.cs"
   - "**/Migrations/**"
+  # Generated standalone diagram HTML (archify exports) — static artifacts.
+  - "docs/architecture/**"

@@ -19,7 +19,7 @@ public class SettingsApiTests : IClassFixture<SettingsApiTests.Fixture>
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-settings-{Guid.NewGuid():N}.db")
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-settings-{Guid.NewGuid():N}.db")
                 }));
     }
 

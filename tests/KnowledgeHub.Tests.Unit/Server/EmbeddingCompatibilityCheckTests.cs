@@ -10,8 +10,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace KnowledgeHub.Tests.Unit.Server;
 
 // Covers SPEC-20260914-embedding-dimension-guard RF-001..004.
-public sealed class EmbeddingCompatibilityCheckTests
+public sealed class EmbeddingCompatibilityCheckTests : IDisposable
 {
+    private readonly List<IDisposable> _owned = new();
     [Fact]
     public async Task EmptyStore_LogsInfo_NoWarnings()
     {
@@ -63,10 +64,11 @@ public sealed class EmbeddingCompatibilityCheckTests
         Assert.Contains("deterministic:hash384", warning.Message);
     }
 
-    private static KnowledgeHubDbContext CreateDb()
+    private KnowledgeHubDbContext CreateDb()
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
+        _owned.Add(connection);
         var options = new DbContextOptionsBuilder<KnowledgeHubDbContext>()
             .UseSqlite(connection)
             .Options;
@@ -115,4 +117,11 @@ public sealed class EmbeddingCompatibilityCheckTests
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
             => Entries.Add((logLevel, formatter(state, exception)));
     }
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        foreach (var d in _owned)
+            d.Dispose();
+    }
+
 }

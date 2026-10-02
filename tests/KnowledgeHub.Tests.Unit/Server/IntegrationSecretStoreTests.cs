@@ -16,6 +16,7 @@ public sealed class IntegrationSecretStoreTests : IDisposable
 {
     private readonly SqliteConnection _conn;
     private readonly ServiceProvider _services;
+    private readonly MemoryCache _cache;
     private readonly IntegrationSecretStore _store;
 
     public IntegrationSecretStoreTests()
@@ -34,7 +35,7 @@ public sealed class IntegrationSecretStoreTests : IDisposable
         _store = new IntegrationSecretStore(
             _services.GetRequiredService<IServiceScopeFactory>(),
             _services.GetRequiredService<IDataProtectionProvider>(),
-            new MemoryCache(new MemoryCacheOptions()),
+            _cache = new MemoryCache(new MemoryCacheOptions()),
             NullLogger<IntegrationSecretStore>.Instance);
     }
 
@@ -103,6 +104,7 @@ public sealed class IntegrationSecretStoreTests : IDisposable
     public void Dispose()
     {
         _services.Dispose();
+        _cache.Dispose();
         _conn.Dispose();
     }
 }

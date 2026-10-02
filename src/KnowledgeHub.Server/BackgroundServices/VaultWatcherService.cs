@@ -75,9 +75,9 @@ public sealed class VaultWatcherService(
 
         // drop watchers for deactivated/removed sources — and for sources
         // whose ROOT changed: id-only matching kept the old directory watched.
-        foreach (var id in _watches.Keys.ToList().Where(id =>
-            !wanted.TryGetValue(id, out var want)
-            || !string.Equals(_watches[id].Root, want.Item2, StringComparison.OrdinalIgnoreCase)))
+        foreach (var (id, _) in _watches.ToList().Where(kv =>
+            !wanted.TryGetValue(kv.Key, out var want)
+            || !string.Equals(kv.Value.Root, want.Item2, StringComparison.OrdinalIgnoreCase)))
         {
             if (_watches.TryRemove(id, out var watch))
                 watch.Watcher.Dispose();

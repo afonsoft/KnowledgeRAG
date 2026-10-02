@@ -17,7 +17,7 @@ public class EvalEndpointsTests : IClassFixture<EvalEndpointsTests.Fixture>
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-eval-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-eval-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -35,15 +35,15 @@ public class EvalEndpointsTests : IClassFixture<EvalEndpointsTests.Fixture>
     public EvalEndpointsTests(Fixture factory)
     {
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"eval-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"eval-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
     private async Task SeedSource()
     {
-        await File.WriteAllTextAsync(Path.Combine(_dir, "alpha.txt"),
+        await File.WriteAllTextAsync(Path.Join(_dir, "alpha.txt"),
             "EVALTOKEN-ALPHA knowledge about alpha systems");
-        await File.WriteAllTextAsync(Path.Combine(_dir, "beta.txt"),
+        await File.WriteAllTextAsync(Path.Join(_dir, "beta.txt"),
             "EVALTOKEN-BETA knowledge about beta systems");
         var response = await _client.PostAsJsonAsync("/api/sources", new
         {

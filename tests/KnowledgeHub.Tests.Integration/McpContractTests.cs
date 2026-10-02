@@ -17,8 +17,8 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-contract-{Guid.NewGuid():N}.db");
-        public string Vault { get; } = Path.Combine(Path.GetTempPath(), $"vault-contract-{Guid.NewGuid():N}");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-contract-{Guid.NewGuid():N}.db");
+        public string Vault { get; } = Path.Join(Path.GetTempPath(), $"vault-contract-{Guid.NewGuid():N}");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {

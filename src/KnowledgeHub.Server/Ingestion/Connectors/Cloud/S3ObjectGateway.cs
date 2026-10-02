@@ -22,10 +22,9 @@ internal sealed class S3ObjectGateway(IAmazonS3 client, string bucket) : IRemote
                 Prefix = string.IsNullOrEmpty(prefix) ? null : prefix,
                 ContinuationToken = continuationToken
             }, ct);
-            foreach (var obj in response.S3Objects ?? [])
+            // skip '/'-suffixed keys — folder placeholders, not documents
+            foreach (var obj in (response.S3Objects ?? []).Where(o => !o.Key.EndsWith('/')))
             {
-                if (obj.Key.EndsWith('/'))
-                    continue; // folder placeholder — not a document
                 yield return new RemoteObject(
                     obj.Key, obj.ETag ?? "", new DateTimeOffset(obj.LastModified ?? DateTime.UnixEpoch), obj.Size ?? 0);
             }

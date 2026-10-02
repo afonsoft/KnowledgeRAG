@@ -172,11 +172,11 @@ public static class ResilientToolInvoker
         out IDictionary<string, System.Text.Json.JsonElement>? mappedArgs)
     {
         foreach (var name in probe.Registry.CandidateToolNames(probe.Current, probe.Available)
-            .Where(n => !probe.Visited.Contains(n)))
+            .Where(n => !probe.Visited.Contains(n)
+                && probe.Catalog.TryGetValue(n, out var c) && c.ReadOnly))
         {
             // never substitute a tool missing from the catalog or write-capable
-            if (!probe.Catalog.TryGetValue(name, out var candidate) || !candidate.ReadOnly)
-                continue;
+            var candidate = probe.Catalog[name];
             if (!MapArgs(candidate, probe.OriginalArgs, out mappedArgs))
                 continue; // schema-incompatible — args would be meaningless
             next = candidate;

@@ -185,7 +185,7 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
             return null;
 
         var stagingDir = staging.GetStagingDirectory(source.Id);
-        var localPath = Path.Combine(stagingDir, Sanitize(found.Key));
+        var localPath = Path.Join(stagingDir, Sanitize(found.Key));
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
@@ -211,7 +211,7 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
     private static string Sanitize(string key)
     {
         var parts = key.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return Path.Combine(parts.Select(p => p is "." or ".." ? "_" : p).ToArray());
+        return Path.Join(parts.Select(p => p is "." or ".." ? "_" : p).ToArray());
     }
 
     private void TryDeletePartial(string path)

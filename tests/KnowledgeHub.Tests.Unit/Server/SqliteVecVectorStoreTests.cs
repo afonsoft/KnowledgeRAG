@@ -11,9 +11,10 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // hits as the in-process cosine provider (CA-001/CA-003), respect the same
 // model/source filters, and fail clearly on dimension mismatch.
 [Collection("SearchTelemetry")]
-public class SqliteVecVectorStoreTests
+public class SqliteVecVectorStoreTests : IAsyncDisposable
 {
     private const string Model = "test-model";
+    private readonly List<IAsyncDisposable> _owned = new();
 
     [Fact]
     public async Task Search_ReturnsNativeKnn_OrderedByCosine()
@@ -163,10 +164,11 @@ public class SqliteVecVectorStoreTests
         Assert.Equal(chunks[0].Id, hit.ChunkId);
     }
 
-    private static KnowledgeHubDbContext CreateDb()
+    private KnowledgeHubDbContext CreateDb()
     {
         var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
+        _owned.Add(connection);
         var options = new DbContextOptionsBuilder<KnowledgeHubDbContext>()
             .UseSqlite(connection)
             .Options;
@@ -199,4 +201,11 @@ public class SqliteVecVectorStoreTests
         await db.SaveChangesAsync();
         return (source, document, chunks);
     }
+    /// <inheritdoc/>
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var d in _owned)
+            await d.DisposeAsync();
+    }
+
 }

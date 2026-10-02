@@ -22,7 +22,7 @@ public class PerKeyIntegrationApiTests : IClassFixture<PerKeyIntegrationApiTests
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-perkey-{Guid.NewGuid():N}.db")
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-perkey-{Guid.NewGuid():N}.db")
                 }));
     }
 

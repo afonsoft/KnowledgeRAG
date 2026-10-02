@@ -14,11 +14,13 @@ namespace KnowledgeHub.Tests.Unit.Server.Ingestion;
 /// </summary>
 public class GoogleDriveConnectorTests : IDisposable
 {
-    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"kh-gd-{Guid.NewGuid():N}");
+    private readonly string _tempRoot = Path.Join(Path.GetTempPath(), $"kh-gd-{Guid.NewGuid():N}");
+    private readonly List<IDisposable> _owned = [];
 
     public void Dispose()
     {
-        try { Directory.Delete(_tempRoot, recursive: true); } catch { }
+        foreach (var d in _owned) d.Dispose();
+        try { Directory.Delete(_tempRoot, recursive: true); } catch (Exception ex) { _ = ex.Message; }
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond)
@@ -38,10 +40,12 @@ public class GoogleDriveConnectorTests : IDisposable
         var secrets = new FakeSecrets();
         if (storedKey is not null)
             secrets.Store["gdrive:" + _srcId] = storedKey;
+        var http = new HttpClient(handler);
+        _owned.Add(http);
         var sut = new GoogleDriveSharedConnector(
-            new GoogleDriveApiClient(new HttpClient(handler)),
+            new GoogleDriveApiClient(http),
             secrets,
-            new FakeStaging(Path.Combine(_tempRoot, "staging")),
+            new FakeStaging(Path.Join(_tempRoot, "staging")),
             NullLogger<GoogleDriveSharedConnector>.Instance);
         return sut;
     }
@@ -77,7 +81,7 @@ public class GoogleDriveConnectorTests : IDisposable
     {
         public string GetStagingDirectory(Guid sourceId)
         {
-            var p = Path.Combine(root, sourceId.ToString("N"));
+            var p = Path.Join(root, sourceId.ToString("N"));
             Directory.CreateDirectory(p);
             return p;
         }

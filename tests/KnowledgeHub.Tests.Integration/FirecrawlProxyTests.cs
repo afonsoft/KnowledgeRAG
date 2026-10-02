@@ -15,7 +15,7 @@ public class FirecrawlProxyEnabledTests : IClassFixture<FirecrawlProxyEnabledTes
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-fc-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-fc-{Guid.NewGuid():N}.db"),
                     ["Firecrawl:Enabled"] = "true",
                     ["Security:Egress:AllowPrivateNetworks"] = "true" // local fake API targets
                 }));
@@ -63,7 +63,7 @@ public class FirecrawlProxyDisabledTests : IClassFixture<FirecrawlProxyDisabledT
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-fc-off-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-fc-off-{Guid.NewGuid():N}.db"),
                     ["Firecrawl:Enabled"] = "false"
                 }));
     }
@@ -92,7 +92,7 @@ public class FirecrawlProxyFallbackTests : IClassFixture<FirecrawlProxyFallbackT
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-fc-fb-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-fc-fb-{Guid.NewGuid():N}.db"),
                     ["Firecrawl:Enabled"] = "true",
                     ["Firecrawl:ApiKey"] = "fc-test-unreachable",
                     ["Firecrawl:Endpoint"] = "http://127.0.0.1:1/mcp",

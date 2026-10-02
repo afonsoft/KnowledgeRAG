@@ -114,10 +114,13 @@ public static class ToolActionAnnotationDetector
         List<ToolActionAnnotation> annotations,
         HashSet<string> seen)
     {
-        foreach (var name in byName.Keys.Where(n => Mentions(question, n))
-            .OrderByDescending(k => k.Length)
-            .Where(n => annotations.Count < maxNominations && seen.Add(n)))
+        foreach (var name in byName.Keys
+            .Where(n => Mentions(question, n) && !seen.Contains(n))
+            .OrderByDescending(k => k.Length))
         {
+            if (annotations.Count >= maxNominations)
+                break;
+            seen.Add(name);
             annotations.Add(new ToolActionAnnotation(
                 name, new Dictionary<string, JsonElement>(),
                 ToolActionOrigin.Question, null));

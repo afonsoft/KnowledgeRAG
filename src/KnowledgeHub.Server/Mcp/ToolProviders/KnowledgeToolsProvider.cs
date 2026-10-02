@@ -632,7 +632,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             return await ToolResults.Error($"source '{target.Name}' is read-only");
 
         return target.SourceType == SourceType.ObsidianVault
-            ? await WriteToVaultAsync(ctx, db, ingestion, target, note, ct)
+            ? await WriteToVaultAsync(db, ingestion, target, note, ct)
             : await WriteToDocumentAsync(ctx, db, target, slugs[target.Id], note, ct);
     }
 
@@ -640,7 +640,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         string Title, string Content, string[]? Tags, WriteOriginContext? Origin);
 
     private static async ValueTask<CallToolResult> WriteToVaultAsync(
-        ToolCallContext ctx, KnowledgeHubDbContext db, IngestionService ingestion,
+        KnowledgeHubDbContext db, IngestionService ingestion,
         Domain.Entities.KnowledgeSource target, NoteWrite note, CancellationToken ct)
     {
         var root = IngestionService.ResolveVaultRoot(target.ConfigurationJson)

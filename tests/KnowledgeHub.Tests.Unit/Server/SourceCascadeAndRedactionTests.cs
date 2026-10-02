@@ -16,11 +16,20 @@ namespace KnowledgeHub.Tests.Unit.Server;
 /// SPEC-20260925-pgvector-source-cascade + SPEC-20260925-log-sinks-and-redaction.
 /// </summary>
 [Collection("SearchTelemetry")]
-public sealed class SourceCascadeAndRedactionTests
+public sealed class SourceCascadeAndRedactionTests : IAsyncDisposable
 {
-    private static async Task<KnowledgeHubDbContext> CreateDbAsync()
+    private readonly List<IAsyncDisposable> _owned = [];
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var d in _owned)
+            await d.DisposeAsync();
+    }
+
+    private async Task<KnowledgeHubDbContext> CreateDbAsync()
     {
         var conn = new SqliteConnection("Data Source=:memory:");
+        _owned.Add(conn); // conn must outlive the returned context (in-memory)
         await conn.OpenAsync();
         var db = new KnowledgeHubDbContext(
             new DbContextOptionsBuilder<KnowledgeHubDbContext>().UseSqlite(conn).Options);

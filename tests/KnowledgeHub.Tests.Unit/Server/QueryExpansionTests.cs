@@ -45,7 +45,7 @@ public sealed class QueryExpansionTests
     {
         var x = Guid.NewGuid(); var y = Guid.NewGuid();
         var fused = RrfFuser.Fuse(
-            [("vector", (IReadOnlyList<Guid>)[x, y]), ("vector", (IReadOnlyList<Guid>)[y, x])], 5);
+            [("vector", new Guid[] { x, y }), ("vector", new Guid[] { y, x })], 5);
         // x ranks 1 and 2 on vector → best = 1; y ranks 2 and 1 → best = 1
         Assert.Equal(1, fused.Single(f => f.ChunkId == x).VectorRank);
         Assert.Equal(1, fused.Single(f => f.ChunkId == y).VectorRank);

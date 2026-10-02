@@ -14,12 +14,12 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // model is never committed to git).
 public class OnnxEmbeddingProviderTests
 {
-    private static readonly string ModelDir = Path.Combine(
+    private static readonly string ModelDir = Path.Join(
         AppContext.BaseDirectory, "..", "..", "..", "..", "..", "models", "all-MiniLM-L6-v2");
 
     private static bool ModelPresent =>
-        File.Exists(Path.Combine(ModelDir, OnnxEmbeddingProvider.ModelFileName))
-        && File.Exists(Path.Combine(ModelDir, OnnxEmbeddingProvider.VocabFileName));
+        File.Exists(Path.Join(ModelDir, OnnxEmbeddingProvider.ModelFileName))
+        && File.Exists(Path.Join(ModelDir, OnnxEmbeddingProvider.VocabFileName));
 
     private static EmbeddingProviderFactoryHolder Factory() => new();
 
@@ -27,7 +27,7 @@ public class OnnxEmbeddingProviderTests
     public void Load_MissingModel_ThrowsClearError()
     {
         var ex = Assert.Throws<EmbeddingProviderException>(
-            () => OnnxEmbeddingProvider.Load(Path.Combine(Path.GetTempPath(), $"no-model-{Guid.NewGuid():N}")));
+            () => OnnxEmbeddingProvider.Load(Path.Join(Path.GetTempPath(), $"no-model-{Guid.NewGuid():N}")));
         Assert.Contains("model.onnx", ex.Message);
         Assert.Contains("huggingface.co", ex.Message);
     }
@@ -48,7 +48,7 @@ public class OnnxEmbeddingProviderTests
         var options = new EmbeddingOptions
         {
             Provider = "onnx",
-            ModelPath = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}")
+            ModelPath = Path.Join(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}")
         };
         Assert.Throws<EmbeddingProviderException>(() =>
             EmbeddingProviderFactory.Create(options, Factory().HttpClientFactory));
@@ -69,7 +69,7 @@ public class OnnxEmbeddingProviderTests
         var cfg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Embeddings:Provider"] = "onnx",
-            ["Embeddings:ModelPath"] = Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}")
+            ["Embeddings:ModelPath"] = Path.Join(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}")
         }).Build();
 
         var ex = Assert.Throws<InvalidOperationException>(() => ConfigurationValidator.Validate(cfg));

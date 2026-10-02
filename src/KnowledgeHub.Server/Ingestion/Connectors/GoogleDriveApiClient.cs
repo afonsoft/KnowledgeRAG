@@ -117,9 +117,8 @@ public sealed class GoogleDriveApiClient(HttpClient http)
             var url = $"{ApiBase}/files?q={q}&pageSize=1000&fields=nextPageToken,files({FileFields}){KeyParam(apiKey)}"
                 + (pageToken is null ? "" : $"&pageToken={pageToken}");
             var page = await http.GetFromJsonAsync<DriveListDto>(url, Json, ct);
-            foreach (var f in page?.Files ?? [])
+            foreach (var meta in (page?.Files ?? []).Select(ToMeta))
             {
-                var meta = ToMeta(f);
                 if (meta.MimeType == "application/vnd.google-apps.folder")
                 {
                     await foreach (var child in ListFolderAsync(meta.Id, apiKey,

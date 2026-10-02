@@ -15,8 +15,8 @@ public class ApprovalsApiTests : IClassFixture<ApprovalsApiTests.Fixture>, IClas
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-appr-{Guid.NewGuid():N}.db");
-        public string Vault { get; } = Path.Combine(Path.GetTempPath(), $"kh-appr-vault-{Guid.NewGuid():N}");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-appr-{Guid.NewGuid():N}.db");
+        public string Vault { get; } = Path.Join(Path.GetTempPath(), $"kh-appr-vault-{Guid.NewGuid():N}");
         public AgentApiTests.ScriptedChatClient Chat { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -35,8 +35,8 @@ public class ApprovalsApiTests : IClassFixture<ApprovalsApiTests.Fixture>, IClas
     /// <summary>Same fixture but approvals expire instantly (timeout -1 min).</summary>
     public sealed class ExpiringFixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-appr-exp-{Guid.NewGuid():N}.db");
-        public string Vault { get; } = Path.Combine(Path.GetTempPath(), $"kh-appr-exp-vault-{Guid.NewGuid():N}");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-appr-exp-{Guid.NewGuid():N}.db");
+        public string Vault { get; } = Path.Join(Path.GetTempPath(), $"kh-appr-exp-vault-{Guid.NewGuid():N}");
         public AgentApiTests.ScriptedChatClient Chat { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -114,7 +114,7 @@ public class ApprovalsApiTests : IClassFixture<ApprovalsApiTests.Fixture>, IClas
         var step = Assert.Single(result.Steps);
         Assert.Equal("write_knowledge", step.Tool);
         Assert.False(step.IsError);
-        Assert.True(File.Exists(Path.Combine(_factory.Vault, "agent-note.md"))); // AC: arquivo criado
+        Assert.True(File.Exists(Path.Join(_factory.Vault, "agent-note.md"))); // AC: arquivo criado
     }
 
     [Fact]

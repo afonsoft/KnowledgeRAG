@@ -64,10 +64,9 @@ public sealed class EmbeddingSettingsService(
         var env = envOptions.Value;
         var row = await FindRowAsync(CancellationToken.None);
 
-        EmbeddingOptions options;
-        if (row is not null)
-        {
-            options = new EmbeddingOptions
+        var options = row is null
+            ? env
+            : new EmbeddingOptions
             {
                 Provider = row.Provider,
                 Endpoint = row.Endpoint,
@@ -79,11 +78,6 @@ public sealed class EmbeddingSettingsService(
                 QueryInputType = env.QueryInputType,
                 DocumentInputType = env.DocumentInputType
             };
-        }
-        else
-        {
-            options = env;
-        }
 
         var maxTokens = row?.MaxTokens
             ?? configuration.GetValue("Ingestion:MaxTokens", DefaultMaxTokens);

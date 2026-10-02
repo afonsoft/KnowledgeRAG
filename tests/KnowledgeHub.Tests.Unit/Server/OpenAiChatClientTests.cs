@@ -11,8 +11,9 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // ("temperature: must be a number" → HTTP 400). O request sempre sai com
 // valores default: temperature 1.0, max_tokens 4096, tools [] e, por mensagem,
 // tool_calls [] / tool_call_id "". Tool sem schema recebe parameters objeto vazio.
-public sealed class OpenAiChatClientTests
+public sealed class OpenAiChatClientTests : IDisposable
 {
+    private readonly List<IDisposable> _owned = new();
     /// <summary>Handler fake que captura o corpo da requisição e responde um completion mínimo.</summary>
     private sealed class CaptureHandler : HttpMessageHandler
     {
@@ -46,10 +47,12 @@ public sealed class OpenAiChatClientTests
     }
 
     /// <summary>Monta um OpenAiChatClient apontando para o handler de captura.</summary>
-    private static (OpenAiChatClient Client, CaptureHandler Handler) Sut(ChatProviderOptions? options = null)
+    private (OpenAiChatClient Client, CaptureHandler Handler) Sut(ChatProviderOptions? options = null)
     {
         var handler = new CaptureHandler();
         var http = new HttpClient(handler);
+        _owned.Add(http);
+        _owned.Add(handler);
         var client = new OpenAiChatClient(http, options ?? new ChatProviderOptions
         {
             Provider = "openai",
@@ -148,4 +151,11 @@ public sealed class OpenAiChatClientTests
         Assert.Contains("\"name\":\"schema_less\"", handler.LastBody!);
         Assert.Contains("\"parameters\":{\"type\":\"object\",\"properties\":{}}", handler.LastBody!);
     }
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        foreach (var d in _owned)
+            d.Dispose();
+    }
+
 }
