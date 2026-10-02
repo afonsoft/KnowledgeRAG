@@ -113,49 +113,9 @@ public sealed class NotionConnector(
         var ctx = new FetchContext(client, existingFingerprints, maxPages, maxBlockDepth, maxBlocksPerPage);
 
         if (rootPageIds.Length > 0 || rootDatabaseIds.Length > 0)
-        {
-            ctx.TraversalMode = true;
-            var queue = new Queue<(string Id, bool IsDatabase)>();
-            foreach (var id in rootPageIds) queue.Enqueue((id, false));
-            foreach (var id in rootDatabaseIds) queue.Enqueue((id, true));
-
-            while (queue.Count > 0 && !ctx.Truncated)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var (id, isDatabase) = queue.Dequeue();
-                if (isDatabase)
-                    await FetchDatabaseRowsAsync(id, ctx, cancellationToken);
-                else
-                    await FetchPageByIdAsync(id, ctx, cancellationToken);
-
-                // child_page/child_database ids collected while building trees
-                // become new traversal roots (unseen ones only — Seen* guards cycles).
-                foreach (var p in ctx.DiscoveredPages)
-                    queue.Enqueue((p, false));
-                ctx.DiscoveredPages.Clear();
-                foreach (var d in ctx.DiscoveredDatabases)
-                    queue.Enqueue((d, true));
-                ctx.DiscoveredDatabases.Clear();
-            }
-        }
+            await FetchViaTraversalAsync(rootPageIds, rootDatabaseIds, ctx, cancellationToken);
         else
-        {
-            await foreach (var obj in client.SearchAsync(cancellationToken))
-            {
-                if (ctx.Truncated)
-                    break;
-                cancellationToken.ThrowIfCancellationRequested();
-                var objectType = obj.ValueKind == JsonValueKind.Object
-                    && obj.TryGetProperty("object", out var o) && o.ValueKind == JsonValueKind.String
-                    ? o.GetString()
-                    : null;
-                if (objectType == "page")
-                    await ProcessPageAsync(obj, ctx, cancellationToken);
-                else if (objectType == "database"
-                         && obj.TryGetProperty("id", out var dbId) && dbId.ValueKind == JsonValueKind.String)
-                    await FetchDatabaseRowsAsync(dbId.GetString()!, ctx, cancellationToken);
-            }
-        }
+            await FetchViaSearchAsync(client, ctx, cancellationToken);
 
         if (ctx.Truncated)
             ctx.Warnings.Add($"fetch truncated at maxPages={maxPages}");
@@ -164,6 +124,57 @@ public sealed class NotionConnector(
             source.Id, ctx.Documents.Count, ctx.Warnings.Count);
         return new FetchResult(ctx.Documents, ctx.Warnings,
             ctx.FailedUris.Count > 0 ? ctx.FailedUris : null, ctx.Truncated);
+    }
+
+    /// <summary>Roots-mode fetch: BFS over configured rootPageIds/rootDatabaseIds —
+    /// child_page/child_database ids collected while building trees become new
+    /// traversal roots (unseen ones only — Seen* guards cycles).</summary>
+    private async Task FetchViaTraversalAsync(
+        string[] rootPageIds, string[] rootDatabaseIds, FetchContext ctx, CancellationToken cancellationToken)
+    {
+        ctx.TraversalMode = true;
+        var queue = new Queue<(string Id, bool IsDatabase)>();
+        foreach (var id in rootPageIds) queue.Enqueue((id, false));
+        foreach (var id in rootDatabaseIds) queue.Enqueue((id, true));
+
+        while (queue.Count > 0 && !ctx.Truncated)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (id, isDatabase) = queue.Dequeue();
+            if (isDatabase)
+                await FetchDatabaseRowsAsync(id, ctx, cancellationToken);
+            else
+                await FetchPageByIdAsync(id, ctx, cancellationToken);
+
+            foreach (var p in ctx.DiscoveredPages)
+                queue.Enqueue((p, false));
+            ctx.DiscoveredPages.Clear();
+            foreach (var d in ctx.DiscoveredDatabases)
+                queue.Enqueue((d, true));
+            ctx.DiscoveredDatabases.Clear();
+        }
+    }
+
+    /// <summary>Search-mode fetch: every page/database shared with the
+    /// integration via <c>POST /search</c>.</summary>
+    private async Task FetchViaSearchAsync(
+        NotionApiClient client, FetchContext ctx, CancellationToken cancellationToken)
+    {
+        await foreach (var obj in client.SearchAsync(cancellationToken))
+        {
+            if (ctx.Truncated)
+                break;
+            cancellationToken.ThrowIfCancellationRequested();
+            var objectType = obj.ValueKind == JsonValueKind.Object
+                && obj.TryGetProperty("object", out var o) && o.ValueKind == JsonValueKind.String
+                ? o.GetString()
+                : null;
+            if (objectType == "page")
+                await ProcessPageAsync(obj, ctx, cancellationToken);
+            else if (objectType == "database"
+                     && obj.TryGetProperty("id", out var dbId) && dbId.ValueKind == JsonValueKind.String)
+                await FetchDatabaseRowsAsync(dbId.GetString()!, ctx, cancellationToken);
+        }
     }
 
     /// <summary>Traversal-mode page fetch: resolves metadata, walks the tree for
