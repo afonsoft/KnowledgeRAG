@@ -60,14 +60,14 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
             Gateway = gateway,
             StagingDir = stagingDir,
             Documents = documents,
-            Warnings = warnings,
-            FailedUris = failedUris
+            Warnings = warnings
         };
 
         await foreach (var obj in gateway.ListAsync(prefix, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ProcessObjectAsync(loopCtx, obj, cancellationToken);
+            if (await ProcessObjectAsync(loopCtx, obj, cancellationToken) is { } failed)
+                failedUris.Add(failed);
         }
 
         return new FetchResult(documents, warnings,
@@ -85,30 +85,29 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
         public required string StagingDir { get; init; }
         public required List<RawDocument> Documents { get; init; }
         public required List<string> Warnings { get; init; }
-        public required List<string> FailedUris { get; init; }
     }
 
     /// <summary>Applies glob/ext/size filters and fingerprint dedup to one
     /// object, then downloads + extracts it. Per-object failures warn and
-    /// land in FailedUris — never abort the fetch.</summary>
-    private async Task ProcessObjectAsync(
+    /// return the uri (→ failedUris) — never abort the fetch.</summary>
+    private async Task<string?> ProcessObjectAsync(
         ObjectLoopContext ctx, RemoteObject obj, CancellationToken ct)
     {
         var uri = UriFor(ctx.Config, obj.Key);
         try
         {
             if (!ctx.Matcher(obj.Key))
-                return;
+                return null;
             var ext = Path.GetExtension(obj.Key);
             if (!DocumentFileConnector.SupportedExtensions.Contains(ext))
             {
                 ctx.Warnings.Add($"{obj.Key}: unsupported extension '{ext}'");
-                return;
+                return null;
             }
             if (obj.Size == 0 || obj.Size > ctx.MaxBytes)
             {
                 ctx.Warnings.Add($"{obj.Key}: size {obj.Size} outside 1..{ctx.MaxBytes} bytes");
-                return;
+                return null;
             }
 
             // Incremental: same upstream marker → keep stored doc, no download.
@@ -118,22 +117,22 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
                 && string.Equals(stored, fingerprint, StringComparison.Ordinal))
             {
                 ctx.Documents.Add(new RawDocument(uri, Path.GetFileNameWithoutExtension(obj.Key), "", fingerprint));
-                return;
+                return null;
             }
 
-            await DownloadExtractAsync(ctx, obj, uri, ext, ct);
+            return await DownloadExtractAsync(ctx, obj, uri, ext, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            ctx.FailedUris.Add(uri);
             logger.LogWarning(ex, "Failed to process {Key} — skipped", obj.Key);
             ctx.Warnings.Add($"{obj.Key}: {ex.Message}");
+            return uri;
         }
     }
 
     /// <summary>Downloads one object to the staging dir and extracts its text.
-    /// Failures keep the indexed document alive via FailedUris (RF-002).</summary>
-    private async Task DownloadExtractAsync(
+    /// Failures return the uri (→ failedUris) so the indexed doc is kept (RF-002).</summary>
+    private async Task<string?> DownloadExtractAsync(
         ObjectLoopContext ctx, RemoteObject obj, string uri, string ext, CancellationToken ct)
     {
         var localPath = Path.Combine(ctx.StagingDir, Sanitize(obj.Key));
@@ -150,17 +149,17 @@ internal abstract class CloudConnectorBase(IStagingStorageService staging, ILogg
             if (string.IsNullOrWhiteSpace(text))
             {
                 ctx.Warnings.Add($"{obj.Key}: no extractable text");
-                ctx.FailedUris.Add(uri); // exists upstream, extraction failed — keep indexed doc
-                return;
+                return uri; // exists upstream, extraction failed — keep indexed doc
             }
             ctx.Documents.Add(new RawDocument(uri, Path.GetFileNameWithoutExtension(obj.Key), text, obj.Fingerprint));
+            return null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             TryDeletePartial(localPath);
-            ctx.FailedUris.Add(uri); // transient failure ≠ remote delete (RF-002)
             logger.LogWarning(ex, "Failed to download/extract {Key} — skipped", obj.Key);
             ctx.Warnings.Add($"{obj.Key}: {ex.Message}");
+            return uri; // transient failure ≠ remote delete (RF-002)
         }
     }
 

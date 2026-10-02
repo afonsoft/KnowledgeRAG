@@ -293,6 +293,12 @@ public sealed class IngestionService : IIngestionService
         public int GraphBudget;
     }
 
+    /// <summary>Per-item fields of a <see cref="DocumentReplacePlan"/> — the
+    /// only parts that differ between vault and connector items.</summary>
+    private sealed record DocumentIdentity(
+        KnowledgeDocument? Doc, string Title, string UriReference, string Content,
+        string Hash, Chunking.ChunkKind Kind, IReadOnlyList<Chunking.ChunkPiece> Pieces);
+
     /// <summary>Inputs for <see cref="ReplaceDocumentAsync"/>.</summary>
     private sealed record DocumentReplacePlan
     {
@@ -310,6 +316,21 @@ public sealed class IngestionService : IIngestionService
         public required IReadOnlyList<Chunking.ChunkPiece> Pieces { get; init; }
         public required List<string> Warnings { get; init; }
     }
+
+    private DocumentReplacePlan PlanFor(SyncItemContext ctx, DocumentIdentity id) => new()
+    {
+        Db = ctx.Db,
+        Doc = id.Doc,
+        Source = ctx.Source,
+        Title = id.Title,
+        UriReference = id.UriReference,
+        Content = id.Content,
+        Hash = id.Hash,
+        ConfigHash = ctx.Chunking.ConfigHash,
+        Kind = id.Kind,
+        Pieces = id.Pieces,
+        Warnings = ctx.Warnings
+    };
 
     /// <summary>Vault sync: enumerate <c>**/*.md</c>, re-index changed files,
     /// remove documents whose files disappeared.</summary>
@@ -364,7 +385,9 @@ public sealed class IngestionService : IIngestionService
             options?.Progress?.Report(new SyncProgress(stats.Processed, stats.Skipped, stats.Failed, stats.ChunksCreated));
         }
 
-        stats.Removed = await ReconcileDeletionsAsync(itemCtx, seen, cancellationToken);
+        (stats.Removed, var gateWarning) = await ReconcileDeletionsAsync(itemCtx, seen, cancellationToken);
+        if (gateWarning is not null)
+            warnings.Add(gateWarning);
 
         source.LastSyncAt = DateTimeOffset.UtcNow;
         source.LastSyncStatus = SyncStatusCompleted;
@@ -440,20 +463,7 @@ public sealed class IngestionService : IIngestionService
                 new Chunking.ChunkerSelector.ChunkRequest(relative, note.Body, ctx.Chunking.MaxTokens, ctx.Chunking.OverlapTokens, ctx.Chunking.Strategy),
                 embeddings, configuration, logger, cancellationToken, ctx.Scope.ServiceProvider);
 
-            plan = new DocumentReplacePlan
-            {
-                Db = ctx.Db,
-                Doc = doc,
-                Source = ctx.Source,
-                Title = note.Title,
-                UriReference = relative,
-                Content = content,
-                Hash = hash,
-                ConfigHash = ctx.Chunking.ConfigHash,
-                Kind = kind,
-                Pieces = pieces,
-                Warnings = ctx.Warnings
-            };
+            plan = PlanFor(ctx, new DocumentIdentity(doc, note.Title, relative, content, hash, kind, pieces));
             (doc, var newChunks) = await ReplaceDocumentAsync(plan, cancellationToken);
             stats.ChunksCreated += await EmbedChunksAsync(newChunks, doc, ctx.Source, ctx.Vectors, cancellationToken);
             stats.GraphBudget -= await ExtractGraphAsync(
@@ -510,20 +520,7 @@ public sealed class IngestionService : IIngestionService
                 new Chunking.ChunkerSelector.ChunkRequest(raw.UriReference, text, ctx.Chunking.MaxTokens, ctx.Chunking.OverlapTokens, ctx.Chunking.Strategy),
                 embeddings, configuration, logger, cancellationToken, ctx.Scope.ServiceProvider);
 
-            plan = new DocumentReplacePlan
-            {
-                Db = ctx.Db,
-                Doc = doc,
-                Source = ctx.Source,
-                Title = raw.Title,
-                UriReference = raw.UriReference,
-                Content = text,
-                Hash = hash,
-                ConfigHash = ctx.Chunking.ConfigHash,
-                Kind = kind,
-                Pieces = pieces,
-                Warnings = ctx.Warnings
-            };
+            plan = PlanFor(ctx, new DocumentIdentity(doc, raw.Title, raw.UriReference, text, hash, kind, pieces));
             (doc, var newChunks) = await ReplaceDocumentAsync(plan, cancellationToken);
             stats.ChunksCreated += await EmbedChunksAsync(newChunks, doc, ctx.Source, ctx.Vectors, cancellationToken);
             stats.GraphBudget -= await ExtractGraphAsync(
@@ -546,7 +543,7 @@ public sealed class IngestionService : IIngestionService
     /// never overwrite stored content — when the doc still needs reprocessing
     /// (force/chunker change), falls back to stored RawContent, then to the
     /// connector's on-demand item fetch. Null = keep the doc as-is.</summary>
-    private async Task<string?> ResolveItemTextAsync(
+    private static async Task<string?> ResolveItemTextAsync(
         SyncItemContext ctx, Connectors.RawDocument raw, KnowledgeDocument? doc,
         CancellationToken cancellationToken)
     {
@@ -644,7 +641,7 @@ public sealed class IngestionService : IIngestionService
     /// Small sources (below MinMassDeleteDocs) are exempt: deleting the
     /// only file of a 1–3 doc vault is a legitimate operation, not a
     /// wipe signature.</summary>
-    private async Task<int> ReconcileDeletionsAsync(
+    private async Task<(int Removed, string? GateWarning)> ReconcileDeletionsAsync(
         SyncItemContext ctx, HashSet<string> seen, CancellationToken cancellationToken)
     {
         var massDeleteSuspicious =
@@ -654,8 +651,7 @@ public sealed class IngestionService : IIngestionService
             logger.LogWarning(
                 "Sync for source {SourceId}: enumeration returned {Seen} item(s) for {Existing} indexed documents — skipping deletions (possible unreadable folder)",
                 ctx.Source.Id, seen.Count, ctx.Existing.Count);
-            ctx.Warnings.Add($"deletion skipped: enumeration returned {seen.Count} of {ctx.Existing.Count} indexed documents — verify the path is accessible");
-            return 0;
+            return (0, $"deletion skipped: enumeration returned {seen.Count} of {ctx.Existing.Count} indexed documents — verify the path is accessible");
         }
 
         var removed = 0;
@@ -667,7 +663,7 @@ public sealed class IngestionService : IIngestionService
             ctx.Db.Documents.Remove(doc);
             removed++;
         }
-        return removed;
+        return (removed, null);
     }
 
     /// <summary>Removes indexed documents no longer returned by the fetch.
