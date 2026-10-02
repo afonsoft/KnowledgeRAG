@@ -91,6 +91,7 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 
 - **Branches**: `feature/{AgentLLM}-{YYYYMMDD}-{descricao-curta}` baseada em `main`. Nunca commitar em `main`, `master` ou `develop`.
 - **Branch protection**: `main` tem proteção ativa no GitHub — PR obrigatório + status checks (`Build KnowledgeHub (.NET 10)`, `Unit Tests (xUnit)`, `Integration Tests (SQLite)`, `Blazor WASM Client Validation`, `Docker Image Build`); force-push e delete bloqueados. `enforce_admins=false` (owner mantém bypass de emergência — usar só com justificativa).
+- **Branch cleanup**: repo setting `delete_branch_on_merge=true` ativo desde 2026-10-02 (#506, E27-S2) — head branches são deletadas automaticamente no merge de PR. Não recriar branches `devin/*`/`docs/*` de PRs já mergeados.
 - **Workflows**: `.github/workflows` é protegido — qualquer alteração é bloqueada pela proteção de branch.
 - **Specs**: `.specs/SPEC-*.md` aprovadas são a fonte da verdade; manter `Status`/`Ticket` sincronizados com a implementação.
 - **Secrets**: nunca commitar `.env`, `*.key`, `*.pem`. API keys via variáveis de ambiente (`Chat__ApiKey`, `Embeddings__ApiKey`).
