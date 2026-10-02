@@ -24,12 +24,9 @@ public static partial class MarkdownNoteParser
         CollectFrontmatterTags(frontmatter, tags);
         foreach (var tag in InlineTagRegex().Matches(StripWikiAndCode(body)).Select(m => m.Groups[1].Value))
             tags.Add(tag);
-        foreach (Match m in WikiLinkRegex().Matches(body))
-        {
-            var target = m.Groups[1].Value.Split('|')[0].Split('#')[0].Trim();
-            if (target.Length > 0)
-                links.Add(target);
-        }
+        links.AddRange(WikiLinkRegex().Matches(body)
+            .Select(m => m.Groups[1].Value.Split('|')[0].Split('#')[0].Trim())
+            .Where(target => target.Length > 0));
 
         return new ParsedNote
         {

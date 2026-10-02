@@ -15,6 +15,10 @@ namespace KnowledgeHub.Server.Api;
 public static class SettingsEndpoints
 {
     private const string BodyRequired = "body is required";
+    private const string IntegrationsCacheKey = "settings:integrations";
+    private const string ChatCacheKey = "settings:chat";
+    private const string EmbeddingsCacheKey = "settings:embeddings";
+    private const string AssistantCacheKey = "settings:assistant";
     /// <summary>Mapeia o grupo /api/settings: keys de integrações e configuração de chat.</summary>
     public static RouteGroupBuilder MapSettingsApi(this IEndpointRouteBuilder app)
     {
@@ -41,7 +45,7 @@ public static class SettingsEndpoints
             HybridCache cache,
             ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:integrations",
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, IntegrationsCacheKey,
                 async c =>
                 {
                     var items = new List<IntegrationSettingsDto>();
@@ -71,7 +75,7 @@ public static class SettingsEndpoints
 
             await store.RemoveAsync(provider, ct);
             await ResetProviderAsync(provider, services, ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:integrations");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, IntegrationsCacheKey);
             return Results.NoContent();
         });
 
@@ -87,7 +91,7 @@ public static class SettingsEndpoints
             HybridCache cache,
             ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:chat",
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, ChatCacheKey,
                 async c => await chat.DescribeAsync(c), lf, ct)));
 
         group.MapPut("/chat", async (
@@ -106,7 +110,7 @@ public static class SettingsEndpoints
                 return Results.BadRequest(new { error = "model is required" });
 
             await chat.SaveAsync(endpoint, model, body!.ApiKey, ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:chat");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, ChatCacheKey);
             return Results.NoContent();
         });
 
@@ -118,7 +122,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             await chat.RemoveKeyAsync(ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:chat");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, ChatCacheKey);
             return Results.NoContent();
         });
 
@@ -130,7 +134,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             await chat.ClearAsync(ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:chat");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, ChatCacheKey);
             return Results.NoContent();
         });
 
@@ -166,7 +170,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             await emb.RemoveKeyAsync(ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:embeddings");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, EmbeddingsCacheKey);
             return Results.NoContent();
         });
 
@@ -178,7 +182,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             await emb.ClearAsync(ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:embeddings");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, EmbeddingsCacheKey);
             return Results.NoContent();
         });
 
@@ -291,7 +295,7 @@ public static class SettingsEndpoints
             HybridCache cache,
             ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:assistant",
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, AssistantCacheKey,
                 async c => await assistant.DescribeAsync(c), lf, ct)));
 
         group.MapPut("/assistant", async (
@@ -310,7 +314,7 @@ public static class SettingsEndpoints
                 return Results.BadRequest(new { error = "endpoint is required when enabled" });
 
             await assistant.SaveAsync(body, ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:assistant");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, AssistantCacheKey);
             return Results.NoContent();
         });
 
@@ -322,7 +326,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             await assistant.RemoveKeyAsync(ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:assistant");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, AssistantCacheKey);
             return Results.NoContent();
         });
 
@@ -334,7 +338,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             await assistant.ClearAsync(ct);
-            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:assistant");
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, AssistantCacheKey);
             return Results.NoContent();
         });
 
@@ -521,14 +525,21 @@ public static class SettingsEndpoints
 
     private static readonly string[] EmbeddingProviders = ["deterministic", "ollama", "openai", "onnx"];
 
+    /// <summary>DI surface shared by the integration-write handlers — grouped
+    /// via [AsParameters] to keep them under the 7-parameter guideline (S107).</summary>
+    public sealed class IntegrationWriteParams
+    {
+        public required IServiceProvider Services { get; init; }
+        public required HybridCache Cache { get; init; }
+        public required ICacheInvalidationBus Bus { get; init; }
+        public required ILoggerFactory Lf { get; init; }
+    }
+
     private static async Task<IResult> SetIntegrationEnabledAsync(
         string provider,
         SetIntegrationEnabledRequest? body,
         IIntegrationStateService state,
-        IServiceProvider services,
-        HybridCache cache,
-        ICacheInvalidationBus bus,
-        ILoggerFactory lf,
+        [AsParameters] IntegrationWriteParams p,
         CancellationToken ct)
     {
         if (!IntegrationProviders.All.Contains(provider))
@@ -537,8 +548,8 @@ public static class SettingsEndpoints
             return Results.BadRequest(new { error = "enabled is required" });
 
         await state.SetEnabledAsync(provider, body.Enabled, ct);
-        await ResetProviderAsync(provider, services, ct);
-        await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:integrations");
+        await ResetProviderAsync(provider, p.Services, ct);
+        await EndpointCache.EvictAsync(p.Cache, p.Bus, p.Lf, ct, IntegrationsCacheKey);
         return Results.NoContent();
     }
 
@@ -546,10 +557,7 @@ public static class SettingsEndpoints
         string provider,
         SetIntegrationKeyRequest? body,
         IIntegrationSecretStore store,
-        IServiceProvider services,
-        HybridCache cache,
-        ICacheInvalidationBus bus,
-        ILoggerFactory lf,
+        [AsParameters] IntegrationWriteParams p,
         CancellationToken ct)
     {
         if (!IntegrationProviders.All.Contains(provider))
@@ -566,8 +574,8 @@ public static class SettingsEndpoints
             return Results.BadRequest(new { error = "Context7 API keys start with 'ctx7sk-'" });
 
         await store.SetAsync(provider, apiKey, ct);
-        await ResetProviderAsync(provider, services, ct);
-        await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:integrations");
+        await ResetProviderAsync(provider, p.Services, ct);
+        await EndpointCache.EvictAsync(p.Cache, p.Bus, p.Lf, ct, IntegrationsCacheKey);
         return Results.NoContent();
     }
 
@@ -581,7 +589,7 @@ public static class SettingsEndpoints
     {
         // The DTO carries live runtime stamps (provider error, store dims) —
         // bounded 30s freshness beats the describe+probe cost on every load.
-        var cached = await EndpointCache.GetJsonAsync(cache, "settings:embeddings",
+        var cached = await EndpointCache.GetJsonAsync(cache, EmbeddingsCacheKey,
             async c => await emb.DescribeAsync(c), lf, ct, TimeSpan.FromSeconds(30));
         var dto = cached ?? await emb.DescribeAsync(ct);
         // SPEC-20260926-embeddings-runtime-coherence RF-002: a broken stored
@@ -624,7 +632,7 @@ public static class SettingsEndpoints
 
         var provider = body.Provider.Trim().ToLowerInvariant();
         await emb.SaveAsync(body with { Provider = provider }, ct);
-        await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:embeddings");
+        await EndpointCache.EvictAsync(cache, bus, lf, ct, EmbeddingsCacheKey);
         return Results.NoContent();
     }
 

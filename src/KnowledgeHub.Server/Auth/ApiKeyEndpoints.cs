@@ -20,6 +20,20 @@ public static class ApiKeyEndpoints
     private const string ApiKeyNotFound = "api key não encontrada";
     private const string ListScope = "list:apikeys";
 
+    /// <summary>DI surface shared by the key-management write handlers — grouped
+    /// via [AsParameters] to keep them under the 7-parameter guideline (S107).</summary>
+    public sealed class ApiKeyWriteParams
+    {
+        public required KnowledgeHubDbContext Db { get; init; }
+        public required IDataProtectionProvider DataProtection { get; init; }
+        public required Mcp.IDynamicToolCatalog Catalog { get; init; }
+        public required IMemoryCache Memory { get; init; }
+        public required HybridCache Cache { get; init; }
+        public required ICacheInvalidationBus Bus { get; init; }
+        public required ILoggerFactory Lf { get; init; }
+        public required RateLimiting.IApiKeyRateLimitResolver RateLimitResolver { get; init; }
+    }
+
     public static RouteGroupBuilder MapApiKeysApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/apikeys")
@@ -100,11 +114,7 @@ public static class ApiKeyEndpoints
     private static async Task<IResult> CreateAsync(
         CreateApiKeyRequest request,
         HttpContext http,
-        KnowledgeHubDbContext db,
-        IDataProtectionProvider dataProtection,
-        HybridCache cache,
-        ICacheInvalidationBus bus,
-        ILoggerFactory lf,
+        [AsParameters] ApiKeyWriteParams p,
         CancellationToken ct)
     {
         var name = request.Name?.Trim() ?? "";
@@ -112,7 +122,7 @@ public static class ApiKeyEndpoints
             return Results.BadRequest(new { error = "nome é obrigatório (máx. 100 caracteres)" });
 
         var secret = ApiKeyService.GenerateKey();
-        var protector = dataProtection.CreateProtector("api-keys");
+        var protector = p.DataProtection.CreateProtector("api-keys");
         var key = new ApiKey
         {
             Name = name,
@@ -121,9 +131,9 @@ public static class ApiKeyEndpoints
             ProtectedKey = protector.Protect(secret),
             UserId = CurrentUserId(http)
         };
-        db.ApiKeys.Add(key);
-        await db.SaveChangesAsync(ct);
-        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
+        p.Db.ApiKeys.Add(key);
+        await p.Db.SaveChangesAsync(ct);
+        await EndpointCache.EvictTagAsync(p.Cache, p.Bus, ListScope, p.Lf, ct);
 
         return Results.Json(
             new ApiKeyCreatedDto(key.Id, key.Name, key.Prefix, secret),
@@ -218,22 +228,17 @@ public static class ApiKeyEndpoints
         Guid id,
         SetApiKeyScopesRequest? body,
         HttpContext http,
-        KnowledgeHubDbContext db,
-        Mcp.IDynamicToolCatalog catalog,
-        IMemoryCache memory,
-        HybridCache cache,
-        ICacheInvalidationBus bus,
-        ILoggerFactory lf,
+        [AsParameters] ApiKeyWriteParams p,
         CancellationToken ct)
     {
-        var key = await db.ApiKeys
+        var key = await p.Db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
             return Results.NotFound(new { error = ApiKeyNotFound });
 
         if (body?.AllowedSourceIds is { } sourceIds && sourceIds.Count > 0)
         {
-            var known = await db.Sources
+            var known = await p.Db.Sources
                 .Where(s => sourceIds.Contains(s.Id))
                 .Select(s => s.Id)
                 .ToListAsync(ct);
@@ -244,7 +249,7 @@ public static class ApiKeyEndpoints
 
         if (body?.AllowedTools is { } tools && tools.Count > 0)
         {
-            var available = (await catalog.GetUnfilteredToolsAsync(http.RequestServices, ct))
+            var available = (await p.Catalog.GetUnfilteredToolsAsync(http.RequestServices, ct))
                 .Select(t => t.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var unknown = tools.Where(t => !available.Contains(t)).ToList();
@@ -258,10 +263,10 @@ public static class ApiKeyEndpoints
         key.AllowedToolsJson = body?.AllowedTools is null
             ? null
             : JsonSerializer.Serialize(body.AllowedTools);
-        await db.SaveChangesAsync(ct);
+        await p.Db.SaveChangesAsync(ct);
 
-        memory.Remove(CallerScopeProvider.CacheKey(id));
-        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
+        p.Memory.Remove(CallerScopeProvider.CacheKey(id));
+        await EndpointCache.EvictTagAsync(p.Cache, p.Bus, ListScope, p.Lf, ct);
         return Results.NoContent();
     }
 
@@ -273,14 +278,10 @@ public static class ApiKeyEndpoints
         Guid id,
         SetApiKeyRateLimitRequest? body,
         HttpContext http,
-        KnowledgeHubDbContext db,
-        RateLimiting.IApiKeyRateLimitResolver resolver,
-        HybridCache cache,
-        ICacheInvalidationBus bus,
-        ILoggerFactory lf,
+        [AsParameters] ApiKeyWriteParams p,
         CancellationToken ct)
     {
-        var key = await db.ApiKeys
+        var key = await p.Db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
             return Results.NotFound(new { error = ApiKeyNotFound });
@@ -294,10 +295,10 @@ public static class ApiKeyEndpoints
         key.LlmRateLimitWindowSeconds = body?.LlmWindowSeconds;
         key.SyncRateLimitPermits = body?.SyncPermits;
         key.SyncRateLimitWindowSeconds = body?.SyncWindowSeconds;
-        await db.SaveChangesAsync(ct);
+        await p.Db.SaveChangesAsync(ct);
 
-        resolver.Invalidate();
-        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
+        p.RateLimitResolver.Invalidate();
+        await EndpointCache.EvictTagAsync(p.Cache, p.Bus, ListScope, p.Lf, ct);
         return Results.NoContent();
     }
 
@@ -308,23 +309,19 @@ public static class ApiKeyEndpoints
         Guid id,
         SetApiKeyWriteAccessRequest? body,
         HttpContext http,
-        KnowledgeHubDbContext db,
-        IMemoryCache memory,
-        HybridCache cache,
-        ICacheInvalidationBus bus,
-        ILoggerFactory lf,
+        [AsParameters] ApiKeyWriteParams p,
         CancellationToken ct)
     {
-        var key = await db.ApiKeys
+        var key = await p.Db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
             return Results.NotFound(new { error = ApiKeyNotFound });
 
         key.AllowWrite = body?.AllowWrite ?? true;
-        await db.SaveChangesAsync(ct);
+        await p.Db.SaveChangesAsync(ct);
 
-        memory.Remove(CallerScopeProvider.CacheKey(id));
-        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
+        p.Memory.Remove(CallerScopeProvider.CacheKey(id));
+        await EndpointCache.EvictTagAsync(p.Cache, p.Bus, ListScope, p.Lf, ct);
         return Results.NoContent();
     }
 
@@ -332,14 +329,10 @@ public static class ApiKeyEndpoints
     private static async Task<IResult> ClearRateLimitAsync(
         Guid id,
         HttpContext http,
-        KnowledgeHubDbContext db,
-        RateLimiting.IApiKeyRateLimitResolver resolver,
-        HybridCache cache,
-        ICacheInvalidationBus bus,
-        ILoggerFactory lf,
+        [AsParameters] ApiKeyWriteParams p,
         CancellationToken ct)
     {
-        var key = await db.ApiKeys
+        var key = await p.Db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
         if (key is null)
             return Results.NotFound(new { error = ApiKeyNotFound });
@@ -348,10 +341,10 @@ public static class ApiKeyEndpoints
         key.LlmRateLimitWindowSeconds = null;
         key.SyncRateLimitPermits = null;
         key.SyncRateLimitWindowSeconds = null;
-        await db.SaveChangesAsync(ct);
+        await p.Db.SaveChangesAsync(ct);
 
-        resolver.Invalidate();
-        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
+        p.RateLimitResolver.Invalidate();
+        await EndpointCache.EvictTagAsync(p.Cache, p.Bus, ListScope, p.Lf, ct);
         return Results.NoContent();
     }
 
