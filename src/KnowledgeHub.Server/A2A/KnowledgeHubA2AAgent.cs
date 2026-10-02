@@ -122,7 +122,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         await heartbeat;
 
         await CompleteTaskAsync(updater, route.Skill, context.ContextId, success, parts, ct);
-        await RecordEvidenceAsync(services, route, context, success, resultJson, logger, ct);
+        await RecordEvidenceAsync(services, route, context, resultJson, logger, ct);
     }
 
     private static async Task CompleteTaskAsync(
@@ -145,7 +145,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
     /// <summary>RF-005 evidence receipt for the delegated tool call.</summary>
     private async Task RecordEvidenceAsync(
         IServiceProvider services, InvocationRoute route, RequestContext context,
-        bool success, string? resultJson, ILogger? logger, CancellationToken ct)
+        string? resultJson, ILogger? logger, CancellationToken ct)
     {
         var apiKeyId = http.HttpContext?.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
         await EvidenceEmission.RecordToolAsync(

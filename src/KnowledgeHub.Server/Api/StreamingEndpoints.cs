@@ -144,7 +144,7 @@ public static class StreamingEndpoints
                 }
             }
             catch (OperationCanceledException) { /* heartbeat stopped */ }
-        });
+        }, http.RequestAborted);
 
         try
         {
@@ -167,7 +167,7 @@ public static class StreamingEndpoints
         catch (Exception ex)
         {
             var payload = JsonSerializer.Serialize(new { seq = seq + 1, data = new { message = ex.Message } }, JsonSerializerOptions.Web);
-            try { await http.Response.WriteAsync($"event: error\ndata: {payload}\n\n", CancellationToken.None); await http.Response.Body.FlushAsync(); }
+            try { await http.Response.WriteAsync($"event: error\ndata: {payload}\n\n", CancellationToken.None); await http.Response.Body.FlushAsync(CancellationToken.None); }
             catch { /* connection already gone */ }
         }
         finally
