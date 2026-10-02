@@ -42,9 +42,8 @@ internal static class McpJsonRpc
         if (!payload.Contains("data:"))
             return payload;
         string? last = null;
-        foreach (var line in payload.Split('\n'))
-            if (line.StartsWith("data:"))
-                last = line[5..].Trim();
+        foreach (var line in payload.Split('\n').Where(l => l.StartsWith("data:")))
+            last = line[5..].Trim();
         return last ?? payload;
     }
 }
