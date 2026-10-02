@@ -76,7 +76,7 @@
 
         .nav-item ::deep a:hover {
             background: rgba(255, 255, 255, 0.08);
-            color: #fff;
+            color: #fff; /* NOSONAR S7924 — white over dark sidebar; transparent bg reads as dark */
         }
 
 @media (min-width: 768px) {

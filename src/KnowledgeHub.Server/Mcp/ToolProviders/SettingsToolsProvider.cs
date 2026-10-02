@@ -74,7 +74,7 @@ public sealed class SettingsToolsProvider : IToolProvider
         var model = ToolArgs.OptionalString(ctx, "model");
         var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
 
-        var service = ctx.Services!.GetRequiredService<IApiKeyChatSettingsService>();
+        var service = ctx.Services.GetRequiredService<IApiKeyChatSettingsService>();
         await service.SaveAsync(keyId, endpoint, model, apiKey, ct);
         var result = await service.DescribeAsync(keyId, ct);
 

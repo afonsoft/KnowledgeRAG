@@ -145,13 +145,14 @@ public sealed class GoogleDriveApiClient(HttpClient http)
         var url = $"https://drive.google.com/embeddedfolderview?id={Uri.EscapeDataString(folderId)}#list";
         var html = await http.GetStringAsync(url, ct);
         // Entries look like: <a href="https://drive.google.com/file/d/{id}/view?..." ...>{name}</a>
-        foreach (Match m in EmbeddedEntryPattern.Matches(html)
-                     .Where(m => !m.Groups[1].Value.Contains("/drive/folders/", StringComparison.Ordinal)))
+        foreach (var groups in EmbeddedEntryPattern.Matches(html)
+                     .Select(m => m.Groups)
+                     .Where(g => !g[1].Value.Contains("/drive/folders/", StringComparison.Ordinal)))
         {
             // public view shows subfolders as links — recursion needs metadata anyway
             yield return new DriveFileMeta(
-                m.Groups[1].Value,
-                System.Net.WebUtility.HtmlDecode(m.Groups[2].Value.Trim()),
+                groups[1].Value,
+                System.Net.WebUtility.HtmlDecode(groups[2].Value.Trim()),
                 "", null, null, null);
         }
     }

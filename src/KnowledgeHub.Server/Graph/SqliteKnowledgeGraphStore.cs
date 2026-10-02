@@ -76,14 +76,14 @@ public sealed class SqliteKnowledgeGraphStore(
         // gaining a 3rd+ type, or pending adds in the same batch) — the
         // (AliasNormalized, KgNodeId) unique index would blow the save.
         // Where-refactor not applicable — the skip predicate is awaited.
-        foreach (var sibling in siblings)
+        foreach (var siblingId in siblings.Select(sibling => sibling.Id))
         {
-            if (await AliasExistsOrPendingAsync(normalized, sibling.Id, ct))
+            if (await AliasExistsOrPendingAsync(normalized, siblingId, ct))
                 continue;
             db.KgAliases.Add(new KgAlias
             {
                 AliasNormalized = normalized,
-                KgNodeId = sibling.Id,
+                KgNodeId = siblingId,
                 KnowledgeSourceId = sourceId,
                 Reason = "conflict"
             });

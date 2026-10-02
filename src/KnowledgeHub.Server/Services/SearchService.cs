@@ -137,7 +137,8 @@ public sealed class SearchService(
 
         var (windowed, breakdowns) = plan.UseSemanticFastPath(mode)
             ? (await SemanticFastPathAsync(effectiveQuery, plan.FetchLimit, activeSourceIds, filter, degraded, ct), null)
-            : await FusedSearchAsync(query, effectiveQuery, mode, plan, activeSourceIds, filter, degraded, ct);
+            : await FusedSearchAsync(
+                new FusedSearchContext(query, effectiveQuery, mode, plan, activeSourceIds, filter, degraded), ct);
 
         var items = await HydrateTrackedAsync(windowed, breakdowns, filter, ct);
         items = await ApplyDiversityAsync(items, topK, ct);
@@ -173,9 +174,11 @@ public sealed class SearchService(
 
         // Fetch a wider window when filters, diversity or rerank need room to
         // work; otherwise hydrate exactly topK — identical to the pre-filter pipeline.
-        var fetchLimit = rerankEnabled || filtersActive || diversityEnabled
-            ? (rerankEnabled ? Math.Min(window, Math.Max(rerankCap, topK)) : window)
-            : topK;
+        var fetchLimit = topK;
+        if (rerankEnabled)
+            fetchLimit = Math.Min(window, Math.Max(rerankCap, topK));
+        else if (filtersActive || diversityEnabled)
+            fetchLimit = window;
 
         // SPEC-20260924-query-expansion-hyde: expansion mode — per-call `expand`
         // filter arg wins over config; off = the classic single-query pipeline.
@@ -260,20 +263,23 @@ public sealed class SearchService(
         return hits.ToList();
     }
 
+    /// <summary>Inputs of a fused search run — kept as one object so the
+    /// signature stays under the 7-parameter cap (RF-006/S107).</summary>
+    private sealed record FusedSearchContext(
+        string Query, string EffectiveQuery, SearchMode Mode, FetchPlan Plan,
+        List<Guid> ActiveSourceIds, ResolvedSearchFilter? Filter, DegradationState Degraded);
+
     private async Task<(List<VectorHit> Windowed, IReadOnlyDictionary<Guid, SearchScoreBreakdown>? Breakdowns)>
-        FusedSearchAsync(
-            string query, string effectiveQuery, SearchMode mode, FetchPlan plan,
-            List<Guid> activeSourceIds, ResolvedSearchFilter? filter,
-            DegradationState degraded, CancellationToken ct)
+        FusedSearchAsync(FusedSearchContext ctx, CancellationToken ct)
     {
         var (vectorLabels, vectorLists, lexicalLabels, lexicalLists) =
-            await ExpandAndSearchAsync(query, effectiveQuery,
-                new ArmRequest(mode, plan.ExpansionMode, plan.Window,
-                    filter?.MinScores?.Semantic, filter?.MinScores?.Lexical, plan.SubQueries),
-                activeSourceIds, degraded, ct);
+            await ExpandAndSearchAsync(ctx.Query, ctx.EffectiveQuery,
+                new ArmRequest(ctx.Mode, ctx.Plan.ExpansionMode, ctx.Plan.Window,
+                    ctx.Filter?.MinScores?.Semantic, ctx.Filter?.MinScores?.Lexical, ctx.Plan.SubQueries),
+                ctx.ActiveSourceIds, ctx.Degraded, ct);
 
-        var graphArm = plan.GraphEnabled
-            ? await GraphRankedAsync(query, ct)
+        var graphArm = ctx.Plan.GraphEnabled
+            ? await GraphRankedAsync(ctx.Query, ct)
             : (Ranked: (IReadOnlyList<Guid>)Array.Empty<Guid>(), DirectChunks: new HashSet<Guid>());
 
         var rankedLists = vectorLists.Select(l => ("vector", l))
@@ -282,7 +288,7 @@ public sealed class SearchService(
             .ToList();
         IReadOnlyList<FusedHit> fused;
         using (KnowledgeHubActivity.Start("search.rrf"))
-            fused = RrfFuser.Fuse(rankedLists, plan.FetchLimit);
+            fused = RrfFuser.Fuse(rankedLists, ctx.Plan.FetchLimit);
 
         // RF-003: gentle boost on chunks with direct-entity evidence.
         var boost = configuration.GetValue("Search:Graph:Boost", 1.0);
@@ -292,7 +298,7 @@ public sealed class SearchService(
                     ? f with { Fused = f.Fused * boost }
                     : f)
                 .OrderByDescending(f => f.Fused).ThenBy(f => f.ChunkId)
-                .Take(plan.FetchLimit)
+                .Take(ctx.Plan.FetchLimit)
                 .ToList();
 
         // SPEC-20260929 RF: an empty fused result must fall through to the
@@ -417,24 +423,30 @@ public sealed class SearchService(
         if (start is null && end is null)
             return items.ToList();
         return items
-            .Select(i => (i.IndexedAt is { } at
-                          && (start is null || at >= start)
-                          && (end is null || at <= end)
-                ? i with
-                {
-                    Score = i.Score * TemporalBoost,
-                    ScoreBreakdown = i.ScoreBreakdown is { } bd
-                        ? bd with
-                        {
-                            Fused = bd.Fused * TemporalBoost,
-                            Normalized = Math.Min(1.0, bd.Normalized * TemporalBoost),
-                            Rerank = bd.Rerank * TemporalBoost
-                        }
-                        : null
-                }
-                : i))
+            .Select(i => ApplyTemporalBoost(i, start, end))
             .OrderByDescending(AutocutFilter.EffectiveScore)
             .ToList();
+    }
+
+    private static SearchResultItem ApplyTemporalBoost(
+        SearchResultItem i, DateTimeOffset? start, DateTimeOffset? end)
+    {
+        if (i.IndexedAt is not { } at
+            || (start is not null && at < start)
+            || (end is not null && at > end))
+            return i;
+        return i with
+        {
+            Score = i.Score * TemporalBoost,
+            ScoreBreakdown = i.ScoreBreakdown is { } bd
+                ? bd with
+                {
+                    Fused = bd.Fused * TemporalBoost,
+                    Normalized = Math.Min(1.0, bd.Normalized * TemporalBoost),
+                    Rerank = bd.Rerank * TemporalBoost
+                }
+                : null
+        };
     }
 
     /// <summary>RF-004: in-window boost factor (modest — window ranks higher
@@ -1150,7 +1162,7 @@ public sealed class SearchService(
                     throw;
                 }
             },
-            EmbeddingVectorCodec.ToBytes, EmbeddingVectorCodec.FromBytes,
+            EmbeddingVectorCodec.Codec,
             ttl: null, logger, ct);
         return vector!; // factory never returns null (provider throws instead)
     }

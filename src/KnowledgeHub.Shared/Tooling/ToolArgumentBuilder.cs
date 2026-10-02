@@ -360,11 +360,16 @@ public static class ToolArgumentBuilder
     {
         ToolFieldKind.String or ToolFieldKind.Choice => el.ValueKind == JsonValueKind.String ? el.GetString()! : el.GetRawText(),
         ToolFieldKind.Integer or ToolFieldKind.Number or ToolFieldKind.Boolean => el.GetRawText().Trim(),
-        ToolFieldKind.StringList or ToolFieldKind.StringOrStringList => el.ValueKind == JsonValueKind.Array
-            ? string.Join(", ", el.EnumerateArray().Select(ElemText))
-            : el.ValueKind == JsonValueKind.String ? el.GetString()! : el.GetRawText(),
+        ToolFieldKind.StringList or ToolFieldKind.StringOrStringList => ElemListText(el),
         _ => el.GetRawText()
     };
+
+    private static string ElemListText(JsonElement el)
+    {
+        if (el.ValueKind == JsonValueKind.Array)
+            return string.Join(", ", el.EnumerateArray().Select(ElemText));
+        return el.ValueKind == JsonValueKind.String ? el.GetString()! : el.GetRawText();
+    }
 
     private static string? ElemText(JsonElement e) =>
         e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText();
