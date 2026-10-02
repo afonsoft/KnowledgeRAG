@@ -449,7 +449,7 @@ public sealed class IngestionService : IIngestionService
         DocumentReplacePlan? plan = null;
         try
         {
-            var content = await File.ReadAllTextAsync(file, cancellationToken);
+            var content = StripNul(await File.ReadAllTextAsync(file, cancellationToken));
             var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content)));
 
             if (ctx.Existing.TryGetValue(relative, out doc)

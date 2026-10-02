@@ -11,7 +11,7 @@
 # vault mounted, so `obsidian_write`/`read_document` sources whose
 # configuration.path points at /vaults/* will report "mount unavailable".
 services:
-  knowledgehub:
+  knowledgerag:
     volumes:
       # Local Obsidian vault, mounted rw so the obsidian_write MCP tool can
       # persist notes. Host path is machine-specific — this one is the
