@@ -35,54 +35,37 @@ public static class NotionBlockRenderer
             return;
 
         var payload = element.TryGetProperty(type, out var p) ? p : default;
-        var indent = new string(' ', depth * 2);
+        RenderPayload(type, payload, new string(' ', depth * 2), sb);
 
+        foreach (var child in block.Children)
+            RenderBlock(child, depth + 1, sb);
+    }
+
+    /// <summary>Markdown prefix for text-ish blocks; null for unknown types,
+    /// which are skipped silently (SPEC edge cases). "toggle" renders its
+    /// summary line — children are rendered below by the caller.</summary>
+    private static readonly Dictionary<string, string> TextPrefixes = new()
+    {
+        ["heading_1"] = "# ",
+        ["heading_2"] = "## ",
+        ["heading_3"] = "### ",
+        ["paragraph"] = "",
+        ["bulleted_list_item"] = "- ",
+        ["numbered_list_item"] = "1. ",
+        ["quote"] = "> ",
+        ["callout"] = "> ",
+        ["toggle"] = "",
+    };
+
+    private static void RenderPayload(string type, JsonElement payload, string indent, StringBuilder sb)
+    {
         switch (type)
         {
-            case "heading_1": Line(sb, indent, "# " + RichText(payload)); break;
-            case "heading_2": Line(sb, indent, "## " + RichText(payload)); break;
-            case "heading_3": Line(sb, indent, "### " + RichText(payload)); break;
-            case "paragraph": Line(sb, indent, RichText(payload)); break;
-            case "bulleted_list_item": Line(sb, indent, "- " + RichText(payload)); break;
-            case "numbered_list_item": Line(sb, indent, "1. " + RichText(payload)); break;
-            case "to_do":
-                var done = payload.ValueKind == JsonValueKind.Object
-                    && payload.TryGetProperty("checked", out var c) && c.ValueKind == JsonValueKind.True;
-                Line(sb, indent, (done ? "- [x] " : "- [ ] ") + RichText(payload));
-                break;
-            case "quote":
-            case "callout":
-                Line(sb, indent, "> " + RichText(payload));
-                break;
-            case "toggle":
-                // Children are rendered below; the summary line keeps context.
-                Line(sb, indent, RichText(payload));
-                break;
-            case "code":
-                var lang = payload.ValueKind == JsonValueKind.Object
-                    && payload.TryGetProperty("language", out var l) && l.ValueKind == JsonValueKind.String
-                    ? l.GetString() : "";
-                Line(sb, indent, "```" + lang);
-                Line(sb, indent, RichText(payload));
-                Line(sb, indent, "```");
-                break;
-            case "divider":
-                Line(sb, indent, "---");
-                break;
             case "table":
                 // table_width lives on the payload; rows are child blocks.
                 break;
             case "table_row":
-                if (payload.ValueKind == JsonValueKind.Object
-                    && payload.TryGetProperty("cells", out var cells)
-                    && cells.ValueKind == JsonValueKind.Array)
-                {
-                    var row = string.Join(" | ", cells.EnumerateArray()
-                        .Select(cell => cell.ValueKind == JsonValueKind.Array
-                            ? string.Concat(cell.EnumerateArray().Select(PlainText))
-                            : ""));
-                    Line(sb, indent, row);
-                }
+                RenderTableRow(payload, indent, sb);
                 break;
             case "child_page":
                 Line(sb, indent, $"[página: {StringProp(payload, TitleProp)}]");
@@ -103,12 +86,57 @@ public static class NotionBlockRenderer
                 Line(sb, indent, $"[{type}: {StringProp(payload, "url")}]");
                 break;
             default:
-                // Unknown block types are skipped silently (SPEC edge cases).
+                RenderTextElement(type, payload, indent, sb);
                 break;
         }
+    }
 
-        foreach (var child in block.Children)
-            RenderBlock(child, depth + 1, sb);
+    private static void RenderTextElement(string type, JsonElement payload, string indent, StringBuilder sb)
+    {
+        switch (type)
+        {
+            case "code":
+                RenderCode(payload, indent, sb);
+                break;
+            case "divider":
+                Line(sb, indent, "---");
+                break;
+            default:
+                var prefix = type == "to_do"
+                    ? IsChecked(payload) ? "- [x] " : "- [ ] "
+                    : TextPrefixes.GetValueOrDefault(type);
+                if (prefix is not null)
+                    Line(sb, indent, prefix + RichText(payload));
+                break;
+        }
+    }
+
+    private static bool IsChecked(JsonElement payload) =>
+        payload.ValueKind == JsonValueKind.Object
+        && payload.TryGetProperty("checked", out var c) && c.ValueKind == JsonValueKind.True;
+
+    private static void RenderCode(JsonElement payload, string indent, StringBuilder sb)
+    {
+        var lang = payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("language", out var l) && l.ValueKind == JsonValueKind.String
+            ? l.GetString() : "";
+        Line(sb, indent, "```" + lang);
+        Line(sb, indent, RichText(payload));
+        Line(sb, indent, "```");
+    }
+
+    private static void RenderTableRow(JsonElement payload, string indent, StringBuilder sb)
+    {
+        if (payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("cells", out var cells)
+            && cells.ValueKind == JsonValueKind.Array)
+        {
+            var row = string.Join(" | ", cells.EnumerateArray()
+                .Select(cell => cell.ValueKind == JsonValueKind.Array
+                    ? string.Concat(cell.EnumerateArray().Select(PlainText))
+                    : ""));
+            Line(sb, indent, row);
+        }
     }
 
     private static void Line(StringBuilder sb, string indent, string text) =>
@@ -189,6 +217,14 @@ public static class NotionBlockRenderer
         return lines;
     }
 
+    private static string? Text(JsonElement e) =>
+        e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+
+    private static string JoinText(JsonElement array, Func<JsonElement, string?> pick) =>
+        array.ValueKind == JsonValueKind.Array
+            ? string.Join(", ", array.EnumerateArray().Select(pick).Where(v => v is not null))
+            : "";
+
     private static string PropertyValue(JsonElement prop)
     {
         if (prop.ValueKind != JsonValueKind.Object
@@ -197,40 +233,40 @@ public static class NotionBlockRenderer
 
         var type = t.GetString()!;
         var payload = prop.TryGetProperty(type, out var p) ? p : default;
-
-        string? Text(JsonElement e) => e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-        string JoinText(JsonElement array, Func<JsonElement, string?> pick) =>
-            array.ValueKind == JsonValueKind.Array
-                ? string.Join(", ", array.EnumerateArray().Select(pick).Where(v => v is not null))
-                : "";
-
-        return type switch
-        {
-            TitleProp or "rich_text" =>
-                payload.ValueKind == JsonValueKind.Array
-                    ? string.Concat(payload.EnumerateArray().Select(PlainText))
-                    : "",
-            "number" => payload.ValueKind == JsonValueKind.Number ? payload.GetRawText() : "",
-            "select" => payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? "" : "",
-            "multi_select" => JoinText(payload, e => StringProp(e, "name")),
-            "status" => payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? "" : "",
-            "date" => payload.ValueKind == JsonValueKind.Object
-                ? string.Join(" → ", new[] { StringProp(payload, "start"), StringProp(payload, "end") }
-                    .Where(v => v is not null))
-                : "",
-            "checkbox" => payload.ValueKind is JsonValueKind.True or JsonValueKind.False
-                ? payload.GetBoolean().ToString() : "",
-            "url" or "email" or "phone_number" => Text(payload) ?? "",
-            "people" => JoinText(payload, e => StringProp(e, "name")),
-            "files" => JoinText(payload, e => StringProp(e, "name")),
-            "relation" => JoinText(payload, e => StringProp(e, "id")),
-            "formula" => FormulaValue(payload),
-            "created_time" or "last_edited_time" => Text(payload) ?? "",
-            "created_by" or "last_edited_by" =>
-                payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? "(user)" : "",
-            _ => "(unsupported)"
-        };
+        return ScalarPropertyValue(type, payload) ?? StructuredPropertyValue(type, payload);
     }
+
+    /// <summary>Scalar/label property types; null when the type is structured.</summary>
+    private static string? ScalarPropertyValue(string type, JsonElement payload) => type switch
+    {
+        TitleProp or "rich_text" =>
+            payload.ValueKind == JsonValueKind.Array
+                ? string.Concat(payload.EnumerateArray().Select(PlainText))
+                : "",
+        "number" => payload.ValueKind == JsonValueKind.Number ? payload.GetRawText() : "",
+        "select" or "status" =>
+            payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? "" : "",
+        "date" => payload.ValueKind == JsonValueKind.Object
+            ? string.Join(" → ", new[] { StringProp(payload, "start"), StringProp(payload, "end") }
+                .Where(v => v is not null))
+            : "",
+        "checkbox" => payload.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? payload.GetBoolean().ToString() : "",
+        "url" or "email" or "phone_number" or "created_time" or "last_edited_time" =>
+            Text(payload) ?? "",
+        "created_by" or "last_edited_by" =>
+            payload.ValueKind == JsonValueKind.Object ? StringProp(payload, "name") ?? "(user)" : "",
+        _ => null
+    };
+
+    /// <summary>Array/reference property types; degrades to <c>(unsupported)</c>.</summary>
+    private static string StructuredPropertyValue(string type, JsonElement payload) => type switch
+    {
+        "multi_select" or "people" or "files" => JoinText(payload, e => StringProp(e, "name")),
+        "relation" => JoinText(payload, e => StringProp(e, "id")),
+        "formula" => FormulaValue(payload),
+        _ => "(unsupported)"
+    };
 
     private static string FormulaValue(JsonElement formula)
     {

@@ -884,48 +884,10 @@ public sealed class IngestionService : IIngestionService
             if (result is null || (result.Entities.Count == 0 && result.Relations.Count == 0))
                 return batch.Count;
 
-            // SPEC-20260927-temporal-episodic-knowledge-graph RF-001: every
-            // extraction run that yields facts opens an episode — new nodes and
-            // all edges are attributed to it for episodic retrieval.
-            var episodes = graphScope.ServiceProvider.GetService<Graph.GraphEpisodeService>();
-            var episode = episodes is null
-                ? null
-                : await episodes.StartIngestionEpisodeAsync(
-                    source.Id, $"{doc.Title} ({doc.UriReference})", cancellationToken);
-
-            // Entity resolution: normalized-name merge per RF-003.
-            var nodes = new Dictionary<string, Domain.Entities.KgNode>(StringComparer.Ordinal);
-            foreach (var e in result.Entities)
-            {
-                var norm = Graph.EntityResolver.Normalize(e.Name);
-                if (norm.Length == 0 || nodes.ContainsKey(norm))
-                    continue;
-                nodes[norm] = await store.ResolveNodeAsync(
-                    e.Name, e.Type, source.Id, cancellationToken, episode?.Id);
-            }
-
-            var edges = new List<Domain.Entities.KgEdge>();
-            foreach (var r in result.Relations)
-            {
-                var from = await ResolveRelationNodeAsync(store, nodes, r.From, source.Id, cancellationToken);
-                var to = await ResolveRelationNodeAsync(store, nodes, r.To, source.Id, cancellationToken);
-                if (from is null || to is null || from.Id == to.Id)
-                    continue;
-                var evidence = r.EvidenceIndex >= 1 && r.EvidenceIndex <= batch.Count
-                    ? batch[r.EvidenceIndex - 1].Id
-                    : batch[0].Id;
-                edges.Add(new Domain.Entities.KgEdge
-                {
-                    FromNodeId = from.Id,
-                    ToNodeId = to.Id,
-                    Kind = Graph.EntityResolver.NormalizeKind(r.Kind),
-                    EvidenceChunkId = evidence,
-                    KnowledgeDocumentId = doc.Id,
-                    KnowledgeSourceId = source.Id,
-                    PromptVersion = Graph.EntityExtractor.PromptVersion,
-                    EpisodeId = episode?.Id
-                });
-            }
+            var ctx = new GraphPersistContext(batch, doc, source.Id,
+                await StartIngestionEpisodeAsync(graphScope, source, doc, cancellationToken));
+            var nodes = await ResolveEntitiesAsync(result.Entities, ctx, store, cancellationToken);
+            var edges = await ResolveEdgesAsync(result.Relations, nodes, ctx, store, cancellationToken);
             var added = await store.AddEdgesAsync(edges, cancellationToken);
             if (added > 0)
                 logger.LogInformation(
@@ -941,6 +903,75 @@ public sealed class IngestionService : IIngestionService
             warnings.Add($"graph extraction failed for '{doc.UriReference}': {ex.GetBaseException().Message}");
             return Math.Min(chunks.Count, budgetRemaining);
         }
+    }
+
+    /// <summary>Per-document graph persistence inputs shared by the
+    /// entity/edge resolution helpers.</summary>
+    private sealed record GraphPersistContext(
+        List<DocumentChunk> Batch, KnowledgeDocument Doc, Guid SourceId, Guid? EpisodeId);
+
+    /// <summary>SPEC-20260927-temporal-episodic-knowledge-graph RF-001: every
+    /// extraction run that yields facts opens an episode — new nodes and all
+    /// edges are attributed to it for episodic retrieval.</summary>
+    private static async Task<Guid?> StartIngestionEpisodeAsync(
+        AsyncServiceScope graphScope, KnowledgeSource source, KnowledgeDocument doc,
+        CancellationToken cancellationToken)
+    {
+        var episodes = graphScope.ServiceProvider.GetService<Graph.GraphEpisodeService>();
+        var episode = episodes is null
+            ? null
+            : await episodes.StartIngestionEpisodeAsync(
+                source.Id, $"{doc.Title} ({doc.UriReference})", cancellationToken);
+        return episode?.Id;
+    }
+
+    /// <summary>Entity resolution: normalized-name merge per RF-003.</summary>
+    private static async Task<Dictionary<string, Domain.Entities.KgNode>> ResolveEntitiesAsync(
+        IReadOnlyList<Graph.ExtractedEntity> entities, GraphPersistContext ctx,
+        Graph.IKnowledgeGraphStore store, CancellationToken cancellationToken)
+    {
+        var nodes = new Dictionary<string, Domain.Entities.KgNode>(StringComparer.Ordinal);
+        foreach (var e in entities)
+        {
+            var norm = Graph.EntityResolver.Normalize(e.Name);
+            if (norm.Length == 0 || nodes.ContainsKey(norm))
+                continue;
+            nodes[norm] = await store.ResolveNodeAsync(
+                e.Name, e.Type, ctx.SourceId, cancellationToken, ctx.EpisodeId);
+        }
+        return nodes;
+    }
+
+    /// <summary>Resolves each relation's endpoints into nodes and builds the
+    /// KgEdge list; dangling/self edges are skipped.</summary>
+    private static async Task<List<Domain.Entities.KgEdge>> ResolveEdgesAsync(
+        IReadOnlyList<Graph.ExtractedRelation> relations,
+        Dictionary<string, Domain.Entities.KgNode> nodes, GraphPersistContext ctx,
+        Graph.IKnowledgeGraphStore store, CancellationToken cancellationToken)
+    {
+        var edges = new List<Domain.Entities.KgEdge>();
+        foreach (var r in relations)
+        {
+            var from = await ResolveRelationNodeAsync(store, nodes, r.From, ctx.SourceId, cancellationToken);
+            var to = await ResolveRelationNodeAsync(store, nodes, r.To, ctx.SourceId, cancellationToken);
+            if (from is null || to is null || from.Id == to.Id)
+                continue;
+            var evidence = r.EvidenceIndex >= 1 && r.EvidenceIndex <= ctx.Batch.Count
+                ? ctx.Batch[r.EvidenceIndex - 1].Id
+                : ctx.Batch[0].Id;
+            edges.Add(new Domain.Entities.KgEdge
+            {
+                FromNodeId = from.Id,
+                ToNodeId = to.Id,
+                Kind = Graph.EntityResolver.NormalizeKind(r.Kind),
+                EvidenceChunkId = evidence,
+                KnowledgeDocumentId = ctx.Doc.Id,
+                KnowledgeSourceId = ctx.SourceId,
+                PromptVersion = Graph.EntityExtractor.PromptVersion,
+                EpisodeId = ctx.EpisodeId
+            });
+        }
+        return edges;
     }
 
     /// <summary>Relations may reference entities absent from the entities list —
@@ -984,135 +1015,170 @@ public sealed class IngestionService : IIngestionService
         await gate.WaitAsync(cancellationToken);
         try
         {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
-            var vectors = scope.ServiceProvider.GetRequiredService<IVectorStore>();
-
-            var source = await db.Sources.FindAsync([sourceId], cancellationToken);
-            if (source is null)
-                return;
-
-            var isDocFile = source.SourceType == SourceType.DocumentFile;
-            var root = ResolveVaultRoot(source.ConfigurationJson);
-            // RF-002: a missing root means the mount is down (vault dir) — record it
-            // and bail without touching documents. DocumentFile may point at a file.
-            var rootExists = root is not null &&
-                (isDocFile ? Directory.Exists(root) || File.Exists(root) : Directory.Exists(root));
-            if (!rootExists)
-            {
-                if (source.LastSyncStatus != SyncStatusFailed)
-                {
-                    source.LastSyncStatus = SyncStatusFailed;
-                    source.LastError = $"vault path '{root ?? "(not configured)"}' not found — mount unavailable?";
-                    await db.SaveChangesAsync(cancellationToken);
-                }
-                return;
-            }
-
-            // Clear a previous failure once the mount is reachable again.
-            if (source.LastSyncStatus == SyncStatusFailed)
-            {
-                source.LastSyncStatus = SyncStatusCompleted;
-                source.LastError = null;
-                await db.SaveChangesAsync(cancellationToken);
-            }
-
-            var full = Path.GetFullPath(Path.Combine(root!, relativePath));
-            if (!full.StartsWith(root!, StringComparison.OrdinalIgnoreCase))
-                return; // path traversal — ignore
-
-            var doc = await db.Documents
-                .FirstOrDefaultAsync(d => d.KnowledgeSourceId == sourceId && d.UriReference == relativePath, cancellationToken);
-
-            if (!File.Exists(full)
-                || isDocFile && !Connectors.DocumentFileConnector.SupportedExtensions.Contains(Path.GetExtension(full)))
-            {
-                if (doc is not null)
-                {
-                    await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
-                    db.Documents.Remove(doc);
-                    await db.SaveChangesAsync(cancellationToken);
-                    await scope.ServiceProvider.GetRequiredService<ILexicalSearchService>()
-                        .ReconcileAsync(cancellationToken);
-                    await BumpIndexVersionAsync(cancellationToken);
-                }
-                return;
-            }
-
-            // DocumentFile hashes/extracts the *text*; vault hashes the raw file.
-            string content;
-            string title;
-            string body;
-            if (isDocFile)
-            {
-                content = await Connectors.DocumentFileConnector.ExtractTextAsync(
-                    full, Path.GetExtension(full), cancellationToken) ?? "";
-                if (content.Length == 0)
-                    return;
-                title = Path.GetFileNameWithoutExtension(full);
-                body = content;
-            }
-            else
-            {
-                content = await File.ReadAllTextAsync(full, cancellationToken);
-                var note = MarkdownNoteParser.Parse(content, Path.GetFileName(full));
-                title = note.Title;
-                body = note.Body;
-            }
-
-            var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content)));
-            if (doc?.ContentHash == hash)
-                return;
-
-            var (chunkMaxTokens, chunkOverlapTokens) = embeddingSettings.GetChunking();
-            var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
-                new Chunking.ChunkerSelector.ChunkRequest(relativePath, body, chunkMaxTokens,
-                    chunkOverlapTokens, Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson)),
-                embeddings, configuration, logger, cancellationToken, scope.ServiceProvider);
-
-            if (doc is null)
-            {
-                doc = new KnowledgeDocument { KnowledgeSourceId = sourceId, Title = title, UriReference = relativePath };
-                db.Documents.Add(doc);
-            }
-            else
-            {
-                doc.Title = title;
-                await db.Chunks.Where(c => c.KnowledgeDocumentId == doc.Id)
-                    .ExecuteDeleteAsync(cancellationToken);
-            }
-
-            doc.RawContent = content;
-            doc.ContentHash = hash;
-            doc.IndexedAt = DateTimeOffset.UtcNow;
-
-            // AddRange via DbSet — see vault path above.
-            var watcherWarnings = new List<string>();
-            var newChunks = pieces.Select((piece, i) => new DocumentChunk
-            {
-                KnowledgeDocumentId = doc.Id,
-                ChunkIndex = i,
-                TextContent = piece.Text,
-                ChunkKind = kind.ToString().ToLowerInvariant(),
-                SymbolPath = piece.SymbolPath,
-                SectionPath = piece.SectionPath,
-                MetadataJson = piece.MetadataJson,
-                EnrichedText = EnrichPiece(source.Name, title, piece)
-            }).ToList();
-            db.Chunks.AddRange(newChunks);
-            ScanChunks(newChunks, doc.Id, sourceId, title, db, watcherWarnings);
-
-            await db.SaveChangesAsync(cancellationToken);
-            await EmbedChunksAsync(newChunks, doc, source, vectors, cancellationToken);
-            await db.SaveChangesAsync(cancellationToken);
-            await scope.ServiceProvider.GetRequiredService<ILexicalSearchService>()
-                .ReconcileAsync(cancellationToken);
-            await BumpIndexVersionAsync(cancellationToken);
+            await SyncFileCoreAsync(sourceId, relativePath, cancellationToken);
         }
         finally
         {
             gate.Release();
         }
+    }
+
+    /// <summary>Scope + resolved services shared by the watcher-sync helpers.</summary>
+    private sealed record FileSyncScope(
+        AsyncServiceScope Scope, KnowledgeHubDbContext Db, IVectorStore Vectors);
+
+    /// <summary>Extracted file content for indexing — DocumentFile hashes the
+    /// extracted *text*; vault hashes the raw file.</summary>
+    private sealed record FileContent(string Content, string Title, string Body);
+
+    private async Task SyncFileCoreAsync(Guid sourceId, string relativePath, CancellationToken cancellationToken)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var ctx = new FileSyncScope(
+            scope,
+            scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>(),
+            scope.ServiceProvider.GetRequiredService<IVectorStore>());
+
+        var source = await ctx.Db.Sources.FindAsync([sourceId], cancellationToken);
+        if (source is null)
+            return;
+
+        var isDocFile = source.SourceType == SourceType.DocumentFile;
+        var root = ResolveVaultRoot(source.ConfigurationJson);
+        // RF-002: a missing root means the mount is down (vault dir) — record it
+        // and bail without touching documents. DocumentFile may point at a file.
+        var rootExists = root is not null &&
+            (isDocFile ? Directory.Exists(root) || File.Exists(root) : Directory.Exists(root));
+        if (!rootExists)
+        {
+            await MarkMountMissingAsync(source, root, ctx.Db, cancellationToken);
+            return;
+        }
+
+        // Clear a previous failure once the mount is reachable again.
+        if (source.LastSyncStatus == SyncStatusFailed)
+        {
+            source.LastSyncStatus = SyncStatusCompleted;
+            source.LastError = null;
+            await ctx.Db.SaveChangesAsync(cancellationToken);
+        }
+
+        var full = Path.GetFullPath(Path.Combine(root!, relativePath));
+        if (!full.StartsWith(root!, StringComparison.OrdinalIgnoreCase))
+            return; // path traversal — ignore
+
+        var doc = await ctx.Db.Documents
+            .FirstOrDefaultAsync(d => d.KnowledgeSourceId == sourceId && d.UriReference == relativePath, cancellationToken);
+
+        if (!File.Exists(full)
+            || isDocFile && !Connectors.DocumentFileConnector.SupportedExtensions.Contains(Path.GetExtension(full)))
+        {
+            if (doc is not null)
+                await RemoveDocumentAsync(ctx, doc, cancellationToken);
+            return;
+        }
+
+        var file = await ReadFileContentAsync(full, isDocFile, cancellationToken);
+        if (file is null)
+            return;
+
+        var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(file.Content)));
+        if (doc?.ContentHash == hash)
+            return;
+
+        await IndexFileContentAsync(ctx, source, doc, relativePath, file, hash, cancellationToken);
+    }
+
+    /// <summary>RF-002: record the mount-down failure once, without touching documents.</summary>
+    private static async Task MarkMountMissingAsync(
+        KnowledgeSource source, string? root, KnowledgeHubDbContext db, CancellationToken cancellationToken)
+    {
+        if (source.LastSyncStatus == SyncStatusFailed)
+            return;
+        source.LastSyncStatus = SyncStatusFailed;
+        source.LastError = $"vault path '{root ?? "(not configured)"}' not found — mount unavailable?";
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Removes a vanished/unsupported file's document + vectors and
+    /// reconciles the lexical index.</summary>
+    private async Task RemoveDocumentAsync(
+        FileSyncScope ctx, KnowledgeDocument doc, CancellationToken cancellationToken)
+    {
+        await ctx.Vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
+        ctx.Db.Documents.Remove(doc);
+        await ctx.Db.SaveChangesAsync(cancellationToken);
+        await ctx.Scope.ServiceProvider.GetRequiredService<ILexicalSearchService>()
+            .ReconcileAsync(cancellationToken);
+        await BumpIndexVersionAsync(cancellationToken);
+    }
+
+    /// <summary>Reads file content for indexing; null when nothing extractable.</summary>
+    private static async Task<FileContent?> ReadFileContentAsync(
+        string full, bool isDocFile, CancellationToken cancellationToken)
+    {
+        if (isDocFile)
+        {
+            var content = await Connectors.DocumentFileConnector.ExtractTextAsync(
+                full, Path.GetExtension(full), cancellationToken) ?? "";
+            return content.Length == 0
+                ? null
+                : new FileContent(content, Path.GetFileNameWithoutExtension(full), content);
+        }
+        var raw = await File.ReadAllTextAsync(full, cancellationToken);
+        var note = MarkdownNoteParser.Parse(raw, Path.GetFileName(full));
+        return new FileContent(raw, note.Title, note.Body);
+    }
+
+    /// <summary>Chunks, scans, embeds and persists one file's document.</summary>
+    private async Task IndexFileContentAsync(
+        FileSyncScope ctx, KnowledgeSource source, KnowledgeDocument? doc, string relativePath,
+        FileContent file, string hash, CancellationToken cancellationToken)
+    {
+        var (chunkMaxTokens, chunkOverlapTokens) = embeddingSettings.GetChunking();
+        var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
+            new Chunking.ChunkerSelector.ChunkRequest(relativePath, file.Body, chunkMaxTokens,
+                chunkOverlapTokens, Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson)),
+            embeddings, configuration, logger, cancellationToken, ctx.Scope.ServiceProvider);
+
+        if (doc is null)
+        {
+            doc = new KnowledgeDocument { KnowledgeSourceId = source.Id, Title = file.Title, UriReference = relativePath };
+            ctx.Db.Documents.Add(doc);
+        }
+        else
+        {
+            doc.Title = file.Title;
+            await ctx.Db.Chunks.Where(c => c.KnowledgeDocumentId == doc.Id)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        doc.RawContent = file.Content;
+        doc.ContentHash = hash;
+        doc.IndexedAt = DateTimeOffset.UtcNow;
+
+        // AddRange via DbSet — see vault path above.
+        var watcherWarnings = new List<string>();
+        var newChunks = pieces.Select((piece, i) => new DocumentChunk
+        {
+            KnowledgeDocumentId = doc.Id,
+            ChunkIndex = i,
+            TextContent = piece.Text,
+            ChunkKind = kind.ToString().ToLowerInvariant(),
+            SymbolPath = piece.SymbolPath,
+            SectionPath = piece.SectionPath,
+            MetadataJson = piece.MetadataJson,
+            EnrichedText = EnrichPiece(source.Name, file.Title, piece)
+        }).ToList();
+        ctx.Db.Chunks.AddRange(newChunks);
+        ScanChunks(newChunks, doc.Id, source.Id, file.Title, ctx.Db, watcherWarnings);
+
+        await ctx.Db.SaveChangesAsync(cancellationToken);
+        await EmbedChunksAsync(newChunks, doc, source, ctx.Vectors, cancellationToken);
+        await ctx.Db.SaveChangesAsync(cancellationToken);
+        await ctx.Scope.ServiceProvider.GetRequiredService<ILexicalSearchService>()
+            .ReconcileAsync(cancellationToken);
+        await BumpIndexVersionAsync(cancellationToken);
     }
 
     /// <summary>Bump the index-version token so cached search results keyed on

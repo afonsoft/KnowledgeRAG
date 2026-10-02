@@ -18,6 +18,11 @@ public sealed class WebPageConnector(
 
     public SourceType Type => SourceType.WebPage;
 
+    /// <summary>Resolved crawl parameters for one fetch.</summary>
+    private sealed record CrawlConfig(
+        Uri Start, bool AllowPrivate, int CrawlDepth, int MaxPages,
+        string? IncludeSelector, string? ExcludeSelector);
+
     public async Task<FetchResult> FetchAsync(KnowledgeSource source, CancellationToken cancellationToken)
     {
         var config = ConnectorConfig.Parse(source.ConfigurationJson);
@@ -25,28 +30,37 @@ public sealed class WebPageConnector(
         if (!Uri.TryCreate(url, UriKind.Absolute, out var start) || start.Scheme is not ("http" or "https"))
             throw new InvalidOperationException($"WebPage source '{source.Name}' has no valid 'url'");
 
-        var allowPrivate = config.Bool("allowPrivateHosts");
-        var crawlDepth = config.Int("crawlDepth", 0, 0, 2);
-        var maxPages = config.Int("maxPages", 20, 1, 100);
-        var includeSelector = config.String("includeSelector");
-        var excludeSelector = config.String("excludeSelector");
+        var crawl = new CrawlConfig(
+            start,
+            config.Bool("allowPrivateHosts"),
+            config.Int("crawlDepth", 0, 0, 2),
+            config.Int("maxPages", 20, 1, 100),
+            config.String("includeSelector"),
+            config.String("excludeSelector"));
 
-        if (!allowPrivate)
+        if (!crawl.AllowPrivate)
             await GuardPublicAsync(start, cancellationToken);
 
-        var robots = await FetchRobotsAsync(start, allowPrivate, cancellationToken);
+        var robots = await FetchRobotsAsync(start, crawl.AllowPrivate, cancellationToken);
+        return await CrawlAsync(crawl, robots, cancellationToken);
+    }
 
+    /// <summary>BFS crawl from <see cref="CrawlConfig.Start"/> bounded by
+    /// depth/pages/robots with a politeness delay between requests.</summary>
+    private async Task<FetchResult> CrawlAsync(
+        CrawlConfig crawl, RobotsPolicy robots, CancellationToken cancellationToken)
+    {
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var queue = new Queue<(Uri Uri, int Depth)>();
-        queue.Enqueue((start, 0));
-        visited.Add(start.GetLeftPart(UriPartial.Path));
+        queue.Enqueue((crawl.Start, 0));
+        visited.Add(crawl.Start.GetLeftPart(UriPartial.Path));
 
         var documents = new List<RawDocument>();
         var warnings = new List<string>();
         var client = httpClientFactory.CreateClient("webpage");
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Knowledge/1.0");
 
-        while (queue.Count > 0 && documents.Count < maxPages)
+        while (queue.Count > 0 && documents.Count < crawl.MaxPages)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (page, depth) = queue.Dequeue();
@@ -58,47 +72,62 @@ public sealed class WebPageConnector(
                 continue;
             }
 
-            string? html = null;
-            try
-            {
-                using var pageRequest = new HttpRequestMessage(HttpMethod.Get, page);
-                if (allowPrivate)
-                    pageRequest.Options.Set(Security.EgressPolicyHandler.AllowPrivateHostsKey, true);
-                using var response = await client.SendAsync(pageRequest, cancellationToken);
-                if (response.IsSuccessStatusCode
-                    && response.Content.Headers.ContentType?.MediaType == "text/html")
-                    html = await response.Content.ReadAsStringAsync(cancellationToken);
-            }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-            {
-                logger.LogWarning(ex, "Fetch failed for {Url} — skipped", page);
-                warnings.Add($"{page}: fetch failed ({ex.Message})");
-            }
-
+            var html = await FetchPageHtmlAsync(client, page, crawl.AllowPrivate, warnings, cancellationToken);
             if (html is not null)
-            {
-                var text = HtmlTextExtractor.Extract(html, includeSelector, excludeSelector);
-                if (text.Length > 0)
-                {
-                    var title = HtmlTextExtractor.ExtractTitle(html) ?? page.AbsolutePath.Trim('/');
-                    documents.Add(new RawDocument(page.AbsoluteUri, title, text));
-                }
-
-                if (depth < crawlDepth)
-                {
-                    foreach (var link in HtmlTextExtractor.ExtractLinks(html, page))
-                    {
-                        if (visited.Add(link) && visited.Count <= maxPages)
-                            queue.Enqueue((new Uri(link), depth + 1));
-                    }
-                }
-            }
+                ProcessPage(html, page, depth, crawl, queue, visited, documents);
 
             if (queue.Count > 0)
                 await Task.Delay(Politeness, cancellationToken);
         }
 
         return new FetchResult(documents, warnings);
+    }
+
+    /// <summary>GETs one page; returns its HTML only for 2xx text/html —
+    /// fetch failures land in warnings, never abort the crawl.</summary>
+    private async Task<string?> FetchPageHtmlAsync(
+        HttpClient client, Uri page, bool allowPrivate,
+        List<string> warnings, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var pageRequest = new HttpRequestMessage(HttpMethod.Get, page);
+            if (allowPrivate)
+                pageRequest.Options.Set(Security.EgressPolicyHandler.AllowPrivateHostsKey, true);
+            using var response = await client.SendAsync(pageRequest, cancellationToken);
+            return response.IsSuccessStatusCode
+                && response.Content.Headers.ContentType?.MediaType == "text/html"
+                ? await response.Content.ReadAsStringAsync(cancellationToken)
+                : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(ex, "Fetch failed for {Url} — skipped", page);
+            warnings.Add($"{page}: fetch failed ({ex.Message})");
+            return null;
+        }
+    }
+
+    /// <summary>Extracts text (a document when non-empty) and enqueues
+    /// same-origin links within the crawl depth.</summary>
+    private static void ProcessPage(
+        string html, Uri page, int depth, CrawlConfig crawl,
+        Queue<(Uri Uri, int Depth)> queue, HashSet<string> visited, List<RawDocument> documents)
+    {
+        var text = HtmlTextExtractor.Extract(html, crawl.IncludeSelector, crawl.ExcludeSelector);
+        if (text.Length > 0)
+        {
+            var title = HtmlTextExtractor.ExtractTitle(html) ?? page.AbsolutePath.Trim('/');
+            documents.Add(new RawDocument(page.AbsoluteUri, title, text));
+        }
+
+        if (depth >= crawl.CrawlDepth)
+            return;
+        foreach (var link in HtmlTextExtractor.ExtractLinks(html, page))
+        {
+            if (visited.Add(link) && visited.Count <= crawl.MaxPages)
+                queue.Enqueue((new Uri(link), depth + 1));
+        }
     }
 
     /// <summary>SSRF guard: refuse loopback/link-local/private targets.</summary>

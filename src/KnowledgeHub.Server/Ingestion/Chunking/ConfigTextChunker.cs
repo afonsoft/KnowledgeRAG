@@ -28,13 +28,7 @@ public sealed partial class ConfigTextChunker : ITextChunker
             return [];
 
         var maxChars = maxTokens * CharsPerToken;
-        var trimmed = text.TrimStart();
-
-        var nodes = trimmed.StartsWith('{') || trimmed.StartsWith('[')
-            ? JsonNodes(text)
-            : null;
-        if (nodes is null)
-            nodes = trimmed.StartsWith('<') ? XmlNodes(text) : YamlNodes(text);
+        var nodes = DetectNodes(text);
 
         if (nodes is null || nodes.Count == 0)
             // Malformed or empty-structure input → prose fallback (never throw).
@@ -50,32 +44,54 @@ public sealed partial class ConfigTextChunker : ITextChunker
                 continue;
             }
             // Oversized node → line-window split keeping the path preamble.
-            var lines = body.Split('\n');
-            var current = new StringBuilder();
-            var part = 0;
-            var parts = new List<string>();
-            foreach (var line in lines)
-            {
-                if (current.Length + line.Length + 1 > maxChars && current.Length > 0)
-                {
-                    parts.Add(current.ToString());
-                    current.Clear();
-                }
-                current.AppendLine(line);
-            }
-            if (current.Length > 0)
-                parts.Add(current.ToString());
-            foreach (var p in parts)
-            {
-                part++;
-                var header = $"{preamble} (part {part}/{parts.Count})";
-                var chunk = preamble is not null && !p.TrimStart().StartsWith(preamble, StringComparison.Ordinal)
-                    ? header + "\n" + p
-                    : p;
-                result.Add(new ChunkPiece(chunk.Trim(), preamble));
-            }
+            result.AddRange(SplitOversized(preamble, body, maxChars));
         }
         return result;
+    }
+
+    /// <summary>Picks the parser by leading character — JSON for
+    /// <c>{</c>/<c>[</c>, XML for <c>&lt;</c>, YAML otherwise; a failed JSON
+    /// parse falls through to YAML (never throws).</summary>
+    private static List<(string? Path, string Body)>? DetectNodes(string text)
+    {
+        var trimmed = text.TrimStart();
+        if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+        {
+            var nodes = JsonNodes(text);
+            if (nodes is not null)
+                return nodes;
+        }
+        return trimmed.StartsWith('<') ? XmlNodes(text) : YamlNodes(text);
+    }
+
+    /// <summary>Line-window split of an oversized node, keeping the path preamble.</summary>
+    private static List<ChunkPiece> SplitOversized(string? preamble, string body, int maxChars)
+    {
+        var current = new StringBuilder();
+        var parts = new List<string>();
+        foreach (var line in body.Split('\n'))
+        {
+            if (current.Length + line.Length + 1 > maxChars && current.Length > 0)
+            {
+                parts.Add(current.ToString());
+                current.Clear();
+            }
+            current.AppendLine(line);
+        }
+        if (current.Length > 0)
+            parts.Add(current.ToString());
+
+        var pieces = new List<ChunkPiece>();
+        for (var i = 0; i < parts.Count; i++)
+        {
+            var p = parts[i];
+            var header = $"{preamble} (part {i + 1}/{parts.Count})";
+            var chunk = preamble is not null && !p.TrimStart().StartsWith(preamble, StringComparison.Ordinal)
+                ? header + "\n" + p
+                : p;
+            pieces.Add(new ChunkPiece(chunk.Trim(), preamble));
+        }
+        return pieces;
     }
 
     /// <summary>JSON top-level members/elements with <c>$.path</c> preambles.</summary>

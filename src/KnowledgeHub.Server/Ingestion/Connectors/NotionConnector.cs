@@ -295,39 +295,46 @@ public sealed class NotionConnector(
                 ctx.WarnOnce($"{ctx.CurrentPageId}: block tree truncated at maxBlocksPerPage={ctx.MaxBlocksPerPage}");
                 break;
             }
-
-            var type = block.ValueKind == JsonValueKind.Object
-                && block.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String
-                ? t.GetString()
-                : null;
-            var id = block.ValueKind == JsonValueKind.Object
-                && block.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String
-                ? i.GetString()!
-                : null;
-
-            if (type == "child_page" && id is not null)
-                ctx.DiscoveredPages.Add(id);
-            else if (type == "child_database" && id is not null)
-                ctx.DiscoveredDatabases.Add(id);
-
-            var hasChildren = block.ValueKind == JsonValueKind.Object
-                && block.TryGetProperty("has_children", out var h) && h.ValueKind == JsonValueKind.True;
-            IReadOnlyList<NotionBlock> children = [];
-            if (hasChildren && type is not ("child_page" or "child_database") && id is not null)
-            {
-                if (depth + 1 > ctx.MaxBlockDepth)
-                {
-                    ctx.WarnOnce($"{ctx.CurrentPageId}: block tree truncated at maxBlockDepth={ctx.MaxBlockDepth}");
-                }
-                else
-                {
-                    children = await BuildTreeAsync(id, depth + 1, ctx, cancellationToken);
-                }
-            }
-            nodes.Add(new NotionBlock(block, children));
+            nodes.Add(await BuildNodeAsync(block, depth, ctx, cancellationToken));
         }
         return nodes;
     }
+
+    /// <summary>Materializes one block: collects child_page/child_database ids
+    /// for traversal discovery and recurses into children within maxBlockDepth.</summary>
+    private static async Task<NotionBlock> BuildNodeAsync(
+        JsonElement block, int depth, FetchContext ctx, CancellationToken cancellationToken)
+    {
+        var type = StringProp(block, "type");
+        var id = StringProp(block, "id");
+
+        if (type == "child_page" && id is not null)
+            ctx.DiscoveredPages.Add(id);
+        else if (type == "child_database" && id is not null)
+            ctx.DiscoveredDatabases.Add(id);
+
+        var hasChildren = block.ValueKind == JsonValueKind.Object
+            && block.TryGetProperty("has_children", out var h) && h.ValueKind == JsonValueKind.True;
+        IReadOnlyList<NotionBlock> children = [];
+        if (hasChildren && type is not ("child_page" or "child_database") && id is not null)
+        {
+            if (depth + 1 > ctx.MaxBlockDepth)
+            {
+                ctx.WarnOnce($"{ctx.CurrentPageId}: block tree truncated at maxBlockDepth={ctx.MaxBlockDepth}");
+            }
+            else
+            {
+                children = await BuildTreeAsync(id, depth + 1, ctx, cancellationToken);
+            }
+        }
+        return new NotionBlock(block, children);
+    }
+
+    private static string? StringProp(JsonElement obj, string name) =>
+        obj.ValueKind == JsonValueKind.Object
+        && obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString()
+            : null;
 
     private static string ReadEditedTime(JsonElement obj) =>
         obj.ValueKind == JsonValueKind.Object
