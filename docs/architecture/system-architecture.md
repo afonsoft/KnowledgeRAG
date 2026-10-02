@@ -21,7 +21,7 @@ flowchart TB
         SPA["Static host<br/>index.html + WASM assets"]
         API["REST API<br/>/api/* (Minimal APIs)"]
         MCP["MCP Server<br/>/mcp (Streamable HTTP, hybrid sessions)<br/>/mcp/sse + /mcp/message (legacy)"]
-        A2A["A2A Server<br/>/.well-known/agent-card.json<br/>/a2a (JSON-RPC + HTTP+JSON)"]
+        A2A["A2A Server<br/>/.well-known/agent-card.json<br/>/a2a (JSON-RPC + HTTP+JSON)<br/>EfA2aTaskStore · push webhooks"]
         HUB["SignalR Hub<br/>/hubs/mcp"]
         AUTH["Auth<br/>cookie session + aft_* API keys"]
         RL["Rate limiter<br/>key → user → IP partitions"]
@@ -57,6 +57,7 @@ flowchart TB
     CUR -->|SSE+POST| MCP
     AG -->|JSON-RPC| MCP
     A2AAG -->|Agent Card + message/send| A2A
+    A2A -->|X-KH-Signature push| A2AAG
 
     AUTH --> API
     AUTH --> MCP
@@ -66,6 +67,7 @@ flowchart TB
     RL --> A2A
     MCP --> CAT
     A2A -->|delegates to live catalog| CAT
+    A2A -->|task store| SQL
     MCP --> FEED
     FEED --> HUB
     CAT --> SRCH
@@ -124,6 +126,8 @@ flowchart TB
 | | `ContentSanitizer` | Heuristic injection scan at ingest → `DocumentChunk.SuspicionFlags` + `security_events`; exclusion default-on |
 | | Source authorization | Per-key `AllowedSourceIdsJson`/`AllowedToolsJson` enforcement in `SearchService` |
 | Core | `DynamicToolCatalog` | Live tool resolution per `tools/list`; `IToolCatalogChangeNotifier` pushes `tools/list_changed` |
+| | `EfA2aTaskStore` | EF-persisted A2A tasks (artifacts + history) in the catalog DB — survives restarts; `TaskUpdater` working/progress events with 2s heartbeat; cooperative cancel |
+| | `A2aPushNotifier` | Push-notification webhooks per `SendMessageConfiguration.PushNotificationConfig` or push-config CRUD — POST with `X-KH-Signature` HMAC (`evidence:master`), 3× exponential retry; destination URLs screened by `EgressPolicyHandler` (SSRF guard) |
 | | `IngestionQueue` + `IngestionWorker` | Persisted async sync jobs (`202+jobId`) — per-doc counters, cancel, selective reindex by chunker version, auto-sync routed through the queue |
 | | `IngestionService` | Connector (Obsidian/WebDAV, web, docs, Notion, REST, SQL, S3, Azure Files, OCI, Google Drive) → chunker (markdown/code/config, semantic opt-in) → injection scan → embed → vector upsert → optional graph extraction |
 | | `SearchService` | Hybrid FTS5 + vector (RRF), MMR + per-doc quota + score floor, corrective-RAG, query rewriting + expansion (multi-query/HyDE) + LLM reranker, contextual enrichment + `contextExpand`, `useGraph` arm, metadata filters, source authz, flagged-chunk exclusion |
@@ -136,7 +140,7 @@ flowchart TB
 | | Serilog | Structured request logging (health/static → Debug, 5xx → Error, `x-request-id`), daily rolling file sink (14 d) + opt-in OTLP sink, secret redaction (`***REDACTED***`), runtime `LoggingLevelSwitch` via `/api/settings/log-level` (auto-reset 0–120 min) |
 | | `IMcpActivityFeed` | Ring buffer (500) → SignalR broadcast |
 | | Telemetry | `System.Diagnostics` `Meter`/`ActivitySource` → OTLP/Prometheus opt-in |
-| Storage | SQLite `knowledgehub.db` | Catalog, documents, chunks (FTS5), vectors (default), knowledge graph, settings, eval runs, security events — beside the executable |
+| Storage | SQLite `knowledgehub.db` | Catalog, documents, chunks (FTS5), vectors (default), knowledge graph, settings, eval runs, security events, A2A tasks — beside the executable |
 | | PostgreSQL + pgvector | Optional vector backend (catalog stays in SQLite) — HNSW, `halfvec` storage, iterative filtered scans; host/external instances reached via `.env`-composed `POSTGRES_*` connection string |
 | | Redis | Optional `IDistributedCache` backend |
 | External | Upstream MCP proxies | DeepWiki (public + private), Firecrawl, Tavily, Context7 — secrets encrypted at rest |
@@ -197,7 +201,53 @@ sequenceDiagram
 - Rate limiting: LLM-spending tools (`ask_knowledge`, `agent_chat`, `search_knowledge`) and write tools (`write_knowledge`, `write_note`) are charged per partition; over-limit calls return `isError` + retry hint (no 429 in JSON-RPC).
 - Execution failures → `CallToolResult { isError: true }` — never break the session stream.
 
-## 3. Tool catalog
+## 3. A2A request flow (message/send)
+
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+sequenceDiagram
+    autonumber
+    participant A as A2A Agent
+    participant S as /a2a (JSON-RPC + HTTP+JSON)
+    participant T as EfA2aTaskStore
+    participant AG as KnowledgeHubA2AAgent
+    participant CAT as DynamicToolCatalog
+    participant DB as Catalog DB (SQLite/Postgres)
+    participant P as A2aPushNotifier
+    participant W as Agent webhook
+
+    A->>S: GET /.well-known/agent-card.json
+    S-->>A: Agent Card (skills, inputModes, pushNotifications:true)
+    A->>S: message/send (skill, contextId?, config?)
+    S->>S: Operational policy (aft_* scope) + llm rate limit
+    S->>T: CreateTask
+    T->>DB: INSERT task (persisted, restart-safe)
+    T-->>S: taskId
+    S->>AG: execute skill
+    AG->>CAT: resolve → tool provider
+    CAT-->>AG: result
+    AG->>T: TaskUpdater working/artifact events (OnProgress + 2s heartbeat)
+    T->>DB: UPDATE task
+    loop task update
+        T->>P: notify (if push configured)
+        P->>W: POST task payload + X-KH-Signature (HMAC)
+    end
+    AG-->>S: terminal state
+    P->>W: POST terminal state + signature
+    A->>S: tasks/get (taskId)
+    S->>T: GetTask
+    T->>DB: SELECT (EF)
+    T-->>S: task + artifacts + history
+    S-->>A: task
+```
+
+- Tasks persist in the catalog DB (`EfA2aTaskStore`) — `tasks/get` works across restarts/deploys; `MaintenanceBackgroundService` purges rows older than `A2a:TaskRetentionHours` (default 72 h).
+- Push webhooks come from `SendMessageConfiguration.PushNotificationConfig` or the push-config CRUD (`tasks/pushNotificationConfig/*`); destinations are screened by `EgressPolicyHandler` before POST (SSRF guard) and signed with `X-KH-Signature` (HMAC, key `evidence:master`, 3× exponential retry).
+- `contextId` is an A2A protocol identifier (hex-32) — intentionally **not** mapped to `agent_chat` threadIds.
+- Delegated writes (`write_knowledge`/`write_note` via A2A or MCP) stamp `origin: {channel, keyId, agentName, at}` frontmatter via `WriteOriginContext`.
+- Full version: `knowledge-hub_a2a_sequence.mmd`.
+
+## 4. Tool catalog
 
 | Tool | Type | Availability |
 |---|---|---|
@@ -217,7 +267,7 @@ sequenceDiagram
 
 Resources: `knowledge://sources` (catalog JSON) + `obsidian://{slug}/{path}` per indexed document.
 
-## 4. Deployment
+## 5. Deployment
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
@@ -248,6 +298,8 @@ flowchart LR
         R2["/api/*       → REST (auth)"]
         R3["/mcp         → Streamable HTTP"]
         R4["/mcp/sse|msg → legacy SSE"]
+        R4B["/a2a         → A2A JSON-RPC + HTTP+JSON"]
+        R4C["/.well-known/agent-card.json → Agent Card"]
         R5["/hubs/mcp    → SignalR"]
         R6["/metrics     → Prometheus (opt-in)"]
         R7["/healthz     → liveness"]
@@ -259,7 +311,7 @@ flowchart LR
     classDef net fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px,color:darkblue
     class EXE bin
     class DB,LOGV,EXT,CFG,PG2,RDS data
-    class R1,R2,R3,R4,R5,R6,R7 net
+    class R1,R2,R3,R4,R4B,R4C,R5,R6,R7 net
 ```
 
 - `docker compose up -d` builds `knowledgehub:latest`; `./data` persists SQLite + uploads, `./logs` persists the Serilog file sink (pre-create both as uid 1654); EF migrations run at startup (`DatabaseMigrator`).
@@ -267,7 +319,7 @@ flowchart LR
 - `dotnet publish -r <RID>` produces a single-file self-contained binary; `install.sh --host --systemd` installs a hardened systemd unit.
 - `backup.sh`/`restore.sh` cover SQLite + uploads.
 
-## 5. Configuration surface
+## 6. Configuration surface
 
 ```jsonc
 {

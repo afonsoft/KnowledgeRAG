@@ -5,7 +5,7 @@
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
         <mxCell id="grp-consumers" value="Consumers" style="swimlane;fontSize=14;fontStyle=1;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=1;" vertex="1" parent="1">
-          <mxGeometry x="40" y="40" width="340" height="240" as="geometry" />
+          <mxGeometry x="40" y="40" width="340" height="310" as="geometry" />
         </mxCell>
         <mxCell id="ui" value="Browser Admin&lt;br&gt;(Blazor WASM SPA / PWA)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="grp-consumers">
           <mxGeometry x="60" y="50" width="220" height="50" as="geometry" />
@@ -15,6 +15,9 @@
         </mxCell>
         <mxCell id="ag" value="MCP agents / LangGraph&lt;br&gt;(Streamable HTTP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="grp-consumers">
           <mxGeometry x="60" y="190" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a2aag" value="A2A agents (v1.0)&lt;br&gt;(JSON-RPC / HTTP+JSON)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="grp-consumers">
+          <mxGeometry x="60" y="255" width="220" height="50" as="geometry" />
         </mxCell>
         <mxCell id="grp-kh" value="KnowledgeHub — single Kestrel process (.NET 10)" style="swimlane;fontSize=14;fontStyle=1;fillColor=#d5e8d4;strokeColor=#82b366;rounded=1;" vertex="1" parent="1">
           <mxGeometry x="520" y="40" width="1015" height="419" as="geometry" />
@@ -76,10 +79,13 @@
         <mxCell id="feed" value="IMcpActivityFeed&lt;br&gt;ring buffer 500" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="grp-kh">
           <mxGeometry x="515" y="336" width="230" height="55" as="geometry" />
         </mxCell>
+        <mxCell id="a2a" value="A2A Server&lt;br&gt;/.well-known/agent-card.json&lt;br&gt;/a2a JSON-RPC + HTTP+JSON&lt;br&gt;EfA2aTaskStore · push webhooks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="grp-kh">
+          <mxGeometry x="760" y="336" width="230" height="55" as="geometry" />
+        </mxCell>
         <mxCell id="grp-stores" value="Storage" style="swimlane;fontSize=14;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;rounded=1;" vertex="1" parent="1">
           <mxGeometry x="40" y="499" width="1460" height="140" as="geometry" />
         </mxCell>
-        <mxCell id="sql" value="SQLite&lt;br&gt;knowledgehub.db&lt;br&gt;catalog + docs + vectors&lt;br&gt;+ graph + settings + jobs" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="grp-stores">
+        <mxCell id="sql" value="SQLite&lt;br&gt;knowledgehub.db&lt;br&gt;catalog + docs + vectors&lt;br&gt;+ graph + settings + jobs + a2a tasks" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="grp-stores">
           <mxGeometry x="60" y="40" width="300" height="80" as="geometry" />
         </mxCell>
         <mxCell id="pg" value="PostgreSQL + pgvector&lt;br&gt;(optional, HNSW / halfvec)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="grp-stores">
@@ -143,6 +149,12 @@
         <mxCell id="e-mcp-tel" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;" edge="1" parent="1" source="mcp" target="tel"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e-api-log" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;dashed=1;" edge="1" parent="1" source="api" target="log"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e-mcp-log" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;dashed=1;" edge="1" parent="1" source="mcp" target="log"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-a2aag-a2a" value="Agent Card + message/send" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;" edge="1" parent="1" source="a2aag" target="a2a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-a2a-a2aag" value="X-KH-Signature push" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;dashed=1;" edge="1" parent="1" source="a2a" target="a2aag"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-auth-a2a" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;" edge="1" parent="1" source="auth" target="a2a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rl-a2a" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;" edge="1" parent="1" source="rl" target="a2a"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-a2a-cat" value="delegates to live catalog" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;" edge="1" parent="1" source="a2a" target="cat"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-a2a-sql" value="task store" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;" edge="1" parent="1" source="a2a" target="sql"><mxGeometry relative="1" as="geometry" /></mxCell>
       </root>
     </mxGraphModel>
   </diagram>
