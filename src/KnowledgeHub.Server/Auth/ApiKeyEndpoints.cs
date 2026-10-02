@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using System.Text.Json;
+using KnowledgeHub.Server.Caching;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace KnowledgeHub.Server.Auth;
@@ -16,6 +18,7 @@ namespace KnowledgeHub.Server.Auth;
 public static class ApiKeyEndpoints
 {
     private const string ApiKeyNotFound = "api key não encontrada";
+    private const string ListScope = "list:apikeys";
 
     public static RouteGroupBuilder MapApiKeysApi(this IEndpointRouteBuilder app)
     {
@@ -49,10 +52,15 @@ public static class ApiKeyEndpoints
     }
 
     private static async Task<IResult> ListAsync(
-        HttpContext http, KnowledgeHubDbContext db, CancellationToken ct)
+        HttpContext http, KnowledgeHubDbContext db,
+        HybridCache cache, ILoggerFactory lf, CancellationToken ct)
     {
         var userId = CurrentUserId(http);
-        var keys = await db.ApiKeys
+        // Caller-scoped — the user id joins the discriminator so the shared
+        // version token never leaks one admin's key list to another.
+        var list = await EndpointCache.GetJsonAsync(cache, $"{ListScope}:u:{userId:N}", async c =>
+            {
+                var keys = await db.ApiKeys
             .Where(k => k.UserId == userId)
             .Select(k => new
             {
@@ -70,21 +78,23 @@ public static class ApiKeyEndpoints
                 k.SyncRateLimitWindowSeconds,
                 k.AllowWrite
             })
-            .ToListAsync(ct);
-        // SQLite cannot ORDER BY DateTimeOffset — sort client-side.
-        return Results.Ok(keys
-            .OrderByDescending(k => k.CreatedAt)
-            .Select(k =>
-            {
-                var scope = CallerScope.FromJson(k.Id, k.AllowedSourceIdsJson, k.AllowedToolsJson, k.AllowWrite);
-                return new ApiKeyDto(
-                    k.Id, k.Name, k.Prefix, k.CreatedAt, k.LastUsedAt, k.RevokedAt,
-                    scope.AllowedSourceIds?.ToList(), scope.AllowedTools?.ToList(),
-                    k.LlmRateLimitPermits, k.LlmRateLimitWindowSeconds,
-                    k.SyncRateLimitPermits, k.SyncRateLimitWindowSeconds,
-                    k.AllowWrite);
-            })
-            .ToList());
+                    .ToListAsync(c);
+                // SQLite cannot ORDER BY DateTimeOffset — sort client-side.
+                return keys
+                    .OrderByDescending(k => k.CreatedAt)
+                    .Select(k =>
+                    {
+                        var scope = CallerScope.FromJson(k.Id, k.AllowedSourceIdsJson, k.AllowedToolsJson, k.AllowWrite);
+                        return new ApiKeyDto(
+                            k.Id, k.Name, k.Prefix, k.CreatedAt, k.LastUsedAt, k.RevokedAt,
+                            scope.AllowedSourceIds?.ToList(), scope.AllowedTools?.ToList(),
+                            k.LlmRateLimitPermits, k.LlmRateLimitWindowSeconds,
+                            k.SyncRateLimitPermits, k.SyncRateLimitWindowSeconds,
+                            k.AllowWrite);
+                    })
+                    .ToList();
+            }, lf, ct, tags: [ListScope]);
+        return Results.Ok(list ?? []);
     }
 
     private static async Task<IResult> CreateAsync(
@@ -92,6 +102,9 @@ public static class ApiKeyEndpoints
         HttpContext http,
         KnowledgeHubDbContext db,
         IDataProtectionProvider dataProtection,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         var name = request.Name?.Trim() ?? "";
@@ -110,6 +123,7 @@ public static class ApiKeyEndpoints
         };
         db.ApiKeys.Add(key);
         await db.SaveChangesAsync(ct);
+        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
 
         return Results.Json(
             new ApiKeyCreatedDto(key.Id, key.Name, key.Prefix, secret),
@@ -151,7 +165,8 @@ public static class ApiKeyEndpoints
     }
 
     private static async Task<IResult> RevokeAsync(
-        Guid id, HttpContext http, KnowledgeHubDbContext db, CancellationToken ct)
+        Guid id, HttpContext http, KnowledgeHubDbContext db,
+        HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct)
     {
         var key = await db.ApiKeys
             .FirstOrDefaultAsync(k => k.Id == id && k.UserId == CurrentUserId(http), ct);
@@ -160,6 +175,7 @@ public static class ApiKeyEndpoints
 
         key.RevokedAt ??= DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
+        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
         return Results.NoContent();
     }
 
@@ -205,6 +221,9 @@ public static class ApiKeyEndpoints
         KnowledgeHubDbContext db,
         Mcp.IDynamicToolCatalog catalog,
         IMemoryCache memory,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         var key = await db.ApiKeys
@@ -242,6 +261,7 @@ public static class ApiKeyEndpoints
         await db.SaveChangesAsync(ct);
 
         memory.Remove(CallerScopeProvider.CacheKey(id));
+        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
         return Results.NoContent();
     }
 
@@ -255,6 +275,9 @@ public static class ApiKeyEndpoints
         HttpContext http,
         KnowledgeHubDbContext db,
         RateLimiting.IApiKeyRateLimitResolver resolver,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         var key = await db.ApiKeys
@@ -274,6 +297,7 @@ public static class ApiKeyEndpoints
         await db.SaveChangesAsync(ct);
 
         resolver.Invalidate();
+        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
         return Results.NoContent();
     }
 
@@ -286,6 +310,9 @@ public static class ApiKeyEndpoints
         HttpContext http,
         KnowledgeHubDbContext db,
         IMemoryCache memory,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         var key = await db.ApiKeys
@@ -297,6 +324,7 @@ public static class ApiKeyEndpoints
         await db.SaveChangesAsync(ct);
 
         memory.Remove(CallerScopeProvider.CacheKey(id));
+        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
         return Results.NoContent();
     }
 
@@ -306,6 +334,9 @@ public static class ApiKeyEndpoints
         HttpContext http,
         KnowledgeHubDbContext db,
         RateLimiting.IApiKeyRateLimitResolver resolver,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         var key = await db.ApiKeys
@@ -320,6 +351,7 @@ public static class ApiKeyEndpoints
         await db.SaveChangesAsync(ct);
 
         resolver.Invalidate();
+        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
         return Results.NoContent();
     }
 

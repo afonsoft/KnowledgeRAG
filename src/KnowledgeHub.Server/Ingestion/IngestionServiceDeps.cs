@@ -12,4 +12,5 @@ public sealed record IngestionServiceDeps(
     IDistributedCache Cache,
     Security.IContentSanitizer Sanitizer,
     Settings.IGraphSettingsService GraphSettings,
-    Settings.IEmbeddingSettingsService EmbeddingSettings);
+    Settings.IEmbeddingSettingsService EmbeddingSettings,
+    Microsoft.Extensions.Caching.Hybrid.HybridCache? Hybrid = null);

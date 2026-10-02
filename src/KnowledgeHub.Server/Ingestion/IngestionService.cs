@@ -31,6 +31,7 @@ public sealed class IngestionService : IIngestionService
     private readonly Settings.IEmbeddingSettingsService embeddingSettings;
     private readonly ILogger<IngestionService> logger;
     private readonly Caching.ICacheInvalidationBus? invalidationBus;
+    private readonly Microsoft.Extensions.Caching.Hybrid.HybridCache? hybrid;
 
     public IngestionService(IngestionServiceDeps deps, IConfiguration configuration,
         ILogger<IngestionService> logger, Caching.ICacheInvalidationBus? invalidationBus = null)
@@ -43,6 +44,7 @@ public sealed class IngestionService : IIngestionService
         sanitizer = deps.Sanitizer;
         graphSettings = deps.GraphSettings;
         embeddingSettings = deps.EmbeddingSettings;
+        hybrid = deps.Hybrid;
         this.logger = logger;
         this.invalidationBus = invalidationBus;
     }
@@ -503,6 +505,7 @@ public sealed class IngestionService : IIngestionService
                 stats.Failed++;
                 return;
             }
+            text = StripNul(text);
 
             // RF-007: a connector-supplied fingerprint (upstream change marker)
             // replaces the content hash for dedup — unchanged items arrive with
@@ -1119,16 +1122,21 @@ public sealed class IngestionService : IIngestionService
     {
         if (isDocFile)
         {
-            var content = await Connectors.DocumentFileConnector.ExtractTextAsync(
-                full, Path.GetExtension(full), cancellationToken) ?? "";
+            var content = StripNul(await Connectors.DocumentFileConnector.ExtractTextAsync(
+                full, Path.GetExtension(full), cancellationToken) ?? "");
             return content.Length == 0
                 ? null
                 : new FileContent(content, Path.GetFileNameWithoutExtension(full), content);
         }
-        var raw = await File.ReadAllTextAsync(full, cancellationToken);
+        var raw = StripNul(await File.ReadAllTextAsync(full, cancellationToken));
         var note = MarkdownNoteParser.Parse(raw, Path.GetFileName(full));
         return new FileContent(raw, note.Title, note.Body);
     }
+
+    /// <summary>Postgres <c>text</c>/<c>jsonb</c> reject U+0000 — binary-ish
+    /// content (extracted PDFs, .bin-adjacent files) would fail SaveChanges with
+    /// <c>invalid byte sequence 0x00</c>. Strip once at the write boundary.</summary>
+    private static string StripNul(string text) => text.Replace('\0', ' ');
 
     /// <summary>Chunks, scans, embeds and persists one file's document.</summary>
     private async Task IndexFileContentAsync(
@@ -1192,6 +1200,11 @@ public sealed class IngestionService : IIngestionService
         // holding the token in L1 must drop it now, not at L1 TTL expiry.
         if (invalidationBus is not null)
             await invalidationBus.PublishAsync("index-version", cancellationToken);
+        // Sync completion rewrote LastSyncAt/LastSyncStatus on sources —
+        // the cached list payloads must re-read on the next GET.
+        if (hybrid is not null)
+            await Caching.EndpointCache.EvictTagAsync(hybrid, invalidationBus,
+                "list:sources", (ILogger)logger, cancellationToken);
     }
 
     /// <summary>Best-effort: record a sync failure on the source in a fresh scope.</summary>

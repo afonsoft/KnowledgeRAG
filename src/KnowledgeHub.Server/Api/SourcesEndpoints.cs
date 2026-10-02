@@ -1,12 +1,18 @@
+using KnowledgeHub.Server.Caching;
 using KnowledgeHub.Server.Services;
 using KnowledgeHub.Shared.Contracts;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace KnowledgeHub.Server.Api;
 
-/// <summary>REST endpoints for knowledge-source CRUD + lifecycle (SPEC-02 RF-002/RF-003).</summary>
+/// <summary>REST endpoints for knowledge-source CRUD + lifecycle (SPEC-02 RF-002/RF-003).
+/// Reads ride the shared <c>list:sources</c> HybridCache tag — any mutation evicts the scope
+/// so every replica's parameterized entries miss on the next read.</summary>
 public static class SourcesEndpoints
 {
     private const string SourceNotFound = "Source not found";
+    internal const string ListScope = "list:sources";
+
     public static RouteGroupBuilder MapSourcesApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/sources");
@@ -20,7 +26,8 @@ public static class SourcesEndpoints
 
     private static void MapSourceCrudEndpoints(RouteGroupBuilder group)
     {
-        group.MapGet("/", async (IKnowledgeSourceService svc, string? type, bool? active, CancellationToken ct) =>
+        group.MapGet("/", async (IKnowledgeSourceService svc, string? type, bool? active,
+            HybridCache cache, ILoggerFactory lf, CancellationToken ct) =>
         {
             SourceType? parsed = null;
             if (type is not null)
@@ -29,37 +36,53 @@ public static class SourcesEndpoints
                     return Results.BadRequest(new { error = $"Invalid source type '{type}'" });
                 parsed = t;
             }
-            return Results.Ok(await svc.ListAsync(parsed, active, ct));
+            var list = await EndpointCache.GetJsonAsync(cache, $"{ListScope}:{parsed}:{active}",
+                async c => await svc.ListAsync(parsed, active, c), lf, ct, tags: [ListScope]);
+            return Results.Ok(list ?? []);
         });
 
-        group.MapGet("/{id:guid}", async (IKnowledgeSourceService svc, Guid id, CancellationToken ct) =>
-            await svc.GetAsync(id, ct) is { } dto ? Results.Ok(dto) : Results.NotFound(new { error = SourceNotFound }));
+        group.MapGet("/{id:guid}", async (IKnowledgeSourceService svc, Guid id,
+            HybridCache cache, ILoggerFactory lf, CancellationToken ct) =>
+            await EndpointCache.GetJsonAsync(cache, $"{ListScope}:id:{id}",
+                async c => await svc.GetAsync(id, c), lf, ct, tags: [ListScope]) is { } dto
+                ? Results.Ok(dto)
+                : Results.NotFound(new { error = SourceNotFound }));
 
-        group.MapPost("/", async (IKnowledgeSourceService svc, CreateKnowledgeSourceRequest request, CancellationToken ct) =>
+        group.MapPost("/", async (IKnowledgeSourceService svc, CreateKnowledgeSourceRequest request,
+            HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct) =>
         {
             var result = await svc.CreateAsync(request, ct);
-            return result.ErrorStatus is { } status
-                ? Results.Json(new { error = result.Error }, statusCode: status)
-                : Results.Created($"/api/sources/{result.Value!.Id}", result.Value);
+            if (result.ErrorStatus is { } status)
+                return Results.Json(new { error = result.Error }, statusCode: status);
+            await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
+            return Results.Created($"/api/sources/{result.Value!.Id}", result.Value);
         });
 
-        group.MapPut("/{id:guid}", async (IKnowledgeSourceService svc, Guid id, UpdateKnowledgeSourceRequest request, CancellationToken ct) =>
-            MapResult(await svc.UpdateAsync(id, request, ct)));
+        group.MapPut("/{id:guid}", async (IKnowledgeSourceService svc, Guid id, UpdateKnowledgeSourceRequest request,
+            HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct) =>
+            await MapResultAsync(svc.UpdateAsync(id, request, ct), cache, bus, lf, ct));
 
-        group.MapDelete("/{id:guid}", async (IKnowledgeSourceService svc, Guid id, CancellationToken ct) =>
-            MapResult(await svc.DeleteAsync(id, ct)));
+        group.MapDelete("/{id:guid}", async (IKnowledgeSourceService svc, Guid id,
+            HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct) =>
+            await MapResultAsync(svc.DeleteAsync(id, ct), cache, bus, lf, ct));
     }
 
     private static void MapSourceLifecycleEndpoints(RouteGroupBuilder group)
     {
-        group.MapPost("/{id:guid}/activate", (IKnowledgeSourceService svc, Guid id, CancellationToken ct) =>
-            SetActive(svc, id, true, ct));
+        group.MapPost("/{id:guid}/activate", (IKnowledgeSourceService svc, Guid id,
+            HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct) =>
+            SetActive(svc, id, true, cache, bus, lf, ct));
 
-        group.MapPost("/{id:guid}/deactivate", (IKnowledgeSourceService svc, Guid id, CancellationToken ct) =>
-            SetActive(svc, id, false, ct));
+        group.MapPost("/{id:guid}/deactivate", (IKnowledgeSourceService svc, Guid id,
+            HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct) =>
+            SetActive(svc, id, false, cache, bus, lf, ct));
 
-        group.MapGet("/{id:guid}/documents", async (IKnowledgeSourceService svc, Guid id, CancellationToken ct) =>
-            await svc.ListDocumentsAsync(id, ct) is { } docs ? Results.Ok(docs) : Results.NotFound(new { error = SourceNotFound }));
+        group.MapGet("/{id:guid}/documents", async (IKnowledgeSourceService svc, Guid id,
+            HybridCache cache, ILoggerFactory lf, CancellationToken ct) =>
+            await EndpointCache.GetJsonAsync(cache, $"{ListScope}:docs:{id}",
+                async c => await svc.ListDocumentsAsync(id, c), lf, ct, tags: [ListScope]) is { } docs
+                ? Results.Ok(docs)
+                : Results.NotFound(new { error = SourceNotFound }));
     }
 
     private static void MapSourceJobEndpoints(RouteGroupBuilder group)
@@ -111,11 +134,17 @@ public static class SourcesEndpoints
         }
     }
 
-    private static async Task<IResult> SetActive(IKnowledgeSourceService svc, Guid id, bool active, CancellationToken ct) =>
-        MapResult(await svc.SetActiveAsync(id, active, ct));
+    private static Task<IResult> SetActive(IKnowledgeSourceService svc, Guid id, bool active,
+        HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct) =>
+        MapResultAsync(svc.SetActiveAsync(id, active, ct), cache, bus, lf, ct);
 
-    private static IResult MapResult<T>(ServiceResult<T> result) =>
-        result.ErrorStatus is { } status
-            ? Results.Json(new { error = result.Error }, statusCode: status)
-            : Results.Ok(result.Value);
+    private static async Task<IResult> MapResultAsync<T>(Task<ServiceResult<T>> resultTask,
+        HybridCache cache, ICacheInvalidationBus bus, ILoggerFactory lf, CancellationToken ct)
+    {
+        var result = await resultTask;
+        if (result.ErrorStatus is { } status)
+            return Results.Json(new { error = result.Error }, statusCode: status);
+        await EndpointCache.EvictTagAsync(cache, bus, ListScope, lf, ct);
+        return Results.Ok(result.Value);
+    }
 }

@@ -97,7 +97,14 @@ public static class KnowledgeHubServiceCollectionExtensions
         // from the EmbeddingSettings store over env. Consumers still inject
         // IEmbeddingProvider — a delegating facade forwards to resolver.Current
         // so /settings edits swap the provider without restart.
-        services.AddSingleton<Settings.IEmbeddingSettingsService, Settings.EmbeddingSettingsService>();
+        services.AddSingleton<Settings.IEmbeddingSettingsService>(sp => new Settings.EmbeddingSettingsService(
+            sp.GetRequiredService<IOptions<Embeddings.EmbeddingOptions>>(),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<Settings.IIntegrationSecretStore>(),
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<ILogger<Settings.EmbeddingSettingsService>>(),
+            sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<Caching.ICacheInvalidationBus>()));
         services.AddSingleton<IEmbeddingProviderResolver, EmbeddingProviderResolver>();
         services.AddSingleton<IEmbeddingProvider>(sp =>
             new DelegatingEmbeddingProvider(sp.GetRequiredService<IEmbeddingProviderResolver>()));
@@ -300,7 +307,7 @@ public static class KnowledgeHubServiceCollectionExtensions
                 return new AnswerService(
                     sp.GetService<Microsoft.Extensions.AI.IChatClient>(),
                     sp.GetRequiredService<Settings.IApiKeyChatSettingsService>().GetEffectiveOptions(keyId),
-                    sp.GetRequiredService<IDistributedCache>(),
+                    sp.GetRequiredService<Caching.L1L2Cache>(),
                     sp.GetRequiredService<IConfiguration>(),
                     sp.GetRequiredService<ILogger<AnswerService>>(),
                     sp.GetRequiredService<Evaluation.IRagEvaluationEnqueuer>());
@@ -308,7 +315,7 @@ public static class KnowledgeHubServiceCollectionExtensions
             return new AnswerService(
                 sp.GetService<Microsoft.Extensions.AI.IChatClient>(),
                 sp.GetRequiredService<Settings.IChatSettingsService>().GetEffectiveOptions(),
-                sp.GetRequiredService<IDistributedCache>(),
+                sp.GetRequiredService<Caching.L1L2Cache>(),
                 sp.GetRequiredService<IConfiguration>(),
                 sp.GetRequiredService<ILogger<AnswerService>>(),
                 sp.GetRequiredService<Evaluation.IRagEvaluationEnqueuer>());
@@ -389,15 +396,43 @@ public static class KnowledgeHubServiceCollectionExtensions
 
     private static void AddRetrieval(IServiceCollection services)
     {
+        // Extras were never registered — staging/vector cleanup on source
+        // delete and the index-version bump were dead code in production.
+        services.AddScoped(sp => new Services.KnowledgeSourceServiceExtras(
+            sp.GetRequiredService<Ingestion.Staging.IStagingStorageService>(),
+            sp.GetRequiredService<VectorStore.IVectorStore>(),
+            sp.GetRequiredService<ILogger<Services.KnowledgeSourceService>>(),
+            sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<Caching.ICacheInvalidationBus>()));
         services.AddScoped<IKnowledgeSourceService, KnowledgeSourceService>();
         services.AddScoped<Search.ILexicalSearchService, Search.LexicalSearchService>();
-        services.AddScoped<ISearchService, SearchService>();
+        services.AddScoped<ISearchService>(sp => new SearchService(
+            sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
+            sp.GetRequiredService<Embeddings.IEmbeddingProvider>(),
+            sp.GetRequiredService<Embeddings.IEmbeddingProviderResolver>(),
+            sp.GetRequiredService<VectorStore.IVectorStore>(),
+            sp.GetRequiredService<Search.ILexicalSearchService>(),
+            sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<Search.IQueryRewriter>(),
+            sp.GetRequiredService<Search.IQueryExpander>(),
+            sp.GetRequiredService<Graph.GraphEntityLinker>(),
+            sp.GetRequiredService<Search.IReranker>(),
+            sp.GetRequiredService<Auth.ICallerScopeProvider>(),
+            sp.GetRequiredService<Settings.IGraphSettingsService>(),
+            sp.GetRequiredService<ILogger<SearchService>>()));
         // SPEC-20260923-source-authorization RF-002: per-request caller scope.
         services.AddScoped<Auth.ICallerScopeProvider, Auth.CallerScopeProvider>();
         // SPEC-20260923-retrieval-quality: opt-in query rewriting + reranker.
-        services.AddScoped<Search.IQueryRewriter, Search.LlmQueryRewriter>();
+        services.AddScoped<Search.IQueryRewriter>(sp => new Search.LlmQueryRewriter(
+            sp, sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<ILogger<Search.LlmQueryRewriter>>()));
         // SPEC-20260924-query-expansion-hyde: multi-query + HyDE (opt-in).
-        services.AddScoped<Search.IQueryExpander, Search.LlmQueryExpander>();
+        services.AddScoped<Search.IQueryExpander>(sp => new Search.LlmQueryExpander(
+            sp, sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<ILogger<Search.LlmQueryExpander>>()));
         services.AddScoped<Search.IReranker>(sp =>
             sp.GetRequiredService<IConfiguration>().GetValue("Search:Rerank:Enabled", false)
                 && sp.GetService<Microsoft.Extensions.AI.IChatClient>() is { } chat
@@ -436,7 +471,15 @@ public static class KnowledgeHubServiceCollectionExtensions
 
     private static void AddIngestion(IServiceCollection services)
     {
-        services.AddSingleton<Ingestion.IngestionServiceDeps>();
+        services.AddSingleton(sp => new Ingestion.IngestionServiceDeps(
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            sp.GetRequiredService<Embeddings.IEmbeddingProvider>(),
+            sp.GetRequiredService<IEnumerable<Ingestion.Connectors.ISourceConnector>>(),
+            sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<Security.IContentSanitizer>(),
+            sp.GetRequiredService<Settings.IGraphSettingsService>(),
+            sp.GetRequiredService<Settings.IEmbeddingSettingsService>(),
+            sp.GetService<Microsoft.Extensions.Caching.Hybrid.HybridCache>()));
         services.AddSingleton<IngestionService>();
         services.AddSingleton<IIngestionService>(sp => sp.GetRequiredService<IngestionService>());
         // SPEC-20260924-async-ingestion-queue RF-001/RF-002: bounded channel +
@@ -573,16 +616,19 @@ public static class KnowledgeHubServiceCollectionExtensions
             // SPEC-20260925-distributed-invalidation-pubsub RF-001: Redis pub/sub
             // bus + the subscriber that evicts local L1 entries on remote events.
             services.AddSingleton<Caching.ICacheInvalidationBus, Caching.RedisInvalidationBus>();
-            services.AddHostedService<Caching.InvalidationSubscriber>();
-            var l1Enabled = configuration.GetValue(
-                $"{Configuration.CacheOptions.SectionName}:L1Enabled", true);
-            var l1MaxTtl = TimeSpan.FromMinutes(configuration.GetValue(
-                $"{Configuration.CacheOptions.SectionName}:L1MaxTtlMinutes", 5));
+            services.AddHostedService(sp => new Caching.InvalidationSubscriber(
+                sp.GetRequiredService<Caching.ICacheInvalidationBus>(),
+                sp.GetRequiredService<Caching.L1L2Cache>(),
+                sp.GetRequiredService<ILogger<Caching.InvalidationSubscriber>>(),
+                sp.GetService<Caching.ICacheManagerService>(),
+                sp.GetService<Settings.IEmbeddingSettingsService>(),
+                sp.GetService<Microsoft.Extensions.Caching.Hybrid.HybridCache>()));
 
-            // IDistributedCache = L1L2Cache(IMemoryCache → RedisCache) when L1 is
-            // on, plain RedisCache otherwise (AddSingleton factory instead of
-            // AddStackExchangeRedisCache so we can wrap without Scrutor).
-            services.AddSingleton<IDistributedCache>(sp =>
+            // IDistributedCache = the RAW L2 backend (Redis). The in-process
+            // tiers layer on top: L1L2Cache for the SafeCache-era paths and
+            // HybridCache for EndpointCache. (AddSingleton factory instead of
+            // AddStackExchangeRedisCache so the multiplexer options apply.)
+            services.AddSingleton<IDistributedCache>(_ =>
             {
                 var redisOpts = new Microsoft.Extensions.Caching.StackExchangeRedis.RedisCacheOptions
                 {
@@ -601,18 +647,8 @@ public static class KnowledgeHubServiceCollectionExtensions
                     // If parsing fails fall back to connection string only
                 }
 
-                IDistributedCache inner =
-                    new Microsoft.Extensions.Caching.StackExchangeRedis.RedisCache(
-                        Microsoft.Extensions.Options.Options.Create(redisOpts));
-
-                // SPEC-20260925-hybrid-cache-l1l2 RF-001: in-process L1 in front
-                // of Redis — hits no longer pay a network RTT; L1 TTL capped by
-                // L1MaxTtlMinutes (bounded staleness until pub/sub, wave 4).
-                return l1Enabled
-                    ? new Caching.L1L2Cache(
-                        sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
-                        inner, l1MaxTtl)
-                    : inner;
+                return new Microsoft.Extensions.Caching.StackExchangeRedis.RedisCache(
+                    Microsoft.Extensions.Options.Options.Create(redisOpts));
             });
         }
         else
@@ -620,8 +656,40 @@ public static class KnowledgeHubServiceCollectionExtensions
             services.AddDistributedMemoryCache();
             services.AddSingleton<Caching.ICacheInvalidationBus, Caching.NoopInvalidationBus>();
         }
-        services.AddSingleton<Caching.ICacheManagerService, Caching.CacheManagerService>();
-        services.AddSingleton<Caching.IToolCacheService, Caching.ToolCacheService>();
+
+        var l1Cap = configuration.GetValue(
+            $"{Configuration.CacheOptions.SectionName}:L1Enabled", true)
+            ? TimeSpan.FromMinutes(configuration.GetValue(
+                $"{Configuration.CacheOptions.SectionName}:L1MaxTtlMinutes", 5))
+            : TimeSpan.Zero;
+
+        // SPEC-20260925-hybrid-cache-l1l2 RF-001: in-process L1 in front of
+        // the L2 backend for the SafeCache-era paths — registered as the
+        // concrete type now that IDistributedCache is the raw backend; hits
+        // no longer pay a network RTT and per-key locks collapse stampedes.
+        services.AddSingleton(sp => new Caching.L1L2Cache(
+            sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+            sp.GetRequiredService<IDistributedCache>(), l1Cap,
+            sp.GetService<ILogger<Caching.L1L2Cache>>()));
+
+        // Microsoft.Extensions.Caching.Hybrid: endpoint-level response cache
+        // (settings describes, list payloads, MCP/A2A metadata) — L1 serves
+        // live objects with zero serialization, the registered
+        // IDistributedCache is its L2, and RemoveByTagAsync drives grouped
+        // invalidation instead of hand-rolled version tokens.
+        services.AddHybridCache();
+
+        services.AddSingleton<Caching.ICacheManagerService>(sp => new Caching.CacheManagerService(
+            sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<IOptions<Configuration.CacheOptions>>(),
+            sp.GetRequiredService<ILogger<Caching.CacheManagerService>>(),
+            sp.GetService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+            sp.GetService<StackExchange.Redis.IConnectionMultiplexer>(),
+            sp.GetService<Caching.ICacheInvalidationBus>()));
+        services.AddSingleton<Caching.IToolCacheService>(sp => new Caching.ToolCacheService(
+            sp.GetRequiredService<Caching.L1L2Cache>(),
+            sp.GetRequiredService<IOptions<Configuration.CacheOptions>>(),
+            sp.GetRequiredService<ILogger<Caching.ToolCacheService>>()));
     }
 
     private static void AddMcpServer(IServiceCollection services)
