@@ -100,7 +100,7 @@ public sealed class TemporalGraphRetrieverTests
         // node browsing, entity lookup, episode listing all filtered.
         var (conn, db, _, store) = await SeedAsync();
         await using var _ = conn;
-        var docA = Doc(db, out var sourceA);
+        Doc(db, out var sourceA);
         var docB = Doc(db, out var sourceB);
         var a = Node("alpha");
         var b = Node("beta");

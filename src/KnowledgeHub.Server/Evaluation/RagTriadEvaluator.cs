@@ -65,9 +65,8 @@ public sealed class RagTriadEvaluator : IRagTriadEvaluator
         if (clauses.Count == 0) return 1.0;
 
         var supported = 0;
-        foreach (var clause in clauses)
+        foreach (var tokens in clauses.Select(TokenSet))
         {
-            var tokens = TokenSet(clause);
             if (tokens.Count == 0) { supported++; continue; }
 
             var numbers = tokens.Where(t => t.Any(char.IsDigit)).ToList();

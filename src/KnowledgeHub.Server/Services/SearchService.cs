@@ -490,10 +490,8 @@ public sealed class SearchService( // NOSONAR S107 — DI resolve o ctor flat; c
                     scope, conversationContext, degraded, level), ct);
             var penalty = Math.Pow(RelaxationPenalty, level);
             var added = 0;
-            foreach (var h in hits)
+            foreach (var h in hits.Where(h => h.ChunkId is not { } cid || seen.Add(cid)))
             {
-                if (h.ChunkId is { } cid && !seen.Add(cid))
-                    continue;
                 relaxed.Add(h with
                 {
                     IsRelaxed = true,

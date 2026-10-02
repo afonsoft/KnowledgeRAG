@@ -18,7 +18,7 @@ public class AssistantSettingsApiTests : IClassFixture<AssistantSettingsApiTests
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-asst-{Guid.NewGuid():N}.db")
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-asst-{Guid.NewGuid():N}.db")
                 }));
         }
     }

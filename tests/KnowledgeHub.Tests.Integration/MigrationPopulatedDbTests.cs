@@ -52,7 +52,7 @@ public sealed class MigrationPopulatedDbTests
     [Fact]
     public async Task Sqlite_Migration_OverPopulatedKgNodes_PreservesRows()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"kh-mig-{Guid.NewGuid():N}.db");
+        var path = Path.Join(Path.GetTempPath(), $"kh-mig-{Guid.NewGuid():N}.db");
         try
         {
             var boundary = (string?)null;
