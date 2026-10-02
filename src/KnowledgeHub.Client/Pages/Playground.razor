@@ -642,45 +642,7 @@
             await foreach (var msg in Streaming.StreamAsync(path, args))
             {
                 received = true;
-                var data = msg.Data.TryGetProperty("data", out var d) ? d : msg.Data;
-                switch (msg.Event)
-                {
-                    case "token":
-                        _agentAnswerSb.Append(data.GetProperty("delta").GetString());
-                        _structuredAnswer = _agentAnswerSb.ToString();
-                        break;
-                    case "tool_start":
-                        _agentSteps.Add(new AgentStepModel
-                        {
-                            Iteration = _agentSteps.Count + 1,
-                            Tool = data.TryGetProperty("tool", out var ts) ? ts.GetString() ?? "" : "",
-                            ArgsSummary = data.TryGetProperty("args", out var aa) ? aa.GetString() ?? "" : ""
-                        });
-                        break;
-                    case "tool_end":
-                        var last = _agentSteps.LastOrDefault();
-                        if (last is not null)
-                        {
-                            _agentSteps[^1] = last with
-                            {
-                                IsError = IsTrue(data, "isError"),
-                                ElapsedMs = data.TryGetProperty("elapsedMs", out var em) ? em.GetDouble() : 0
-                            };
-                        }
-                        break;
-                    case "awaiting_approval":
-                        _agentAnswerSb.Append($"\n\n⏳ Aguardando aprovação da tool '{data.GetProperty("tool").GetString()}' — veja /approvals.");
-                        _structuredAnswer = _agentAnswerSb.ToString();
-                        break;
-                    case "done":
-                        (_structuredAnswer, _citations, _agentSteps, _agentIterations, _agentLatencyMs) =
-                            ParseStructuredContent(data);
-                        break;
-                    case "error":
-                        _isError = true;
-                        _texts = [data.TryGetProperty("message", out var m) ? m.GetString() ?? "stream error" : "stream error"];
-                        break;
-                }
+                HandleStreamEvent(msg);
                 StateHasChanged();
             }
             _elapsedMs = sw.Elapsed.TotalMilliseconds;
@@ -701,6 +663,50 @@
         finally
         {
             _running = false;
+        }
+    }
+
+    /// <summary>Applies one SSE event to the streaming UI state.</summary>
+    private void HandleStreamEvent(StreamingApiClient.SseMessage msg)
+    {
+        var data = msg.Data.TryGetProperty("data", out var d) ? d : msg.Data;
+        switch (msg.Event)
+        {
+            case "token":
+                _agentAnswerSb.Append(data.GetProperty("delta").GetString());
+                _structuredAnswer = _agentAnswerSb.ToString();
+                break;
+            case "tool_start":
+                _agentSteps.Add(new AgentStepModel
+                {
+                    Iteration = _agentSteps.Count + 1,
+                    Tool = data.TryGetProperty("tool", out var ts) ? ts.GetString() ?? "" : "",
+                    ArgsSummary = data.TryGetProperty("args", out var aa) ? aa.GetString() ?? "" : ""
+                });
+                break;
+            case "tool_end":
+                var last = _agentSteps.LastOrDefault();
+                if (last is not null)
+                {
+                    _agentSteps[^1] = last with
+                    {
+                        IsError = IsTrue(data, "isError"),
+                        ElapsedMs = data.TryGetProperty("elapsedMs", out var em) ? em.GetDouble() : 0
+                    };
+                }
+                break;
+            case "awaiting_approval":
+                _agentAnswerSb.Append($"\n\n⏳ Aguardando aprovação da tool '{data.GetProperty("tool").GetString()}' — veja /approvals.");
+                _structuredAnswer = _agentAnswerSb.ToString();
+                break;
+            case "done":
+                (_structuredAnswer, _citations, _agentSteps, _agentIterations, _agentLatencyMs) =
+                    ParseStructuredContent(data);
+                break;
+            case "error":
+                _isError = true;
+                _texts = [data.TryGetProperty("message", out var m) ? m.GetString() ?? "stream error" : "stream error"];
+                break;
         }
     }
 

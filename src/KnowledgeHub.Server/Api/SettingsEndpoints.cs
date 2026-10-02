@@ -47,47 +47,9 @@ public static class SettingsEndpoints
         // SPEC-20260926-integration-toggle: runtime on/off per integration —
         // disabled providers contribute no tools to the MCP catalog and their
         // upstream session is reset.
-        group.MapPut("/integrations/{provider}/enabled", async (
-            string provider,
-            SetIntegrationEnabledRequest? body,
-            IIntegrationStateService state,
-            IServiceProvider services,
-            CancellationToken ct) =>
-        {
-            if (!IntegrationProviders.All.Contains(provider))
-                return Results.NotFound(new { error = $"unknown provider '{provider}'" });
-            if (body is null)
-                return Results.BadRequest(new { error = "enabled is required" });
+        group.MapPut("/integrations/{provider}/enabled", SetIntegrationEnabledAsync);
 
-            await state.SetEnabledAsync(provider, body.Enabled, ct);
-            await ResetProviderAsync(provider, services, ct);
-            return Results.NoContent();
-        });
-
-        group.MapPut("/integrations/{provider}", async (
-            string provider,
-            SetIntegrationKeyRequest? body,
-            IIntegrationSecretStore store,
-            IServiceProvider services,
-            CancellationToken ct) =>
-        {
-            if (!IntegrationProviders.All.Contains(provider))
-                return Results.NotFound(new { error = $"unknown provider '{provider}'" });
-
-            var apiKey = body?.ApiKey?.Trim();
-            if (string.IsNullOrWhiteSpace(apiKey))
-                return Results.BadRequest(new { error = "apiKey is required" });
-            if (provider == IntegrationProviders.Firecrawl && !apiKey.StartsWith("fc-", StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "Firecrawl API keys start with 'fc-'" });
-            if (provider == IntegrationProviders.Tavily && !apiKey.StartsWith("tvly-", StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "Tavily API keys start with 'tvly-'" });
-            if (provider == IntegrationProviders.Context7 && !apiKey.StartsWith("ctx7sk-", StringComparison.Ordinal))
-                return Results.BadRequest(new { error = "Context7 API keys start with 'ctx7sk-'" });
-
-            await store.SetAsync(provider, apiKey, ct);
-            await ResetProviderAsync(provider, services, ct);
-            return Results.NoContent();
-        });
+        group.MapPut("/integrations/{provider}", SetIntegrationKeyAsync);
 
         group.MapDelete("/integrations/{provider}", async (
             string provider,
@@ -167,115 +129,9 @@ public static class SettingsEndpoints
         // provider (provider + endpoint + model + dims + chunking + API key)
         // editable from /settings; the resolver swaps the live provider on
         // signature change — no restart, but warn about dims/model drift.
-        var embeddingProviders = new[] { "deterministic", "ollama", "openai", "onnx" };
-        group.MapGet("/embeddings", async (
-            IEmbeddingSettingsService emb,
-            Embeddings.IEmbeddingProviderResolver resolver,
-            VectorStore.IVectorStore store,
-            CancellationToken ct) =>
-        {
-            var dto = await emb.DescribeAsync(ct);
-            // SPEC-20260926-embeddings-runtime-coherence RF-002: a broken stored
-            // config (e.g. missing ONNX model) must never sink the GET — the
-            // editor needs to render to offer "Restaurar ambiente".
-            string? stampedId = null, providerError = null;
-            try
-            {
-                stampedId = resolver.Current.ModelId;
-            }
-            catch (Exception ex)
-            {
-                var b = ex.GetBaseException();
-                providerError = $"{b.GetType().Name}: {b.Message}";
-                if (providerError.Length > 300) providerError = providerError[..300];
-            }
-            return Results.Ok(dto with
-            {
-                StampedModelId = stampedId,
-                ProviderError = providerError,
-                StoreDimensions = store.Dimensions
-            });
-        });
+        group.MapGet("/embeddings", GetEmbeddingSettingsAsync);
 
-        group.MapPut("/embeddings", async (
-            SaveEmbeddingSettingsRequest? body,
-            IEmbeddingSettingsService emb,
-            VectorStore.IVectorStore store,
-            CancellationToken ct) =>
-        {
-            if (body is null)
-                return Results.BadRequest(new { error = BodyRequired });
-            var provider = body.Provider?.Trim().ToLowerInvariant();
-            if (!embeddingProviders.Contains(provider))
-                return Results.BadRequest(new { error = $"provider must be one of: {string.Join(", ", embeddingProviders)}" });
-            if (!string.IsNullOrWhiteSpace(body.Endpoint) && !IsHttpUri(body.Endpoint.Trim()))
-                return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
-            if (body.Dimensions is < 64 or > 4096)
-                return Results.BadRequest(new { error = "dimensions must be 64..4096" });
-            // SPEC-20260926-embeddings-runtime-coherence RF-006: overlap cap —
-            // >~40% of the chunk degrades piece coherence; max 2000 regardless
-            // of maxTokens, and always < maxTokens.
-            if (body.OverlapTokens is < 0 or > 2000)
-                return Results.BadRequest(new { error = "overlapTokens must be 0..2000" });
-            if (body.MaxTokens is < 100 or > 4000)
-                return Results.BadRequest(new { error = "maxTokens must be 100..4000" });
-            if (body.MaxTokens is { } mt && body.OverlapTokens is { } ov && ov >= mt)
-                return Results.BadRequest(new { error = "overlapTokens must be smaller than maxTokens" });
-            // SPEC-20260926-embeddings-runtime-coherence RF-001: vector schemas
-            // (sqlite-vec/pgvector) are compiled at startup — dims ≠ store dims
-            // can never be accepted until env + restart + reindex.
-            if (store.Dimensions is { } storeDims && body.Dimensions != storeDims)
-                return Results.BadRequest(new
-                {
-                    error = $"dimensions {body.Dimensions} != vector store {storeDims} — " +
-                            "the index schema is fixed at startup; set Embeddings:Dimensions " +
-                            "in the environment, restart, then run reindex"
-                });
-            // SPEC-20260926-embeddings-runtime-coherence RF-002: fail fast on an
-            // ONNX path that cannot possibly load instead of persisting a
-            // config that breaks the provider at runtime.
-            if (provider == "onnx" && !string.IsNullOrWhiteSpace(body.ModelPath))
-            {
-                var dir = body.ModelPath.Trim();
-                if (!Directory.Exists(dir))
-                    return Results.BadRequest(new { error = $"modelPath '{dir}' does not exist" });
-            }
-            // RF-001 (SPEC-20260926-embeddings-swap-safety): validate against the
-            // MODEL's actual output width — the store check above only compares
-            // request vs schema; a 512-dim ONNX file accepted under
-            // Dimensions=384 would silently produce garbage vectors.
-            if (provider == "onnx" && body.Dimensions is { } requestedDims)
-            {
-                Embeddings.OnnxEmbeddingProvider? probe = null;
-                try
-                {
-                    probe = Embeddings.OnnxEmbeddingProvider.Load(body.ModelPath);
-                }
-                catch (Embeddings.EmbeddingProviderException ex)
-                {
-                    return Results.BadRequest(new { error = ex.Message });
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    // RF-603: a corrupt model.onnx throws native ONNX/tokenizer
-                    // exceptions, not EmbeddingProviderException — still a 400,
-                    // never a 500 on a settings save.
-                    return Results.BadRequest(new { error = $"onnx model failed to load: {ex.GetBaseException().Message}" });
-                }
-                using (probe)
-                {
-                    if (probe.Dimensions != requestedDims)
-                        return Results.BadRequest(new
-                        {
-                            error = $"dimensions {requestedDims} != onnx model output {probe.Dimensions} — " +
-                                    "the model file defines the vector size"
-                        });
-                }
-            }
-
-            await emb.SaveAsync(body with { Provider = provider! }, ct);
-            return Results.NoContent();
-        });
+        group.MapPut("/embeddings", SaveEmbeddingSettingsAsync);
 
         group.MapDelete("/embeddings/apikey", async (
             IEmbeddingSettingsService emb,
@@ -588,6 +444,176 @@ public static class SettingsEndpoints
                 break;
         }
         await services.GetRequiredService<Mcp.IToolCatalogChangeNotifier>().NotifyToolsChangedAsync(ct);
+    }
+
+    private static readonly string[] EmbeddingProviders = ["deterministic", "ollama", "openai", "onnx"];
+
+    private static async Task<IResult> SetIntegrationEnabledAsync(
+        string provider,
+        SetIntegrationEnabledRequest? body,
+        IIntegrationStateService state,
+        IServiceProvider services,
+        CancellationToken ct)
+    {
+        if (!IntegrationProviders.All.Contains(provider))
+            return Results.NotFound(new { error = $"unknown provider '{provider}'" });
+        if (body is null)
+            return Results.BadRequest(new { error = "enabled is required" });
+
+        await state.SetEnabledAsync(provider, body.Enabled, ct);
+        await ResetProviderAsync(provider, services, ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> SetIntegrationKeyAsync(
+        string provider,
+        SetIntegrationKeyRequest? body,
+        IIntegrationSecretStore store,
+        IServiceProvider services,
+        CancellationToken ct)
+    {
+        if (!IntegrationProviders.All.Contains(provider))
+            return Results.NotFound(new { error = $"unknown provider '{provider}'" });
+
+        var apiKey = body?.ApiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return Results.BadRequest(new { error = "apiKey is required" });
+        if (provider == IntegrationProviders.Firecrawl && !apiKey.StartsWith("fc-", StringComparison.Ordinal))
+            return Results.BadRequest(new { error = "Firecrawl API keys start with 'fc-'" });
+        if (provider == IntegrationProviders.Tavily && !apiKey.StartsWith("tvly-", StringComparison.Ordinal))
+            return Results.BadRequest(new { error = "Tavily API keys start with 'tvly-'" });
+        if (provider == IntegrationProviders.Context7 && !apiKey.StartsWith("ctx7sk-", StringComparison.Ordinal))
+            return Results.BadRequest(new { error = "Context7 API keys start with 'ctx7sk-'" });
+
+        await store.SetAsync(provider, apiKey, ct);
+        await ResetProviderAsync(provider, services, ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> GetEmbeddingSettingsAsync(
+        IEmbeddingSettingsService emb,
+        Embeddings.IEmbeddingProviderResolver resolver,
+        VectorStore.IVectorStore store,
+        CancellationToken ct)
+    {
+        var dto = await emb.DescribeAsync(ct);
+        // SPEC-20260926-embeddings-runtime-coherence RF-002: a broken stored
+        // config (e.g. missing ONNX model) must never sink the GET — the
+        // editor needs to render to offer "Restaurar ambiente".
+        string? stampedId = null, providerError = null;
+        try
+        {
+            stampedId = resolver.Current.ModelId;
+        }
+        catch (Exception ex)
+        {
+            var b = ex.GetBaseException();
+            providerError = $"{b.GetType().Name}: {b.Message}";
+            if (providerError.Length > 300) providerError = providerError[..300];
+        }
+        return Results.Ok(dto with
+        {
+            StampedModelId = stampedId,
+            ProviderError = providerError,
+            StoreDimensions = store.Dimensions
+        });
+    }
+
+    private static async Task<IResult> SaveEmbeddingSettingsAsync(
+        SaveEmbeddingSettingsRequest? body,
+        IEmbeddingSettingsService emb,
+        VectorStore.IVectorStore store,
+        CancellationToken ct)
+    {
+        if (body is null)
+            return Results.BadRequest(new { error = BodyRequired });
+        if (ValidateEmbeddingRequest(body, store) is { } bad)
+            return bad;
+        if (ValidateOnnxModel(body) is { } badOnnx)
+            return badOnnx;
+
+        var provider = body.Provider!.Trim().ToLowerInvariant();
+        await emb.SaveAsync(body with { Provider = provider }, ct);
+        return Results.NoContent();
+    }
+
+    /// <summary>Scalar field + vector-store guards — returns the 400 result to
+    /// send back, or null when the request is coherent so far.</summary>
+    private static IResult? ValidateEmbeddingRequest(
+        SaveEmbeddingSettingsRequest body, VectorStore.IVectorStore store)
+    {
+        var provider = body.Provider?.Trim().ToLowerInvariant();
+        if (!EmbeddingProviders.Contains(provider))
+            return Results.BadRequest(new { error = $"provider must be one of: {string.Join(", ", EmbeddingProviders)}" });
+        if (!string.IsNullOrWhiteSpace(body.Endpoint) && !IsHttpUri(body.Endpoint.Trim()))
+            return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+        if (body.Dimensions is < 64 or > 4096)
+            return Results.BadRequest(new { error = "dimensions must be 64..4096" });
+        // SPEC-20260926-embeddings-runtime-coherence RF-006: overlap cap —
+        // >~40% of the chunk degrades piece coherence; max 2000 regardless
+        // of maxTokens, and always < maxTokens.
+        if (body.OverlapTokens is < 0 or > 2000)
+            return Results.BadRequest(new { error = "overlapTokens must be 0..2000" });
+        if (body.MaxTokens is < 100 or > 4000)
+            return Results.BadRequest(new { error = "maxTokens must be 100..4000" });
+        if (body.MaxTokens is { } mt && body.OverlapTokens is { } ov && ov >= mt)
+            return Results.BadRequest(new { error = "overlapTokens must be smaller than maxTokens" });
+        // SPEC-20260926-embeddings-runtime-coherence RF-001: vector schemas
+        // (sqlite-vec/pgvector) are compiled at startup — dims ≠ store dims
+        // can never be accepted until env + restart + reindex.
+        if (store.Dimensions is { } storeDims && body.Dimensions != storeDims)
+            return Results.BadRequest(new
+            {
+                error = $"dimensions {body.Dimensions} != vector store {storeDims} — " +
+                        "the index schema is fixed at startup; set Embeddings:Dimensions " +
+                        "in the environment, restart, then run reindex"
+            });
+        // SPEC-20260926-embeddings-runtime-coherence RF-002: fail fast on an
+        // ONNX path that cannot possibly load instead of persisting a
+        // config that breaks the provider at runtime.
+        if (provider == "onnx" && !string.IsNullOrWhiteSpace(body.ModelPath)
+            && !Directory.Exists(body.ModelPath.Trim()))
+            return Results.BadRequest(new { error = $"modelPath '{body.ModelPath.Trim()}' does not exist" });
+        return null;
+    }
+
+    /// <summary>RF-001 (SPEC-20260926-embeddings-swap-safety): validate against
+    /// the MODEL's actual output width — the store check above only compares
+    /// request vs schema; a 512-dim ONNX file accepted under Dimensions=384
+    /// would silently produce garbage vectors.</summary>
+    private static IResult? ValidateOnnxModel(SaveEmbeddingSettingsRequest body)
+    {
+        var provider = body.Provider!.Trim().ToLowerInvariant();
+        if (provider != "onnx")
+            return null;
+        var requestedDims = body.Dimensions;
+
+        Embeddings.OnnxEmbeddingProvider? probe;
+        try
+        {
+            probe = Embeddings.OnnxEmbeddingProvider.Load(body.ModelPath);
+        }
+        catch (Embeddings.EmbeddingProviderException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // RF-603: a corrupt model.onnx throws native ONNX/tokenizer
+            // exceptions, not EmbeddingProviderException — still a 400,
+            // never a 500 on a settings save.
+            return Results.BadRequest(new { error = $"onnx model failed to load: {ex.GetBaseException().Message}" });
+        }
+        using (probe)
+        {
+            if (probe.Dimensions != requestedDims)
+                return Results.BadRequest(new
+                {
+                    error = $"dimensions {requestedDims} != onnx model output {probe.Dimensions} — " +
+                            "the model file defines the vector size"
+                });
+        }
+        return null;
     }
 }
 
