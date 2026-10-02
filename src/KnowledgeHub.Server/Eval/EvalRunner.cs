@@ -49,22 +49,7 @@ public sealed class EvalRunner(
         // SPEC-20260924-eval-regression-gate RF-001: named baseline resolves to
         // its run id — and pins the dataset fingerprint.
         var baselineName = options?.BaselineName;
-        var compareTo = options?.CompareTo;
-        if (baselineName is { } bn)
-        {
-            var baseline = await db.EvalBaselines.AsNoTracking()
-                .FirstOrDefaultAsync(b => b.Name == bn, ct)
-                ?? throw new KeyNotFoundException($"baseline '{bn}' not found");
-            // SPEC-20260926-search-correctness-and-stream RF-004: a baseline is
-            // only comparable when it ran on the SAME dataset — the pinned
-            // fingerprint must match the current one.
-            if (!string.Equals(baseline.DatasetHash, datasetHash, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    $"baseline '{bn}' was pinned to a different dataset " +
-                    $"(baseline {baseline.DatasetHash[..Math.Min(12, baseline.DatasetHash.Length)]}… " +
-                    $"vs current {datasetHash[..12]}…) — re-pin the baseline or run without it");
-            compareTo = baseline.EvalRunId;
-        }
+        var compareTo = await ResolveBaselineAsync(baselineName, datasetHash, options?.CompareTo, ct);
 
         var results = new List<EvalCaseResult>(cases.Count);
         foreach (var evalCase in cases)
@@ -146,6 +131,25 @@ public sealed class EvalRunner(
             report = report with { Delta = delta };
         }
         return report with { Gate = gateResult };
+    }
+
+    /// <summary>A named baseline must exist and have run on the SAME dataset —
+    /// SPEC-20260926-search-correctness-and-stream RF-004: the pinned
+    /// fingerprint must match the current one or the compare is meaningless.</summary>
+    private async Task<Guid?> ResolveBaselineAsync(
+        string? baselineName, string datasetHash, Guid? compareTo, CancellationToken ct)
+    {
+        if (baselineName is not { } bn)
+            return compareTo;
+        var baseline = await db.EvalBaselines.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.Name == bn, ct)
+            ?? throw new KeyNotFoundException($"baseline '{bn}' not found");
+        if (!string.Equals(baseline.DatasetHash, datasetHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"baseline '{bn}' was pinned to a different dataset " +
+                $"(baseline {baseline.DatasetHash[..Math.Min(12, baseline.DatasetHash.Length)]}… " +
+                $"vs current {datasetHash[..12]}…) — re-pin the baseline or run without it");
+        return baseline.EvalRunId;
     }
 
     /// <summary>RF-002: p50/p95/p99/mean over per-case latencies.</summary>

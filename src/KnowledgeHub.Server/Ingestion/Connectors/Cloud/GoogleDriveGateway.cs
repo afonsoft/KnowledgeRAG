@@ -35,8 +35,7 @@ internal sealed class GoogleDriveGateway(
         string? prefix, [EnumeratorCancellation] CancellationToken ct)
     {
         var seen = 0;
-        IEnumerable<RemoteObject> Emit(GoogleDriveApiClient.DriveFileMeta meta, string dir,
-            bool probeOnly = false)
+        await foreach (var (meta, dir, probeOnly) in EnumerateAsync(ct))
         {
             // Truncated only when a (maxFiles+1)-th object actually exists.
             foreach (var o in Yield(meta, dir, probeOnly))
@@ -46,40 +45,46 @@ internal sealed class GoogleDriveGateway(
                 yield return o;
             }
         }
+    }
 
+    /// <summary>Enumerates raw file metadata from the configured source shape:
+    /// single-file link, API-key folder listing, or public folder view.</summary>
+    private async IAsyncEnumerable<(GoogleDriveApiClient.DriveFileMeta Meta, string Dir, bool ProbeOnly)> EnumerateAsync(
+        [EnumeratorCancellation] CancellationToken ct)
+    {
         if (!rootIsFolder)
         {
-            var meta = apiKey is not null
-                ? await client.GetFileAsync(rootId, apiKey, ct)
-                : null;
-            // Public single-file links: probe Content-Disposition for the real
-            // name — an id-as-name has no extension and never indexes (RF-005).
-            GoogleDriveApiClient.DriveFileMeta? probed = null;
-            var m = meta;
-            if (m is null)
-            {
-                probed = await client.TryGetPublicFileMetaAsync(rootId, ct);
-                m = probed ?? new GoogleDriveApiClient.DriveFileMeta(rootId, rootId, "", null, null, null);
-            }
-            foreach (var o in Emit(m, "", probeOnly: probed is not null)) yield return o;
+            var m = await ResolveSingleFileMetaAsync(ct);
+            yield return (m.Meta, "", m.ProbeOnly);
             yield break;
         }
 
         if (apiKey is not null)
         {
             await foreach (var (meta, dir) in client.ListFolderAsync(rootId, apiKey, ct: ct))
-            {
-                foreach (var o in Emit(meta, dir)) yield return o;
-                if (Truncated) yield break;
-            }
+                yield return (meta, dir, false);
             yield break;
         }
 
         await foreach (var meta in client.ListPublicFolderAsync(rootId, ct))
-        {
-            foreach (var o in Emit(meta, "")) yield return o;
-            if (Truncated) yield break;
-        }
+            yield return (meta, "", false);
+    }
+
+    /// <summary>Resolves a single-file link's metadata. Public links probe
+    /// Content-Disposition for the real name — an id-as-name has no extension
+    /// and never indexes (RF-005).</summary>
+    private async Task<(GoogleDriveApiClient.DriveFileMeta Meta, bool ProbeOnly)> ResolveSingleFileMetaAsync(
+        CancellationToken ct)
+    {
+        var meta = apiKey is not null
+            ? await client.GetFileAsync(rootId, apiKey, ct)
+            : null;
+        if (meta is not null)
+            return (meta, false);
+        var probed = await client.TryGetPublicFileMetaAsync(rootId, ct);
+        return probed is not null
+            ? (probed, true)
+            : (new GoogleDriveApiClient.DriveFileMeta(rootId, rootId, "", null, null, null), false);
     }
 
     private IEnumerable<RemoteObject> Yield(
