@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `Approved` |
+| Status | `Done` — executado via repo settings + branch delete (30 remotas + 1 local), `delete_branch_on_merge=true`; convenção registrada em CLAUDE.md (PR #508) |
 | Ticket | Epic [#503 (E27)](https://github.com/afonsoft/LangGraph-UI/issues/503) — slice [#506](https://github.com/afonsoft/LangGraph-UI/issues/506) (RF-001..002) |
 | Origem | gap-analysis — `git branch -r --no-merged origin/main` |
 | Pré-requisito | SPEC-20260917-merged-branch-cleanup + SPEC-20260917-stale-branch-cleanup (Done) — a acumulação recorreu |

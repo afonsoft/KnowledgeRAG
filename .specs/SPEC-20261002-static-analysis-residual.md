@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `Approved` |
+| Status | `In Review` — PR [#510](https://github.com/afonsoft/LangGraph-UI/pull/510) |
 | Ticket | Epic [#503 (E27)](https://github.com/afonsoft/LangGraph-UI/issues/503) — slice [#505](https://github.com/afonsoft/LangGraph-UI/issues/505) (RF-01..03) |
 | Origem | gap-analysis + qa-analyst 2026-10-02 (SonarCloud API pública + `gh api code-scanning/alerts`) |
 | Pré-requisito | E23 (#470–#479) e E25 (#487–#491) mergeadas — backlog Sonar 1.093 → 8 |
