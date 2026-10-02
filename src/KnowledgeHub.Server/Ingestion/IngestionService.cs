@@ -133,202 +133,10 @@ public sealed class IngestionService : IIngestionService
                     source, connector, db, vectors, scope, stopwatch, options), cancellationToken);
             }
 
-            var root = ResolveVaultRoot(source.ConfigurationJson);
-            if (root is null || !Directory.Exists(root))
-            {
-                // SPEC-20260914-obsidian-webdav RF-002: a missing vault path usually
-                // means an unmounted remote — surface that on the source record.
-                var reason = $"vault path '{root ?? "(not configured)"}' not found — mount unavailable?";
-                source.LastSyncStatus = SyncStatusFailed;
-                source.LastError = reason;
-                await db.SaveChangesAsync(cancellationToken);
-                return Fail(sourceId, reason);
-            }
-
-            var files = EnumerateMarkdown(root);
-            // SPEC-20260916-performance-memory-cache RF-004: no Include(Chunks) —
-            // the old code materialized every chunk's text + embedding BLOB for
-            // the whole source. Changed docs purge via ExecuteDeleteAsync below.
-            var existing = await db.Documents
-                .Where(d => d.KnowledgeSourceId == sourceId)
-                .ToDictionaryAsync(d => d.UriReference, cancellationToken);
-
-            var processed = 0; var skipped = 0; var removed = 0; var failed = 0; var chunksCreated = 0;
-            var warnings = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var graphBudget = graphSettings.GetEffective().MaxChunksPerSync;
-
-            // SPEC-20260924-async-ingestion-queue RF-003: chunker versioning —
-            // content-identical docs are still re-chunked when the chunker
-            // version or chunking-relevant config changed.
-            // SPEC-20260926-settings-ux-embeddings RF-004: chunking knobs from
-            // the embedding settings store over env.
-            var (maxTokens, overlapTokens) = embeddingSettings.GetChunking();
-            var chunkStrategy = Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson);
-            var configHash = Chunking.ChunkerSelector.ConfigHash(
-                maxTokens, overlapTokens,
-                configuration.GetValue("Ingestion:ContextualEnrichment", "structural"),
-                configuration.GetValue("Ingestion:ContextualEnrichment:MinTokens", 40),
-                chunkStrategy);
-            var forceReindex = options?.ForceReindex == true;
-
-            foreach (var file in files)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var relative = Path.GetRelativePath(root, file);
-                seen.Add(relative);
-                KnowledgeDocument? doc = null;
-
-                try
-                {
-                    var content = await File.ReadAllTextAsync(file, cancellationToken);
-                    var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content)));
-
-                    if (existing.TryGetValue(relative, out doc) && doc.ContentHash == hash
-                        && !forceReindex
-                        && doc.ChunkerVersion == Chunking.ChunkerSelector.CurrentVersion
-                        && doc.ChunkerConfigHash == configHash)
-                    {
-                        skipped++;
-                        continue;
-                    }
-
-                    var note = MarkdownNoteParser.Parse(content, Path.GetFileName(file));
-                    // SPEC-20260923-code-aware-chunking: kind from the file extension.
-                    var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
-                        new Chunking.ChunkerSelector.ChunkRequest(relative, note.Body, maxTokens, overlapTokens, chunkStrategy),
-                        embeddings, configuration, logger, cancellationToken, scope.ServiceProvider);
-
-                    // RF-201: delete + replace inside a transaction — same
-                    // zero-chunks-on-failure fix as the remote path.
-                    List<DocumentChunk> newChunks;
-                    await using (var tx = await db.Database.BeginTransactionAsync(cancellationToken))
-                    {
-                        try
-                        {
-                            if (doc is null)
-                            {
-                                doc = new KnowledgeDocument
-                                {
-                                    KnowledgeSourceId = sourceId,
-                                    Title = note.Title,
-                                    UriReference = relative
-                                };
-                                db.Documents.Add(doc);
-                            }
-                            else
-                            {
-                                doc.Title = note.Title;
-                                // Purge old chunks with a direct DELETE — no BLOB/text
-                                // materialization, no tracked-collection pitfalls.
-                                await db.Chunks.Where(c => c.KnowledgeDocumentId == doc.Id)
-                                    .ExecuteDeleteAsync(cancellationToken);
-                            }
-
-                            doc.RawContent = content;
-                            doc.ContentHash = hash;
-                            doc.ChunkerVersion = Chunking.ChunkerSelector.CurrentVersion;
-                            doc.ChunkerConfigHash = configHash;
-                            doc.IndexedAt = DateTimeOffset.UtcNow;
-
-                            // AddRange via DbSet — reassigning doc.Chunks after RemoveRange makes EF Core
-                            // emit an UPDATE for the deleted rows inside the same batch (concurrency error).
-                            newChunks = pieces.Select((piece, i) => new DocumentChunk
-                            {
-                                KnowledgeDocumentId = doc.Id,
-                                ChunkIndex = i,
-                                TextContent = piece.Text,
-                                ChunkKind = kind.ToString().ToLowerInvariant(),
-                                SymbolPath = piece.SymbolPath,
-                                SectionPath = piece.SectionPath,
-                                MetadataJson = piece.MetadataJson,
-                                EnrichedText = EnrichPiece(source.Name, note.Title, piece)
-                            }).ToList();
-                            db.Chunks.AddRange(newChunks);
-                            ScanChunks(newChunks, doc.Id, sourceId, note.Title, db, warnings);
-
-                            await db.SaveChangesAsync(cancellationToken);
-                            await tx.CommitAsync(cancellationToken);
-                        }
-                        catch
-                        {
-                            await tx.RollbackAsync(CancellationToken.None);
-                            throw;
-                        }
-                    }
-                    chunksCreated += await EmbedChunksAsync(newChunks, doc, source, vectors, cancellationToken);
-                    graphBudget -= await ExtractGraphAsync(
-                        source, doc, newChunks, scope, warnings, graphBudget, cancellationToken);
-                    processed++;
-                }
-                catch (OperationCanceledException) { throw; }
-                // SPEC-20260924-async-ingestion-queue RF-002: one bad document
-                // never aborts the job — recorded and the loop continues.
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Document '{Path}' failed during sync — continuing", relative);
-                    // SPEC-20260926-job-error-details RF-003: record the real
-                    // cause (inner exception), not the EF wrapper message.
-                    warnings.Add($"{relative}: {ex.GetBaseException().Message}");
-                    failed++;
-                    // RF-006 (SPEC-20260926-ingestion-connector-integrity): detach
-                    // this doc's partial tracked state — the next document's
-                    // SaveChanges must not persist or re-fail on it.
-                    DetachPartialAsync(doc, db);
-                }
-                options?.Progress?.Report(new SyncProgress(processed, skipped, failed, chunksCreated));
-            }
-
-            // Remove documents whose files disappeared from the vault.
-            // SPEC-20260929 RF-003: mass-delete safety gate — an empty (or near-
-            // empty) enumeration on a POPULATED index cannot prove absence; an
-            // unreadable dir mounts as zero files and would wipe the index.
-            // Small sources (below MinMassDeleteDocs) are exempt: deleting the
-            // only file of a 1–3 doc vault is a legitimate operation, not a
-            // wipe signature.
-            var massDeleteSuspicious =
-                existing.Count >= MinMassDeleteDocs && seen.Count * 2 < existing.Count;
-            if (massDeleteSuspicious)
-            {
-                logger.LogWarning(
-                    "Sync for source {SourceId}: enumeration returned {Seen} item(s) for {Existing} indexed documents — skipping deletions (possible unreadable folder)",
-                    source.Id, seen.Count, existing.Count);
-                warnings.Add($"deletion skipped: enumeration returned {seen.Count} of {existing.Count} indexed documents — verify the path is accessible");
-            }
-            else
-            {
-                foreach (var (uri, doc) in existing)
-                {
-                    if (seen.Contains(uri))
-                        continue;
-                    await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
-                    db.Documents.Remove(doc);
-                    removed++;
-                }
-            }
-
-            source.LastSyncAt = DateTimeOffset.UtcNow;
-            source.LastSyncStatus = SyncStatusCompleted;
-            source.LastError = null;
-            await db.SaveChangesAsync(cancellationToken);
-
-            // RF-004: keep the FTS index consistent with Chunks after sync.
-            await scope.ServiceProvider.GetRequiredService<ILexicalSearchService>()
-                .ReconcileAsync(cancellationToken);
-            await BumpIndexVersionAsync(cancellationToken);
-
-            return new SyncResultDto
-            {
-                Status = SyncStatusCompleted,
-                SourceId = sourceId,
-                DocumentsProcessed = processed,
-                DocumentsSkipped = skipped,
-                DocumentsFailed = failed,
-                DocumentsRemoved = removed,
-                ChunksCreated = chunksCreated,
-                DurationMs = stopwatch.Elapsed.TotalMilliseconds,
-                Warnings = warnings.Count == 0 ? null : warnings
-            };
+            return await SyncVaultAsync(
+                source,
+                new PipelineContext(db, vectors, scope, options, stopwatch),
+                cancellationToken);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -379,7 +187,7 @@ public sealed class IngestionService : IIngestionService
                 cancellationToken)
             : await connector.FetchAsync(source, cancellationToken);
 
-        var processed = 0; var skipped = 0; var removed = 0; var failed = 0; var chunksCreated = 0;
+        var stats = new SyncStats { GraphBudget = graphSettings.GetEffective().MaxChunksPerSync };
         var warnings = new List<string>(fetch.Warnings);
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // RF-002: upstream items that failed to download/extract still exist —
@@ -395,167 +203,34 @@ public sealed class IngestionService : IIngestionService
         {
             warnings.Add("remote listing was truncated by provider limit — deletion pass skipped");
         }
-        var graphBudget = graphSettings.GetEffective().MaxChunksPerSync;
 
-        // SPEC-20260924-async-ingestion-queue RF-003: chunker versioning.
-        var (maxTokens, overlapTokens) = embeddingSettings.GetChunking();
-        var chunkStrategy = Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson);
-        var configHash = Chunking.ChunkerSelector.ConfigHash(
-            maxTokens, overlapTokens,
-            configuration.GetValue("Ingestion:ContextualEnrichment", "structural"),
-            configuration.GetValue("Ingestion:ContextualEnrichment:MinTokens", 40),
-            chunkStrategy);
-        var forceReindex = options?.ForceReindex == true;
+        // SPEC-20260924-async-ingestion-queue RF-003: chunker versioning —
+        // content-identical docs are still re-chunked when the chunker
+        // version or chunking-relevant config changed.
+        // SPEC-20260926-settings-ux-embeddings RF-004: chunking knobs from
+        // the embedding settings store over env.
+        var itemCtx = new SyncItemContext
+        {
+            Source = source,
+            Db = db,
+            Vectors = vectors,
+            Scope = scope,
+            Existing = existing,
+            Warnings = warnings,
+            Chunking = ChunkingPlanFor(source),
+            ForceReindex = options?.ForceReindex == true,
+            Connector = connector
+        };
 
         foreach (var raw in fetch.Documents)
         {
             cancellationToken.ThrowIfCancellationRequested();
             seen.Add(raw.UriReference);
-            KnowledgeDocument? doc = null;
-
-            try
-            {
-                existing.TryGetValue(raw.UriReference, out doc);
-
-                // RF-001: an empty-text stub (unchanged-fingerprint marker) must
-                // never overwrite stored content — when the doc still needs
-                // reprocessing (force/chunker change), fall back to stored
-                // RawContent, then to the connector's on-demand item fetch.
-                var text = raw.TextContent;
-                if (text.Length == 0)
-                {
-                    text = doc?.RawContent ?? "";
-                    if (text.Length == 0 && connector is Connectors.IItemFetchConnector itemFetch)
-                    {
-                        var fetched = await itemFetch.FetchItemAsync(
-                            source, raw.UriReference, cancellationToken);
-                        if (fetched is not null)
-                            text = fetched.TextContent;
-                    }
-                    if (text.Length == 0)
-                    {
-                        warnings.Add($"{raw.UriReference}: no content available for reprocessing — kept as-is");
-                        failed++;
-                        continue;
-                    }
-                }
-
-                // RF-007: a connector-supplied fingerprint (upstream change marker)
-                // replaces the content hash for dedup — unchanged items arrive with
-                // empty TextContent and must not overwrite stored RawContent.
-                var hash = string.IsNullOrEmpty(raw.Fingerprint)
-                    ? Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)))
-                    : raw.Fingerprint;
-                if (doc is not null && doc.ContentHash == hash
-                    && !forceReindex
-                    && doc.ChunkerVersion == Chunking.ChunkerSelector.CurrentVersion
-                    && doc.ChunkerConfigHash == configHash)
-                {
-                    skipped++;
-                    continue;
-                }
-
-                // RF-201 (SPEC-20260926-review-backlog-remediation): delete +
-                // replace inside a transaction — a chunker/scan/save failure
-                // previously left the doc with ZERO chunks (the ExecuteDelete
-                // is immediate; detaching could not restore them).
-                List<DocumentChunk> newChunks;
-                await using (var tx = await db.Database.BeginTransactionAsync(cancellationToken))
-                {
-                    try
-                    {
-                        if (doc is null)
-                        {
-                            doc = new KnowledgeDocument
-                            {
-                                KnowledgeSourceId = source.Id,
-                                Title = raw.Title,
-                                UriReference = raw.UriReference
-                            };
-                            db.Documents.Add(doc);
-                        }
-                        else
-                        {
-                            doc.Title = raw.Title;
-                            await db.Chunks.Where(c => c.KnowledgeDocumentId == doc.Id)
-                                .ExecuteDeleteAsync(cancellationToken);
-                        }
-
-                        doc.RawContent = text;
-                        doc.ContentHash = hash;
-                        doc.ChunkerVersion = Chunking.ChunkerSelector.CurrentVersion;
-                        doc.ChunkerConfigHash = configHash;
-                        doc.IndexedAt = DateTimeOffset.UtcNow;
-
-                        // AddRange via DbSet — see vault path above; nav reassignment after
-                        // RemoveRange produces a bogus UPDATE inside the same SaveChanges batch.
-                        var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
-                            new Chunking.ChunkerSelector.ChunkRequest(raw.UriReference, text, maxTokens, overlapTokens, chunkStrategy),
-                            embeddings, configuration, logger, cancellationToken, scope.ServiceProvider);
-                        newChunks = pieces
-                            .Select((piece, i) => new DocumentChunk
-                            {
-                                KnowledgeDocumentId = doc.Id,
-                                ChunkIndex = i,
-                                TextContent = piece.Text,
-                                ChunkKind = kind.ToString().ToLowerInvariant(),
-                                SymbolPath = piece.SymbolPath,
-                                SectionPath = piece.SectionPath,
-                                MetadataJson = piece.MetadataJson,
-                                EnrichedText = EnrichPiece(source.Name, raw.Title, piece)
-                            }).ToList();
-                        db.Chunks.AddRange(newChunks);
-                        ScanChunks(newChunks, doc.Id, source.Id, raw.Title, db, warnings);
-
-                        await db.SaveChangesAsync(cancellationToken);
-                        await tx.CommitAsync(cancellationToken);
-                    }
-                    catch
-                    {
-                        await tx.RollbackAsync(CancellationToken.None);
-                        throw;
-                    }
-                }
-                chunksCreated += await EmbedChunksAsync(newChunks, doc, source, vectors, cancellationToken);
-                graphBudget -= await ExtractGraphAsync(
-                    source, doc, newChunks, scope, warnings, graphBudget, cancellationToken);
-                processed++;
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Document '{Uri}' failed during sync — continuing", raw.UriReference);
-                warnings.Add($"{raw.UriReference}: {ex.GetBaseException().Message}");
-                failed++;
-                // RF-006: detach this doc's partially-mutated tracked state so the
-                // next document's SaveChanges cannot persist (or fail on) it.
-                DetachPartialAsync(doc, db);
-            }
-            options?.Progress?.Report(new SyncProgress(processed, skipped, failed, chunksCreated));
+            await ProcessFetchedItemAsync(itemCtx, raw, stats, cancellationToken);
+            options?.Progress?.Report(new SyncProgress(stats.Processed, stats.Skipped, stats.Failed, stats.ChunksCreated));
         }
 
-        // SPEC-20260929 RF-003: same safety gate as the file path — a fetch that
-        // sees <50% of a populated index can't prove mass absence. Sources
-        // below MinMassDeleteDocs are exempt (small indexes legitimately empty).
-        var fetchSuspiciousDrop =
-            existing.Count >= MinMassDeleteDocs && seen.Count * 2 < existing.Count;
-        if (fetchSuspiciousDrop && !fetch.Truncated)
-        {
-            logger.LogWarning(
-                "Fetch sync for source {SourceId}: listing returned {Seen} item(s) for {Existing} indexed documents — skipping deletions",
-                source.Id, seen.Count, existing.Count);
-            warnings.Add($"deletion skipped: listing returned {seen.Count} of {existing.Count} indexed documents");
-        }
-
-        foreach (var (uri, doc) in existing)
-        {
-            // RF-002: a truncated listing cannot prove absence — keep everything.
-            if (seen.Contains(uri) || fetch.Truncated || fetchSuspiciousDrop)
-                continue;
-            await vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
-            db.Documents.Remove(doc);
-            removed++;
-        }
+        stats.Removed = await ReconcileFetchDeletionsAsync(itemCtx, seen, fetch, cancellationToken);
 
         source.LastSyncAt = DateTimeOffset.UtcNow;
         source.LastSyncStatus = SyncStatusCompleted;
@@ -570,15 +245,456 @@ public sealed class IngestionService : IIngestionService
         {
             Status = SyncStatusCompleted,
             SourceId = source.Id,
-            DocumentsProcessed = processed,
-            DocumentsSkipped = skipped,
-            DocumentsFailed = failed,
-            DocumentsRemoved = removed,
-            ChunksCreated = chunksCreated,
+            DocumentsProcessed = stats.Processed,
+            DocumentsSkipped = stats.Skipped,
+            DocumentsFailed = stats.Failed,
+            DocumentsRemoved = stats.Removed,
+            ChunksCreated = stats.ChunksCreated,
             DurationMs = stopwatch.Elapsed.TotalMilliseconds,
             Reason = warnings.Count == 0 ? null : $"{warnings.Count} item(s) skipped or flagged: {string.Join("; ", warnings.Take(5))}",
             Warnings = warnings.Count == 0 ? null : warnings
         };
+    }
+
+    /// <summary>Services/options shared by the vault sync pipeline.</summary>
+    private sealed record PipelineContext(
+        KnowledgeHubDbContext Db,
+        IVectorStore Vectors,
+        AsyncServiceScope Scope,
+        SyncOptions? Options,
+        Stopwatch Stopwatch);
+
+    /// <summary>Chunking knobs resolved once per sync (SPEC-20260924
+    /// async-ingestion-queue RF-003 chunker versioning).</summary>
+    private sealed record ChunkingPlan(int MaxTokens, int OverlapTokens, string? Strategy, string ConfigHash);
+
+    /// <summary>Per-item inputs shared by the vault and connector sync loops.</summary>
+    private sealed record SyncItemContext
+    {
+        public required KnowledgeSource Source { get; init; }
+        public required KnowledgeHubDbContext Db { get; init; }
+        public required IVectorStore Vectors { get; init; }
+        public required AsyncServiceScope Scope { get; init; }
+        public required Dictionary<string, KnowledgeDocument> Existing { get; init; }
+        public required List<string> Warnings { get; init; }
+        public required ChunkingPlan Chunking { get; init; }
+        public required bool ForceReindex { get; init; }
+        public Connectors.ISourceConnector? Connector { get; init; }
+    }
+
+    /// <summary>Mutable counters accumulated by the per-item sync loops.</summary>
+    private sealed class SyncStats
+    {
+        public int Processed;
+        public int Skipped;
+        public int Failed;
+        public int Removed;
+        public int ChunksCreated;
+        public int GraphBudget;
+    }
+
+    /// <summary>Per-item fields of a <see cref="DocumentReplacePlan"/> — the
+    /// only parts that differ between vault and connector items.</summary>
+    private sealed record DocumentIdentity(
+        KnowledgeDocument? Doc, string Title, string UriReference, string Content,
+        string Hash, Chunking.ChunkKind Kind, IReadOnlyList<Chunking.ChunkPiece> Pieces);
+
+    /// <summary>Inputs for <see cref="ReplaceDocumentAsync"/>.</summary>
+    private sealed record DocumentReplacePlan
+    {
+        public required KnowledgeHubDbContext Db { get; init; }
+        // Mutable so ReplaceDocumentAsync can publish a newly-created doc for
+        // the caller's failure path (DetachPartialAsync) even when it throws.
+        public KnowledgeDocument? Doc { get; set; }
+        public required KnowledgeSource Source { get; init; }
+        public required string Title { get; init; }
+        public required string UriReference { get; init; }
+        public required string Content { get; init; }
+        public required string Hash { get; init; }
+        public required string ConfigHash { get; init; }
+        public required Chunking.ChunkKind Kind { get; init; }
+        public required IReadOnlyList<Chunking.ChunkPiece> Pieces { get; init; }
+        public required List<string> Warnings { get; init; }
+    }
+
+    private DocumentReplacePlan PlanFor(SyncItemContext ctx, DocumentIdentity id) => new()
+    {
+        Db = ctx.Db,
+        Doc = id.Doc,
+        Source = ctx.Source,
+        Title = id.Title,
+        UriReference = id.UriReference,
+        Content = id.Content,
+        Hash = id.Hash,
+        ConfigHash = ctx.Chunking.ConfigHash,
+        Kind = id.Kind,
+        Pieces = id.Pieces,
+        Warnings = ctx.Warnings
+    };
+
+    /// <summary>Vault sync: enumerate <c>**/*.md</c>, re-index changed files,
+    /// remove documents whose files disappeared.</summary>
+    private async Task<SyncResultDto> SyncVaultAsync(
+        KnowledgeSource source, PipelineContext pipe, CancellationToken cancellationToken)
+    {
+        var (db, vectors, scope, options, stopwatch) =
+            (pipe.Db, pipe.Vectors, pipe.Scope, pipe.Options, pipe.Stopwatch);
+        var sourceId = source.Id;
+
+        var root = ResolveVaultRoot(source.ConfigurationJson);
+        if (root is null || !Directory.Exists(root))
+        {
+            // SPEC-20260914-obsidian-webdav RF-002: a missing vault path usually
+            // means an unmounted remote — surface that on the source record.
+            var reason = $"vault path '{root ?? "(not configured)"}' not found — mount unavailable?";
+            source.LastSyncStatus = SyncStatusFailed;
+            source.LastError = reason;
+            await db.SaveChangesAsync(cancellationToken);
+            return Fail(sourceId, reason);
+        }
+
+        var files = EnumerateMarkdown(root);
+        // SPEC-20260916-performance-memory-cache RF-004: no Include(Chunks) —
+        // the old code materialized every chunk's text + embedding BLOB for
+        // the whole source. Changed docs purge via ExecuteDeleteAsync below.
+        var existing = await db.Documents
+            .Where(d => d.KnowledgeSourceId == sourceId)
+            .ToDictionaryAsync(d => d.UriReference, cancellationToken);
+
+        var stats = new SyncStats { GraphBudget = graphSettings.GetEffective().MaxChunksPerSync };
+        var warnings = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var itemCtx = new SyncItemContext
+        {
+            Source = source,
+            Db = db,
+            Vectors = vectors,
+            Scope = scope,
+            Existing = existing,
+            Warnings = warnings,
+            Chunking = ChunkingPlanFor(source),
+            ForceReindex = options?.ForceReindex == true
+        };
+
+        foreach (var file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var relative = Path.GetRelativePath(root, file);
+            seen.Add(relative);
+            await ProcessVaultFileAsync(itemCtx, file, relative, stats, cancellationToken);
+            options?.Progress?.Report(new SyncProgress(stats.Processed, stats.Skipped, stats.Failed, stats.ChunksCreated));
+        }
+
+        (stats.Removed, var gateWarning) = await ReconcileDeletionsAsync(itemCtx, seen, cancellationToken);
+        if (gateWarning is not null)
+            warnings.Add(gateWarning);
+
+        source.LastSyncAt = DateTimeOffset.UtcNow;
+        source.LastSyncStatus = SyncStatusCompleted;
+        source.LastError = null;
+        await db.SaveChangesAsync(cancellationToken);
+
+        // RF-004: keep the FTS index consistent with Chunks after sync.
+        await scope.ServiceProvider.GetRequiredService<ILexicalSearchService>()
+            .ReconcileAsync(cancellationToken);
+        await BumpIndexVersionAsync(cancellationToken);
+
+        return new SyncResultDto
+        {
+            Status = SyncStatusCompleted,
+            SourceId = sourceId,
+            DocumentsProcessed = stats.Processed,
+            DocumentsSkipped = stats.Skipped,
+            DocumentsFailed = stats.Failed,
+            DocumentsRemoved = stats.Removed,
+            ChunksCreated = stats.ChunksCreated,
+            DurationMs = stopwatch.Elapsed.TotalMilliseconds,
+            Warnings = warnings.Count == 0 ? null : warnings
+        };
+    }
+
+    /// <summary>SPEC-20260924-async-ingestion-queue RF-003/RF-004 (settings-ux
+    /// RF-004): chunker version + chunking-relevant config fingerprint — knobs
+    /// come from the embedding settings store over env.</summary>
+    private ChunkingPlan ChunkingPlanFor(KnowledgeSource source)
+    {
+        var (maxTokens, overlapTokens) = embeddingSettings.GetChunking();
+        var strategy = Chunking.ChunkerSelector.StrategyFor(source.ConfigurationJson);
+        var configHash = Chunking.ChunkerSelector.ConfigHash(
+            maxTokens, overlapTokens,
+            configuration.GetValue("Ingestion:ContextualEnrichment", "structural"),
+            configuration.GetValue("Ingestion:ContextualEnrichment:MinTokens", 40),
+            strategy);
+        return new ChunkingPlan(maxTokens, overlapTokens, strategy, configHash);
+    }
+
+    /// <summary>Unchanged-doc skip: same content hash, no force reindex, and
+    /// current chunker version + config hash.</summary>
+    private static bool IsCurrent(KnowledgeDocument doc, string hash, bool forceReindex, string configHash) =>
+        doc.ContentHash == hash
+        && !forceReindex
+        && doc.ChunkerVersion == Chunking.ChunkerSelector.CurrentVersion
+        && doc.ChunkerConfigHash == configHash;
+
+    /// <summary>Reads, dedups, chunks, replaces, embeds and graph-extracts a
+    /// single vault file. SPEC-20260924-async-ingestion-queue RF-002: one bad
+    /// document never aborts the job — recorded and the loop continues.</summary>
+    private async Task ProcessVaultFileAsync(
+        SyncItemContext ctx, string file, string relative,
+        SyncStats stats, CancellationToken cancellationToken)
+    {
+        KnowledgeDocument? doc = null;
+        DocumentReplacePlan? plan = null;
+        try
+        {
+            var content = await File.ReadAllTextAsync(file, cancellationToken);
+            var hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content)));
+
+            if (ctx.Existing.TryGetValue(relative, out doc)
+                && IsCurrent(doc, hash, ctx.ForceReindex, ctx.Chunking.ConfigHash))
+            {
+                stats.Skipped++;
+                return;
+            }
+
+            var note = MarkdownNoteParser.Parse(content, Path.GetFileName(file));
+            // SPEC-20260923-code-aware-chunking: kind from the file extension.
+            var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
+                new Chunking.ChunkerSelector.ChunkRequest(relative, note.Body, ctx.Chunking.MaxTokens, ctx.Chunking.OverlapTokens, ctx.Chunking.Strategy),
+                embeddings, configuration, logger, cancellationToken, ctx.Scope.ServiceProvider);
+
+            plan = PlanFor(ctx, new DocumentIdentity(doc, note.Title, relative, content, hash, kind, pieces));
+            (doc, var newChunks) = await ReplaceDocumentAsync(plan, cancellationToken);
+            stats.ChunksCreated += await EmbedChunksAsync(newChunks, doc, ctx.Source, ctx.Vectors, cancellationToken);
+            stats.GraphBudget -= await ExtractGraphAsync(
+                ctx.Source, doc, newChunks, ctx.Scope, ctx.Warnings, stats.GraphBudget, cancellationToken);
+            stats.Processed++;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Document '{Path}' failed during sync — continuing", relative);
+            // SPEC-20260926-job-error-details RF-003: record the real
+            // cause (inner exception), not the EF wrapper message.
+            ctx.Warnings.Add($"{relative}: {ex.GetBaseException().Message}");
+            stats.Failed++;
+            // RF-006 (SPEC-20260926-ingestion-connector-integrity): detach
+            // this doc's partial tracked state — the next document's
+            // SaveChanges must not persist or re-fail on it.
+            DetachPartialAsync(plan?.Doc ?? doc, ctx.Db);
+        }
+    }
+
+    /// <summary>Processes one fetched item: empty-stub content resolution,
+    /// fingerprint dedup, chunk → replace → embed → graph.</summary>
+    private async Task ProcessFetchedItemAsync(
+        SyncItemContext ctx, Connectors.RawDocument raw,
+        SyncStats stats, CancellationToken cancellationToken)
+    {
+        KnowledgeDocument? doc = null;
+        DocumentReplacePlan? plan = null;
+        try
+        {
+            ctx.Existing.TryGetValue(raw.UriReference, out doc);
+
+            var text = await ResolveItemTextAsync(ctx, raw, doc, cancellationToken);
+            if (text is null)
+            {
+                stats.Failed++;
+                return;
+            }
+
+            // RF-007: a connector-supplied fingerprint (upstream change marker)
+            // replaces the content hash for dedup — unchanged items arrive with
+            // empty TextContent and must not overwrite stored RawContent.
+            var hash = string.IsNullOrEmpty(raw.Fingerprint)
+                ? Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)))
+                : raw.Fingerprint;
+            if (doc is not null && IsCurrent(doc, hash, ctx.ForceReindex, ctx.Chunking.ConfigHash))
+            {
+                stats.Skipped++;
+                return;
+            }
+
+            var (kind, pieces) = await Chunking.ChunkerSelector.ChunkAsync(
+                new Chunking.ChunkerSelector.ChunkRequest(raw.UriReference, text, ctx.Chunking.MaxTokens, ctx.Chunking.OverlapTokens, ctx.Chunking.Strategy),
+                embeddings, configuration, logger, cancellationToken, ctx.Scope.ServiceProvider);
+
+            plan = PlanFor(ctx, new DocumentIdentity(doc, raw.Title, raw.UriReference, text, hash, kind, pieces));
+            (doc, var newChunks) = await ReplaceDocumentAsync(plan, cancellationToken);
+            stats.ChunksCreated += await EmbedChunksAsync(newChunks, doc, ctx.Source, ctx.Vectors, cancellationToken);
+            stats.GraphBudget -= await ExtractGraphAsync(
+                ctx.Source, doc, newChunks, ctx.Scope, ctx.Warnings, stats.GraphBudget, cancellationToken);
+            stats.Processed++;
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Document '{Uri}' failed during sync — continuing", raw.UriReference);
+            ctx.Warnings.Add($"{raw.UriReference}: {ex.GetBaseException().Message}");
+            stats.Failed++;
+            // RF-006: detach this doc's partially-mutated tracked state so the
+            // next document's SaveChanges cannot persist (or fail on) it.
+            DetachPartialAsync(plan?.Doc ?? doc, ctx.Db);
+        }
+    }
+
+    /// <summary>RF-001: an empty-text stub (unchanged-fingerprint marker) must
+    /// never overwrite stored content — when the doc still needs reprocessing
+    /// (force/chunker change), falls back to stored RawContent, then to the
+    /// connector's on-demand item fetch. Null = keep the doc as-is.</summary>
+    private static async Task<string?> ResolveItemTextAsync(
+        SyncItemContext ctx, Connectors.RawDocument raw, KnowledgeDocument? doc,
+        CancellationToken cancellationToken)
+    {
+        var text = raw.TextContent;
+        if (text.Length > 0)
+            return text;
+
+        text = doc?.RawContent ?? "";
+        if (text.Length == 0 && ctx.Connector is Connectors.IItemFetchConnector itemFetch)
+        {
+            var fetched = await itemFetch.FetchItemAsync(
+                ctx.Source, raw.UriReference, cancellationToken);
+            if (fetched is not null)
+                text = fetched.TextContent;
+        }
+        if (text.Length == 0)
+        {
+            ctx.Warnings.Add($"{raw.UriReference}: no content available for reprocessing — kept as-is");
+            return null;
+        }
+        return text;
+    }
+
+    /// <summary>RF-201 (SPEC-20260926-review-backlog-remediation): delete +
+    /// replace inside a transaction — a chunker/scan/save failure previously
+    /// left the doc with ZERO chunks (the ExecuteDelete is immediate; detaching
+    /// could not restore them).</summary>
+    private async Task<(KnowledgeDocument Doc, List<DocumentChunk> Chunks)> ReplaceDocumentAsync(
+        DocumentReplacePlan plan, CancellationToken cancellationToken)
+    {
+        var doc = plan.Doc;
+        List<DocumentChunk> newChunks;
+        await using (var tx = await plan.Db.Database.BeginTransactionAsync(cancellationToken))
+        {
+            try
+            {
+                if (doc is null)
+                {
+                    doc = new KnowledgeDocument
+                    {
+                        KnowledgeSourceId = plan.Source.Id,
+                        Title = plan.Title,
+                        UriReference = plan.UriReference
+                    };
+                    plan.Db.Documents.Add(doc);
+                    plan.Doc = doc;
+                }
+                else
+                {
+                    doc.Title = plan.Title;
+                    // Purge old chunks with a direct DELETE — no BLOB/text
+                    // materialization, no tracked-collection pitfalls.
+                    await plan.Db.Chunks.Where(c => c.KnowledgeDocumentId == doc.Id)
+                        .ExecuteDeleteAsync(cancellationToken);
+                }
+
+                doc.RawContent = plan.Content;
+                doc.ContentHash = plan.Hash;
+                doc.ChunkerVersion = Chunking.ChunkerSelector.CurrentVersion;
+                doc.ChunkerConfigHash = plan.ConfigHash;
+                doc.IndexedAt = DateTimeOffset.UtcNow;
+
+                // AddRange via DbSet — reassigning doc.Chunks after RemoveRange makes EF Core
+                // emit an UPDATE for the deleted rows inside the same batch (concurrency error).
+                newChunks = plan.Pieces.Select((piece, i) => new DocumentChunk
+                {
+                    KnowledgeDocumentId = doc.Id,
+                    ChunkIndex = i,
+                    TextContent = piece.Text,
+                    ChunkKind = plan.Kind.ToString().ToLowerInvariant(),
+                    SymbolPath = piece.SymbolPath,
+                    SectionPath = piece.SectionPath,
+                    MetadataJson = piece.MetadataJson,
+                    EnrichedText = EnrichPiece(plan.Source.Name, plan.Title, piece)
+                }).ToList();
+                plan.Db.Chunks.AddRange(newChunks);
+                ScanChunks(newChunks, doc.Id, plan.Source.Id, plan.Title, plan.Db, plan.Warnings);
+
+                await plan.Db.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
+        }
+        return (doc, newChunks);
+    }
+
+    /// <summary>Removes vault documents whose files disappeared.
+    /// SPEC-20260929 RF-003: mass-delete safety gate — an empty (or near-
+    /// empty) enumeration on a POPULATED index cannot prove absence; an
+    /// unreadable dir mounts as zero files and would wipe the index.
+    /// Small sources (below MinMassDeleteDocs) are exempt: deleting the
+    /// only file of a 1–3 doc vault is a legitimate operation, not a
+    /// wipe signature.</summary>
+    private async Task<(int Removed, string? GateWarning)> ReconcileDeletionsAsync(
+        SyncItemContext ctx, HashSet<string> seen, CancellationToken cancellationToken)
+    {
+        var massDeleteSuspicious =
+            ctx.Existing.Count >= MinMassDeleteDocs && seen.Count * 2 < ctx.Existing.Count;
+        if (massDeleteSuspicious)
+        {
+            logger.LogWarning(
+                "Sync for source {SourceId}: enumeration returned {Seen} item(s) for {Existing} indexed documents — skipping deletions (possible unreadable folder)",
+                ctx.Source.Id, seen.Count, ctx.Existing.Count);
+            return (0, $"deletion skipped: enumeration returned {seen.Count} of {ctx.Existing.Count} indexed documents — verify the path is accessible");
+        }
+
+        var removed = 0;
+        foreach (var (uri, doc) in ctx.Existing)
+        {
+            if (seen.Contains(uri))
+                continue;
+            await ctx.Vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
+            ctx.Db.Documents.Remove(doc);
+            removed++;
+        }
+        return (removed, null);
+    }
+
+    /// <summary>Removes indexed documents no longer returned by the fetch.
+    /// SPEC-20260929 RF-003: same safety gate as the file path — a fetch that
+    /// sees &lt;50% of a populated index can't prove mass absence. Sources
+    /// below MinMassDeleteDocs are exempt (small indexes legitimately empty).</summary>
+    private async Task<int> ReconcileFetchDeletionsAsync(
+        SyncItemContext ctx, HashSet<string> seen, Connectors.FetchResult fetch,
+        CancellationToken cancellationToken)
+    {
+        var fetchSuspiciousDrop =
+            ctx.Existing.Count >= MinMassDeleteDocs && seen.Count * 2 < ctx.Existing.Count;
+        if (fetchSuspiciousDrop && !fetch.Truncated)
+        {
+            logger.LogWarning(
+                "Fetch sync for source {SourceId}: listing returned {Seen} item(s) for {Existing} indexed documents — skipping deletions",
+                ctx.Source.Id, seen.Count, ctx.Existing.Count);
+            ctx.Warnings.Add($"deletion skipped: listing returned {seen.Count} of {ctx.Existing.Count} indexed documents");
+        }
+
+        var removed = 0;
+        foreach (var (uri, doc) in ctx.Existing)
+        {
+            // RF-002: a truncated listing cannot prove absence — keep everything.
+            if (seen.Contains(uri) || fetch.Truncated || fetchSuspiciousDrop)
+                continue;
+            await ctx.Vectors.DeleteByDocumentAsync(doc.Id, cancellationToken);
+            ctx.Db.Documents.Remove(doc);
+            removed++;
+        }
+        return removed;
     }
 
     /// <summary>SPEC-20260926-ingestion-connector-integrity RF-006: after a

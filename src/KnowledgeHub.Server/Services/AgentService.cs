@@ -72,17 +72,7 @@ public sealed class AgentService(
         await foreach (var e in channel.Reader.ReadAllAsync(cancellationToken))
             yield return e;
 
-        AgentResponse? result = null;
-        Exception? failure = null;
-        try
-        {
-            result = await run;
-        }
-        catch (Exception ex)
-        {
-            if (ex is OperationCanceledException) throw;
-            failure = ex;
-        }
+        var (result, failure) = await AwaitRunAsync(run);
         if (failure is not null)
         {
             yield return new SseEvent("error", new { message = failure.Message });
@@ -116,6 +106,13 @@ public sealed class AgentService(
     private static ValueTask WriteEventAsync(
         ChannelWriter<SseEvent>? sink, SseEvent e, CancellationToken ct) =>
         sink is null ? ValueTask.CompletedTask : sink.WriteAsync(e, ct);
+
+    /// <summary>Flattens the loop task outcome; cancellation keeps propagating.</summary>
+    private static async Task<(AgentResponse? Result, Exception? Failure)> AwaitRunAsync(Task<AgentResponse> run)
+    {
+        try { return (await run, null); }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return (null, ex); }
+    }
 
     private sealed record Preparation(
         IChatClient Client,

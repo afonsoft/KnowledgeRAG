@@ -246,7 +246,8 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
             cmd.Transaction = tx;
 
             var whereSource = sourceIds is null ? "" : " AND source_id = ANY($4)";
-            cmd.CommandText = $"""
+            cmd.CommandText = // NOSONAR S2077 — interpola apenas cláusula estática "AND source_id = ANY($4)"; valores parametrizados
+                $"""
                 SELECT chunk_id, 1 - (embedding <=> $1) AS score
                 FROM kh_embeddings
                 WHERE model = $2{whereSource}
@@ -465,8 +466,8 @@ public sealed class PostgresVectorStore : IVectorStore, IAsyncDisposable
             await using var alter = conn.CreateCommand();
             alter.Transaction = tx;
             alter.CommandTimeout = 600; // table rewrite — give it room
-            alter.CommandText =
-                $"ALTER TABLE kh_embeddings ALTER COLUMN embedding TYPE {_storageType} USING embedding::{_storageType}"; // NOSONAR S2077 — _storageType é enum interno validado (vector|halfvec)
+            alter.CommandText = // NOSONAR S2077 — _storageType é enum interno validado (vector|halfvec)
+                $"ALTER TABLE kh_embeddings ALTER COLUMN embedding TYPE {_storageType} USING embedding::{_storageType}";
             await alter.ExecuteNonQueryAsync(ct);
 
             await tx.CommitAsync(ct);
