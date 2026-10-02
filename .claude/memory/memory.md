@@ -59,3 +59,12 @@
 - Corrigido bug pré-existente: `contextId` A2A auto-mapeado p/ `agent_chat.threadId` — hex-32 parseia como Guid, jogava `KeyNotFoundException` → stream -32603.
 - Verificação: build 0/0, **1184 unit + 322 integration verdes** (12+6 novas cobrindo AC-1..AC-5), format limpo nos arquivos da feature. `docker-compose.yml` `mem_limit` segue não commitado.
 - Detalhes/pegadinhas (SQLite DateTimeOffset client-side, enum `TASK_STATE_*`, union `{task:…}`, ClearAllPools no restart test) em `.claude/memory/20261001-memory.md`.
+
+## Session summary (2026-10-02 — E27 orchestrator: gap-analysis residual)
+
+- **Epic #503** executado: #504 ratchet-pin+format gate → **PR #509** (checks verdes); #506 stale-branches → **Done/fechada** (30 remotas + 1 local deletadas, `delete_branch_on_merge=true`, convenção em CLAUDE.md via #508); #505 static-analysis residual → **PR #510**; #507 branch-protection → pendente decisão do usuário.
+- **CodeQL backlog real era ~100**, não 29 — incluía ~26 alertas em `obj/**/generated/*.g.cs` (autobuild escaneava saída do RegexGenerator). Fix estrutural: `.github/codeql/codeql-config.yml` com `paths-ignore` + `config-file` no init do security-scan.yml.
+- **Dismissals CodeQL via `gh api -X PATCH code-scanning/alerts/{n}`**: reason usa espaços (`"won't fix"`, `"false positive"`) — underscore dá 422. Dismissados 26 com justificativa por alerta.
+- **Padrões úteis:** casts `(string?)` p/ tuple-inference → `Select<T,(string,string?)>` com generics explícitos; `(IReadOnlyList<T>)[]` → `Array.Empty<T>()`; `Path.Combine(a, rel)` → `Path.Join` (não descarta prefixo se arg rooted); anon-type EF projection não atravessa fronteira de método → record `HydratedChunk` tipado; `foreach{continue}` → `.Where(...)` satisfaz cs/missed-where.
+- **SDK flutuante `10.0.x` injeta refs implícitas nos packages.lock.json** (HotReload.WebAssembly.Browser) — drift documentado na #504; locked-mode deferido.
+- Verificação: build 0/0, format gate limpo, 1246 unit + 322 integration verdes.
