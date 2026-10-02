@@ -4,7 +4,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `Approved` |
+| Status | `Done` — 230 alerts dismissed via API (obj/** generated code + boundary catch-alls); policy documented in codeql-config.yml |
 | Ticket | Epic [#515 (E28)](https://github.com/afonsoft/LangGraph-UI/issues/515) — slice [#516](https://github.com/afonsoft/LangGraph-UI/issues/516) | gap-analysis-20261002-r3 — gap `GAP-automation-codeql-generated-noise` |
 | Origem | gap-analysis r3 — `gh api code-scanning/alerts?state=open` (scan d0435ef) |
 | Pré-requisito | SPEC-20261002-static-analysis-residual (Done, #510) |
