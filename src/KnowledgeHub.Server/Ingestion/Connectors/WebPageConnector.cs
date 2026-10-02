@@ -152,14 +152,20 @@ public sealed class WebPageConnector(
     public static bool IsPrivate(IPAddress ip) =>
         IPAddress.IsLoopback(ip)
         || ip.IsIPv6LinkLocal
-        || (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
-            && (ip.GetAddressBytes()[0] & 0xFE) == 0xFC) // fc00::/7 unique-local
-        || (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
-            && ip.GetAddressBytes() is { } b
-            && (b[0] == 10
-                || (b[0] == 172 && b[1] is >= 16 and <= 31)
-                || (b[0] == 192 && b[1] == 168)
-                || (b[0] == 169 && b[1] == 254)));
+        || IsUniqueLocalV6(ip)
+        || IsPrivateV4(ip);
+
+    private static bool IsUniqueLocalV6(IPAddress ip) =>
+        ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
+        && (ip.GetAddressBytes()[0] & 0xFE) == 0xFC; // fc00::/7 unique-local
+
+    private static bool IsPrivateV4(IPAddress ip) =>
+        ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+        && ip.GetAddressBytes() is { } b
+        && (b[0] == 10
+            || (b[0] == 172 && b[1] is >= 16 and <= 31)
+            || (b[0] == 192 && b[1] == 168)
+            || (b[0] == 169 && b[1] == 254));
 
     private async Task<RobotsPolicy> FetchRobotsAsync(Uri start, bool allowPrivate, CancellationToken ct)
     {
@@ -193,9 +199,8 @@ public sealed class WebPageConnector(
         {
             var disallow = new List<string>();
             var appliesToUs = false;
-            foreach (var rawLine in robotsTxt.Split('\n'))
+            foreach (var line in robotsTxt.Split('\n').Select(raw => raw.Split('#')[0].Trim()))
             {
-                var line = rawLine.Split('#')[0].Trim();
                 var colon = line.IndexOf(':');
                 if (colon <= 0) continue;
                 var field = line[..colon].Trim();

@@ -17,7 +17,7 @@ public class CodeChunkingTests : IClassFixture<CodeChunkingTests.Fixture>
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-chunk-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-chunk-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -37,7 +37,7 @@ public class CodeChunkingTests : IClassFixture<CodeChunkingTests.Fixture>
     {
         _factory = factory;
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"chunks-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"chunks-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
@@ -55,7 +55,7 @@ public class CodeChunkingTests : IClassFixture<CodeChunkingTests.Fixture>
                 }
             }
             """;
-        await File.WriteAllTextAsync(Path.Combine(_dir, "svc.cs"), cs);
+        await File.WriteAllTextAsync(Path.Join(_dir, "svc.cs"), cs);
         var src = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"cs-{Guid.NewGuid():N}",

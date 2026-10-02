@@ -58,8 +58,8 @@ public sealed class OnnxEmbeddingProvider : IEmbeddingProvider, IDisposable
     public static OnnxEmbeddingProvider Load(string? modelDirectory)
     {
         var dir = string.IsNullOrWhiteSpace(modelDirectory) ? DefaultModelDirectory : modelDirectory;
-        var modelFile = Path.Combine(dir, ModelFileName);
-        var vocabFile = Path.Combine(dir, VocabFileName);
+        var modelFile = Path.Join(dir, ModelFileName);
+        var vocabFile = Path.Join(dir, VocabFileName);
 
         if (!File.Exists(modelFile) || !File.Exists(vocabFile))
             throw new EmbeddingProviderException(

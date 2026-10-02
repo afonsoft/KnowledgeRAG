@@ -129,7 +129,7 @@ public static class StreamingEndpoints
         await http.Response.StartAsync(ct);
 
         var seq = 0;
-        var gate = new SemaphoreSlim(1, 1);
+        using var gate = new SemaphoreSlim(1, 1);
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var heartbeat = Task.Run(async () =>
         {

@@ -15,10 +15,10 @@ public static class DatabasePath
         var configured = configuration["KnowledgeHub:DatabasePath"]
             ?? configuration.GetValue<string>("Database:Path");
         if (string.IsNullOrWhiteSpace(configured))
-            return Path.Combine(AppContext.BaseDirectory, DefaultFileName);
+            return Path.Join(AppContext.BaseDirectory, DefaultFileName);
         return Path.IsPathRooted(configured)
             ? configured
-            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configured));
+            : Path.GetFullPath(Path.Join(AppContext.BaseDirectory, configured));
     }
 
     /// <summary>Ensures the parent directory exists; surfaces a clear error on read-only locations.</summary>

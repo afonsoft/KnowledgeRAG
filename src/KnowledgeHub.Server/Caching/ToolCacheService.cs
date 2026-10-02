@@ -138,16 +138,13 @@ public sealed class ToolCacheEntry
 
         if (result.Content != null)
         {
-            foreach (var block in result.Content)
+            foreach (var text in result.Content.OfType<TextContentBlock>())
             {
-                if (block is TextContentBlock text)
+                entry.Content.Add(new ToolCacheContentBlock
                 {
-                    entry.Content.Add(new ToolCacheContentBlock
-                    {
-                        Type = "text",
-                        Text = text.Text
-                    });
-                }
+                    Type = "text",
+                    Text = text.Text
+                });
             }
         }
 

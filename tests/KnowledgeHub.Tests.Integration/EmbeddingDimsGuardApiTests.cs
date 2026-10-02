@@ -19,7 +19,7 @@ public class EmbeddingDimsGuardApiTests : IClassFixture<EmbeddingDimsGuardApiTes
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-embguard-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-embguard-{Guid.NewGuid():N}.db"),
                     ["Embeddings:Provider"] = "deterministic",
                     ["Embeddings:Dimensions"] = "384",
                     ["VectorStore:Provider"] = "sqlite-vec"

@@ -80,12 +80,11 @@ public sealed class ConnectorIntegrityTests : IDisposable
         public async IAsyncEnumerable<RemoteObject> ListAsync(
             string? prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
         {
-            foreach (var o in objects)
+            foreach (var o in objects.Where(o =>
+                prefix is null
+                || o.Key.StartsWith(prefix.TrimEnd('/') + "/", StringComparison.Ordinal)
+                || o.Key.Equals(prefix, StringComparison.Ordinal)))
             {
-                if (prefix is not null
-                    && !o.Key.StartsWith(prefix.TrimEnd('/') + "/", StringComparison.Ordinal)
-                    && !o.Key.Equals(prefix, StringComparison.Ordinal))
-                    continue;
                 yield return o;
             }
             await Task.CompletedTask;
@@ -105,7 +104,7 @@ public sealed class ConnectorIntegrityTests : IDisposable
     {
         public string GetStagingDirectory(Guid sourceId)
         {
-            var dir = Path.Combine(root, sourceId.ToString("N"));
+            var dir = Path.Join(root, sourceId.ToString("N"));
             Directory.CreateDirectory(dir);
             return dir;
         }
@@ -132,7 +131,7 @@ public sealed class ConnectorIntegrityTests : IDisposable
     {
         var c = new AwsS3Connector(
             new FakeSecrets(),
-            new FakeStaging(Path.Combine(Path.GetTempPath(), $"kh_ci_{Guid.NewGuid():N}")),
+            new FakeStaging(Path.Join(Path.GetTempPath(), $"kh_ci_{Guid.NewGuid():N}")),
             NullLogger<AwsS3Connector>.Instance);
         c.GatewayOverride = (_, _, _) => Task.FromResult(gw);
         return c;
@@ -464,7 +463,7 @@ public sealed class ConnectorIntegrityTests : IDisposable
     {
         var sc = new ServiceCollection();
         sc.AddDbContext<KnowledgeHubDbContext>(o => o.UseSqlite(_conn));
-        var sp = sc.BuildServiceProvider();
+        await using var sp = sc.BuildServiceProvider();
         var cfg = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Ingestion:QueueSize"] = "1" }).Build();
         var queue = new IngestionQueue(sp.GetRequiredService<IServiceScopeFactory>(), cfg);
@@ -486,7 +485,6 @@ public sealed class ConnectorIntegrityTests : IDisposable
         var db = scope.ServiceProvider.GetRequiredService<KnowledgeHubDbContext>();
         var failedJob = await db.IngestionJobs.SingleAsync(j => j.SourceId == b);
         Assert.Equal("failed", failedJob.Status);
-        sp.Dispose();
     }
 
     // ---- Azure helpers ----

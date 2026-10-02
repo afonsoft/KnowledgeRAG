@@ -12,6 +12,7 @@ public static class RrfFuser
 {
     public const int K = 60;
 
+    /// <summary>Reciprocal-rank fusion of vector and lexical ranked chunk lists.</summary>
     /// <param name="vectorRanked">Chunk ids ordered best-first by the vector ranker.</param>
     /// <param name="lexicalRanked">Chunk ids ordered best-first by the lexical ranker.</param>
     public static IReadOnlyList<FusedHit> Fuse(

@@ -13,7 +13,7 @@ public class DeepWikiProxyEnabledTests : IClassFixture<DeepWikiProxyEnabledTests
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-dw-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-dw-{Guid.NewGuid():N}.db"),
                     ["DeepWiki:Enabled"] = "true"
                 }));
     }
@@ -50,7 +50,7 @@ public class DeepWikiProxyDisabledTests : IClassFixture<DeepWikiProxyDisabledTes
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-dw-off-{Guid.NewGuid():N}.db"),
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-dw-off-{Guid.NewGuid():N}.db"),
                     ["DeepWiki:Enabled"] = "false"
                 }));
     }

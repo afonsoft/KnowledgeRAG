@@ -14,7 +14,7 @@ public class EvalBaselinesApiTests : IClassFixture<EvalBaselinesApiTests.Fixture
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-evalbl-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-evalbl-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
         {
@@ -32,15 +32,15 @@ public class EvalBaselinesApiTests : IClassFixture<EvalBaselinesApiTests.Fixture
     public EvalBaselinesApiTests(Fixture factory)
     {
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"evalbl-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"evalbl-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
-    public void Dispose() { try { Directory.Delete(_dir, recursive: true); } catch { } }
+    public void Dispose() { try { Directory.Delete(_dir, recursive: true); } catch (Exception ex) { _ = ex.Message; } }
 
     private async Task SeedSource()
     {
-        await File.WriteAllTextAsync(Path.Combine(_dir, "alpha.txt"), "EVALBL-ALPHA baseline marker");
+        await File.WriteAllTextAsync(Path.Join(_dir, "alpha.txt"), "EVALBL-ALPHA baseline marker");
         var response = await _client.PostAsJsonAsync("/api/sources", new
         {
             name = $"evalbl-{Guid.NewGuid():N}",

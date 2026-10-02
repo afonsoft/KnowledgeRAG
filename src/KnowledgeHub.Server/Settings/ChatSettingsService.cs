@@ -67,10 +67,9 @@ public sealed class ChatSettingsService(
         var env = envOptions.Value;
         var row = await FindRowAsync(CancellationToken.None);
 
-        ChatProviderOptions options;
-        if (row is not null)
-        {
-            options = new ChatProviderOptions
+        var options = row is null
+            ? env
+            : new ChatProviderOptions
             {
                 Provider = "openai",
                 Endpoint = row.Endpoint,
@@ -80,11 +79,6 @@ public sealed class ChatSettingsService(
                 MaxTokens = env.MaxTokens,
                 TimeoutSeconds = env.TimeoutSeconds
             };
-        }
-        else
-        {
-            options = env;
-        }
 
         IChatClient? client = null;
         try
@@ -174,7 +168,8 @@ public sealed class ChatSettingsService(
 
         Invalidate();
         logger.LogInformation("chat settings saved (endpoint {Endpoint}, model {Model}, key {KeyAction})",
-            endpoint, model, string.IsNullOrWhiteSpace(apiKey) ? "kept" : "updated");
+            EmbeddingSettingsService.LogSafe(endpoint), EmbeddingSettingsService.LogSafe(model),
+            string.IsNullOrWhiteSpace(apiKey) ? "kept" : "updated");
     }
 
     /// <summary>Remove a key "chat" do store e invalida o cache — a key de env volta a valer.</summary>

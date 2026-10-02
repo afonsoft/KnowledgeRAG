@@ -219,12 +219,8 @@ public sealed class ApiKeyChatSettingsService(
         var endpoint = row?.Endpoint ?? globalOpts.Endpoint;
         var model = row?.Model ?? globalOpts.Model;
 
-        string? apiKey = null;
         var secret = secrets.GetAsync($"apikey-chat-{apiKeyId:N}").GetAwaiter().GetResult();
-        if (secret is not null)
-            apiKey = secret;
-        else
-            apiKey = globalOpts.ApiKey;
+        var apiKey = secret ?? globalOpts.ApiKey;
 
         return new ChatProviderOptions
         {

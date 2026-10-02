@@ -21,7 +21,7 @@ public sealed class SearchAllocBenchTests(ITestOutputHelper output)
         const int chunks = 5000;
         const int dims = 384;
 
-        var dbPath = Path.Combine(Path.GetTempPath(), $"kh-bench-{Guid.NewGuid():N}.db");
+        var dbPath = Path.Join(Path.GetTempPath(), $"kh-bench-{Guid.NewGuid():N}.db");
         try
         {
             var options = new DbContextOptionsBuilder<KnowledgeHubDbContext>()
@@ -68,7 +68,7 @@ public sealed class SearchAllocBenchTests(ITestOutputHelper output)
         }
         finally
         {
-            try { File.Delete(dbPath); } catch { }
+            try { File.Delete(dbPath); } catch (Exception ex) { _ = ex.Message; }
         }
     }
 

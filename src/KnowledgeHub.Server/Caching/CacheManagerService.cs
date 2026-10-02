@@ -300,13 +300,8 @@ public sealed class CacheManagerService : ICacheManagerService
     private void PruneExpired()
     {
         var now = DateTimeOffset.UtcNow;
-        foreach (var kvp in _trackedKeys)
-        {
-            if (kvp.Value.ExpiresAt.HasValue && kvp.Value.ExpiresAt.Value <= now)
-            {
-                _trackedKeys.TryRemove(kvp.Key, out _);
-            }
-        }
+        foreach (var kvp in _trackedKeys.Where(kv => kv.Value.ExpiresAt <= now))
+            _trackedKeys.TryRemove(kvp.Key, out _);
     }
 
     private static string ExtractPrefix(string key)

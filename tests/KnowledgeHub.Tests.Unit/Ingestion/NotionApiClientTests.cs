@@ -150,6 +150,7 @@ public class NotionApiClientTests
             await foreach (var _ in Sut(responses, new List<SentRequest>())
                 .GetBlockChildrenAsync("missing", CancellationToken.None))
             {
+                throw new InvalidOperationException("expected NotFound before any item");
             }
         });
 

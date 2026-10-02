@@ -15,7 +15,7 @@ public class AgentApiTests : IClassFixture<AgentApiTests.Fixture>, IClassFixture
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-agent-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-agent-{Guid.NewGuid():N}.db");
         public ScriptedChatClient Chat { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -95,7 +95,7 @@ public class AgentApiTests : IClassFixture<AgentApiTests.Fixture>, IClassFixture
         _factory = factory;
         _noChat = noChat;
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"agent-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"agent-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
@@ -103,7 +103,7 @@ public class AgentApiTests : IClassFixture<AgentApiTests.Fixture>, IClassFixture
 
     public void Dispose()
     {
-        try { Directory.Delete(_dir, recursive: true); } catch { }
+        try { Directory.Delete(_dir, recursive: true); } catch (Exception ex) { _ = ex.Message; }
     }
 
     [Fact]

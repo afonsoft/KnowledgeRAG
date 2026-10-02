@@ -29,7 +29,8 @@ public sealed class GlobalExceptionHandler(
         };
 
         if (status >= 500)
-            logger.LogError(exception, "Unhandled exception on {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
+            logger.LogError(exception, "Unhandled exception on {Method} {Path}",
+                Safe(httpContext.Request.Method), Safe(httpContext.Request.Path.Value));
 
         var problem = new ProblemDetails
         {
@@ -48,4 +49,6 @@ public sealed class GlobalExceptionHandler(
         });
         return true;
     }
+
+    private static string? Safe(string? value) => value?.ReplaceLineEndings("_");
 }

@@ -53,20 +53,14 @@ public static class HtmlTextExtractor
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(html);
-        var links = new List<string>();
-        foreach (var a in doc.DocumentNode.SelectNodes("//a[@href]") ?? Enumerable.Empty<HtmlNode>())
-        {
-            var href = a.GetAttributeValue("href", "");
-            if (Uri.TryCreate(page, href, out var absolute)
-                && absolute.Scheme is "http" or "https"
+        return (doc.DocumentNode.SelectNodes("//a[@href]") ?? Enumerable.Empty<HtmlNode>())
+            .Select(a => a.GetAttributeValue("href", ""))
+            .Select(href => Uri.TryCreate(page, href, out var absolute) ? absolute : null)
+            .Where(absolute => absolute is { Scheme: "http" or "https" }
                 && absolute.Host.Equals(page.Host, StringComparison.OrdinalIgnoreCase))
-            {
-                var clean = absolute.GetLeftPart(UriPartial.Path);
-                if (!links.Contains(clean))
-                    links.Add(clean);
-            }
-        }
-        return links;
+            .Select(absolute => absolute!.GetLeftPart(UriPartial.Path))
+            .Distinct()
+            .ToList();
     }
 
     private static IEnumerable<HtmlNode> DropBySelector(HtmlNode scope, string? selector) =>

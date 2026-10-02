@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace KnowledgeHub.Shared.Tooling;
 
-/// Resolved input kinds for a schema-driven tool form (SPEC-20260914-playground-tool-form RF-001).
+/// <summary>Resolved input kinds for a schema-driven tool form (SPEC-20260914-playground-tool-form RF-001).</summary>
 public enum ToolFieldKind
 {
     String,
@@ -208,9 +208,8 @@ public static class ToolArgumentBuilder
     {
         if (args.ValueKind != JsonValueKind.Object)
             return;
-        foreach (var f in fields)
-            if (args.TryGetProperty(f.Name, out var el))
-                f.TextValue = ToRawText(f, el);
+        foreach (var f in fields.Where(f => args.TryGetProperty(f.Name, out _)))
+            f.TextValue = ToRawText(f, args.GetProperty(f.Name));
     }
 
     /// <summary>RF-007: no examples → minimal skeleton from required fields + kinds.</summary>

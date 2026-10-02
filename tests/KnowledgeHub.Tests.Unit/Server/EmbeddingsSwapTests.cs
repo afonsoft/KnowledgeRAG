@@ -75,7 +75,7 @@ public sealed class EmbeddingsSwapTests
             NullLogger<EmbeddingProviderResolver>.Instance,
             _ => { var p = new TrackedProvider(); built.Add(p); return p; });
 
-        var lease = resolver.Acquire();
+        using var lease = resolver.Acquire();
         var previous = built[0];
 
         settings.Options = new EmbeddingOptions { Provider = "ollama", Dimensions = 4 };

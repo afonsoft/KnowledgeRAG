@@ -10,8 +10,9 @@ namespace KnowledgeHub.Tests.Unit.Server;
 // Mesma regra do OpenAiChatClient: o request Ollama sempre sai com valores
 // concretos — options {temperature, num_predict}, tools [] e, por mensagem,
 // tool_calls [] / tool_call_id "". Tool sem schema recebe parameters default.
-public sealed class OllamaChatClientTests
+public sealed class OllamaChatClientTests : IDisposable
 {
+    private readonly List<IDisposable> _owned = new();
     /// <summary>Handler fake que captura o corpo da requisição e responde um chat mínimo.</summary>
     private sealed class CaptureHandler : HttpMessageHandler
     {
@@ -45,16 +46,26 @@ public sealed class OllamaChatClientTests
     }
 
     /// <summary>Monta um OllamaChatClient apontando para o handler de captura.</summary>
-    private static (OllamaChatClient Client, CaptureHandler Handler) Sut()
+    private (OllamaChatClient Client, CaptureHandler Handler) Sut()
     {
         var handler = new CaptureHandler();
-        var client = new OllamaChatClient(new HttpClient(handler), new ChatProviderOptions
+        var http = new HttpClient(handler);
+        _owned.Add(http);
+        _owned.Add(handler);
+        var client = new OllamaChatClient(http, new ChatProviderOptions
         {
             Provider = "ollama",
             Endpoint = "http://ollama.test",
             Model = "m"
         });
         return (client, handler);
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        foreach (var d in _owned)
+            d.Dispose();
     }
 
     /// <summary>options sempre sai com temperature/num_predict, mesmo sem configuração.</summary>

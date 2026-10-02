@@ -63,7 +63,8 @@ public static partial class MarkdownNoteParser
         try
         {
             var yaml = new YamlStream();
-            yaml.Load(new StringReader(yamlText));
+            using var reader = new StringReader(yamlText);
+            yaml.Load(reader);
             if (yaml.Documents.Count == 0 || yaml.Documents[0].RootNode is not YamlMappingNode map)
                 return (empty, body);
 

@@ -123,7 +123,7 @@ public sealed class SearchCorrectnessTests
         {
             Calls++;
             // First call returns hits; the rewritten retry returns nothing.
-            return Task.FromResult(Calls == 1 ? first : (IReadOnlyList<SearchResultItem>)[]);
+            return Task.FromResult(Calls == 1 ? first : []);
         }
     }
 

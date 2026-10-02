@@ -25,7 +25,7 @@ public class ChatSettingsApiTests : IClassFixture<ChatSettingsApiTests.Fixture>
             builder.ConfigureAppConfiguration((_, config) =>
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = Path.Combine(Path.GetTempPath(), $"kh-chatsettings-{Guid.NewGuid():N}.db")
+                    ["Database:Path"] = Path.Join(Path.GetTempPath(), $"kh-chatsettings-{Guid.NewGuid():N}.db")
                 }));
             builder.ConfigureServices(services =>
                 services.AddSingleton<Func<HttpClient>>(() =>

@@ -14,7 +14,7 @@ public class StreamingApiTests : IClassFixture<StreamingApiTests.Fixture>
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-stream-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-stream-{Guid.NewGuid():N}.db");
         public AgentApiTests.ScriptedChatClient Chat { get; } = new();
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -37,7 +37,7 @@ public class StreamingApiTests : IClassFixture<StreamingApiTests.Fixture>
     {
         _factory = factory;
         _client = TestAuth.Login(factory);
-        _dir = Path.Combine(Path.GetTempPath(), $"stream-{Guid.NewGuid():N}");
+        _dir = Path.Join(Path.GetTempPath(), $"stream-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
     }
 
@@ -60,8 +60,8 @@ public class StreamingApiTests : IClassFixture<StreamingApiTests.Fixture>
 
     private async Task<string> PostSseAsync(string url, object payload)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload) };
-        var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload) };
+        using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
         Assert.Equal("no", response.Headers.GetValues("X-Accel-Buffering").First());
@@ -97,7 +97,7 @@ public class StreamingApiTests : IClassFixture<StreamingApiTests.Fixture>
     public async Task AskStream_EmitsTokensAndDone()
     {
         // Seed a document source so the context is non-empty.
-        var file = Path.Combine(_dir, "seed.txt");
+        var file = Path.Join(_dir, "seed.txt");
         await File.WriteAllTextAsync(file, "knowledge about streaming");
         var create = await _client.PostAsJsonAsync("/api/sources", new
         {

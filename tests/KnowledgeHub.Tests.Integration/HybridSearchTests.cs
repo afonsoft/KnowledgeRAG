@@ -14,7 +14,7 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
 {
     public sealed class Fixture : WebApplicationFactory<Program>
     {
-        public string DbPath { get; } = Path.Combine(Path.GetTempPath(), $"kh-hybrid-{Guid.NewGuid():N}.db");
+        public string DbPath { get; } = Path.Join(Path.GetTempPath(), $"kh-hybrid-{Guid.NewGuid():N}.db");
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
@@ -32,13 +32,13 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
     public HybridSearchTests(Fixture factory)
     {
         _client = TestAuth.Login(factory);
-        _vault = Path.Combine(Path.GetTempPath(), $"vault-{Guid.NewGuid():N}");
+        _vault = Path.Join(Path.GetTempPath(), $"vault-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_vault);
     }
 
     public void Dispose()
     {
-        try { Directory.Delete(_vault, recursive: true); } catch { }
+        try { Directory.Delete(_vault, recursive: true); } catch (Exception ex) { _ = ex.Message; }
     }
 
     private async Task<KnowledgeSourceDto> CreateAndSyncVault(string name)
@@ -62,9 +62,9 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
     {
         // Out-of-vocabulary token: the vector ranker cannot score it
         // meaningfully, but FTS must rank the containing doc #1.
-        await File.WriteAllTextAsync(Path.Combine(_vault, "runbook.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "runbook.md"),
             "# Runbook\n\nRestart procedure uses token ZXQW77ALPHA for the freeze window.");
-        await File.WriteAllTextAsync(Path.Combine(_vault, "unrelated.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "unrelated.md"),
             "# Notes\n\ncompletely unrelated content about gardening and soil");
 
         await CreateAndSyncVault($"lit-{Guid.NewGuid():N}");
@@ -81,7 +81,7 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
     [Fact]
     public async Task Lexical_OnlyMode_FindsExactTerm()
     {
-        await File.WriteAllTextAsync(Path.Combine(_vault, "spec.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "spec.md"),
             "# Spec\n\nidentifier KLMN99BETA appears in the spec table");
         await CreateAndSyncVault($"lex-{Guid.NewGuid():N}");
 
@@ -95,9 +95,9 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
     [Fact]
     public async Task Semantic_Mode_PreservesVectorResults()
     {
-        await File.WriteAllTextAsync(Path.Combine(_vault, "vectors.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "vectors.md"),
             "# Busca Vetorial\n\nembeddings vetores similaridade cosseno busca semântica");
-        await File.WriteAllTextAsync(Path.Combine(_vault, "cake.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "cake.md"),
             "# Bolo\n\nreceita de bolo de chocolate com farinha");
         await CreateAndSyncVault($"sem-{Guid.NewGuid():N}");
 
@@ -113,7 +113,7 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
     public async Task SourceFilter_RestrictsLexicalResults()
     {
         var shared = "UNIQTOKEN42";
-        await File.WriteAllTextAsync(Path.Combine(_vault, "only.md"),
+        await File.WriteAllTextAsync(Path.Join(_vault, "only.md"),
             $"# Only\n\ncontains {shared}");
         var source = await CreateAndSyncVault($"filt-{Guid.NewGuid():N}");
 
@@ -138,7 +138,7 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
     [Fact]
     public async Task FtsSyntaxGarbage_Returns200_NotException()
     {
-        await File.WriteAllTextAsync(Path.Combine(_vault, "x.md"), "# X\n\nplain text");
+        await File.WriteAllTextAsync(Path.Join(_vault, "x.md"), "# X\n\nplain text");
         await CreateAndSyncVault($"syn-{Guid.NewGuid():N}");
 
         var response = await _client.GetAsync(
@@ -149,7 +149,7 @@ public class HybridSearchTests : IClassFixture<HybridSearchTests.Fixture>, IDisp
     [Fact]
     public async Task DeletedFile_LeavesLexicalIndex()
     {
-        var file = Path.Combine(_vault, "ephemeral.md");
+        var file = Path.Join(_vault, "ephemeral.md");
         await File.WriteAllTextAsync(file, "# Ephemeral\n\nunique marker DELTATOKEN55 here");
         var source = await CreateAndSyncVault($"del-{Guid.NewGuid():N}");
 

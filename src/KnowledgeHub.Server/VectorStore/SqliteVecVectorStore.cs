@@ -329,10 +329,9 @@ public sealed class SqliteVecVectorStore : IVectorStore
         await using var tx = (SqliteTransaction)await conn.BeginTransactionAsync(cancellationToken);
         try
         {
-            foreach (var chunk in missing)
+            foreach (var chunk in missing.Where(c => sourceByDocument.ContainsKey(c.KnowledgeDocumentId)))
             {
-                if (!sourceByDocument.TryGetValue(chunk.KnowledgeDocumentId, out var sourceId))
-                    continue;
+                var sourceId = sourceByDocument[chunk.KnowledgeDocumentId];
                 await using var cmd = conn.CreateCommand();
                 cmd.Transaction = tx;
                 cmd.CommandText = $"""

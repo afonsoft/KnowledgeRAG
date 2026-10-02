@@ -751,33 +751,28 @@
 
     private static List<AgentStepModel> ParseSteps(JsonElement sc)
     {
-        var steps = new List<AgentStepModel>();
         if (!sc.TryGetProperty("steps", out var st) || st.ValueKind != JsonValueKind.Array)
-            return steps;
-        foreach (var s in st.EnumerateArray())
-        {
-            if (s.ValueKind != JsonValueKind.Object) continue;
-            steps.Add(new AgentStepModel
+            return [];
+        return st.EnumerateArray()
+            .Where(s => s.ValueKind == JsonValueKind.Object)
+            .Select(s => new AgentStepModel
             {
                 Iteration = s.TryGetProperty("iteration", out var it) ? it.GetInt32() : 0,
                 Tool = s.TryGetProperty("tool", out var tn) ? tn.GetString() ?? "" : "",
                 ArgsSummary = s.TryGetProperty("argsSummary", out var ag) ? ag.GetString() ?? "" : "",
                 IsError = IsTrue(s, "isError"),
                 ElapsedMs = s.TryGetProperty("elapsedMs", out var em) ? em.GetDouble() : 0
-            });
-        }
-        return steps;
+            })
+            .ToList();
     }
 
     private static List<CitationModel> ParseCitations(JsonElement sc)
     {
-        var citations = new List<CitationModel>();
         if (!sc.TryGetProperty("citations", out var cs) || cs.ValueKind != JsonValueKind.Array)
-            return citations;
-        foreach (var c in cs.EnumerateArray())
-        {
-            if (c.ValueKind != JsonValueKind.Object) continue;
-            citations.Add(new CitationModel
+            return [];
+        return cs.EnumerateArray()
+            .Where(c => c.ValueKind == JsonValueKind.Object)
+            .Select(c => new CitationModel
             {
                 Index = c.TryGetProperty("index", out var i) ? i.GetInt32() : 0,
                 Source = c.TryGetProperty("source", out var s) ? s.GetString() ?? "" : "",
@@ -785,9 +780,8 @@
                 Uri = c.TryGetProperty("uri", out var u) ? u.GetString() ?? "" : "",
                 SuspicionFlags = c.TryGetProperty("suspicionFlags", out var sf)
                     && sf.ValueKind == JsonValueKind.String ? sf.GetString() : null
-            });
-        }
-        return citations;
+            })
+            .ToList();
     }
 
     private sealed record AgentStepModel
