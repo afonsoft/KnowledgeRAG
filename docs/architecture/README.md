@@ -35,5 +35,5 @@ Architecture deliverables for KnowledgeHub. Source of truth for decisions:
 | [knowledge-hub_a2a_sequence.mmd](knowledge-hub_a2a_sequence.mmd) | Mermaid | A2A `message/send`→`tasks/get` sequence + push webhooks |
 | [knowledge-hub_deployment.mmd](knowledge-hub_deployment.mmd) | Mermaid | Deployment view (binary/container, one port) |
 | [knowledge-hub-architecture.drawio](knowledge-hub-architecture.drawio) | draw.io XML | Editable mirror of the context/container view |
-| [runtime-architecture.json](runtime-architecture.json) | archify spec | Interactive runtime diagram definition |
-| [runtime-architecture.html](runtime-architecture.html) | HTML | Standalone explorable runtime diagram |
+| [runtime-architecture.json](runtime-architecture.json) | archify spec | Interactive runtime diagram definition — **stale**: generated 2026-09, predates A2A (#425) and task-durability (#445); regenerate via archify when available |
+| [runtime-architecture.html](runtime-architecture.html) | HTML | Standalone explorable runtime diagram — **stale**: same provenance as the .json; regenerate when archify is available |
