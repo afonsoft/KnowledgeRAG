@@ -153,6 +153,27 @@ public class IngestionSyncTests : IClassFixture<IngestionSyncTests.Fixture>, IDi
     }
 
     [Fact]
+    public async Task Sync_VaultFile_WithNulBytes_IsSanitizedAndIndexed()
+    {
+        // Postgres `text` rejects U+0000 ("invalid byte sequence 0x00") —
+        // vault files with embedded NULs must be stripped before persistence.
+        await File.WriteAllTextAsync(Path.Join(_vault, "withnul.md"),
+            "# Nota com Nul\n\nantes \0 depois do byte nulo");
+
+        var source = await CreateVaultSource();
+        var result = await (await _client.PostAsync($"/api/sources/{source.Id}/sync?wait=true", null))
+            .Content.ReadFromJsonAsync<SyncResultDto>();
+
+        Assert.Equal("completed", result!.Status);
+        Assert.Equal(1, result.DocumentsProcessed);
+        Assert.Equal(0, result.DocumentsFailed);
+
+        var search = await _client.GetFromJsonAsync<SearchResponse>("/api/search?query=depois byte nulo&topK=5");
+        var hit = Assert.Single(search!.Results);
+        Assert.DoesNotContain('\0', hit.ChunkText);
+    }
+
+    [Fact]
     public async Task Search_ReturnsRankedResults_AfterSync()
     {
         await File.WriteAllTextAsync(Path.Join(_vault, "vectors.md"),
