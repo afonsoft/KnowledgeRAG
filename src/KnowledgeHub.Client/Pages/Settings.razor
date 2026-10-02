@@ -64,9 +64,25 @@ else
                         </div>
                         <div class="col-12 col-md-5">
                             <label class="form-label">Model</label>
-                            <input type="text" class="form-control font-monospace"
-                                   @bind="_chatForm.Model"
-                                   placeholder="nome do modelo" autocomplete="off" />
+                            <div class="input-group">
+                                <input type="text" class="form-control font-monospace" list="kh-chat-models"
+                                       @bind="_chatForm.Model"
+                                       placeholder="nome do modelo" autocomplete="off" />
+                                <button type="button" class="btn btn-outline-secondary" title="Listar modelos do endpoint"
+                                        @onclick="LoadChatModelsAsync" disabled="@_chatModelsLoading">
+                                    <i class="fa-solid @(_chatModelsLoading ? "fa-spinner fa-spin" : "fa-rotate")"></i>
+                                </button>
+                            </div>
+                            <datalist id="kh-chat-models">
+                                @foreach (var m in _chatModels)
+                                {
+                                    <option value="@m"></option>
+                                }
+                            </datalist>
+                            @if (_chatModelsDetail is { } cmd)
+                            {
+                                <small class="text-muted">lista indisponível (@cmd) — digite o nome manualmente</small>
+                            }
                         </div>
                     </div>
 
@@ -312,8 +328,9 @@ else
 <p class="text-muted">
     Provider secundário de baixo custo usado nas sub-tarefas do pipeline
     (rewrite de query, grading de chunks, expansão/HyDE, sumarização de thread).
-    Em <code>remote</code>, o endpoint é a URL de um Agent Card A2A e a sub-tarefa
-    é delegada via protocolo A2A. Falhas/timeout caem para o modelo principal.
+    Segue o endpoint do provider de chat por padrão (a key do chat vale quando
+    o endpoint é o mesmo) — <code>Assistant:*</code> no ambiente sobrepõe.
+    Falhas/timeout caem para o modelo principal.
 </p>
 
 @if (_assistant is null)
@@ -344,27 +361,27 @@ else
                             <Switch @bind-Value="_asForm.Enabled"
                                     DisplayText="Habilitado" ShowLabel="true" />
                         </div>
-                        <div class="col-6 col-md-3">
-                            <label class="form-label">Modo</label>
-                            <select class="form-select" @bind="_asForm.Mode">
-                                <option value="local">local (OpenAI-compatible)</option>
-                                <option value="remote">remote (A2A agent)</option>
-                            </select>
-                        </div>
-                        <div class="col-12 col-md-4">
-                            <label class="form-label">Endpoint</label>
-                            <input type="text" class="form-control font-monospace"
-                                   @bind="_asForm.Endpoint"
-                                   placeholder="@(_asForm.Mode == "remote" ? "https://agent.exemplo.com" : "https://api.exemplo.com")" autocomplete="off" />
-                        </div>
-                        @if (_asForm.Mode == "local")
-                        {
-                            <div class="col-12 col-md-2">
-                                <label class="form-label">Model</label>
-                                <input type="text" class="form-control font-monospace"
+                        <div class="col-12 col-md-6">
+                            <label class="form-label">Model</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control font-monospace" list="kh-asst-models"
                                        @bind="_asForm.Model" placeholder="gpt-4o-mini" autocomplete="off" />
+                                <button type="button" class="btn btn-outline-secondary" title="Listar modelos do endpoint"
+                                        @onclick="LoadAssistantModelsAsync" disabled="@_asModelsLoading">
+                                    <i class="fa-solid @(_asModelsLoading ? "fa-spinner fa-spin" : "fa-rotate")"></i>
+                                </button>
                             </div>
-                        }
+                            <datalist id="kh-asst-models">
+                                @foreach (var m in _assistantModels)
+                                {
+                                    <option value="@m"></option>
+                                }
+                            </datalist>
+                            @if (_asModelsDetail is { } amd)
+                            {
+                                <small class="text-muted">lista indisponível (@amd) — digite o nome manualmente</small>
+                            }
+                        </div>
                     </div>
 
                     <div class="row g-2 mb-2">
@@ -1017,8 +1034,14 @@ else
     private readonly Dictionary<string, FormState> _forms = new();
     private ChatSettingsDto? _chat;
     private readonly ChatFormState _chatForm = new();
+    private string[] _chatModels = [];
+    private bool _chatModelsLoading;
+    private string? _chatModelsDetail;
     private AssistantSettingsDto? _assistant;
     private readonly AssistantFormState _asForm = new();
+    private string[] _assistantModels = [];
+    private bool _asModelsLoading;
+    private string? _asModelsDetail;
     private GraphSettingsDto? _graph;
     private readonly GraphFormState _graphForm = new();
     private ResilienceSettingsDto? _resilience;
@@ -1123,6 +1146,7 @@ else
         await ReloadLogLevelAsync();
         await ReloadDatabaseAsync();
         await ReloadEmbeddingsAsync();
+        await Task.WhenAll(LoadChatModelsAsync(), LoadAssistantModelsAsync());
     }
 
     /// <summary>SPEC-20260926-settings-ux-embeddings RF-004.</summary>
@@ -1432,6 +1456,25 @@ else
         }
     }
 
+    /// <summary>Preenche o combobox de modelos da aba Chat sondando
+    /// {endpoint}/v1/models via GET /api/settings/chat/models — o endpoint
+    /// digitado no form é o consultado (antes mesmo de salvar).</summary>
+    private async Task LoadChatModelsAsync()
+    {
+        _chatModelsLoading = true;
+        _chatModelsDetail = null;
+        try
+        {
+            var res = await Api.GetChatModelsAsync(_chatForm.Endpoint);
+            _chatModels = res?.Models ?? [];
+            _chatModelsDetail = res?.Ok == true ? null : res?.Detail ?? "falha ao listar";
+        }
+        finally
+        {
+            _chatModelsLoading = false;
+        }
+    }
+
     /// <summary>Recarrega a configuração efetiva do assistente e preenche o formulário.</summary>
     private async Task ReloadAssistantAsync()
     {
@@ -1465,12 +1508,34 @@ else
             _asForm.Route.Remove(subtask);
     }
 
+    /// <summary>Preenche o combobox de modelos do assistente sondando o endpoint
+    /// efetivo (assistant store/env → chat) via GET /api/settings/assistant/models.</summary>
+    private async Task LoadAssistantModelsAsync()
+    {
+        _asModelsLoading = true;
+        _asModelsDetail = null;
+        try
+        {
+            var res = await Api.GetAssistantModelsAsync(_asForm.Endpoint);
+            _assistantModels = res?.Models ?? [];
+            _asModelsDetail = res?.Ok == true ? null : res?.Detail ?? "falha ao listar";
+        }
+        finally
+        {
+            _asModelsLoading = false;
+        }
+    }
+
     /// <summary>Valida e salva a config do assistente; key em branco mantém a armazenada.</summary>
     private async Task SaveAssistantAsync()
     {
+        // O endpoint ficou oculto: resolve o efetivo (assistant → chat) antes de validar.
+        if (string.IsNullOrWhiteSpace(_asForm.Endpoint) && !string.IsNullOrWhiteSpace(_chat?.Endpoint))
+            _asForm.Endpoint = _chat!.Endpoint;
+
         if (_asForm.Enabled && string.IsNullOrWhiteSpace(_asForm.Endpoint))
         {
-            await Toast.Error("Campos obrigatórios", "Informe o endpoint antes de habilitar o assistente.");
+            await Toast.Error("Campos obrigatórios", "Configure o provider de chat (aba Chat) — o assistente usa o mesmo endpoint.");
             return;
         }
 

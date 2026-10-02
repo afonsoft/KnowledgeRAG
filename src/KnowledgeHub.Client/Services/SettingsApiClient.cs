@@ -87,6 +87,11 @@ public sealed class SettingsApiClient(HttpClient http)
         return await ReadAsync<TestChatConnectionResponse>(response, ct);
     }
 
+    /// <summary>Lista os modelos do endpoint de chat (override opcional = o
+    /// valor digitado no form) — alimenta o combobox de Model.</summary>
+    public Task<ProviderModelsResponse?> GetChatModelsAsync(string? endpoint = null, CancellationToken ct = default) =>
+        GetWithRetryAsync<ProviderModelsResponse>($"api/settings/chat/models{EndpointQuery(endpoint)}", ct);
+
     // SPEC-20260929-a2a-assistant-delegation RF-001: low-cost assistant provider.
 
     /// <summary>Obtém a configuração efetiva do assistente (mascarada, sem a key).</summary>
@@ -120,6 +125,14 @@ public sealed class SettingsApiClient(HttpClient http)
         var response = await http.PostAsJsonAsync("api/settings/assistant/test", request, ct);
         return await ReadAsync<TestChatConnectionResponse>(response, ct);
     }
+
+    /// <summary>Lista os modelos do endpoint efetivo do assistente (override
+    /// opcional) — alimenta o combobox de Model da aba Assistente.</summary>
+    public Task<ProviderModelsResponse?> GetAssistantModelsAsync(string? endpoint = null, CancellationToken ct = default) =>
+        GetWithRetryAsync<ProviderModelsResponse>($"api/settings/assistant/models{EndpointQuery(endpoint)}", ct);
+
+    private static string EndpointQuery(string? endpoint) =>
+        string.IsNullOrWhiteSpace(endpoint) ? "" : $"?endpoint={Uri.EscapeDataString(endpoint.Trim())}";
 
     // SPEC-20260923-graph-settings-ui: GraphRAG switch + tuning knobs.
 

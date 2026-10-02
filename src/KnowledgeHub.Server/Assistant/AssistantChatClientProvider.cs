@@ -19,6 +19,7 @@ public sealed class AssistantChatClientProvider(
     IIntegrationSecretStore secrets,
     IServiceScopeFactory scopeFactory,
     IHttpClientFactory httpFactory,
+    IChatSettingsService chatSettings,
     ILogger<AssistantChatClientProvider> logger) : IAssistantChatClientProvider
 {
     private readonly object _gate = new();
@@ -87,6 +88,10 @@ public sealed class AssistantChatClientProvider(
             }
         }
         key = secrets.GetAsync("assistant").GetAwaiter().GetResult() ?? env.ApiKey;
+        // Endpoint herdado do provider de chat ⇒ a key do chat vale também
+        // (mesmo provider); nunca mandamos a key do chat a outro endpoint.
+        if (key is null && AssistantSettingsService.IsSameEndpoint(endpoint, chatSettings.GetEffectiveOptions().Endpoint))
+            key = chatSettings.GetEffectiveOptions().ApiKey;
 
         IChatClient? client = null;
         if (enabled && !string.IsNullOrWhiteSpace(endpoint))

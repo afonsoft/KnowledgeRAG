@@ -17,4 +17,9 @@ public interface IAssistantSettingsService
     Task ClearAsync(CancellationToken cancellationToken = default);
     Task<TestChatConnectionResponse> TestAsync(
         TestAssistantConnectionRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists model ids via GET {endpoint}/v1/models with the assistant
+    /// key (store → env); <paramref name="endpointOverride"/> wins over the
+    /// effective config. Never persists anything.</summary>
+    Task<ProviderModelsResponse> ListModelsAsync(string? endpointOverride, CancellationToken cancellationToken = default);
 }

@@ -1,4 +1,5 @@
 using KnowledgeHub.Server.Assistant;
+using KnowledgeHub.Server.Chat;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Settings;
 using KnowledgeHub.Shared.Contracts;
@@ -42,19 +43,26 @@ public sealed class AssistantSettingsServiceTests : IDisposable
         _conn.Dispose();
     }
 
-    private AssistantChatClientProvider NewProvider(AssistantOptions? env = null) => new(
+    private static readonly IChatSettingsService NoChat =
+        new StubChatSettingsService(new ChatProviderOptions());
+
+    private AssistantChatClientProvider NewProvider(AssistantOptions? env = null,
+        IChatSettingsService? chat = null) => new(
         Options.Create(env ?? new AssistantOptions()),
         _secrets,
         _provider.GetRequiredService<IServiceScopeFactory>(),
         new FakeHttpFactory(),
+        chat ?? NoChat,
         NullLogger<AssistantChatClientProvider>.Instance);
 
-    private AssistantSettingsService Sut(IAssistantChatClientProvider? provider = null) => new(
+    private AssistantSettingsService Sut(IAssistantChatClientProvider? provider = null,
+        IChatSettingsService? chat = null) => new(
         Options.Create(new AssistantOptions()),
         _secrets,
         _provider.GetRequiredService<IServiceScopeFactory>(),
         new FakeHttpFactory(),
         provider ?? NewProvider(),
+        chat ?? NoChat,
         NullLogger<AssistantSettingsService>.Instance);
 
     [Fact]
@@ -208,6 +216,7 @@ public sealed class AssistantSettingsServiceTests : IDisposable
             _secrets,
             _provider.GetRequiredService<IServiceScopeFactory>(),
             new FakeHttpFactory(new StubHandler(cardJson)),
+            NoChat,
             NullLogger<AssistantChatClientProvider>.Instance);
 
         var main = new StubChatClient("main");
@@ -225,6 +234,7 @@ public sealed class AssistantSettingsServiceTests : IDisposable
             _provider.GetRequiredService<IServiceScopeFactory>(),
             new FakeHttpFactory(new StubHandler("""{"data":[{"id":"m1"}]}""")),
             NewProvider(),
+            NoChat,
             NullLogger<AssistantSettingsService>.Instance);
         var res = await sut.TestAsync(new TestAssistantConnectionRequest
         {
@@ -246,6 +256,7 @@ public sealed class AssistantSettingsServiceTests : IDisposable
             _provider.GetRequiredService<IServiceScopeFactory>(),
             new FakeHttpFactory(new StubHandler(cardJson)),
             NewProvider(),
+            NoChat,
             NullLogger<AssistantSettingsService>.Instance);
         var res = await sut.TestAsync(new TestAssistantConnectionRequest
         {
@@ -273,6 +284,7 @@ public sealed class AssistantSettingsServiceTests : IDisposable
             _provider.GetRequiredService<IServiceScopeFactory>(),
             new FakeHttpFactory(new StubHandler("x", HttpStatusCode.BadGateway)),
             NewProvider(),
+            NoChat,
             NullLogger<AssistantSettingsService>.Instance);
         var res = await sut.TestAsync(new TestAssistantConnectionRequest
         {
@@ -281,6 +293,127 @@ public sealed class AssistantSettingsServiceTests : IDisposable
         });
         Assert.False(res.Ok);
         Assert.Equal("HTTP 502", res.Detail);
+    }
+
+    [Fact]
+    public async Task ListModels_UsesAssistantEndpointAndKey()
+    {
+        var handler = new StubHandler("""{"data":[{"id":"cheap-1"}]}""");
+        var sut = new AssistantSettingsService(
+            Options.Create(new AssistantOptions
+            {
+                Enabled = true,
+                Mode = "local",
+                Endpoint = "http://assistant.local",
+                ApiKey = "sk-asst-1"
+            }),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(handler),
+            NewProvider(),
+            NoChat,
+            NullLogger<AssistantSettingsService>.Instance);
+
+        var res = await sut.ListModelsAsync(null);
+
+        Assert.True(res.Ok);
+        Assert.Equal(["cheap-1"], res.Models);
+        Assert.Equal("Bearer sk-asst-1", handler.LastAuth);
+    }
+
+    /// <summary>Endpoint do assistente = endpoint do chat (caso do form sem
+    /// campo de endpoint) ⇒ a key do chat é herdada — era o 401 reportado.</summary>
+    [Fact]
+    public async Task ListModels_SameEndpointAsChat_InheritsChatKey()
+    {
+        var handler = new StubHandler("""{"data":[{"id":"cheap-1"}]}""");
+        var chat = new StubChatSettingsService(new ChatProviderOptions
+        {
+            Provider = "openai",
+            Endpoint = "https://omniroute.test",
+            ApiKey = "sk-chat-9"
+        });
+        var sut = new AssistantSettingsService(
+            Options.Create(new AssistantOptions()),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(handler),
+            NewProvider(),
+            chat,
+            NullLogger<AssistantSettingsService>.Instance);
+
+        var res = await sut.ListModelsAsync("https://omniroute.test/");
+
+        Assert.True(res.Ok);
+        Assert.Equal("Bearer sk-chat-9", handler.LastAuth);
+    }
+
+    /// <summary>A key do chat NUNCA vaza para um endpoint diferente — assistente
+    /// com endpoint próprio e sem key própria sonda sem Authorization.</summary>
+    [Fact]
+    public async Task ListModels_DifferentEndpoint_NeverSendsChatKey()
+    {
+        var handler = new StubHandler("""{"data":[]}""");
+        var chat = new StubChatSettingsService(new ChatProviderOptions
+        {
+            Provider = "openai",
+            Endpoint = "https://omniroute.test",
+            ApiKey = "sk-chat-9"
+        });
+        var sut = new AssistantSettingsService(
+            Options.Create(new AssistantOptions()),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(handler),
+            NewProvider(),
+            chat,
+            NullLogger<AssistantSettingsService>.Instance);
+
+        var res = await sut.ListModelsAsync("https://other-provider.test");
+
+        Assert.True(res.Ok);
+        Assert.Null(handler.LastAuth);
+    }
+
+    /// <summary>Mesmo caso do 401 na UI: teste de conexão do assistente no
+    /// endpoint do chat usa a key do chat.</summary>
+    [Fact]
+    public async Task TestAsync_SameEndpointAsChat_InheritsChatKey()
+    {
+        var handler = new StubHandler("""{"data":[{"id":"m1"}]}""");
+        var chat = new StubChatSettingsService(new ChatProviderOptions
+        {
+            Provider = "openai",
+            Endpoint = "https://omniroute.test",
+            ApiKey = "sk-chat-9"
+        });
+        var sut = new AssistantSettingsService(
+            Options.Create(new AssistantOptions()),
+            _secrets,
+            _provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHttpFactory(handler),
+            NewProvider(),
+            chat,
+            NullLogger<AssistantSettingsService>.Instance);
+
+        var res = await sut.TestAsync(new TestAssistantConnectionRequest
+        {
+            Mode = "local",
+            Endpoint = "https://omniroute.test"
+        });
+
+        Assert.True(res.Ok);
+        Assert.Equal("Bearer sk-chat-9", handler.LastAuth);
+    }
+
+    [Fact]
+    public async Task ListModels_NoEndpoint_FailsFast()
+    {
+        var res = await Sut().ListModelsAsync(null);
+
+        Assert.False(res.Ok);
+        Assert.Equal("endpoint is required", res.Detail);
+        Assert.Empty(res.Models);
     }
 
     [Fact]
@@ -330,12 +463,18 @@ public sealed class AssistantSettingsServiceTests : IDisposable
     private sealed class StubHandler(string body, HttpStatusCode status = HttpStatusCode.OK)
         : HttpMessageHandler
     {
+        /// <summary>Último header Authorization recebido pelo probe.</summary>
+        public string? LastAuth { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(status)
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            LastAuth = request.Headers.Authorization?.ToString();
+            return Task.FromResult(new HttpResponseMessage(status)
             {
                 Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
             });
+        }
     }
 
     private sealed class StubChatClient(string reply, bool fails = false) : IChatClient
@@ -356,6 +495,27 @@ public sealed class AssistantSettingsServiceTests : IDisposable
 
         public object? GetService(Type serviceType, object? serviceKey = null) => null;
         public void Dispose() { }
+    }
+
+    /// <summary>Stub de IChatSettingsService expondo só as options efetivas
+    /// (endpoint/key do chat) — o assistente herda a key quando o endpoint é o mesmo.</summary>
+    private sealed class StubChatSettingsService(ChatProviderOptions options) : IChatSettingsService
+    {
+        public ChatProviderOptions GetEffectiveOptions() => options;
+        public IChatClient? GetClient() => null;
+        public void Invalidate() { }
+        public Task<ChatSettingsDto> DescribeAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task SaveAsync(string endpoint, string model, string? apiKey, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task RemoveKeyAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task ClearAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task<TestChatConnectionResponse> TestAsync(TestChatConnectionRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task<ProviderModelsResponse> ListModelsAsync(string? endpointOverride, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeSecretStore : IIntegrationSecretStore

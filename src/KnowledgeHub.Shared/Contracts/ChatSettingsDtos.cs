@@ -53,6 +53,17 @@ public sealed record TestChatConnectionResponse
     public string? Detail { get; init; }
 }
 
+/// <summary>GET /api/settings/{chat|assistant}/models — ids returned by
+/// GET {endpoint}/v1/models, used to populate the Settings model comboboxes.
+/// <see cref="Models"/> is empty on failure; <see cref="Detail"/> is a
+/// sanitized reason ("HTTP 401", "timeout", "connection failed").</summary>
+public sealed record ProviderModelsResponse
+{
+    public required bool Ok { get; init; }
+    public string[] Models { get; init; } = [];
+    public string? Detail { get; init; }
+}
+
 /// <summary>Per-API-key effective chat-provider state — never carries the API key itself
 /// (SPEC-20260916-api-key-settings RF-003).</summary>
 public sealed record ApiKeyIntegrationKeyDto(string? Hint, bool HasKey);
