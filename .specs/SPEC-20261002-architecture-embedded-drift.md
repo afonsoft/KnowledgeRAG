@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `Approved` |
+| Status | Done |
 | Ticket | Epic [#494 (E26)](https://github.com/afonsoft/LangGraph-UI/issues/494) — slice [#495](https://github.com/afonsoft/LangGraph-UI/issues/495) |
 | Origem | /gap-analysis run — audit docs↔code |
 | Tipo | Docs |
