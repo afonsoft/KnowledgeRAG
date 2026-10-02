@@ -5,7 +5,7 @@
   "title": "KnowledgeHub — Runtime Architecture",
   "quality_profile": "showcase",
   "repository": {
-   "url": "https://github.com/afonsoft/LangGraph-UI",
+   "url": "https://github.com/afonsoft/KnowledgeRAG",
    "provider": "github",
    "revision": "96cfb62b1cd3e9d0910399d9a021e70924ab7e47"
   }

@@ -6,8 +6,8 @@
 #   ./install.sh --host --systemd   + install/enable a systemd unit
 set -euo pipefail
 
-IMAGE_NAME="${IMAGE_NAME:-knowledgehub:latest}"
-CONTAINER_NAME="${CONTAINER_NAME:-knowledgehub}"
+IMAGE_NAME="${IMAGE_NAME:-knowledgerag:latest}"
+CONTAINER_NAME="${CONTAINER_NAME:-knowledgerag}"
 CONTAINER_PORT=8080
 
 # Load .env for vars not already set in the environment — same precedence as
@@ -37,7 +37,7 @@ VECTORSTORE_CONNECTIONSTRING="${VECTORSTORE_CONNECTIONSTRING:-Host=${POSTGRES_HO
 
 MODE=""
 PORT="${KNOWLEDGEHUB_PORT:-5000}"
-PREFIX="/opt/knowledgehub"
+PREFIX="/opt/knowledgerag"
 DATA_DIR="./data"
 SKIP_TESTS=0
 SYSTEMD=0
@@ -58,8 +58,8 @@ Modes (default: --docker when docker is installed, otherwise --host):
 Options:
   --port <p>        Host port to expose (default: KNOWLEDGEHUB_PORT from env/.env, else 5000 → container 8080).
   --data-dir <dir>  SQLite data directory (default: ./data, bind-mounted to /data).
-  --prefix <dir>    Install prefix for --host mode (default: /opt/knowledgehub).
-  --systemd         (--host only) write + enable + start knowledgehub.service.
+  --prefix <dir>    Install prefix for --host mode (default: /opt/knowledgerag).
+  --systemd         (--host only) write + enable + start knowledgerag.service.
   --skip-tests      Skip dotnet build/test gate.
   -h, --help        Show this help.
 
@@ -254,11 +254,11 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 )"
-  info "Installing /etc/systemd/system/knowledgehub.service (user: $user)"
-  echo "$unit" | sudo tee /etc/systemd/system/knowledgehub.service >/dev/null
+  info "Installing /etc/systemd/system/knowledgerag.service (user: $user)"
+  echo "$unit" | sudo tee /etc/systemd/system/knowledgerag.service >/dev/null
   sudo systemctl daemon-reload
-  sudo systemctl enable --now knowledgehub.service
-  info "systemctl status knowledgehub — http://localhost:$PORT"
+  sudo systemctl enable --now knowledgerag.service
+  info "systemctl status knowledgerag — http://localhost:$PORT"
 }
 
 host_deploy() {

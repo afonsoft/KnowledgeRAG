@@ -1,10 +1,10 @@
 # docker-compose.yml — KnowledgeHub (SPEC-20260913-install-deploy RF-007)
 # Same result as `./install.sh --docker`, declared declaratively.
 services:
-  knowledgehub:
+  knowledgerag:
     build: .
-    image: knowledgehub:latest
-    container_name: knowledgehub
+    image: knowledgerag:latest
+    container_name: knowledgerag
     # Vars in .env reach the container directly (ASP.NET Core reads
     # `Section__Key` env names case-insensitively) — same pattern as
     # proxyLLM-AI. `required: false` keeps clean checkouts deployable

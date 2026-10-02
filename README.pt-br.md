@@ -2,9 +2,9 @@
 
 **[English](README.md) · [Português (pt-BR)](README.pt-br.md)**
 
-[![CI Build & Test](https://github.com/afonsoft/LangGraph-UI/actions/workflows/ci-build-test.yml/badge.svg?branch=main)](https://github.com/afonsoft/LangGraph-UI/actions/workflows/ci-build-test.yml)
-[![Code Quality](https://github.com/afonsoft/LangGraph-UI/actions/workflows/code-quality.yml/badge.svg?branch=main)](https://github.com/afonsoft/LangGraph-UI/actions/workflows/code-quality.yml)
-[![Security Scan](https://github.com/afonsoft/LangGraph-UI/actions/workflows/security-scan.yml/badge.svg?branch=main)](https://github.com/afonsoft/LangGraph-UI/actions/workflows/security-scan.yml)
+[![CI Build & Test](https://github.com/afonsoft/KnowledgeRAG/actions/workflows/ci-build-test.yml/badge.svg?branch=main)](https://github.com/afonsoft/KnowledgeRAG/actions/workflows/ci-build-test.yml)
+[![Code Quality](https://github.com/afonsoft/KnowledgeRAG/actions/workflows/code-quality.yml/badge.svg?branch=main)](https://github.com/afonsoft/KnowledgeRAG/actions/workflows/code-quality.yml)
+[![Security Scan](https://github.com/afonsoft/KnowledgeRAG/actions/workflows/security-scan.yml/badge.svg?branch=main)](https://github.com/afonsoft/KnowledgeRAG/actions/workflows/security-scan.yml)
 [![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=afonsoft_LangGraph-UI&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=afonsoft_LangGraph-UI)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=afonsoft_LangGraph-UI&metric=coverage)](https://sonarcloud.io/summary/new_code?id=afonsoft_LangGraph-UI)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
@@ -388,8 +388,8 @@ KnowledgeHub/
 ### Instalar
 
 ```bash
-git clone https://github.com/afonsoft/LangGraph-UI.git
-cd LangGraph-UI
+git clone https://github.com/afonsoft/KnowledgeRAG.git
+cd KnowledgeRAG
 ```
 
 ### Configurar
@@ -504,8 +504,8 @@ Knowledge MCP Hub resolve o problema de conhecimento organizacional fragmentado 
 - [Guia de Instalação](docs/pt/INSTALL.md) — Setup específico por plataforma
 - [Documentação da API](docs/pt/API.md) — Referência da API REST
 - [Changelog](CHANGELOG.md) — Mudanças notáveis
-- [Issues no GitHub](https://github.com/afonsoft/LangGraph-UI/issues) — Relatórios de bugs e solicitações de features
-- [Releases](https://github.com/afonsoft/LangGraph-UI/releases) — Histórico de versões
+- [Issues no GitHub](https://github.com/afonsoft/KnowledgeRAG/issues) — Relatórios de bugs e solicitações de features
+- [Releases](https://github.com/afonsoft/KnowledgeRAG/releases) — Histórico de versões
 
 ### Referências
 
