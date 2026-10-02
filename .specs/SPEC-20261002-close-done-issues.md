@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `Approved` |
+| Status | Done |
 | Ticket | Epic [#494 (E26)](https://github.com/afonsoft/LangGraph-UI/issues/494) — slice [#498](https://github.com/afonsoft/LangGraph-UI/issues/498) |
 | Origem | /gap-analysis run — label/state convention drift |
 | Tipo | Infra |
