@@ -76,15 +76,18 @@ jobs:
 
       # SPEC-20260928-test-reliability-and-coverage-gate RF-002 +
       # SPEC-20260929-observability-and-tests-residual RF-004: the floor lives
-      # in .ci/coverage-baseline.txt — a committed baseline, not a hardcoded
-      # env var. PRs compare against it; the coverage-ratchet job raises it
-      # automatically when main's measured coverage improves.
+      # in the COVERAGE_BASELINE repository variable — the coverage-ratchet
+      # job raises it via API when main improves (main is PR-required, so a
+      # committed-file bump can't be pushed; bot-authored PRs would never
+      # satisfy required checks). .ci/coverage-baseline.txt is the bootstrap
+      # fallback only.
       - name: Coverage Gate
         run: |
           XML=$(ls -t tests/KnowledgeHub.Tests.Unit/TestResults/*/coverage.cobertura.xml 2>/dev/null | head -1)
           if [ -z "$XML" ]; then echo "::error::coverage.cobertura.xml not found"; exit 1; fi
           RATE=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('$XML').getroot().get('line-rate'))*100, 2))")
-          BASELINE=$(cat .ci/coverage-baseline.txt 2>/dev/null || echo "20")
+          BASELINE="${{ vars.COVERAGE_BASELINE }}"
+          BASELINE=${BASELINE:-$(cat .ci/coverage-baseline.txt 2>/dev/null || echo "20")}
           echo "Line coverage: ${RATE}% (baseline ${BASELINE}%)"
           if python3 -c "import sys; sys.exit(0 if float('$RATE') >= float('$BASELINE') else 1)"; then
             echo "Coverage gate passed."
@@ -207,8 +210,8 @@ jobs:
     needs: test-unit
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      actions: write
 
     steps:
       - name: Checkout Code
@@ -219,9 +222,9 @@ jobs:
         with:
           name: unit-coverage-xml
 
-      # main is PR-required — a direct `git push` is rejected by branch
-      # protection. Raise via a persistent PR branch instead; merging it
-      # updates the baseline (auto-deleted on merge, recreated next raise).
+      # Baseline lives in the COVERAGE_BASELINE repository variable —
+      # updated via API. PRs can't carry the raise (bot-authored PRs get no
+      # workflow runs, so required checks never report).
       - name: Raise Baseline When Improved
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,23 +232,13 @@ jobs:
           XML=$(find . -name "coverage.cobertura.xml" | head -1)
           if [ -z "$XML" ]; then echo "coverage xml not found — skipping ratchet"; exit 0; fi
           RATE=$(python3 -c "import xml.etree.ElementTree as ET; print(round(float(ET.parse('$XML').getroot().get('line-rate'))*100, 2))")
-          BASELINE=$(cat .ci/coverage-baseline.txt 2>/dev/null || echo "0")
+          BASELINE="${{ vars.COVERAGE_BASELINE }}"
+          BASELINE=${BASELINE:-$(cat .ci/coverage-baseline.txt 2>/dev/null || echo "0")}
           echo "measured ${RATE}% vs baseline ${BASELINE}%"
           if python3 -c "import sys; sys.exit(0 if float('$RATE') > float('$BASELINE') else 1)"; then
-            echo "$RATE" > .ci/coverage-baseline.txt
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git checkout -b chore/coverage-baseline-ratchet
-            git add .ci/coverage-baseline.txt
-            git commit -m "chore(ci): raise coverage baseline to ${RATE}%"
-            git push -f origin chore/coverage-baseline-ratchet
-            if gh pr list --head chore/coverage-baseline-ratchet --state open --json number --jq '.[0].number' | grep -q .; then
-              echo "baseline PR already open — branch updated to ${RATE}%"
-            else
-              gh pr create --base main --head chore/coverage-baseline-ratchet \
-                --title "chore(ci): raise coverage baseline to ${RATE}%" \
-                --body "Auto-raised by Coverage Baseline Ratchet — measured ${RATE}% vs baseline ${BASELINE}%. Merging updates \`.ci/coverage-baseline.txt\`; the branch is recreated on the next improvement."
-            fi
+            gh api "repos/${GITHUB_REPOSITORY}/actions/variables/COVERAGE_BASELINE" -X PATCH -f value="$RATE" \
+              || gh api "repos/${GITHUB_REPOSITORY}/actions/variables" -X POST -f name=COVERAGE_BASELINE -f value="$RATE"
+            echo "::notice::coverage baseline raised ${BASELINE}% -> ${RATE}%"
           else
             echo "coverage did not improve — baseline unchanged"
           fi
