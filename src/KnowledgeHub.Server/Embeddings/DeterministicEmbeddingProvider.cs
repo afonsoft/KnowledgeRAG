@@ -24,9 +24,8 @@ public sealed class DeterministicEmbeddingProvider : IEmbeddingProvider
     public Task<float[]> EmbedAsync(string text, CancellationToken cancellationToken = default)
     {
         var vector = new float[_dimensions];
-        foreach (var token in Tokenize(text))
+        foreach (var hash in Tokenize(text).Select(StableHash))
         {
-            var hash = StableHash(token);
             var bucket = (int)(hash % (uint)_dimensions);
             vector[bucket] += (hash & 0x8000_0000) == 0 ? 1f : -1f; // signed hashing reduces collisions
         }

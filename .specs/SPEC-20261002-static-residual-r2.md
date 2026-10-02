@@ -4,7 +4,7 @@
 
 | Campo | Valor |
 |-------|-------|
-| Status | `InProgress` — [PR #520](https://github.com/afonsoft/LangGraph-UI/pull/520) |
+| Status | `Done` — [PR #520](https://github.com/afonsoft/LangGraph-UI/pull/520) merged |
 | Ticket | Epic [#515 (E28)](https://github.com/afonsoft/LangGraph-UI/issues/515) — slice [#517](https://github.com/afonsoft/LangGraph-UI/issues/517) | gap-analysis-20261002-r3 — gaps `GAP-quality-codeql-residual-r2`, `GAP-quality-sonar-residual-r2` |
 | Origem | gap-analysis r3 — CodeQL scan d0435ef + SonarCloud API (issues OPEN/CONFIRMED) |
 | Pré-requisito | SPEC-20261002-static-analysis-residual (Done, #510) — r1 corrigiu a maior parte; restam sites não cobertos e resíduo da própria refatoração E27 |

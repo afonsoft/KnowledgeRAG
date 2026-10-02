@@ -22,8 +22,8 @@ public static partial class MarkdownNoteParser
         var links = new List<string>();
 
         CollectFrontmatterTags(frontmatter, tags);
-        foreach (Match m in InlineTagRegex().Matches(StripWikiAndCode(body)))
-            tags.Add(m.Groups[1].Value);
+        foreach (var tag in InlineTagRegex().Matches(StripWikiAndCode(body)).Select(m => m.Groups[1].Value))
+            tags.Add(tag);
         foreach (Match m in WikiLinkRegex().Matches(body))
         {
             var target = m.Groups[1].Value.Split('|')[0].Split('#')[0].Trim();
@@ -89,10 +89,10 @@ public static partial class MarkdownNoteParser
 
     private static void CollectFrontmatterTags(IReadOnlyDictionary<string, object?> frontmatter, ISet<string> tags)
     {
-        foreach (var key in new[] { "tags", "tag" })
+        foreach (var value in new[] { "tags", "tag" }
+            .Select(key => frontmatter.TryGetValue(key, out var v) ? v : null)
+            .Where(v => v is not null))
         {
-            if (!frontmatter.TryGetValue(key, out var value) || value is null)
-                continue;
             switch (value)
             {
                 case string single:
@@ -109,9 +109,8 @@ public static partial class MarkdownNoteParser
 
     private static string? ExtractTitle(string body)
     {
-        foreach (var line in body.Split('\n'))
+        foreach (var trimmed in body.Split('\n').Select(l => l.TrimStart()))
         {
-            var trimmed = line.TrimStart();
             if (trimmed.StartsWith("# ", StringComparison.Ordinal))
                 return trimmed[2..].Trim();
             if (trimmed.Length > 0 && !trimmed.StartsWith('#'))

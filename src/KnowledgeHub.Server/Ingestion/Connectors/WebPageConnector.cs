@@ -159,13 +159,20 @@ public sealed class WebPageConnector(
         ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
         && (ip.GetAddressBytes()[0] & 0xFE) == 0xFC; // fc00::/7 unique-local
 
-    private static bool IsPrivateV4(IPAddress ip) =>
-        ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
-        && ip.GetAddressBytes() is { } b
-        && (b[0] == 10
-            || (b[0] == 172 && b[1] is >= 16 and <= 31)
-            || (b[0] == 192 && b[1] == 168)
-            || (b[0] == 169 && b[1] == 254));
+    private static bool IsPrivateV4(IPAddress ip)
+    {
+        if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            return false;
+        var b = ip.GetAddressBytes();
+        return b[0] switch
+        {
+            10 => true,
+            172 => b[1] is >= 16 and <= 31,
+            192 => b[1] == 168,
+            169 => b[1] == 254,
+            _ => false
+        };
+    }
 
     private async Task<RobotsPolicy> FetchRobotsAsync(Uri start, bool allowPrivate, CancellationToken ct)
     {
