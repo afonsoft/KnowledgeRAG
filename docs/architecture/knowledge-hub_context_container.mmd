@@ -4,6 +4,7 @@ flowchart TB
         UI["🖥️ Browser Admin<br/>(Blazor WASM SPA / PWA)"]
         CUR["🤖 Cursor / Claude Desktop<br/>(legacy SSE)"]
         AG["🧠 MCP agents / LangGraph<br/>(Streamable HTTP)"]
+        A2AAG["🤝 A2A agents (v1.0)<br/>(JSON-RPC / HTTP+JSON)"]
     end
 
     subgraph KH["🚀 KnowledgeHub — single Kestrel process (.NET 10)"]
@@ -11,6 +12,7 @@ flowchart TB
         SPA["📄 Static host<br/>index.html + WASM assets"]
         API["🌐 REST API<br/>/api/* (Minimal APIs)"]
         MCP["📨 MCP Server<br/>/mcp (Streamable HTTP, hybrid sessions)<br/>/mcp/sse + /mcp/message (legacy)"]
+        A2A["🤝 A2A Server<br/>/.well-known/agent-card.json<br/>/a2a JSON-RPC + HTTP+JSON<br/>EfA2aTaskStore · push webhooks"]
         HUB["📡 SignalR Hub<br/>/hubs/mcp"]
         AUTH["🔐 Auth<br/>cookie + aft_* API keys"]
         RL["🚦 Rate limiter<br/>key → user → IP"]
@@ -45,13 +47,19 @@ flowchart TB
     UI -->|SignalR| HUB
     CUR -->|SSE+POST| MCP
     AG -->|JSON-RPC| MCP
+    A2AAG -->|Agent Card + message/send| A2A
+    A2A -->|X-KH-Signature push| A2AAG
 
     AUTH --> API
     AUTH --> MCP
+    AUTH --> A2A
     RL --> API
     RL --> MCP
+    RL --> A2A
     MCP --> CAT
     MCP --> FEED
+    A2A -->|delegates to live catalog| CAT
+    A2A -->|task store| SQL
     FEED --> HUB
     CAT --> SRCH
     CAT --> ANS
@@ -89,7 +97,7 @@ flowchart TB
     classDef core fill:#d5e8d4,stroke:#82b366,stroke-width:2px,color:darkgreen
     classDef store fill:#f5f5f5,stroke:#666666,stroke-width:2px,color:black
     classDef ext fill:#ffe6cc,stroke:#d79b00,stroke-width:2px,color:#7f4d00
-    class UI,CUR,AG client
-    class SPA,API,MCP,HUB,AUTH,RL,CAT,QUEUE,ING,SEC,GRAPH,SRCH,ANS,EMB,VEC,CACHE,LOG,TEL,FEED core
+    class UI,CUR,AG,A2AAG client
+    class SPA,API,MCP,A2A,HUB,AUTH,RL,CAT,QUEUE,ING,SEC,GRAPH,SRCH,ANS,EMB,VEC,CACHE,LOG,TEL,FEED core
     class SQL,PG,VAULT,REDIS store
     class UP,LLM,CLOUD ext

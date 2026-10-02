@@ -1,0 +1,55 @@
+%%{init: {'theme':'neutral'}}%%
+sequenceDiagram
+    autonumber
+    participant A as 🤝 A2A Agent
+    participant S as 📨 /a2a (JSON-RPC + HTTP+JSON)
+    participant F as 📊 Auth + rate limit
+    participant T as 💾 EfA2aTaskStore
+    participant AG as 🧠 KnowledgeHubA2AAgent
+    participant CAT as 🧰 DynamicToolCatalog
+    participant DB as 💾 Catalog DB (SQLite/Postgres)
+    participant P as 📡 A2aPushNotifier
+    participant W as ☁️ Agent webhook
+
+    A->>S: GET /.well-known/agent-card.json
+    S-->>A: Agent Card (skills, inputModes,<br/>pushNotifications:true)
+
+    A->>S: message/send (skill, contextId?, config?)
+    S->>F: Operational policy (aft_* scope)<br/>+ llm rate limit
+    S->>T: CreateTask
+    T->>DB: INSERT task (persisted, restart-safe)
+    T-->>S: taskId
+
+    opt pushNotificationConfig (inline ou CRUD)
+        S->>DB: save webhook URL (EgressPolicy valida destino — SSRF guard)
+    end
+
+    S->>AG: execute skill
+    AG->>CAT: resolve → tool provider
+    CAT-->>AG: result
+    AG->>T: TaskUpdater working/artifact events<br/>(OnProgress + heartbeat 2s)
+    T->>DB: UPDATE task (status + artifacts)
+    loop task update
+        T->>P: notify (se push configurado)
+        P->>W: POST task payload<br/>X-KH-Signature (HMAC evidence:master)<br/>retry 3× exponencial
+    end
+
+    AG-->>S: terminal state (completed/failed/canceled)
+    S->>T: UPDATE task
+    P->>W: POST terminal state + signature
+
+    Note over A,T: restart/deploy aqui não perde a task
+
+    A->>S: tasks/get (taskId)
+    S->>T: GetTask
+    T->>DB: SELECT (EF, sem cache in-memory)
+    T-->>S: task + artifacts + history
+    S-->>A: task
+
+    opt tasks/cancel
+        A->>S: tasks/cancel (taskId)
+        S->>T: CancelTask → cooperative cancel
+        T->>DB: UPDATE task (canceled)
+    end
+
+    Note over T,DB: purge diário via MaintenanceBackgroundService<br/>A2a:TaskRetentionHours (default 72h)

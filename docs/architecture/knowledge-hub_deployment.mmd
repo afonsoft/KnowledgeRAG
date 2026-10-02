@@ -26,6 +26,8 @@ flowchart LR
         R2["/api/*       → REST (auth + rate limits)"]
         R3["/mcp         → Streamable HTTP"]
         R4["/mcp/sse|msg → legacy SSE"]
+        R4B["/a2a         → A2A JSON-RPC + HTTP+JSON"]
+        R4C["/.well-known/agent-card.json → Agent Card (anonymous)"]
         R5["/hubs/mcp    → SignalR"]
         R6["/metrics     → Prometheus (opt-in)"]
         R7["/healthz     → liveness probe"]
@@ -38,4 +40,4 @@ flowchart LR
     classDef net fill:#dae8fc,stroke:#6c8ebf,stroke-width:2px,color:darkblue
     class EXE bin
     class DB,LOGV,EXT,CFG,PG2,RDS data
-    class R1,R2,R3,R4,R5,R6,R7,R8 net
+    class R1,R2,R3,R4,R4B,R4C,R5,R6,R7,R8 net

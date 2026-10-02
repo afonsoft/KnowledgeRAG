@@ -23,14 +23,16 @@ Architecture deliverables for KnowledgeHub. Source of truth for decisions:
 | [AD-0013](AD-0013-env-composed-postgres-vector-store.md) | `.env`-composed `POSTGRES_*` connection string for external/host pgvector |
 | [AD-0014](AD-0014-unified-database-provider.md) | Single backend for catalog EF + vector store — `Database:Provider` auto/postgres/sqlite |
 | [AD-0015](AD-0015-agentic-rag-resilience-evidence-temporal.md) | Agentic-RAG wave — resilience fallback, HMAC evidence chain, temporal/episodic KG, action bridge, ChainAst compaction |
+| [AD-0016](AD-0016-a2a-task-durability-push-notifications.md) | A2A task durability — EF task store, retention purge, signed push webhooks, origin frontmatter |
 
 ## Diagrams
 
 | File | Format | Content |
 |---|---|---|
-| [system-architecture.md](system-architecture.md) | Markdown + Mermaid | Context/container, tool-call sequence, deployment, config surface |
+| [system-architecture.md](system-architecture.md) | Markdown + Mermaid | Context/container, MCP + A2A sequences, deployment, config surface |
 | [knowledge-hub_context_container.mmd](knowledge-hub_context_container.mmd) | Mermaid | C4-style context + container view |
 | [knowledge-hub_toolcall_sequence.mmd](knowledge-hub_toolcall_sequence.mmd) | Mermaid | `tools/call` sequence (local / graph / upstream) |
+| [knowledge-hub_a2a_sequence.mmd](knowledge-hub_a2a_sequence.mmd) | Mermaid | A2A `message/send`→`tasks/get` sequence + push webhooks |
 | [knowledge-hub_deployment.mmd](knowledge-hub_deployment.mmd) | Mermaid | Deployment view (binary/container, one port) |
 | [knowledge-hub-architecture.drawio](knowledge-hub-architecture.drawio) | draw.io XML | Editable mirror of the context/container view |
 | [runtime-architecture.json](runtime-architecture.json) | archify spec | Interactive runtime diagram definition |
