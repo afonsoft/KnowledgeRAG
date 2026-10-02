@@ -145,7 +145,7 @@
         "type": "Direct",
         "requested": "[10.0.12, )",
         "resolved": "10.0.12",
-        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
+        "contentHash": "x3DE+uneL/A1ZtF70QvDwI648zx58Xwwm0WG5havCPnJaBWOGFbzANgz09FVbXRlXwleGW/K3hs1sFjnCMrtaA=="
       },
       "ModelContextProtocol.Extensions.Tasks": {
         "type": "Direct",
@@ -459,6 +459,11 @@
         "dependencies": {
           "SQLitePCLRaw.core": "2.1.12"
         }
+      },
+      "Microsoft.DotNet.HotReload.WebAssembly.Browser": {
+        "type": "Transitive",
+        "resolved": "10.0.112",
+        "contentHash": "1k5ylG+88HAS1Gy72U6BXo+TVGkdGSMsKeaf3shHs46JuxwSbT8adKMcv22XWEi6ERr/blPZJc8tb49LtasLGQ=="
       },
       "Microsoft.EntityFrameworkCore": {
         "type": "Transitive",
@@ -899,7 +904,8 @@
           "BootstrapBlazor.FontAwesome": "[10.0.3, )",
           "KnowledgeHub.Shared": "[1.0.0, )",
           "Microsoft.AspNetCore.Components.WebAssembly": "[10.0.12, )",
-          "Microsoft.AspNetCore.SignalR.Client": "[10.0.12, )"
+          "Microsoft.AspNetCore.SignalR.Client": "[10.0.12, )",
+          "Microsoft.DotNet.HotReload.WebAssembly.Browser": "[10.0.112, )"
         }
       },
       "knowledgehub.mcpengine": {
@@ -915,7 +921,7 @@
         "type": "Project"
       }
     },
-    "net10.0/linux-x64": {
+    "net10.0/linux-arm64": {
       "HiraokaHyperTools.sqlite-vec": {
         "type": "Direct",
         "requested": "[0.1.9, )",
