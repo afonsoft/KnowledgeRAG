@@ -132,7 +132,8 @@ public sealed class LexicalSearchService(
             return [];
         }
 
-        command.CommandText = $"""
+        command.CommandText = // NOSONAR S2077 — interpola apenas identificador const TableName e fragmento de placeholders nomeados
+            $"""
             SELECT c.Id, f.rank
             FROM {TableName} f
             JOIN Chunks c ON c.Id = f.chunk_id
@@ -140,7 +141,7 @@ public sealed class LexicalSearchService(
             WHERE f.text MATCH $match {sourceFilter}
             ORDER BY f.rank
             LIMIT $limit
-            """; // NOSONAR S2077 — interpola apenas identificador const TableName e fragmento de placeholders nomeados
+            """;
         AddParameter(command, "$match", match);
         AddParameter(command, "$limit", topK);
 
@@ -179,7 +180,8 @@ public sealed class LexicalSearchService(
             var sourceFilter = sourceIds is { Count: > 0 }
                 ? "AND d.\"KnowledgeSourceId\" = ANY($3) "
                 : "";
-            cmd.CommandText = $"""
+            cmd.CommandText = // NOSONAR S2077 — interpola apenas fragmento de placeholders nomeados
+                $"""
                 SELECT c."Id", ts_rank(c."search_vector", q) AS rank
                 FROM "Chunks" c
                 JOIN "Documents" d ON c."KnowledgeDocumentId" = d."Id",
@@ -187,7 +189,7 @@ public sealed class LexicalSearchService(
                 WHERE c."search_vector" @@ q {sourceFilter}
                 ORDER BY rank DESC
                 LIMIT $2
-                """; // NOSONAR S2077 — interpola apenas fragmento de placeholders nomeados
+                """;
             cmd.Parameters.AddWithValue(query);
             cmd.Parameters.AddWithValue(topK);
             if (sourceIds is { Count: > 0 })
