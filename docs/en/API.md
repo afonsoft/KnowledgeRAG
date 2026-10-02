@@ -146,3 +146,10 @@ Discovery is anonymous; execution requires `Authorization: Bearer aft_*` and run
     "parts": [{ "text": "what changed in the auth policy?" }],
     "metadata": { "skill": "search_knowledge" } } } }
 ```
+
+### Durability & push notifications
+
+- **Persisted tasks** — `SendMessage` tasks are stored in the catalog DB (`EfA2aTaskStore`), so `tasks/get` and `tasks/cancel` keep working across restarts and deploys. Tasks older than `A2a:TaskRetentionHours` (default `72`) are purged periodically.
+- **Push webhooks** — subscribe via `SendMessageConfiguration.PushNotificationConfig` (inline in `SendMessage`) or the push-config CRUD (`tasks/pushNotificationConfig/{set,get,list,delete}`). On each task update the server POSTs the task payload to your webhook signed with `X-KH-Signature` (HMAC over the evidence-chain key) — verify before trusting. Bounded retry (3× exponential backoff); URLs are egress-validated before the first call (no private/blocked destinations unless `EgressPolicy:AllowPrivateAddresses`).
+- **Origin provenance** — `write_knowledge`/`write_note` invoked over A2A (or MCP) stamps `origin: {channel, keyId, agentName, at}` into the document frontmatter.
+- `contextId` is an A2A protocol identifier (hex-32) — it is **not** mapped to `agent_chat` threadIds.
