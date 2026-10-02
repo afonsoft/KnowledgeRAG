@@ -125,9 +125,9 @@ public sealed class SearchService(
     private async Task<IReadOnlyList<SearchResultItem>> ExecuteAsync(
         SearchInvocation inv, CancellationToken ct)
     {
-        var (query, topK, sourceId, mode, filter, scope, conversationContext, degraded, relaxLevel) =
+        var (query, topK, sourceId, mode, filter, scope, conversationContext, degraded) =
             (inv.Query, inv.TopK, inv.SourceId, inv.Mode, inv.Filter, inv.Scope,
-             inv.ConversationContext, inv.Degraded, inv.RelaxLevel);
+             inv.ConversationContext, inv.Degraded);
         var activeSourceIds = await ResolveActiveSourcesAsync(sourceId, scope, ct);
         if (activeSourceIds.Count == 0)
             return [];
@@ -350,7 +350,7 @@ public sealed class SearchService(
     {
         var final = (!plan.RerankEnabled || items.Count <= 1)
             ? items.Take(topK).ToList()
-            : await RerankAsync(query, items, breakdowns, topK, ct);
+            : await RerankAsync(query, items, topK, ct);
 
         // SPEC-20260927-chunk-window-retrieval-and-autocut RF-003: dynamic tail
         // pruning — the elbow in the score curve decides the count (≤topK).
@@ -549,8 +549,7 @@ public sealed class SearchService(
     /// <summary>RF-002: re-orders the hydrated window by rerank score; any
     /// failure preserves the fused order (fail-open).</summary>
     private async Task<IReadOnlyList<SearchResultItem>> RerankAsync(
-        string query, List<SearchResultItem> items,
-        IReadOnlyDictionary<Guid, SearchScoreBreakdown>? breakdowns, int topK, CancellationToken ct)
+        string query, List<SearchResultItem> items, int topK, CancellationToken ct)
     {
         IReadOnlyList<RerankScore> scores;
         using var span = Telemetry.KnowledgeHubActivity.Start("search.rerank");
@@ -1206,16 +1205,16 @@ public sealed class SearchService(
         // post-rank when ExcludeFlagged is on (default true) — ranking window is
         // unaffected, the answer just never sees them.
         var excludeFlagged = configuration.GetValue("Security:Injection:ExcludeFlagged", true);
-        var excluded = 0;
+        var excluded = excludeFlagged
+            ? hits.Count(h => byId.TryGetValue(h.ChunkId, out var c) && c.SuspicionFlags is not null)
+            : 0;
         var items = hits
             .Where(h => byId.ContainsKey(h.ChunkId))
             .Select(h =>
             {
                 var c = byId[h.ChunkId];
-                var flagged = c.SuspicionFlags is not null;
-                if (flagged && excludeFlagged)
+                if (c.SuspicionFlags is not null && excludeFlagged)
                 {
-                    excluded++;
                     return null;
                 }
                 // RF-003: language is metadata-derived (no column) — a set
