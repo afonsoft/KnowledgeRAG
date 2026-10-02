@@ -6,9 +6,26 @@ namespace KnowledgeHub.Client.Services;
 /// <summary>Typed client for /api/settings (SPEC-20260916-firecrawl-mcp-proxy).</summary>
 public sealed class SettingsApiClient(HttpClient http)
 {
+    /// <summary>GET com um retry após ~300ms: um blip transitório de rede no
+    /// WASM aparece como <c>TypeError: Failed to fetch</c>/<see cref="HttpRequestException"/>
+    /// mesmo com o backend saudável — re-emitir o GET idempotente absorve o
+    /// caso sem mudar a UX de erros reais.</summary>
+    private async Task<T?> GetWithRetryAsync<T>(string url, CancellationToken ct)
+    {
+        try
+        {
+            return await http.GetFromJsonAsync<T>(url, ct);
+        }
+        catch (HttpRequestException) when (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(300, ct);
+            return await http.GetFromJsonAsync<T>(url, ct);
+        }
+    }
+
     /// <summary>Lista as integrações com o status mascarado de cada key.</summary>
     public Task<IntegrationSettingsResponse?> ListIntegrationsAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<IntegrationSettingsResponse>("api/settings/integrations", ct);
+        GetWithRetryAsync<IntegrationSettingsResponse>("api/settings/integrations", ct);
 
     /// <summary>Salva/substitui a API key de uma integração.</summary>
     public async Task<ApiResult<object>> SetKeyAsync(string provider, string apiKey, CancellationToken ct = default)
@@ -39,7 +56,7 @@ public sealed class SettingsApiClient(HttpClient http)
 
     /// <summary>Obtém a configuração efetiva de chat (mascarada, sem a key).</summary>
     public Task<ChatSettingsDto?> GetChatAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<ChatSettingsDto>("api/settings/chat", ct);
+        GetWithRetryAsync<ChatSettingsDto>("api/settings/chat", ct);
 
     /// <summary>Salva endpoint/model do chat e, se informada, a API key.</summary>
     public async Task<ApiResult<object>> SaveChatAsync(string endpoint, string model, string? apiKey, CancellationToken ct = default)
@@ -74,7 +91,7 @@ public sealed class SettingsApiClient(HttpClient http)
 
     /// <summary>Obtém a configuração efetiva do assistente (mascarada, sem a key).</summary>
     public Task<AssistantSettingsDto?> GetAssistantAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<AssistantSettingsDto>("api/settings/assistant", ct);
+        GetWithRetryAsync<AssistantSettingsDto>("api/settings/assistant", ct);
 
     /// <summary>Salva enabled/mode/endpoint/model/route do assistente; key em branco mantém a atual.</summary>
     public async Task<ApiResult<object>> SaveAssistantAsync(SaveAssistantSettingsRequest request, CancellationToken ct = default)
@@ -108,7 +125,7 @@ public sealed class SettingsApiClient(HttpClient http)
 
     /// <summary>Obtém a configuração efetiva do grafo (store → env/defaults).</summary>
     public Task<GraphSettingsDto?> GetGraphAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<GraphSettingsDto>("api/settings/graph", ct);
+        GetWithRetryAsync<GraphSettingsDto>("api/settings/graph", ct);
 
     /// <summary>Salva a configuração do grafo; efeito imediato, sem restart.</summary>
     public async Task<ApiResult<object>> SaveGraphAsync(SaveGraphSettingsRequest request, CancellationToken ct = default)
@@ -128,7 +145,7 @@ public sealed class SettingsApiClient(HttpClient http)
 
     /// <summary>Obtém a configuração efetiva de resiliência (store → env/defaults).</summary>
     public Task<ResilienceSettingsDto?> GetResilienceAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<ResilienceSettingsDto>("api/settings/resilience", ct);
+        GetWithRetryAsync<ResilienceSettingsDto>("api/settings/resilience", ct);
 
     /// <summary>Salva a política de fallback; efeito imediato, sem restart.</summary>
     public async Task<ApiResult<object>> SaveResilienceAsync(SaveResilienceSettingsRequest request, CancellationToken ct = default)
@@ -148,7 +165,7 @@ public sealed class SettingsApiClient(HttpClient http)
 
     /// <summary>Obtém a configuração efetiva de chat para uma API key específica.</summary>
     public Task<ApiKeyChatSettingsDto?> GetApiKeyChatAsync(Guid apiKeyId, CancellationToken ct = default) =>
-        http.GetFromJsonAsync<ApiKeyChatSettingsDto>($"api/api-keys/{apiKeyId}/settings/chat", ct);
+        GetWithRetryAsync<ApiKeyChatSettingsDto>($"api/api-keys/{apiKeyId}/settings/chat", ct);
 
     /// <summary>Salva endpoint/model/chat key para uma API key específica.</summary>
     public async Task<ApiResult<object>> SaveApiKeyChatAsync(Guid apiKeyId, string? endpoint, string? model, string? apiKey, CancellationToken ct = default)
@@ -187,19 +204,19 @@ public sealed class SettingsApiClient(HttpClient http)
 
     /// <summary>Obtém estatísticas e chaves ativas do cache.</summary>
     public Task<CacheStatsDto?> GetCacheStatsAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<CacheStatsDto>("api/settings/cache", ct);
+        GetWithRetryAsync<CacheStatsDto>("api/settings/cache", ct);
 
     // SPEC-20260926-settings-tabs-database-metrics RF-003.
 
     /// <summary>Métricas do banco: provider, tamanhos, contagens por entidade, vector store.</summary>
     public Task<DatabaseStatsDto?> GetDatabaseStatsAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<DatabaseStatsDto>("api/settings/database", ct);
+        GetWithRetryAsync<DatabaseStatsDto>("api/settings/database", ct);
 
     // SPEC-20260925-runtime-log-level RF-003/RF-004: runtime log level.
 
     /// <summary>Nível de log atual + auto-reset.</summary>
     public Task<LogLevelState?> GetLogLevelAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<LogLevelState>("api/settings/log-level", ct);
+        GetWithRetryAsync<LogLevelState>("api/settings/log-level", ct);
 
     /// <summary>Define o nível; <paramref name="minutes"/> agenda auto-reset.</summary>
     public async Task<ApiResult<LogLevelState>> SetLogLevelAsync(string level, int minutes, CancellationToken ct = default)
@@ -213,7 +230,7 @@ public sealed class SettingsApiClient(HttpClient http)
 
     /// <summary>Estado efetivo do provider de embeddings (store + env mascarado).</summary>
     public Task<EmbeddingSettingsDto?> GetEmbeddingsAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<EmbeddingSettingsDto>("api/settings/embeddings", ct);
+        GetWithRetryAsync<EmbeddingSettingsDto>("api/settings/embeddings", ct);
 
     /// <summary>Salva provider/endpoint/model/dims/chunking de embeddings; key em branco mantém.</summary>
     public async Task<ApiResult<object>> SaveEmbeddingsAsync(SaveEmbeddingSettingsRequest request, CancellationToken ct = default)

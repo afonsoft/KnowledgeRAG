@@ -1,10 +1,13 @@
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using KnowledgeHub.Server.Caching;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Server.Settings;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
@@ -25,7 +28,8 @@ public sealed partial class McpProxyToolsProvider(
     IIntegrationSecretStore secrets,
     ILoggerFactory loggerFactory,
     ILogger<McpProxyToolsProvider> logger,
-    IHttpClientFactory? httpClients = null) : IToolProvider, IAsyncDisposable
+    IHttpClientFactory? httpClients = null,
+    HybridCache? cache = null) : IToolProvider, IAsyncDisposable
 {
     private readonly SemaphoreSlim _sessionsGate = new(1, 1);
     private readonly Dictionary<Guid, IMcpProxySession> _sessions = [];
@@ -52,7 +56,7 @@ public sealed partial class McpProxyToolsProvider(
             activeFingerprints[source.Id] = config!.Fingerprint;
 
             var session = await GetSessionAsync(config, cancellationToken);
-            foreach (var proto in await session.GetToolsAsync(cancellationToken))
+            foreach (var proto in await GetProtosAsync(session, config, cancellationToken))
                 tools.Add(MapTool(session, config, proto));
         }
 
@@ -83,6 +87,27 @@ public sealed partial class McpProxyToolsProvider(
         {
             _sessionsGate.Release();
         }
+    }
+
+    /// <summary>Upstream <c>tools/list</c> with an L2 layer in front of the
+    /// session's own in-memory TTL — a restart or a second replica serves the
+    /// Redis copy instead of hitting the upstream again. The key embeds the
+    /// config fingerprint, so endpoint/prefix changes miss naturally; entries
+    /// expire by <see cref="McpProxyConfig.ToolsCacheSeconds"/>.</summary>
+    private async Task<IReadOnlyList<Tool>> GetProtosAsync(
+        IMcpProxySession session, McpProxyConfig config, CancellationToken cancellationToken)
+    {
+        if (cache is null)
+            return await session.GetToolsAsync(cancellationToken);
+
+        var fp = Convert.ToHexStringLower(SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(config.Fingerprint)));
+        var protos = await EndpointCache.GetJsonAsync(cache,
+            $"mcp:proxy-tools:{config.SourceId:N}:{fp}",
+            async c => await session.GetToolsAsync(c),
+            loggerFactory, cancellationToken,
+            TimeSpan.FromSeconds(config.ToolsCacheSeconds));
+        return protos ?? [];
     }
 
     private async Task EvictStaleSessionsAsync(Dictionary<Guid, string> activeFingerprints)

@@ -33,6 +33,10 @@ public sealed class CacheOptions
         ["expand"] = 60,       // parity with previous Search:QueryExpansion:Ttl default
         ["index"] = 10080,     // 7d — version token must outlive everything
         ["secret"] = 60,
+        ["settings"] = 1,      // describe DTOs — explicit evict on every write; TTL is only the out-of-band bound
+        ["list"] = 2,          // list payloads (sources/api-keys) — tag invalidation on every mutation
+        ["a2a"] = 60,          // agent card — config changes only via redeploy
+        ["mcp:proxy-tools"] = 5, // upstream tools/list protos — per-source fingerprint already re-keys
     };
 
     /// <summary>Fallback when a key's region isn't in <see cref="RegionTtlMinutes"/>.</summary>

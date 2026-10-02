@@ -24,6 +24,12 @@ public sealed class CacheTtlPolicy
         Current = this;
     }
 
+    /// <summary>L1 lifetime ceiling for <see cref="EndpointCache"/> entries —
+    /// <see cref="CacheOptions.L1MaxTtlMinutes"/>, or <see cref="TimeSpan.Zero"/>
+    /// when <c>Cache:L1Enabled=false</c> (tells callers to disable the local tier).</summary>
+    public TimeSpan L1Cap =>
+        _options.L1Enabled ? TimeSpan.FromMinutes(_options.L1MaxTtlMinutes) : TimeSpan.Zero;
+
     /// <summary>TTL for a key. Keys embed the version token already, so the
     /// policy never needs invalidation semantics — just region length.</summary>
     public TimeSpan For(string key)

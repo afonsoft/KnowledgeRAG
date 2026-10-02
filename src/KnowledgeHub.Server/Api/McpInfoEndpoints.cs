@@ -11,13 +11,23 @@ public static class McpInfoEndpoints
     {
         var group = app.MapGroup("/api/mcp").WithTags("MCP");
 
-        group.MapGet("/capabilities", (IConfiguration cfg) =>
+        group.MapGet("/capabilities", async (IConfiguration cfg,
+            Microsoft.Extensions.Caching.Hybrid.HybridCache cache,
+            ILoggerFactory lf, CancellationToken ct) =>
         {
-            var mode = cfg["Mcp:SessionMode"] ?? "StatefulForInitializeClients";
-            var legacySse = !mode.Equals("Stateless", StringComparison.OrdinalIgnoreCase);
-            return Results.Ok(new { sessionMode = mode, legacySse });
+            // Global config-derived payload — L1 hit is a live object.
+            var payload = await Caching.EndpointCache.GetJsonAsync(cache,
+                "mcp:capabilities", c =>
+                {
+                    var mode = cfg["Mcp:SessionMode"] ?? "StatefulForInitializeClients";
+                    var legacySse = !mode.Equals("Stateless", StringComparison.OrdinalIgnoreCase);
+                    return Task.FromResult<McpCapabilities?>(new(mode, legacySse));
+                }, lf, ct);
+            return Results.Ok(payload);
         }).AllowAnonymous();
 
         return group;
     }
+
+    private sealed record McpCapabilities(string SessionMode, bool LegacySse);
 }

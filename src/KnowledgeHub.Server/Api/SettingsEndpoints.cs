@@ -1,6 +1,8 @@
+using KnowledgeHub.Server.Caching;
 using KnowledgeHub.Server.Mcp.Upstream;
 using KnowledgeHub.Server.Settings;
 using KnowledgeHub.Shared.Contracts;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace KnowledgeHub.Server.Api;
 
@@ -36,13 +38,17 @@ public static class SettingsEndpoints
             IIntegrationSecretStore store,
             IIntegrationStateService state,
             IConfiguration cfg,
+            HybridCache cache,
+            ILoggerFactory lf,
             CancellationToken ct) =>
-        {
-            var items = new List<IntegrationSettingsDto>();
-            foreach (var provider in IntegrationProviders.All)
-                items.Add(await DescribeAsync(provider, store, state, cfg, ct));
-            return Results.Ok(new IntegrationSettingsResponse { Integrations = items });
-        });
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:integrations",
+                async c =>
+                {
+                    var items = new List<IntegrationSettingsDto>();
+                    foreach (var provider in IntegrationProviders.All)
+                        items.Add(await DescribeAsync(provider, store, state, cfg, c));
+                    return new IntegrationSettingsResponse { Integrations = items };
+                }, lf, ct)));
 
         // SPEC-20260926-integration-toggle: runtime on/off per integration —
         // disabled providers contribute no tools to the MCP catalog and their
@@ -55,6 +61,9 @@ public static class SettingsEndpoints
             string provider,
             IIntegrationSecretStore store,
             IServiceProvider services,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             if (!IntegrationProviders.All.Contains(provider))
@@ -62,6 +71,7 @@ public static class SettingsEndpoints
 
             await store.RemoveAsync(provider, ct);
             await ResetProviderAsync(provider, services, ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:integrations");
             return Results.NoContent();
         });
 
@@ -74,12 +84,18 @@ public static class SettingsEndpoints
         // the service's Invalidate() — no restart.
         group.MapGet("/chat", async (
             IChatSettingsService chat,
+            HybridCache cache,
+            ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await chat.DescribeAsync(ct)));
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:chat",
+                async c => await chat.DescribeAsync(c), lf, ct)));
 
         group.MapPut("/chat", async (
             SaveChatSettingsRequest? body,
             IChatSettingsService chat,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             var endpoint = body?.Endpoint?.Trim();
@@ -90,22 +106,31 @@ public static class SettingsEndpoints
                 return Results.BadRequest(new { error = "model is required" });
 
             await chat.SaveAsync(endpoint, model, body!.ApiKey, ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:chat");
             return Results.NoContent();
         });
 
         group.MapDelete("/chat/apikey", async (
             IChatSettingsService chat,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await chat.RemoveKeyAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:chat");
             return Results.NoContent();
         });
 
         group.MapDelete("/chat", async (
             IChatSettingsService chat,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await chat.ClearAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:chat");
             return Results.NoContent();
         });
 
@@ -135,17 +160,25 @@ public static class SettingsEndpoints
 
         group.MapDelete("/embeddings/apikey", async (
             IEmbeddingSettingsService emb,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await emb.RemoveKeyAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:embeddings");
             return Results.NoContent();
         });
 
         group.MapDelete("/embeddings", async (
             IEmbeddingSettingsService emb,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await emb.ClearAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:embeddings");
             return Results.NoContent();
         });
 
@@ -158,12 +191,18 @@ public static class SettingsEndpoints
         // Invalidate() — no restart.
         group.MapGet("/graph", async (
             IGraphSettingsService graph,
+            HybridCache cache,
+            ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await graph.DescribeAsync(ct)));
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:graph",
+                async c => await graph.DescribeAsync(c), lf, ct)));
 
         group.MapPut("/graph", async (
             SaveGraphSettingsRequest? body,
             IGraphSettingsService graph,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             if (body is null)
@@ -176,14 +215,19 @@ public static class SettingsEndpoints
                 return Results.BadRequest(new { error = "maxResults must be 10..10000" });
 
             await graph.SaveAsync(body, ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:graph");
             return Results.NoContent();
         });
 
         group.MapDelete("/graph", async (
             IGraphSettingsService graph,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await graph.ClearAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:graph");
             return Results.NoContent();
         });
 
@@ -196,12 +240,18 @@ public static class SettingsEndpoints
         // effective immediately via the service's Invalidate() — no restart.
         group.MapGet("/resilience", async (
             Settings.IResilienceSettingsService resilience,
+            HybridCache cache,
+            ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await resilience.DescribeAsync(ct)));
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:resilience",
+                async c => await resilience.DescribeAsync(c), lf, ct)));
 
         group.MapPut("/resilience", async (
             SaveResilienceSettingsRequest? body,
             Settings.IResilienceSettingsService resilience,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             if (body is null)
@@ -214,14 +264,19 @@ public static class SettingsEndpoints
                 return Results.BadRequest(new { error = "chatFallbacks capped at 10" });
 
             await resilience.SaveAsync(body, ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:resilience");
             return Results.NoContent();
         });
 
         group.MapDelete("/resilience", async (
             Settings.IResilienceSettingsService resilience,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await resilience.ClearAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:resilience");
             return Results.NoContent();
         });
 
@@ -233,12 +288,18 @@ public static class SettingsEndpoints
         // (local OpenAI-compatible or remote A2A agent) routed to cheap sub-tasks.
         group.MapGet("/assistant", async (
             Settings.IAssistantSettingsService assistant,
+            HybridCache cache,
+            ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await assistant.DescribeAsync(ct)));
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:assistant",
+                async c => await assistant.DescribeAsync(c), lf, ct)));
 
         group.MapPut("/assistant", async (
             SaveAssistantSettingsRequest? body,
             Settings.IAssistantSettingsService assistant,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             if (body is null)
@@ -249,22 +310,31 @@ public static class SettingsEndpoints
                 return Results.BadRequest(new { error = "endpoint is required when enabled" });
 
             await assistant.SaveAsync(body, ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:assistant");
             return Results.NoContent();
         });
 
         group.MapDelete("/assistant/apikey", async (
             Settings.IAssistantSettingsService assistant,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await assistant.RemoveKeyAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:assistant");
             return Results.NoContent();
         });
 
         group.MapDelete("/assistant", async (
             Settings.IAssistantSettingsService assistant,
+            HybridCache cache,
+            ICacheInvalidationBus bus,
+            ILoggerFactory lf,
             CancellationToken ct) =>
         {
             await assistant.ClearAsync(ct);
+            await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:assistant");
             return Results.NoContent();
         });
 
@@ -317,8 +387,11 @@ public static class SettingsEndpoints
             Data.KnowledgeHubDbContext db,
             IConfiguration cfg,
             VectorStore.IVectorStore vectors,
+            HybridCache cache,
+            ILoggerFactory lf,
             CancellationToken ct) =>
-            Results.Ok(await DatabaseStatsBuilder.BuildAsync(db, cfg, vectors, ct)));
+            Results.Ok(await EndpointCache.GetJsonAsync(cache, "settings:database",
+                async c => await DatabaseStatsBuilder.BuildAsync(db, cfg, vectors, c), lf, ct)));
 
         // SPEC-20260925-runtime-log-level RF-002/RF-003: runtime log level with
         // auto-reset — a Debug session expires instead of filling the disk.
@@ -453,6 +526,9 @@ public static class SettingsEndpoints
         SetIntegrationEnabledRequest? body,
         IIntegrationStateService state,
         IServiceProvider services,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         if (!IntegrationProviders.All.Contains(provider))
@@ -462,6 +538,7 @@ public static class SettingsEndpoints
 
         await state.SetEnabledAsync(provider, body.Enabled, ct);
         await ResetProviderAsync(provider, services, ct);
+        await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:integrations");
         return Results.NoContent();
     }
 
@@ -470,6 +547,9 @@ public static class SettingsEndpoints
         SetIntegrationKeyRequest? body,
         IIntegrationSecretStore store,
         IServiceProvider services,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         if (!IntegrationProviders.All.Contains(provider))
@@ -487,6 +567,7 @@ public static class SettingsEndpoints
 
         await store.SetAsync(provider, apiKey, ct);
         await ResetProviderAsync(provider, services, ct);
+        await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:integrations");
         return Results.NoContent();
     }
 
@@ -494,9 +575,15 @@ public static class SettingsEndpoints
         IEmbeddingSettingsService emb,
         Embeddings.IEmbeddingProviderResolver resolver,
         VectorStore.IVectorStore store,
+        HybridCache cache,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
-        var dto = await emb.DescribeAsync(ct);
+        // The DTO carries live runtime stamps (provider error, store dims) —
+        // bounded 30s freshness beats the describe+probe cost on every load.
+        var cached = await EndpointCache.GetJsonAsync(cache, "settings:embeddings",
+            async c => await emb.DescribeAsync(c), lf, ct, TimeSpan.FromSeconds(30));
+        var dto = cached ?? await emb.DescribeAsync(ct);
         // SPEC-20260926-embeddings-runtime-coherence RF-002: a broken stored
         // config (e.g. missing ONNX model) must never sink the GET — the
         // editor needs to render to offer "Restaurar ambiente".
@@ -523,6 +610,9 @@ public static class SettingsEndpoints
         SaveEmbeddingSettingsRequest? body,
         IEmbeddingSettingsService emb,
         VectorStore.IVectorStore store,
+        HybridCache cache,
+        ICacheInvalidationBus bus,
+        ILoggerFactory lf,
         CancellationToken ct)
     {
         if (body is null)
@@ -534,6 +624,7 @@ public static class SettingsEndpoints
 
         var provider = body.Provider.Trim().ToLowerInvariant();
         await emb.SaveAsync(body with { Provider = provider }, ct);
+        await EndpointCache.EvictAsync(cache, bus, lf, ct, "settings:embeddings");
         return Results.NoContent();
     }
 

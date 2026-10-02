@@ -2,6 +2,7 @@ using System.Text.Json;
 using A2A;
 using A2A.AspNetCore;
 using KnowledgeHub.Server.Auth;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace KnowledgeHub.Server.A2A;
 
@@ -135,12 +136,19 @@ public static class A2AEndpointExtensions
         // Well-known card: anonymous, per-request absolute URLs (proxy-safe).
         // The push-notifications flag reads live configuration so test-host
         // overrides apply even though the DI card was built at startup.
-        app.MapGet("/.well-known/agent-card.json", (HttpContext http) =>
+        app.MapGet("/.well-known/agent-card.json", async (HttpContext http,
+            HybridCache cache, ILoggerFactory lf, CancellationToken ct) =>
         {
             var baseUri = new Uri($"{http.Request.Scheme}://{http.Request.Host}/");
-            var cfg = http.RequestServices.GetRequiredService<IConfiguration>();
-            var card = BuildAgentCard(baseUri,
-                cfg.GetValue(KnowledgeHubA2AServer.EnabledConfigKey, true));
+            var pushEnabled = http.RequestServices.GetRequiredService<IConfiguration>()
+                .GetValue(KnowledgeHubA2AServer.EnabledConfigKey, true);
+            // The card is derived data (scheme/host + a config flag) — L1 serves
+            // the live object, L2 (Redis) shares it across replicas; config
+            // changes ride the "a2a" region TTL.
+            var card = await Caching.EndpointCache.GetJsonAsync(cache,
+                $"a2a:card:{baseUri}:{pushEnabled}",
+                c => Task.FromResult<AgentCard?>(BuildAgentCard(baseUri, pushEnabled)),
+                lf, ct);
             return Results.Json(card, A2AJsonUtilities.DefaultOptions);
         }).AllowAnonymous();
 

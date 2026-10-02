@@ -5,6 +5,8 @@ namespace KnowledgeHub.Server.Caching;
 /// into local L1 evictions. <c>index-version</c> drops just the token key —
 /// every cached result/answer key embeds it, so the next read re-fetches the
 /// fresh token and all stale entries miss. <c>cache-clear</c> wipes L1.
+/// <c>cache-key:{key}</c>/<c>cache-tag:{tag}</c> also drop the HybridCache L1 —
+/// HybridCache's own invalidation covers the shared L2, never remote L1s.
 /// </summary>
 public sealed class InvalidationSubscriber : BackgroundService
 {
@@ -12,6 +14,7 @@ public sealed class InvalidationSubscriber : BackgroundService
     private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache _cache;
     private readonly ICacheManagerService? _manager;
     private readonly Settings.IEmbeddingSettingsService? _embeddingSettings;
+    private readonly Microsoft.Extensions.Caching.Hybrid.HybridCache? _hybrid;
     private readonly ILogger<InvalidationSubscriber> _logger;
 
     public InvalidationSubscriber(
@@ -19,12 +22,14 @@ public sealed class InvalidationSubscriber : BackgroundService
         Microsoft.Extensions.Caching.Distributed.IDistributedCache cache,
         ILogger<InvalidationSubscriber> logger,
         ICacheManagerService? manager = null,
-        Settings.IEmbeddingSettingsService? embeddingSettings = null)
+        Settings.IEmbeddingSettingsService? embeddingSettings = null,
+        Microsoft.Extensions.Caching.Hybrid.HybridCache? hybrid = null)
     {
         _bus = bus;
         _cache = cache;
         _manager = manager;
         _embeddingSettings = embeddingSettings;
+        _hybrid = hybrid;
         _logger = logger;
         _bus.Received += OnReceived;
     }
@@ -46,6 +51,17 @@ public sealed class InvalidationSubscriber : BackgroundService
         {
             _embeddingSettings.Invalidate();
             _logger.LogInformation("settings-changed on another replica — embedding settings snapshot invalidated");
+        }
+
+        // HybridCache L1 drops for endpoint-level entries — RemoveByTagAsync
+        // on the publisher already wrote the L2 tombstone; these calls only
+        // need to clear THIS replica's local tier.
+        if (_hybrid is not null)
+        {
+            if (topic.StartsWith("cache-tag:", StringComparison.Ordinal))
+                _ = _hybrid.RemoveByTagAsync(topic["cache-tag:".Length..]);
+            else if (topic.StartsWith("cache-key:", StringComparison.Ordinal))
+                _ = _hybrid.RemoveAsync(topic["cache-key:".Length..]);
         }
 
         if (l1 is null)
