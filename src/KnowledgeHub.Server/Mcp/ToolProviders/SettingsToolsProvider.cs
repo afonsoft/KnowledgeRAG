@@ -59,36 +59,32 @@ public sealed class SettingsToolsProvider : IToolProvider
                 InputSchema = SetChatSettingsSchema,
                 ReadOnly = false,
                 IdempotentHint = true,
-                Handler = async (ctx, ct) =>
-                {
-                    var http = ctx.Services?.GetService<IHttpContextAccessor>()?.HttpContext;
-                    if (http is null)
-                        throw new McpProtocolException("HTTP context not available", McpErrorCode.InternalError);
-
-                    var authMethod = http.User.FindFirst(ApiKeyAuthenticationHandler.AuthMethodClaim)?.Value;
-                    var keyIdValue = http.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
-                    if (authMethod != "apikey" || !Guid.TryParse(keyIdValue, out var keyId))
-                        throw new McpProtocolException("This tool is only available to API-key-authenticated sessions", McpErrorCode.InvalidParams);
-
-                    var endpoint = ToolArgs.OptionalString(ctx, "endpoint");
-                    var model = ToolArgs.OptionalString(ctx, "model");
-                    var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
-
-                    var service = ctx.Services!.GetRequiredService<IApiKeyChatSettingsService>();
-                    await service.SaveAsync(keyId, endpoint, model, apiKey, ct);
-                    var result = await service.DescribeAsync(keyId, ct);
-
-                    var msg = $"Chat settings updated for API key '{keyId}'.\n" +
-                              $"Provider: {result.Provider}\n" +
-                              $"Endpoint: {result.Endpoint ?? "(inherited)"}\n" +
-                              $"Model: {result.Model ?? "(inherited)"}\n" +
-                              $"Has override: {result.HasOverride}\n" +
-                              $"Override fields: {string.Join(", ", result.OverrideFields)}";
-                    return await ToolResults.Text(msg);
-                }
+                Handler = SetChatSettingsAsync
             }
         ];
         return Task.FromResult(tools);
+    }
+
+    private static async ValueTask<CallToolResult> SetChatSettingsAsync(
+        ToolCallContext ctx, CancellationToken ct)
+    {
+        var keyId = RequireApiKeySession(ctx);
+
+        var endpoint = ToolArgs.OptionalString(ctx, "endpoint");
+        var model = ToolArgs.OptionalString(ctx, "model");
+        var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
+
+        var service = ctx.Services!.GetRequiredService<IApiKeyChatSettingsService>();
+        await service.SaveAsync(keyId, endpoint, model, apiKey, ct);
+        var result = await service.DescribeAsync(keyId, ct);
+
+        var msg = $"Chat settings updated for API key '{keyId}'.\n" +
+                  $"Provider: {result.Provider}\n" +
+                  $"Endpoint: {result.Endpoint ?? "(inherited)"}\n" +
+                  $"Model: {result.Model ?? "(inherited)"}\n" +
+                  $"Has override: {result.HasOverride}\n" +
+                  $"Override fields: {string.Join(", ", result.OverrideFields)}";
+        return await ToolResults.Text(msg);
     }
 
     /// <summary>Resolves the caller's API-key identity or throws — the settings

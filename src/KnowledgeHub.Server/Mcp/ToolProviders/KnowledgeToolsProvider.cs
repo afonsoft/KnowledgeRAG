@@ -131,34 +131,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
                 OutputSchema = SearchOutputSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
-                Handler = async (ctx, ct) =>
-                {
-                    var query = ToolArgs.RequiredString(ctx, "query");
-                    var topK = ToolArgs.OptionalInt(ctx, "topK", 5, 50);
-                    var (sourceId, mode, filter) = await ResolveScopeAsync(ctx, ct);
-                    // SPEC-20260924-corrective-rag RF-004: the corrective wrapper
-                    // retries weak retrievals once and surfaces the grade so the
-                    // agent can decide to rephrase on its own.
-                    var retrieval = ctx.Services.GetRequiredService<CorrectiveRetrievalService>();
-                    var outcome = await retrieval.RetrieveAsync(query, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
-                    // SPEC-20261001-mcp-recall-ergonomics RF-002: the token
-                    // budget truncates the ranked list post MMR/autocut/floors —
-                    // complements topK's count limit.
-                    var (bounded, truncatedByTokens) =
-                        ApplyTokenBudget(outcome.Results, ResolveMaxTokens(ctx));
-                    outcome = outcome with { Results = bounded };
-                    var suggested = await DetectSuggestedActionsAsync(ctx, query, outcome, ct);
-                    // Suggestions lead the text — CatalogToolAIFunction truncates
-                    // long results from the end, and appended suggestions were
-                    // being cut off when hits filled the budget (devin-review).
-                    return await ToolResults.Structured(
-                        BuildGradeLine(retrieval, outcome)
-                            + BuildSuggestedLine(suggested)
-                            + FormatHits(outcome.Results)
-                            + (truncatedByTokens ? "(truncated to fit maxTokens budget)" : ""),
-                        BuildSearchStructured(retrieval, outcome, sourceId, filter, suggested,
-                            ctx.Services.GetRequiredService<IConfiguration>(), truncatedByTokens));
-                }
+                Handler = SearchKnowledgeAsync
             },
             new CatalogTool
             {
@@ -194,6 +167,36 @@ public sealed class KnowledgeToolsProvider : IToolProvider
     }
 
     /// <summary>Grade hint appended to the text result when grading is on.</summary>
+    private static async ValueTask<CallToolResult> SearchKnowledgeAsync(
+        ToolCallContext ctx, CancellationToken ct)
+    {
+        var query = ToolArgs.RequiredString(ctx, "query");
+        var topK = ToolArgs.OptionalInt(ctx, "topK", 5, 50);
+        var (sourceId, mode, filter) = await ResolveScopeAsync(ctx, ct);
+        // SPEC-20260924-corrective-rag RF-004: the corrective wrapper
+        // retries weak retrievals once and surfaces the grade so the
+        // agent can decide to rephrase on its own.
+        var retrieval = ctx.Services.GetRequiredService<CorrectiveRetrievalService>();
+        var outcome = await retrieval.RetrieveAsync(query, topK, sourceId, mode, filter, ctx.ConversationContext, ct);
+        // SPEC-20261001-mcp-recall-ergonomics RF-002: the token
+        // budget truncates the ranked list post MMR/autocut/floors —
+        // complements topK's count limit.
+        var (bounded, truncatedByTokens) =
+            ApplyTokenBudget(outcome.Results, ResolveMaxTokens(ctx));
+        outcome = outcome with { Results = bounded };
+        var suggested = await DetectSuggestedActionsAsync(ctx, query, outcome, ct);
+        // Suggestions lead the text — CatalogToolAIFunction truncates
+        // long results from the end, and appended suggestions were
+        // being cut off when hits filled the budget (devin-review).
+        return await ToolResults.Structured(
+            BuildGradeLine(retrieval, outcome)
+                + BuildSuggestedLine(suggested)
+                + FormatHits(outcome.Results)
+                + (truncatedByTokens ? "(truncated to fit maxTokens budget)" : ""),
+            BuildSearchStructured(retrieval, outcome, sourceId, filter, suggested,
+                ctx.Services.GetRequiredService<IConfiguration>(), truncatedByTokens));
+    }
+
     private static string? BuildGradeLine(
         CorrectiveRetrievalService retrieval, CorrectiveRetrievalService.RetrievalOutcome outcome)
     {
