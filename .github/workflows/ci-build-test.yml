@@ -19,7 +19,7 @@ env:
   SOLUTION: "KnowledgeHub.slnx"
 
 jobs:
-  build-knowledgehub:
+  build-knowledgerag:
     name: Build KnowledgeHub (.NET 10)
     runs-on: ubuntu-latest
     permissions:
@@ -58,7 +58,7 @@ jobs:
   test-unit:
     name: Unit Tests (xUnit)
     runs-on: ubuntu-latest
-    needs: build-knowledgehub
+    needs: build-knowledgerag
     permissions:
       contents: read
 
@@ -114,7 +114,7 @@ jobs:
   test-integration:
     name: Integration Tests (SQLite)
     runs-on: ubuntu-latest
-    needs: build-knowledgehub
+    needs: build-knowledgerag
     permissions:
       contents: read
 
@@ -141,7 +141,7 @@ jobs:
   blazor-client-validation:
     name: Blazor WASM Client Validation
     runs-on: ubuntu-latest
-    needs: build-knowledgehub
+    needs: build-knowledgerag
     permissions:
       contents: read
 
@@ -179,7 +179,7 @@ jobs:
   docker-build:
     name: Docker Image Build
     runs-on: ubuntu-latest
-    needs: build-knowledgehub
+    needs: build-knowledgerag
     permissions:
       contents: read
 
@@ -196,7 +196,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
-          tags: knowledgehub:ci-test
+          tags: knowledgerag:ci-test
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
 
