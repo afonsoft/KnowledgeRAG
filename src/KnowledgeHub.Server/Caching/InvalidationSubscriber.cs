@@ -10,6 +10,8 @@ namespace KnowledgeHub.Server.Caching;
 /// </summary>
 public sealed class InvalidationSubscriber : BackgroundService
 {
+    private const string CacheKeyTopicPrefix = "cache-key:";
+    private const string CacheTagTopicPrefix = "cache-tag:";
     private readonly ICacheInvalidationBus _bus;
     private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache _cache;
     private readonly ICacheManagerService? _manager;
@@ -58,10 +60,10 @@ public sealed class InvalidationSubscriber : BackgroundService
         // need to clear THIS replica's local tier.
         if (_hybrid is not null)
         {
-            if (topic.StartsWith("cache-tag:", StringComparison.Ordinal))
-                _ = _hybrid.RemoveByTagAsync(topic["cache-tag:".Length..]);
-            else if (topic.StartsWith("cache-key:", StringComparison.Ordinal))
-                _ = _hybrid.RemoveAsync(topic["cache-key:".Length..]);
+            if (topic.StartsWith(CacheTagTopicPrefix, StringComparison.Ordinal))
+                _ = _hybrid.RemoveByTagAsync(topic[CacheTagTopicPrefix.Length..]);
+            else if (topic.StartsWith(CacheKeyTopicPrefix, StringComparison.Ordinal))
+                _ = _hybrid.RemoveAsync(topic[CacheKeyTopicPrefix.Length..]);
         }
 
         if (l1 is null)
@@ -80,9 +82,9 @@ public sealed class InvalidationSubscriber : BackgroundService
             default:
                 // SPEC-20260926-cache-key-consistency RF-001: per-key eviction
                 // propagated from another replica — drop only the L1 copy.
-                if (topic.StartsWith("cache-key:", StringComparison.Ordinal))
+                if (topic.StartsWith(CacheKeyTopicPrefix, StringComparison.Ordinal))
                 {
-                    var key = topic["cache-key:".Length..];
+                    var key = topic[CacheKeyTopicPrefix.Length..];
                     l1.InvalidateLocal(key);
                     _logger.LogDebug("remote cache-key eviction — L1 entry dropped");
                 }

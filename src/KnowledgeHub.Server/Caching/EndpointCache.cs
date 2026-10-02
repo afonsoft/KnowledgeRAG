@@ -41,7 +41,7 @@ public static class EndpointCache
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "endpoint cache {Key} failed — serving fresh", key);
+            logger.LogWarning(ex, "endpoint cache {Key} failed — serving fresh", LogSafe(key));
             return await factory(ct);
         }
     }
@@ -61,7 +61,10 @@ public static class EndpointCache
         foreach (var key in keys)
         {
             try { await cache.RemoveAsync(key, ct); }
-            catch (Exception ex) { logger.LogWarning(ex, "endpoint cache evict {Key} failed", key); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "endpoint cache evict {Key} failed", LogSafe(key));
+            }
             if (bus is not null)
                 await bus.PublishAsync($"cache-key:{key}", ct);
         }
@@ -81,13 +84,17 @@ public static class EndpointCache
         ILogger logger, CancellationToken ct)
     {
         try { await cache.RemoveByTagAsync(tag, ct); }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "endpoint cache tag evict {Tag} failed", tag);
+            logger.LogWarning(ex, "endpoint cache tag evict {Tag} failed", LogSafe(tag));
         }
         if (bus is not null)
             await bus.PublishAsync($"cache-tag:{tag}", ct);
     }
+
+    // keys/tags are caller- and channel-originated — strip line breaks before
+    // they reach the rendered log message (log forging).
+    private static string LogSafe(string value) => value.ReplaceLineEndings("_");
 
     private static HybridCacheEntryOptions EntryOptions(string key, TimeSpan? ttl)
     {

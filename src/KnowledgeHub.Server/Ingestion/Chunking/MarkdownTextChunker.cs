@@ -37,12 +37,13 @@ public sealed class MarkdownTextChunker : ITextChunker
     private static string? SectionPathFor(string piece, List<(int Level, string Title)> stack)
     {
         string? firstPath = null;
-        foreach (var m in piece.Split('\n')
+        foreach (var groups in piece.Split('\n')
             .Select(raw => HeaderLine().Match(raw.TrimStart()))
-            .Where(m => m.Success))
+            .Where(m => m.Success)
+            .Select(m => m.Groups))
         {
-            var level = m.Groups[1].Value.Length;
-            var title = m.Groups[2].Value.Trim();
+            var level = groups[1].Value.Length;
+            var title = groups[2].Value.Trim();
             while (stack.Count > 0 && stack[^1].Level >= level)
                 stack.RemoveAt(stack.Count - 1);
             stack.Add((level, title));

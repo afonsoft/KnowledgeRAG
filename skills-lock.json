@@ -85,6 +85,12 @@
       "skillPath": "skills/mermaid-architecture/SKILL.md",
       "computedHash": "2b5f3a6613606fa2efdcebf055084e8bddef02347cd5ca49201b3f30a1a8c58b"
     },
+    "migration-planner": {
+      "source": "afonsoft/skills",
+      "sourceType": "github",
+      "skillPath": "skills/migration-planner/SKILL.md",
+      "computedHash": "d9e5ff52a19a0060ffa0def7df56856d8c21afc812eb99ac196cc144978b02c1"
+    },
     "notebooklm-mcp": {
       "source": "afonsoft/skills",
       "sourceType": "github",
@@ -132,6 +138,12 @@
       "sourceType": "github",
       "skillPath": "skills/sonarqube-autofix/SKILL.md",
       "computedHash": "aa44e3f7a8738ce3be0fbb4e6cae48ae62266fe5576bf75eaf9725dce84de4d2"
+    },
+    "web-design-guidelines": {
+      "source": "afonsoft/skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "fe40e1fce9495348af048986e51c0b20f72ceaed700fd7ee54a3d629987a4ea0"
     },
     "wordpress-mcp": {
       "source": "afonsoft/skills",

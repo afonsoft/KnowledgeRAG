@@ -628,7 +628,7 @@ public static class KnowledgeHubServiceCollectionExtensions
             // tiers layer on top: L1L2Cache for the SafeCache-era paths and
             // HybridCache for EndpointCache. (AddSingleton factory instead of
             // AddStackExchangeRedisCache so the multiplexer options apply.)
-            services.AddSingleton<IDistributedCache>(_ =>
+            services.AddSingleton<IDistributedCache>(sp =>
             {
                 var redisOpts = new Microsoft.Extensions.Caching.StackExchangeRedis.RedisCacheOptions
                 {
@@ -642,9 +642,9 @@ public static class KnowledgeHubServiceCollectionExtensions
                     parsed.AllowAdmin = true;
                     redisOpts.ConfigurationOptions = parsed;
                 }
-                catch
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    // If parsing fails fall back to connection string only
+                    _ = ex.Message; // If parsing fails fall back to connection string only
                 }
 
                 return new Microsoft.Extensions.Caching.StackExchangeRedis.RedisCache(
