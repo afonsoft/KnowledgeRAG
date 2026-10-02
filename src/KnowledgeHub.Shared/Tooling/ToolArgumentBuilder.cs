@@ -77,83 +77,121 @@ public static class ToolArgumentBuilder
         if (string.IsNullOrWhiteSpace(raw))
             return true;
 
-        switch (field.Kind)
+        return field.Kind switch
         {
-            case ToolFieldKind.String:
-                value = JsonSerializer.SerializeToElement(raw);
-                return true;
+            ToolFieldKind.String => BuildString(raw, out value, out error),
+            ToolFieldKind.Choice => BuildChoice(field, raw, out value, out error),
+            ToolFieldKind.Integer or ToolFieldKind.Number => BuildNumber(field, raw, out value, out error),
+            ToolFieldKind.Boolean => BuildBoolean(field, raw, out value, out error),
+            ToolFieldKind.StringList or ToolFieldKind.StringOrStringList => BuildList(field, raw, out value, out error),
+            ToolFieldKind.Json => BuildJson(field, raw, out value, out error),
+            _ => Unsupported(field, out value, out error)
+        };
+    }
 
-            case ToolFieldKind.Choice:
-                var trimmed = raw.Trim();
-                if (field.EnumValues is { } allowed && !allowed.Contains(trimmed))
-                {
-                    error = $"esperado {field.TypeLabel}";
-                    return false;
-                }
-                value = JsonSerializer.SerializeToElement(trimmed);
-                return true;
+    private static bool BuildString(string raw, out JsonElement value, out string? error)
+    {
+        value = JsonSerializer.SerializeToElement(raw);
+        error = null;
+        return true;
+    }
 
-            case ToolFieldKind.Integer:
-            case ToolFieldKind.Number:
-                if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var n))
-                {
-                    error = $"esperado {field.TypeLabel}";
-                    return false;
-                }
-                value = JsonSerializer.SerializeToElement(n);
-                return true;
-
-            case ToolFieldKind.Boolean:
-                if (!bool.TryParse(raw.Trim(), out var b))
-                {
-                    error = $"esperado {field.TypeLabel}";
-                    return false;
-                }
-                value = JsonSerializer.SerializeToElement(b);
-                return true;
-
-            case ToolFieldKind.StringList:
-            case ToolFieldKind.StringOrStringList:
-                var items = SplitList(raw);
-                if (items.Count == 0)
-                    return true;
-                if (field.MaxItems is { } max && items.Count > max)
-                {
-                    error = $"máximo de {max} itens";
-                    return false;
-                }
-                value = field.Kind == ToolFieldKind.StringOrStringList && items.Count == 1
-                    ? JsonSerializer.SerializeToElement(items[0])
-                    : JsonSerializer.SerializeToElement(items);
-                return true;
-
-            case ToolFieldKind.Json:
-                try
-                {
-                    using var doc = JsonDocument.Parse(raw);
-                    if (field.UnionKinds is { } kinds && !kinds.Contains(doc.RootElement.ValueKind))
-                    {
-                        error = $"esperado {field.TypeLabel}";
-                        return false;
-                    }
-                    value = doc.RootElement.Clone();
-                    return true;
-                }
-                catch (JsonException)
-                {
-                    if (field.UnionAllowsString)
-                    {
-                        value = JsonSerializer.SerializeToElement(raw);
-                        return true;
-                    }
-                    error = $"esperado {field.TypeLabel}";
-                    return false;
-                }
-
-            default:
-                error = $"tipo não suportado ({field.TypeLabel})";
-                return false;
+    private static bool BuildChoice(ToolField field, string raw, out JsonElement value, out string? error)
+    {
+        var trimmed = raw.Trim();
+        if (field.EnumValues is { } allowed && !allowed.Contains(trimmed))
+        {
+            value = default;
+            error = $"esperado {field.TypeLabel}";
+            return false;
         }
+        value = JsonSerializer.SerializeToElement(trimmed);
+        error = null;
+        return true;
+    }
+
+    private static bool BuildNumber(ToolField field, string raw, out JsonElement value, out string? error)
+    {
+        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var n))
+        {
+            value = default;
+            error = $"esperado {field.TypeLabel}";
+            return false;
+        }
+        value = JsonSerializer.SerializeToElement(n);
+        error = null;
+        return true;
+    }
+
+    private static bool BuildBoolean(ToolField field, string raw, out JsonElement value, out string? error)
+    {
+        if (!bool.TryParse(raw.Trim(), out var b))
+        {
+            value = default;
+            error = $"esperado {field.TypeLabel}";
+            return false;
+        }
+        value = JsonSerializer.SerializeToElement(b);
+        error = null;
+        return true;
+    }
+
+    private static bool BuildList(ToolField field, string raw, out JsonElement value, out string? error)
+    {
+        var items = SplitList(raw);
+        if (items.Count == 0)
+        {
+            value = default;
+            error = null;
+            return true;
+        }
+        if (field.MaxItems is { } max && items.Count > max)
+        {
+            value = default;
+            error = $"máximo de {max} itens";
+            return false;
+        }
+        value = field.Kind == ToolFieldKind.StringOrStringList && items.Count == 1
+            ? JsonSerializer.SerializeToElement(items[0])
+            : JsonSerializer.SerializeToElement(items);
+        error = null;
+        return true;
+    }
+
+    private static bool BuildJson(ToolField field, string raw, out JsonElement value, out string? error)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            if (field.UnionKinds is { } kinds && !kinds.Contains(doc.RootElement.ValueKind))
+            {
+                value = default;
+                error = $"esperado {field.TypeLabel}";
+                return false;
+            }
+            value = doc.RootElement.Clone();
+            error = null;
+            return true;
+        }
+        catch (JsonException)
+        {
+            if (field.UnionAllowsString)
+            {
+                value = JsonSerializer.SerializeToElement(raw);
+                error = null;
+                return true;
+            }
+            value = default;
+            error = $"esperado {field.TypeLabel}";
+            return false;
+        }
+    }
+
+    private static bool Unsupported(ToolField field, out JsonElement value, out string? error)
+    {
+        value = default;
+        error = $"tipo não suportado ({field.TypeLabel})";
+        return false;
     }
 
     /// <summary>RF-006: root-level <c>examples</c> — array of complete argument objects.</summary>

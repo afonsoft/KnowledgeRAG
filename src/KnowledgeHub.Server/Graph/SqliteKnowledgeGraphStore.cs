@@ -201,32 +201,46 @@ public sealed class SqliteKnowledgeGraphStore(
 
         for (var d = 0; d < depth && frontier.Count > 0; d++)
         {
-            var batch = await db.KgEdges
-                .Include(e => e.From).Include(e => e.To).Include(e => e.Document)
-                .Where(e => e.ValidTo == null && (direction == GraphDirection.Outbound
-                    ? frontier.Contains(e.FromNodeId)
-                    : frontier.Contains(e.ToNodeId)))
-                .Take(maxEdges - edges.Count + 1)
-                .ToListAsync(ct);
+            var batch = await LoadFrontierEdgesAsync(frontier, direction, maxEdges - edges.Count + 1, ct);
             if (batch.Count == 0)
                 break;
             truncated = edges.Count + batch.Count > maxEdges;
-
-            var next = new List<Guid>();
-            foreach (var e in batch.Take(maxEdges - edges.Count))
-            {
-                edges.Add(e);
-                var neighbor = direction == GraphDirection.Outbound ? e.ToNodeId : e.FromNodeId;
-                if (visited.Add(neighbor))
-                    next.Add(neighbor);
-            }
-            frontier = next;
+            frontier = CollectNeighbors(batch, edges, visited, direction, maxEdges - edges.Count);
             if (truncated)
                 break;
         }
 
         var nodes = await db.KgNodes.Where(n => visited.Contains(n.Id)).ToListAsync(ct);
         return new GraphSubgraph(nodes, edges, truncated);
+    }
+
+    /// <summary>One BFS level of still-valid edges touching the frontier,
+    /// bounded by <paramref name="take"/>.</summary>
+    private async Task<List<KgEdge>> LoadFrontierEdgesAsync(
+        List<Guid> frontier, GraphDirection direction, int take, CancellationToken ct)
+        => await db.KgEdges
+            .Include(e => e.From).Include(e => e.To).Include(e => e.Document)
+            .Where(e => e.ValidTo == null && (direction == GraphDirection.Outbound
+                ? frontier.Contains(e.FromNodeId)
+                : frontier.Contains(e.ToNodeId)))
+            .Take(take)
+            .ToListAsync(ct);
+
+    /// <summary>Appends up to <paramref name="take"/> batch edges to the result
+    /// and returns the next frontier (first-visit neighbors only).</summary>
+    private static List<Guid> CollectNeighbors(
+        List<KgEdge> batch, List<KgEdge> edges, HashSet<Guid> visited,
+        GraphDirection direction, int take)
+    {
+        var next = new List<Guid>();
+        foreach (var e in batch.Take(take))
+        {
+            edges.Add(e);
+            var neighbor = direction == GraphDirection.Outbound ? e.ToNodeId : e.FromNodeId;
+            if (visited.Add(neighbor))
+                next.Add(neighbor);
+        }
+        return next;
     }
 
     /// <inheritdoc />

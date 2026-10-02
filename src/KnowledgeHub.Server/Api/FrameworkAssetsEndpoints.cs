@@ -22,29 +22,7 @@ public static partial class FrameworkAssetsEndpoints
     {
         var group = app.MapGroup("/framework-assets").AllowAnonymous();
 
-        group.MapGet("/{fileName}", (string fileName, HttpContext http, IWebHostEnvironment env) =>
-        {
-            if (fileName.Contains("..", StringComparison.Ordinal) || !ValidName().IsMatch(fileName))
-                return Results.NotFound();
-
-            var root = env.WebRootFileProvider;
-            var file = root.GetFileInfo($"_framework/{fileName}");
-            if (!file.Exists || file.IsDirectory)
-                return Results.NotFound();
-
-            // Publish emits .br/.gz siblings for every asset; dev emits .gz.
-            var compressed = TryCompressed(root, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
-
-            http.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
-            // Shared caches (corporate proxies) must key on Accept-Encoding.
-            http.Response.Headers.Vary = "Accept-Encoding";
-            if (compressed is not null)
-            {
-                http.Response.Headers.ContentEncoding = encoding;
-                return Results.File(compressed.CreateReadStream(), "application/octet-stream");
-            }
-            return Results.File(file.CreateReadStream(), "application/octet-stream");
-        });
+        group.MapGet("/{fileName}", ServeSingleSegment);
 
         // SPEC-20260915-wasm-boot-proxy-hardening RF-001: the blocked suffix must
         // not appear in the request URL — client sends stem/ext as two segments.
@@ -52,39 +30,65 @@ public static partial class FrameworkAssetsEndpoints
         // extension filters and binary content-sniffing; the client verifies
         // SHA-256 against the boot integrity hash before handing the bytes to
         // Blazor.
-        group.MapGet("/{stem}/{ext}", (string stem, string ext, HttpContext http, IWebHostEnvironment env) =>
-        {
-            if (stem.Contains("..", StringComparison.Ordinal) || !ValidName().IsMatch(stem) || !ValidExt().IsMatch(ext))
-                return Results.NotFound();
-
-            var fileName = $"{stem}.{ext}";
-            var root = env.WebRootFileProvider;
-            var file = root.GetFileInfo($"_framework/{fileName}");
-            if (!file.Exists || file.IsDirectory)
-                return Results.NotFound();
-
-            http.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
-
-            var enc = (string?)http.Request.Query["enc"];
-            if (string.Equals(enc, "b64", StringComparison.Ordinal))
-            {
-                using var raw = file.CreateReadStream();
-                using var buffer = new MemoryStream();
-                raw.CopyTo(buffer);
-                return Results.Text(Convert.ToBase64String(buffer.GetBuffer(), 0, (int)buffer.Length), "text/plain");
-            }
-
-            http.Response.Headers.Vary = "Accept-Encoding";
-            var compressed = TryCompressed(root, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
-            if (compressed is not null)
-            {
-                http.Response.Headers.ContentEncoding = encoding;
-                return Results.File(compressed.CreateReadStream(), ContentType(ext));
-            }
-            return Results.File(file.CreateReadStream(), ContentType(ext));
-        });
+        group.MapGet("/{stem}/{ext}", ServeTwoSegments);
 
         return group;
+    }
+
+    private static IResult ServeSingleSegment(string fileName, HttpContext http, IWebHostEnvironment env)
+    {
+        if (fileName.Contains("..", StringComparison.Ordinal) || !ValidName().IsMatch(fileName))
+            return Results.NotFound();
+
+        var root = env.WebRootFileProvider;
+        var file = root.GetFileInfo($"_framework/{fileName}");
+        if (!file.Exists || file.IsDirectory)
+            return Results.NotFound();
+
+        // Publish emits .br/.gz siblings for every asset; dev emits .gz.
+        var compressed = TryCompressed(root, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
+
+        http.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
+        // Shared caches (corporate proxies) must key on Accept-Encoding.
+        http.Response.Headers.Vary = "Accept-Encoding";
+        if (compressed is not null)
+        {
+            http.Response.Headers.ContentEncoding = encoding;
+            return Results.File(compressed.CreateReadStream(), "application/octet-stream");
+        }
+        return Results.File(file.CreateReadStream(), "application/octet-stream");
+    }
+
+    private static IResult ServeTwoSegments(string stem, string ext, HttpContext http, IWebHostEnvironment env)
+    {
+        if (stem.Contains("..", StringComparison.Ordinal) || !ValidName().IsMatch(stem) || !ValidExt().IsMatch(ext))
+            return Results.NotFound();
+
+        var fileName = $"{stem}.{ext}";
+        var root = env.WebRootFileProvider;
+        var file = root.GetFileInfo($"_framework/{fileName}");
+        if (!file.Exists || file.IsDirectory)
+            return Results.NotFound();
+
+        http.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
+
+        var enc = (string?)http.Request.Query["enc"];
+        if (string.Equals(enc, "b64", StringComparison.Ordinal))
+        {
+            using var raw = file.CreateReadStream();
+            using var buffer = new MemoryStream();
+            raw.CopyTo(buffer);
+            return Results.Text(Convert.ToBase64String(buffer.GetBuffer(), 0, (int)buffer.Length), "text/plain");
+        }
+
+        http.Response.Headers.Vary = "Accept-Encoding";
+        var compressed = TryCompressed(root, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
+        if (compressed is not null)
+        {
+            http.Response.Headers.ContentEncoding = encoding;
+            return Results.File(compressed.CreateReadStream(), ContentType(ext));
+        }
+        return Results.File(file.CreateReadStream(), ContentType(ext));
     }
 
     private static string ContentType(string ext) => ext switch

@@ -97,33 +97,43 @@ public static class ConfigurationValidator
         if (!string.IsNullOrWhiteSpace(provider) && !EmbeddingProviders.Contains(provider))
             problems.Add($"Embeddings:Provider '{provider}' is invalid (expected: deterministic | ollama | openai | onnx)");
 
-        if (provider is not null && !provider.Equals("deterministic", StringComparison.OrdinalIgnoreCase)
-            && !provider.Equals("onnx", StringComparison.OrdinalIgnoreCase))
-        {
-            var endpoint = section[EndpointKey];
-            if (!IsHttpUri(endpoint))
-                problems.Add($"Embeddings:Endpoint '{endpoint}' is required and must be an absolute http(s) URI when Provider={provider}");
-            if (string.IsNullOrWhiteSpace(section[ModelKey]))
-                problems.Add($"Embeddings:Model is required when Provider={provider}");
-        }
+        if (RequiresRemoteEndpoint(provider))
+            ValidateRemoteProvider(section, provider!, problems);
 
         // SPEC-20260917-onnx-local-embeddings RF-002: Provider=onnx needs the
         // model artifacts at startup — fail with a clear message, not a crash.
         if (provider?.Equals("onnx", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            var dir = section["ModelPath"] is { Length: > 0 } p ? p : OnnxEmbeddingProvider.DefaultModelDirectory;
-            if (!File.Exists(Path.Combine(dir, OnnxEmbeddingProvider.ModelFileName))
-                || !File.Exists(Path.Combine(dir, OnnxEmbeddingProvider.VocabFileName)))
-                problems.Add(
-                    $"Embeddings:Provider=onnx requires {OnnxEmbeddingProvider.ModelFileName} and " +
-                    $"{OnnxEmbeddingProvider.VocabFileName} under '{Path.GetFullPath(dir)}' " +
-                    "(set Embeddings:ModelPath or download all-MiniLM-L6-v2 from Hugging Face)");
-            if (section["Dimensions"] is { } onnxDims
-                && (!int.TryParse(onnxDims, out var od) || od != OnnxEmbeddingProvider.EmbeddingDimensions))
-                problems.Add($"Embeddings:Dimensions '{onnxDims}' must be {OnnxEmbeddingProvider.EmbeddingDimensions} when Provider=onnx");
-        }
+            ValidateOnnxArtifacts(section, problems);
 
         RequirePositiveInt(section, "Dimensions", "Embeddings", problems);
+    }
+
+    private static bool RequiresRemoteEndpoint(string? provider)
+        => provider is not null
+            && !provider.Equals("deterministic", StringComparison.OrdinalIgnoreCase)
+            && !provider.Equals("onnx", StringComparison.OrdinalIgnoreCase);
+
+    private static void ValidateRemoteProvider(IConfigurationSection section, string provider, List<string> problems)
+    {
+        var endpoint = section[EndpointKey];
+        if (!IsHttpUri(endpoint))
+            problems.Add($"Embeddings:Endpoint '{endpoint}' is required and must be an absolute http(s) URI when Provider={provider}");
+        if (string.IsNullOrWhiteSpace(section[ModelKey]))
+            problems.Add($"Embeddings:Model is required when Provider={provider}");
+    }
+
+    private static void ValidateOnnxArtifacts(IConfigurationSection section, List<string> problems)
+    {
+        var dir = section["ModelPath"] is { Length: > 0 } p ? p : OnnxEmbeddingProvider.DefaultModelDirectory;
+        if (!File.Exists(Path.Combine(dir, OnnxEmbeddingProvider.ModelFileName))
+            || !File.Exists(Path.Combine(dir, OnnxEmbeddingProvider.VocabFileName)))
+            problems.Add(
+                $"Embeddings:Provider=onnx requires {OnnxEmbeddingProvider.ModelFileName} and " +
+                $"{OnnxEmbeddingProvider.VocabFileName} under '{Path.GetFullPath(dir)}' " +
+                "(set Embeddings:ModelPath or download all-MiniLM-L6-v2 from Hugging Face)");
+        if (section["Dimensions"] is { } onnxDims
+            && (!int.TryParse(onnxDims, out var od) || od != OnnxEmbeddingProvider.EmbeddingDimensions))
+            problems.Add($"Embeddings:Dimensions '{onnxDims}' must be {OnnxEmbeddingProvider.EmbeddingDimensions} when Provider=onnx");
     }
 
     private static void ValidateVectorStore(IConfiguration cfg, List<string> problems)

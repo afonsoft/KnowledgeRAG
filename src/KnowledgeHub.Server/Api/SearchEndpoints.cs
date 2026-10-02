@@ -37,56 +37,54 @@ public static class SearchEndpoints
             ISearchService svc, IConfiguration config,
             [AsParameters] SearchQueryParams q,
             CancellationToken ct) =>
-        {
-            if (string.IsNullOrWhiteSpace(q.Query))
-                return Results.BadRequest(new { error = "query is required" });
-
-            // Default "semantic" preserves pre-hybrid API behavior; tools default to hybrid.
-            var searchMode = ParseMode(q.Mode);
-            if (searchMode is null)
-                return Results.BadRequest(new { error = "mode must be hybrid | semantic | lexical" });
-
-            // SPEC-20260923-retrieval-quality RF-003: flat filter params.
-            if (!Search.ResolvedSearchFilter.TryResolve(
-                    new SearchFilter
-                    {
-                        SourceType = q.SourceType,
-                        PathPrefix = q.PathPrefix,
-                        IndexedAfter = q.IndexedAfter,
-                        Language = q.Language,
-                        WindowSize = q.WindowSize,
-                        LimitMode = q.LimitMode,
-                        AutocutSensitivity = q.AutocutSensitivity,
-                        SubQueries = q.SubQueries,
-                        AllowRelaxation = q.AllowRelaxation
-                    }, out var filter, out var error))
-                return Results.BadRequest(new { error });
-
-            var k = q.TopK is null or <= 0 ? DefaultTopK : Math.Min(q.TopK.Value, MaxTopK);
-            var results = await svc.SearchAsync(q.Query, k, q.SourceId, searchMode.Value, filter, ct: ct);
-            return Results.Ok(Enrich(results, filter, q.SourceId, config));
-        });
+            await RunSearchAsync(svc, config,
+                new SearchInvocation(q.Query, q.Mode, q.TopK, q.SourceId, BuildFilter(q)), ct));
 
         // SPEC-20260923-retrieval-quality §5: POST variant accepting a filters object.
         group.MapPost("/", async (
             ISearchService svc, IConfiguration config, SearchRequest request, CancellationToken ct) =>
-        {
-            if (string.IsNullOrWhiteSpace(request.Query))
-                return Results.BadRequest(new { error = "query is required" });
-
-            var searchMode = ParseMode(request.Mode);
-            if (searchMode is null)
-                return Results.BadRequest(new { error = "mode must be hybrid | semantic | lexical" });
-
-            if (!Search.ResolvedSearchFilter.TryResolve(request.Filters, out var filter, out var error))
-                return Results.BadRequest(new { error });
-
-            var k = request.TopK is null or <= 0 ? DefaultTopK : Math.Min(request.TopK.Value, MaxTopK);
-            var results = await svc.SearchAsync(request.Query, k, request.SourceId, searchMode.Value, filter, ct: ct);
-            return Results.Ok(Enrich(results, filter, request.SourceId, config));
-        });
+            await RunSearchAsync(svc, config,
+                new SearchInvocation(request.Query, request.Mode, request.TopK, request.SourceId, request.Filters), ct));
 
         return group;
+    }
+
+    /// <summary>Normalized handler inputs — the GET binds flat query params,
+    /// the POST a filters object; both funnel through <see cref="RunSearchAsync"/>.</summary>
+    private sealed record SearchInvocation(
+        string? Query, string? Mode, int? TopK, Guid? SourceId, SearchFilter? Filters);
+
+    // SPEC-20260923-retrieval-quality RF-003: flat filter params.
+    private static SearchFilter BuildFilter(SearchQueryParams q) => new()
+    {
+        SourceType = q.SourceType,
+        PathPrefix = q.PathPrefix,
+        IndexedAfter = q.IndexedAfter,
+        Language = q.Language,
+        WindowSize = q.WindowSize,
+        LimitMode = q.LimitMode,
+        AutocutSensitivity = q.AutocutSensitivity,
+        SubQueries = q.SubQueries,
+        AllowRelaxation = q.AllowRelaxation
+    };
+
+    private static async Task<IResult> RunSearchAsync(
+        ISearchService svc, IConfiguration config, SearchInvocation inv, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(inv.Query))
+            return Results.BadRequest(new { error = "query is required" });
+
+        // Default "semantic" preserves pre-hybrid API behavior; tools default to hybrid.
+        var searchMode = ParseMode(inv.Mode);
+        if (searchMode is null)
+            return Results.BadRequest(new { error = "mode must be hybrid | semantic | lexical" });
+
+        if (!Search.ResolvedSearchFilter.TryResolve(inv.Filters, out var filter, out var error))
+            return Results.BadRequest(new { error });
+
+        var k = inv.TopK is null or <= 0 ? DefaultTopK : Math.Min(inv.TopK.Value, MaxTopK);
+        var results = await svc.SearchAsync(inv.Query, k, inv.SourceId, searchMode.Value, filter, ct: ct);
+        return Results.Ok(Enrich(results, filter, inv.SourceId, config));
     }
 
     /// <summary>Envelope metadata: limit mode + relaxation provenance
