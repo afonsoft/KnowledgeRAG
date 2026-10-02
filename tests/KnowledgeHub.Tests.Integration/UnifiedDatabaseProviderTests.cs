@@ -89,7 +89,7 @@ public sealed class UnifiedDatabaseProviderTests
         { SearchPath = schema };
 
         // Source sqlite catalog with a source → document → chunk chain.
-        var sqlitePath = Path.Combine(Path.GetTempPath(), $"kh-mig-{Guid.NewGuid():N}.db");
+        var sqlitePath = Path.Join(Path.GetTempPath(), $"kh-mig-{Guid.NewGuid():N}.db");
         try
         {
             await using (var sqlite = new KnowledgeHubDbContext(
@@ -165,7 +165,8 @@ public sealed class UnifiedDatabaseProviderTests
         }
         finally
         {
-            try { File.Delete(sqlitePath); File.Delete(sqlitePath + ".migrated"); } catch { }
+            try { File.Delete(sqlitePath); File.Delete(sqlitePath + ".migrated"); }
+            catch (Exception ioEx) { _ = ioEx.Message; /* best-effort temp cleanup */ }
         }
     }
 
