@@ -50,6 +50,7 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
 
     public DbSet<AgentFlow> AgentFlows => Set<AgentFlow>();
     public DbSet<FlowRun> FlowRuns => Set<FlowRun>();
+    public DbSet<FlowTrigger> FlowTriggers => Set<FlowTrigger>();
 
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -386,9 +387,23 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.Property(r => r.Status).IsRequired().HasMaxLength(16);
             e.HasIndex(r => r.FlowId);
             e.HasIndex(r => r.CreatedAt);
+            e.HasIndex(r => r.PendingApprovalId);
             e.HasOne<AgentFlow>()
                 .WithMany()
                 .HasForeignKey(r => r.FlowId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FlowTrigger>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Kind).IsRequired().HasMaxLength(16);
+            e.Property(t => t.Secret).HasMaxLength(80);
+            e.HasIndex(t => t.Secret).IsUnique();
+            e.HasIndex(t => t.FlowId);
+            e.HasOne<AgentFlow>()
+                .WithMany()
+                .HasForeignKey(t => t.FlowId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

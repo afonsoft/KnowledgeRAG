@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using KnowledgeHub.Shared.Contracts;
 
 namespace KnowledgeHub.Server.Flows;
 
@@ -36,6 +37,48 @@ public sealed class FlowExecContext
 
     /// <summary>ApiKey id of the caller (recorded on the run; null = cookie admin).</summary>
     public Guid? ApiKeyId { get; init; }
+
+    /// <summary>Set by the <c>approval</c> step handler: the run must suspend
+    /// here until a human resolves the gate. The engine turns it into a
+    /// <see cref="FlowSuspendException"/> before the next step.</summary>
+    public PendingApproval? PendingApproval { get; set; }
+
+    /// <summary>Step ids carried in from a <see cref="FlowResumeState"/> — only
+    /// these may be skipped (each is consumed on first match). Distinct from
+    /// <see cref="StepOutputs"/> so steps executed during THIS run (e.g. a
+    /// nested step inside a foreach's later iterations) are never skipped.</summary>
+    public HashSet<string>? RestoredStepIds { get; set; }
+}
+
+/// <summary>A mid-flow HITL gate: the step that asked for approval plus the
+/// operator-facing message shown in /api/approvals.</summary>
+public sealed class PendingApproval
+{
+    public required string StepId { get; init; }
+    public required string Message { get; init; }
+}
+
+/// <summary>Serialised execution state persisted on a suspended FlowRun —
+/// enough for the engine to skip already-executed steps on resume.</summary>
+public sealed class FlowResumeState
+{
+    public JsonObject? Vars { get; set; }
+    public Dictionary<string, JsonNode?>? StepOutputs { get; set; }
+    public Dictionary<string, string?>? StepErrors { get; set; }
+    public int ExecutedCount { get; set; }
+    public int IterationsCount { get; set; }
+    public List<FlowStepResultDto>? Trace { get; set; }
+    /// <summary>The approval step's id — its resolution is seeded into
+    /// StepOutputs on resume.</summary>
+    public string? PendingStepId { get; set; }
+}
+
+/// <summary>Engine abort that suspends instead of failing — carries the
+/// pending gate up to FlowService, which persists the resume state.</summary>
+public sealed class FlowSuspendException(PendingApproval pending) : Exception(
+    $"flow suspended at step '{pending.StepId}': awaiting approval")
+{
+    public PendingApproval Pending { get; } = pending;
 }
 
 /// <summary>Engine-emitted event for streaming runs.</summary>
@@ -43,6 +86,10 @@ public sealed record FlowStreamEvent(string Type, JsonNode? Data)
 {
     public const string StepStart = "flow_step_start";
     public const string StepEnd = "flow_step_end";
+    /// <summary>A step skipped on a resumed run (its output was restored).</summary>
+    public const string StepSkip = "flow_step_skip";
+    /// <summary>Emitted when a run suspends on an approval step.</summary>
+    public const string Waiting = "flow_waiting_approval";
     public const string Done = "done";
     public const string Error = "error";
 }
@@ -59,16 +106,24 @@ public sealed class FlowStepResult
     public JsonNode? Output { get; set; }
     public string? Error { get; set; }
     public long DurationMs { get; set; }
+    /// <summary>Total handler executions (1 + retries; F3).</summary>
+    public int Attempts { get; set; } = 1;
 }
 
 /// <summary>Run-level outcome.</summary>
 public sealed class FlowRunResult
 {
-    public required string Status { get; init; } // done | failed
+    public required string Status { get; init; } // done | failed | waiting_approval
     public JsonNode? Output { get; init; }
     public string? Error { get; init; }
     public required List<FlowStepResult> Steps { get; init; }
     public required long DurationMs { get; init; }
+    /// <summary>Set on a waiting_approval run — the gate FlowService turns
+    /// into a ToolApproval + persisted resume state.</summary>
+    public PendingApproval? Pending { get; init; }
+    /// <summary>Run state captured at suspension — FlowService stores it on
+    /// the FlowRun row so a later resume can rebuild the context.</summary>
+    public FlowResumeState? ResumeState { get; init; }
 }
 
 /// <summary>Execution limits, bound from <c>Flow:*</c> configuration.</summary>

@@ -278,15 +278,23 @@ public sealed class FlowsToolsProvider(
         try
         {
             var result = await service.RunAsync(flow, inputs, ctx.Services, apiKeyId, sink: null, ct);
-            var text = result.Status == "done"
-                ? $"flow '{flow.Slug}' completed ({result.Steps.Count} steps, {result.DurationMs}ms)\n" +
-                  (result.Output?.ToJsonString() ?? "")
-                : $"flow '{flow.Slug}' failed: {result.Error}";
-            return result.Status == "done"
+            var text = result.Status switch
+            {
+                "done" => $"flow '{flow.Slug}' completed ({result.Steps.Count} steps, {result.DurationMs}ms)\n" +
+                    (result.Output?.ToJsonString() ?? ""),
+                "waiting_approval" => $"flow '{flow.Slug}' paused — waiting for approval {result.ApprovalId} " +
+                    "(resolve via /api/approvals; the run resumes automatically)",
+                _ => $"flow '{flow.Slug}' failed: {result.Error}",
+            };
+            // waiting_approval is a structured outcome (the run is parked,
+            // not failed) — return it like done so the agent relays the
+            // gate instead of reporting an error.
+            return result.Status is "done" or "waiting_approval"
                 ? await ToolResults.Structured(text, new
                 {
                     runId = result.RunId,
                     status = result.Status,
+                    approvalId = result.ApprovalId,
                     output = result.Output,
                     steps = result.Steps.Select(s => new
                     {

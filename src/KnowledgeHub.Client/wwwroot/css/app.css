@@ -535,6 +535,7 @@ button.fc-node {
 .fc-node--transform { border-left-color: var(--bs-teal, #20c997); }
 .fc-node--output    { border-left-color: var(--bs-success); }
 .fc-node--fail      { border-left-color: var(--bs-danger); }
+.fc-node--approval  { border-left-color: var(--bs-purple, #6f42c1); }
 
 .fc-node--start,
 .fc-node--end {

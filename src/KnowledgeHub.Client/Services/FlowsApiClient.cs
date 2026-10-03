@@ -57,6 +57,35 @@ public sealed class FlowsApiClient(HttpClient http)
     public async Task<IReadOnlyList<FlowRunDto>> RunsAsync(Guid id, CancellationToken ct = default)
         => await http.GetFromJsonAsync<List<FlowRunDto>>($"api/flows/{id}/runs", SharedJson.Options, ct) ?? [];
 
+    // ── Triggers ──────────────────────────────────────────────────────
+
+    public async Task<IReadOnlyList<FlowTriggerDto>> TriggersAsync(Guid flowId, CancellationToken ct = default)
+        => await http.GetFromJsonAsync<List<FlowTriggerDto>>($"api/flows/{flowId}/triggers", SharedJson.Options, ct) ?? [];
+
+    public async Task<(FlowTriggerDto? Trigger, string? Error)> CreateTriggerAsync(
+        Guid flowId, CreateFlowTriggerRequest request, CancellationToken ct = default)
+    {
+        var r = await http.PostAsJsonAsync($"api/flows/{flowId}/triggers", request, SharedJson.Options, ct);
+        return r.IsSuccessStatusCode
+            ? (await r.Content.ReadFromJsonAsync<FlowTriggerDto>(SharedJson.Options, ct), null)
+            : (null, await ReadErrorAsync(r, ct));
+    }
+
+    public async Task<(FlowTriggerDto? Trigger, string? Error)> UpdateTriggerAsync(
+        Guid triggerId, UpdateFlowTriggerRequest request, CancellationToken ct = default)
+    {
+        var r = await http.PutAsJsonAsync($"api/flows/triggers/{triggerId}", request, SharedJson.Options, ct);
+        return r.IsSuccessStatusCode
+            ? (await r.Content.ReadFromJsonAsync<FlowTriggerDto>(SharedJson.Options, ct), null)
+            : (null, await ReadErrorAsync(r, ct));
+    }
+
+    public async Task<(bool Ok, string? Error)> DeleteTriggerAsync(Guid triggerId, CancellationToken ct = default)
+    {
+        var r = await http.DeleteAsync($"api/flows/triggers/{triggerId}", ct);
+        return r.IsSuccessStatusCode ? (true, null) : (false, await ReadErrorAsync(r, ct));
+    }
+
     private static async Task<string> ReadErrorAsync(HttpResponseMessage r, CancellationToken ct)
     {
         try

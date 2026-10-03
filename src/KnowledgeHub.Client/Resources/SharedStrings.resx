@@ -2477,4 +2477,73 @@ Awaiting approval — see /approvals.
   <data name="StepType_transform" xml:space="preserve">
     <value>transform — reshape</value>
   </data>
+  <data name="StepType_approval" xml:space="preserve">
+    <value>approval — human gate</value>
+  </data>
+  <data name="FC_ApprovalExample" xml:space="preserve">
+    <value>review before continuing</value>
+  </data>
+  <data name="Flows_Triggers" xml:space="preserve">
+    <value>Triggers</value>
+  </data>
+  <data name="Flows_TriggersTooltip" xml:space="preserve">
+    <value>Manage triggers (webhook / schedule)</value>
+  </data>
+  <data name="Flows_TriggersTitle" xml:space="preserve">
+    <value>Triggers — {0}</value>
+  </data>
+  <data name="Flows_TriggersCaption" xml:space="preserve">
+    <value>Flow triggers</value>
+  </data>
+  <data name="Flows_NoTriggers" xml:space="preserve">
+    <value>No triggers — the flow only runs manually or via MCP.</value>
+  </data>
+  <data name="Flows_TriggerDetail" xml:space="preserve">
+    <value>Detail</value>
+  </data>
+  <data name="Flows_LastFired" xml:space="preserve">
+    <value>Last fired</value>
+  </data>
+  <data name="Flows_EverySeconds" xml:space="preserve">
+    <value>every {0}s</value>
+  </data>
+  <data name="Flows_TriggerDeleteConfirm" xml:space="preserve">
+    <value>Delete this trigger?</value>
+  </data>
+  <data name="Flows_NewTrigger" xml:space="preserve">
+    <value>New trigger</value>
+  </data>
+  <data name="Flows_KindWebhook" xml:space="preserve">
+    <value>Webhook</value>
+  </data>
+  <data name="Flows_KindSchedule" xml:space="preserve">
+    <value>Schedule</value>
+  </data>
+  <data name="Flows_IntervalSeconds" xml:space="preserve">
+    <value>Interval (s)</value>
+  </data>
+  <data name="Flows_StaticInputs" xml:space="preserve">
+    <value>Static inputs (JSON)</value>
+  </data>
+  <data name="Flows_AddTrigger" xml:space="preserve">
+    <value>Add trigger</value>
+  </data>
+  <data name="Flows_WebhookHint" xml:space="preserve">
+    <value>A secret URL is generated — POST the event JSON to it to run the flow (the payload is available as inputs.event).</value>
+  </data>
+  <data name="Flows_TriggerCreated" xml:space="preserve">
+    <value>Trigger created</value>
+  </data>
+  <data name="Flows_TriggerDeleted" xml:space="preserve">
+    <value>Trigger deleted</value>
+  </data>
+  <data name="Flows_TriggerFail" xml:space="preserve">
+    <value>Trigger operation failed</value>
+  </data>
+  <data name="Flows_WaitingApproval" xml:space="preserve">
+    <value>Run paused on an approval gate.</value>
+  </data>
+  <data name="Flows_OpenApprovals" xml:space="preserve">
+    <value>Resolve it in Approvals</value>
+  </data>
 </root>

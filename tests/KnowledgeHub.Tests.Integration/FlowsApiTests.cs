@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using KnowledgeHub.Shared;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -206,5 +208,153 @@ public class FlowsApiTests : IClassFixture<FlowsApiTests.Fixture>, IDisposable
         Assert.NotEmpty(items);
         Assert.Contains(items, f => f.GetProperty("slug").GetString() == "listed_flow"
             && f.GetProperty("tool").GetString() == "flow_listed_flow");
+    }
+
+    // ── F3: triggers, webhook, approval gate ─────────────────────────
+
+    [Fact]
+    public async Task Trigger_crud_and_webhook_invokes_flow_anonymously()
+    {
+        var echoEvent = new FlowDefinitionDto(
+            [new FlowInputDto("q", "string", Required: true, null, null)],
+            [
+                new FlowStepDto("s1", "transform", null,
+                    JsonNode.Parse("""{"template":"echo: {{vars.q}} src={{vars.event.source}}"}""")!.AsObject(), null),
+                new FlowStepDto("out", "output", null,
+                    JsonNode.Parse("""{"value":"{{steps.s1.output}}"}""")!.AsObject(), null),
+            ]);
+        var create = await _admin.PostAsJsonAsync("/api/flows",
+            new CreateFlowRequest("Hooked Flow", "test flow", echoEvent));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var flow = (await create.Content.ReadFromJsonAsync<FlowDetailDto>())!;
+
+        var created = await _admin.PostAsJsonAsync($"/api/flows/{flow.Flow.Id}/triggers",
+            new CreateFlowTriggerRequest("webhook", null, new JsonObject { ["q"] = "static-q" }));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var trigger = (await created.Content.ReadFromJsonAsync<FlowTriggerDto>())!;
+        Assert.Equal("webhook", trigger.Kind);
+        Assert.NotNull(trigger.WebhookUrl);
+        Assert.StartsWith("fwt_", trigger.WebhookUrl.Split('/').Last());
+
+        var listed = await _admin.GetFromJsonAsync<List<FlowTriggerDto>>(
+            $"/api/flows/{flow.Flow.Id}/triggers");
+        Assert.Single(listed!);
+
+        // Anonymous POST to the secret URL runs the flow — static input q
+        // fills the required input, the event lands in inputs.event.
+        var anon = _factory.CreateClient();
+        var hook = await anon.PostAsJsonAsync(new Uri(trigger.WebhookUrl!).PathAndQuery,
+            new { source = "test-event" });
+        Assert.True(hook.StatusCode is HttpStatusCode.OK or HttpStatusCode.Accepted);
+        var result = (await hook.Content.ReadFromJsonAsync<FlowRunResultDto>())!;
+        Assert.Equal("done", result.Status);
+        Assert.Equal("echo: static-q src=test-event", result.Output!.GetValue<string>());
+
+        // Unknown token → 404
+        var missing = await anon.PostAsJsonAsync("/api/flowtriggers/fwt_" + new string('0', 48),
+            new { });
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        // Disable → webhook stops firing
+        var toggled = await _admin.PutAsJsonAsync($"/api/flows/triggers/{trigger.Id}",
+            new UpdateFlowTriggerRequest(false, null, null));
+        toggled.EnsureSuccessStatusCode();
+        var disabled = await anon.PostAsJsonAsync(new Uri(trigger.WebhookUrl!).PathAndQuery,
+            new { });
+        Assert.Equal(HttpStatusCode.NotFound, disabled.StatusCode);
+
+        var del = await _admin.DeleteAsync($"/api/flows/triggers/{trigger.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+        Assert.Empty((await _admin.GetFromJsonAsync<List<FlowTriggerDto>>(
+            $"/api/flows/{flow.Flow.Id}/triggers"))!);
+    }
+
+    [Fact]
+    public async Task Schedule_trigger_requires_minimum_interval()
+    {
+        var flow = await CreateFlowAsync("Scheduled Flow");
+
+        var bad = await _admin.PostAsJsonAsync($"/api/flows/{flow.Flow.Id}/triggers",
+            new CreateFlowTriggerRequest("schedule", 10, null));
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+
+        var ok = await _admin.PostAsJsonAsync($"/api/flows/{flow.Flow.Id}/triggers",
+            new CreateFlowTriggerRequest("schedule", 300, new JsonObject { ["q"] = "tick" }));
+        Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+        var trigger = (await ok.Content.ReadFromJsonAsync<FlowTriggerDto>())!;
+        Assert.Equal(300, trigger.IntervalSeconds);
+        Assert.Null(trigger.WebhookUrl);
+    }
+
+    [Fact]
+    public async Task Approval_step_suspends_run_and_approve_resumes_it()
+    {
+        var def = new FlowDefinitionDto([], [
+            new FlowStepDto("work", "transform", null,
+                JsonNode.Parse("""{"template":"did-work"}""")!.AsObject(), null),
+            new FlowStepDto("gate", "approval", null,
+                JsonNode.Parse("""{"message":"ship it?"}""")!.AsObject(), null),
+            new FlowStepDto("out", "output", null,
+                JsonNode.Parse("""{"value":"{{steps.gate.output.approved}}"}""")!.AsObject(), null),
+        ]);
+        var create = await _admin.PostAsJsonAsync("/api/flows",
+            new CreateFlowRequest("Gated Flow", null, def));
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var flow = (await create.Content.ReadFromJsonAsync<FlowDetailDto>())!;
+
+        var run = await _admin.PostAsJsonAsync($"/api/flows/{flow.Flow.Id}/run",
+            new FlowRunRequest(new JsonObject()));
+        Assert.Equal(HttpStatusCode.Accepted, run.StatusCode);
+        var waiting = (await run.Content.ReadFromJsonAsync<FlowRunResultDto>())!;
+        Assert.Equal("waiting_approval", waiting.Status);
+        Assert.NotNull(waiting.ApprovalId);
+        Assert.Equal("waiting", waiting.Steps[1].Status);
+
+        // The gate shows up in /api/approvals as a flow-requested approval.
+        var pending = await _admin.GetFromJsonAsync<List<ApprovalDto>>("/api/approvals?status=pending");
+        var approval = pending!.Single(a => a.Id == waiting.ApprovalId);
+        Assert.Equal("flow", approval.RequestedBy);
+        Assert.Equal("flow:gated_flow:gate", approval.ToolName);
+
+        // Approve → endpoint resumes the run inline and returns its result.
+        var approve = await _admin.PostAsJsonAsync(
+            $"/api/approvals/{approval.Id}/approve", (object?)null);
+        Assert.Equal(HttpStatusCode.OK, approve.StatusCode);
+        var resumed = await approve.Content.ReadFromJsonAsync<JsonObject>();
+        var result = resumed!["run"]!.Deserialize<FlowRunResultDto>(SharedJson.Options);
+        Assert.Equal("done", result!.Status);
+        Assert.True(result.Output!.GetValue<bool>());
+
+        var persisted = await _admin.GetFromJsonAsync<FlowRunResultDto>(
+            $"/api/flowruns/{waiting.RunId}");
+        Assert.Equal("done", persisted!.Status);
+
+        // Double-resume is rejected.
+        var again = await _admin.PostAsJsonAsync(
+            $"/api/approvals/{approval.Id}/approve", (object?)null);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+    }
+
+    [Fact]
+    public async Task Deny_marks_suspended_run_failed()
+    {
+        var def = new FlowDefinitionDto([], [
+            new FlowStepDto("gate", "approval", null,
+                JsonNode.Parse("""{"message":"ok?"}""")!.AsObject(), null),
+            new FlowStepDto("out", "output", null,
+                JsonNode.Parse("""{"value":"never"}""")!.AsObject(), null),
+        ]);
+        var create = await _admin.PostAsJsonAsync("/api/flows",
+            new CreateFlowRequest("Denied Flow", null, def));
+        var flow = (await create.Content.ReadFromJsonAsync<FlowDetailDto>())!;
+
+        var run = await _admin.PostAsJsonAsync($"/api/flows/{flow.Flow.Id}/run",
+            new FlowRunRequest(new JsonObject()));
+        var waiting = (await run.Content.ReadFromJsonAsync<FlowRunResultDto>())!;
+
+        var deny = await _admin.PostAsync($"/api/approvals/{waiting.ApprovalId}/deny", null);
+        Assert.Equal(HttpStatusCode.OK, deny.StatusCode);
+        var resumed = await deny.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal("failed", resumed!["run"]!.Deserialize<FlowRunResultDto>(SharedJson.Options)!.Status);
     }
 }

@@ -270,6 +270,7 @@
         "transform" => """{"value":{"result":"{{steps.prev.output}}"}}""",
         "output" => """{"value":"{{steps.prev.output}}"}""",
         "fail" => "{\"message\":\"" + L["FC_FailExample"].Value + "\"}",
+        "approval" => "{\"message\":\"" + L["FC_ApprovalExample"].Value + "\"}",
         _ => "{}",
     };
 }

@@ -76,11 +76,98 @@ public static class FlowEndpoints
             Results.Ok(await svc.ListRunsAsync(id, take ?? 50, ct)))
             .RequireAuthorization(AuthPolicies.CookieSession);
 
+        // ── Triggers (CookieSession admin) ───────────────────────────
+        group.MapGet("/{id:guid}/triggers", async (Guid id, HttpRequest http, FlowService svc, CancellationToken ct) =>
+            Results.Ok(await svc.ListTriggersAsync(id, http, ct)))
+            .RequireAuthorization(AuthPolicies.CookieSession);
+
+        group.MapPost("/{id:guid}/triggers", async (Guid id, CreateFlowTriggerRequest request, HttpRequest http, FlowService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                return await svc.CreateTriggerAsync(id, request, http, ct) is { } dto
+                    ? Results.Created($"/api/flowtriggers/{dto.Id}", dto)
+                    : Results.NotFound(new { error = "flow not found" });
+            }
+            catch (FlowStepException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).RequireAuthorization(AuthPolicies.CookieSession);
+
+        group.MapPut("/triggers/{triggerId:guid}", async (Guid triggerId, UpdateFlowTriggerRequest request, HttpRequest http, FlowService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                return await svc.UpdateTriggerAsync(triggerId, request, http, ct) is { } dto
+                    ? Results.Ok(dto)
+                    : Results.NotFound(new { error = "trigger not found" });
+            }
+            catch (FlowStepException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).RequireAuthorization(AuthPolicies.CookieSession);
+
+        group.MapDelete("/triggers/{triggerId:guid}", async (Guid triggerId, FlowService svc, CancellationToken ct) =>
+            await svc.DeleteTriggerAsync(triggerId, ct)
+                ? Results.NoContent()
+                : Results.NotFound(new { error = "trigger not found" }))
+            .RequireAuthorization(AuthPolicies.CookieSession);
+
         app.MapGet("/api/flowruns/{runId:guid}", async (Guid runId, FlowService svc, CancellationToken ct) =>
             await svc.GetRunAsync(runId, ct) is { } run
                 ? Results.Ok(run)
                 : Results.NotFound(new { error = "run not found" }))
             .RequireAuthorization(AuthPolicies.CookieSession);
+
+        // Resume a run suspended on an approval step (admin).
+        app.MapPost("/api/flowruns/{runId:guid}/resume", async (Guid runId, HttpContext http, FlowService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                var db = http.RequestServices.GetRequiredService<Data.KnowledgeHubDbContext>();
+                var run = await db.FlowRuns.FindAsync([runId], ct);
+                if (run?.PendingApprovalId is not { } approvalId)
+                    return Results.NotFound(new { error = "run not found or not waiting" });
+                var result = await svc.ResumeByApprovalAsync(approvalId, http.RequestServices, ct);
+                return Results.Ok(result);
+            }
+            catch (ConflictException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+        }).RequireAuthorization(AuthPolicies.CookieSession);
+
+        // Inbound webhook: unauthenticated — the fwt_ path token IS the
+        // credential (rate-limited like the operational run surface).
+        app.MapPost("/api/flowtriggers/{token}", async (string token, HttpContext http, FlowService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                var body = await JsonSerializer.DeserializeAsync<JsonObject>(http.Request.Body, cancellationToken: ct);
+                var result = await svc.InvokeWebhookAsync(token, body, http.RequestServices, ct);
+                if (result is null)
+                    return Results.NotFound(new { error = "trigger not found or disabled" });
+                return result.Status == "waiting_approval"
+                    ? Results.Accepted($"/api/flowruns/{result.RunId}", result)
+                    : result.Status == "done"
+                        ? Results.Ok(result)
+                        : Results.UnprocessableEntity(result);
+            }
+            catch (FlowStepException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (FlowAbortException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).AllowAnonymous().RequireRateLimiting("llm");
 
         return group;
     }
@@ -115,7 +202,14 @@ public static class FlowEndpoints
         try
         {
             var result = await svc.RunAsync(flow, request.Inputs, http.RequestServices, apiKeyId, null, ct);
-            http.Response.StatusCode = result.Status == "done" ? 200 : 422;
+            // waiting_approval → 202: the run is parked on an approval,
+            // not failed — the caller resolves it and calls /resume.
+            http.Response.StatusCode = result.Status switch
+            {
+                "done" => 200,
+                "waiting_approval" => 202,
+                _ => 422,
+            };
             await http.Response.WriteAsJsonAsync(result, SharedJson.Options, ct);
         }
         catch (FlowAbortException ex)

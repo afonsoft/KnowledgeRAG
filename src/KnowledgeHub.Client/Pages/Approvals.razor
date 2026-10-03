@@ -96,6 +96,14 @@ else
             await Api.ApproveAsync(a.Id, string.IsNullOrWhiteSpace(overrideArgs) ? null : overrideArgs);
             // R7 (audit 2026-10-03): auto-resume — a aprovação já é o sinal do
             // operador; exigir POST /api/agent/resume manual era passo extra.
+            // Flow gates resume server-side inside the approve call — skip the
+            // agent resume (it would 4xx since the approval is not a loop gate).
+            if (a.RequestedBy == "flow")
+            {
+                await Toast.Success(L["Approvals_ApprovedResumed"], L["Approvals_ApprovedResumedBody", a.ToolName]);
+                await LoadAsync();
+                return;
+            }
             try
             {
                 await Api.ResumeAgentAsync(a.Id);

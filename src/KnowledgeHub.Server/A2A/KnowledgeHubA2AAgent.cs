@@ -290,8 +290,14 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
         if (context.Message?.Metadata is { } md)
             ApplyMetadata(md, ref skill, args);
 
-        if (skill is null || !DelegableSkills.Contains(skill))
-            return (skill, null, $"skill '{skill}' is not delegable — allowed: {string.Join(", ", DelegableSkills)}");
+        // flow_<slug> skills are catalog tools (any enabled flow), not a
+        // fixed list — accept the prefix and let the catalog resolve the
+        // slug (a disabled/unknown flow fails at execution, not here).
+        var delegable = skill is not null
+            && (DelegableSkills.Contains(skill)
+                || skill.StartsWith("flow_", StringComparison.OrdinalIgnoreCase));
+        if (!delegable)
+            return (skill, null, $"skill '{skill}' is not delegable — allowed: {string.Join(", ", DelegableSkills)}, flow_<slug>");
 
         // Positional primary arg per skill when the caller didn't pass it.
         void Primary(string name)
@@ -300,7 +306,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
                 args[name] = JsonSerializer.SerializeToElement(userText);
         }
 
-        switch (skill.ToLowerInvariant())
+        switch (skill!.ToLowerInvariant())
         {
             case "ask_knowledge": Primary("question"); break;
             case "search_knowledge": Primary("query"); break;
@@ -314,6 +320,13 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
                 // No threadId auto-map: A2A contextIds share the Guid format
                 // but are not ConversationThread rows — RunAsync throws on a
                 // missing thread. Callers pass arguments.threadId explicitly.
+                break;
+            default:
+                // flow_<slug>: free-text maps to the conventional `input`
+                // arg; richer calls pass the flow's declared inputs via
+                // arguments.
+                if (skill!.StartsWith("flow_", StringComparison.OrdinalIgnoreCase))
+                    Primary("input");
                 break;
         }
 
