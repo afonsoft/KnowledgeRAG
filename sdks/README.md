@@ -6,8 +6,8 @@ Client libraries that wrap the hub's MCP server (Streamable HTTP, `/mcp`) so oth
 |-----|---------|-------------|--------|
 | [.NET](dotnet/) | `KnowledgeHub.Sdk` (NuGet, net8.0) | `AIFunction` → Microsoft.Extensions.AI / Semantic Kernel | ✅ Phase 1 |
 | [Python](python/) | `knowledgehub-sdk` (PyPI, ≥3.10) | `StructuredTool` → LangChain / LangGraph | ✅ Phase 1 |
-| Java | `io.github.afonsoft:knowledgehub` (Maven) | `ToolSpecification`/`ToolExecutor` → LangChain4j | 🔜 Phase 2 |
-| Go | `github.com/afonsoft/KnowledgeRAG/sdks/go` | `tools.Tool` → langchaingo | 🔜 Phase 2 |
+| [Java](java/) | `io.github.afonsoft:knowledgehub-sdk` (Maven) | `ToolSpecification`/`ToolExecutor` → LangChain4j | ✅ Phase 2 |
+| [Go](go/) | `github.com/afonsoft/KnowledgeRAG/sdks/go` | `tools.Tool` → langchaingo | ✅ Phase 2 |
 
 ## Design
 
@@ -21,7 +21,9 @@ Client libraries that wrap the hub's MCP server (Streamable HTTP, `/mcp`) so oth
 
 CI (`.github/workflows/sdk-ci.yml`) builds and tests each SDK on `sdks/**` changes.
 Publishing runs on tags `sdk-v*.*.*` (`.github/workflows/sdk-release.yml`):
-`git tag sdk-v0.1.0 && git push --tags` — NuGet push gated on `NUGET_API_KEY`, PyPI push on `PYPI_API_TOKEN` (same opt-in secret pattern as `DOCKERHUB_*`).
+`git tag sdk-v0.1.0 && git push --tags` — NuGet push gated on `NUGET_API_KEY`, PyPI push on `PYPI_API_TOKEN` (same opt-in secret pattern as `DOCKERHUB_*`). The Java job always builds jar+sources+javadoc artifacts (Maven Central deploy needs Central Portal credentials — configure the `central-publishing-maven-plugin` when ready). The Go job re-tags the module as `sdks/go/vX.Y.Z` — Go consumers resolve versions straight from git.
+
+Python CI installs use a pinned toolchain (`sdks/python/requirements-ci.txt`) with `--only-binary ":all:"` (SonarCloud gate).
 
 ## Quickstart
 
@@ -37,4 +39,19 @@ var answer = await kh.AskAsync("…");
 async with KnowledgeHubClient("http://localhost:5009", api_key="aft_...") as kh:
     tools = await kh.as_langchain_tools()        # → StructuredTool list
     answer = await kh.ask("…")
+```
+
+```java
+// Java
+try (var hub = KnowledgeHubClient.connect("http://localhost:5009", "aft_...")) {
+    var tools = KnowledgeHubLangChain4j.asTools(hub);  // Map<ToolSpecification, ToolExecutor>
+    var answer = hub.ask("…");
+}
+```
+
+```go
+// Go
+hub, _ := knowledgehub.New(ctx, "http://localhost:5009", "aft_...")
+tools, _ := langchain.AsTools(ctx, hub)              // []tools.Tool (langchaingo)
+answer, _ := hub.Ask(ctx, "…", 5)
 ```
