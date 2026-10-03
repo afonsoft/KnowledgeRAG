@@ -23,7 +23,10 @@ COPY src/KnowledgeHub.Server/KnowledgeHub.Server.csproj   src/KnowledgeHub.Serve
 # NOTE: no -r here — a RID on `dotnet restore` propagates to the Blazor WASM
 # client, which then demands a nonexistent Mono.<rid> pack. The RID belongs
 # to `publish`, whose implicit restore scopes it correctly.
-RUN dotnet restore src/KnowledgeHub.Server/KnowledgeHub.Server.csproj
+# BuildKit cache mount keeps the NuGet http cache across builds — CI pushes
+# type=gha cache, so restores inside the image stop re-downloading packages.
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    dotnet restore src/KnowledgeHub.Server/KnowledgeHub.Server.csproj
 
 # wasm-tools: without it the Blazor client publish skips the wasm
 # optimization passes (SDK warns "Publishing without optimizations").
@@ -38,7 +41,8 @@ RUN dotnet workload install wasm-tools \
 COPY src/ src/
 # RID follows the image's own arch (native or --platform/QEMU): plain
 # `docker build` doesn't inject TARGETARCH, so uname is the reliable source.
-RUN case "$(uname -m)" in \
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    case "$(uname -m)" in \
       x86_64)  RID=linux-x64 ;; \
       aarch64) RID=linux-arm64 ;; \
       *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;; \

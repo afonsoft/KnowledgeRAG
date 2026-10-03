@@ -2,6 +2,12 @@ name: 🚀 CI Build & Test
 
 permissions: {}
 
+# Pushes stack up duplicate full runs on the same ref — cancel superseded
+# ones (main always runs to completion so post-merge signal is never lost).
+concurrency:
+  group: ci-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 on:
   push:
     branches:
@@ -12,7 +18,9 @@ on:
   pull_request:
     branches:
       - "main"
-    types: [opened, synchronize, reopened, closed]
+    # 'closed' was a full duplicate run on every merge — the main push already
+    # triggers this workflow, so it only burned minutes.
+    types: [opened, synchronize, reopened]
 
 env:
   DOTNET_VERSION: "10.0.x"
@@ -71,6 +79,14 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Cache NuGet Packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Run Unit Tests
         run: dotnet test tests/KnowledgeHub.Tests.Unit/KnowledgeHub.Tests.Unit.csproj --configuration Release --verbosity minimal --logger "trx;LogFileName=unit-tests.trx" --collect:"XPlat Code Coverage"
 
@@ -127,6 +143,14 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Cache NuGet Packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Run Integration Tests
         run: dotnet test tests/KnowledgeHub.Tests.Integration/KnowledgeHub.Tests.Integration.csproj --configuration Release --verbosity minimal --logger "trx;LogFileName=integration-tests.trx"
 
@@ -153,6 +177,14 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
       - name: Build Blazor WASM Client
         run: dotnet build src/KnowledgeHub.Client/KnowledgeHub.Client.csproj --configuration Release --verbosity minimal

@@ -2,6 +2,10 @@ name: 🔒 Security Scan
 
 permissions: {}
 
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 on:
   push:
     branches: [main, develop]
@@ -25,7 +29,9 @@ jobs:
       matrix:
         include:
           - language: csharp
-            build-mode: autobuild
+            # C# supports build-mode 'none': CodeQL extracts the code without
+            # compiling — same analysis quality, saves the ~5min autobuild.
+            build-mode: none
           - language: javascript
             build-mode: none
 
@@ -46,10 +52,6 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           config-file: ./.github/codeql/codeql-config.yml
 
-      - name: 🔍 Autobuild
-        if: matrix.language == 'csharp'
-        uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63   # v4
-
       - name: 🔍 Perform Analysis
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63   # v4
         with:
@@ -66,14 +68,8 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
-      - name: 🗄️ Setup .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: 🔧 Restore Dependencies
-        run: dotnet restore KnowledgeHub.slnx --ignore-failed-sources
-
+      # Token check before the restore — without SNYK_TOKEN the whole job is
+      # advisory anyway, so skip the ~40s restore+setup work.
       - name: 🔑 Check Snyk token
         id: snyk-token
         run: |
@@ -83,6 +79,16 @@ jobs:
             echo "present=false" >> $GITHUB_OUTPUT
             echo "::notice::SNYK_TOKEN não configurado — pulando Snyk"
           fi
+
+      - name: 🗄️ Setup .NET
+        if: steps.snyk-token.outputs.present == 'true'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: 🔧 Restore Dependencies
+        if: steps.snyk-token.outputs.present == 'true'
+        run: dotnet restore KnowledgeHub.slnx --ignore-failed-sources
 
       - name: 🛡️ Install Snyk CLI
         if: steps.snyk-token.outputs.present == 'true'
@@ -109,8 +115,21 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e   # v4.3.0
+
+      # build-push-action + gha cache reuses the CI Build & Test image layers
+      # (same Dockerfile/context) — a bare `docker build` re-did ~10min of work.
       - name: 🐳 Build image to scan
-        run: docker build -t knowledgerag:scan .
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a   # v7.3.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: knowledgerag:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: 🔐 Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
