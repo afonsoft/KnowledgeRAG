@@ -21,6 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- coverlet.collector auto-loads coverlet.runsettings when it sits next to the test assembly -->
+    <None Include="coverlet.runsettings" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\KnowledgeHub.Shared\KnowledgeHub.Shared.csproj" />
     <ProjectReference Include="..\..\src\KnowledgeHub.McpEngine\KnowledgeHub.McpEngine.csproj" />
     <ProjectReference Include="..\..\src\KnowledgeHub.Server\KnowledgeHub.Server.csproj" />

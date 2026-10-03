@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using KnowledgeHub.Shared.Contracts;
@@ -103,6 +104,9 @@ namespace KnowledgeHub.Shared;
 [JsonSerializable(typeof(GraphNodesResponse))]
 [JsonSerializable(typeof(DatabaseStatsDto))]
 [JsonSerializable(typeof(TableCountDto))]
+// Audit 2026-10-03: source-gen emits thousands of instrumented lines under this
+// context — exclude it so the coverage ratchet measures hand-written code.
+[ExcludeFromCodeCoverage]
 public partial class SharedJsonContext : JsonSerializerContext;
 
 /// <summary>
