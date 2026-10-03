@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
       - name: 🗄️ Setup .NET
-        uses: actions/setup-dotnet@f2e9831d2d00e097556d494ed4e460fb3f606cc8   # v5
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
       - name: 🐍 Setup Python
-        uses: actions/setup-python@a26ff69c30b7e5d4f40e46eea0775234db9edc54   # v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1   # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
