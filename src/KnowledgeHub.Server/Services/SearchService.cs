@@ -908,14 +908,21 @@ public sealed class SearchService( // NOSONAR S107 — DI resolve o ctor flat; c
         var (vectorTexts, lexicalQueries) = BuildArmTexts(
             effectiveQuery, expansionMode, variants, hydeText, subQueries);
 
-        var vectorLists = mode != SearchMode.Lexical
-            ? await RunVectorArmsAsync(vectorTexts, window, minSemantic,
+        // Vector and lexical arms are independent (dedicated connections on
+        // both paths) — run them concurrently so hybrid latency is max(arms)
+        // instead of sum(arms). Arm failures only write degraded.Any = true,
+        // which stays correct under concurrent writes.
+        var vectorTask = mode != SearchMode.Lexical
+            ? RunVectorArmsAsync(vectorTexts, window, minSemantic,
                 activeSourceIds, degraded, ct)
-            : [];
-        var lexicalLists = mode != SearchMode.Semantic
-            ? await RunLexicalArmsAsync(lexicalQueries, window, minLexical,
+            : Task.FromResult<List<IReadOnlyList<Guid>>>([]);
+        var lexicalTask = mode != SearchMode.Semantic
+            ? RunLexicalArmsAsync(lexicalQueries, window, minLexical,
                 activeSourceIds, degraded, ct)
-            : [];
+            : Task.FromResult<List<IReadOnlyList<Guid>>>([]);
+        await Task.WhenAll(vectorTask, lexicalTask);
+        var vectorLists = await vectorTask;
+        var lexicalLists = await lexicalTask;
 
         return (mode != SearchMode.Lexical ? vectorTexts.Select(t => t.Label).ToList() : [],
                 vectorLists,

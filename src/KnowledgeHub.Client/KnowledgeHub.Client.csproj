@@ -6,6 +6,11 @@
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <!-- Ship a single ICU variant covering all non-CJK cultures (pt-BR and
+         every Latin script) instead of the four files the runtime pack emits —
+         the PWA service worker precaches every published asset, so the unused
+         full/CJK/EFIGS variants were downloaded on first load regardless. -->
+    <BlazorIcuDataFileName>icudt_no_CJK.dat</BlazorIcuDataFileName>
   </PropertyGroup>
 
   <ItemGroup>

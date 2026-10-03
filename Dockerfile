@@ -25,6 +25,10 @@ COPY src/KnowledgeHub.Server/KnowledgeHub.Server.csproj   src/KnowledgeHub.Serve
 # to `publish`, whose implicit restore scopes it correctly.
 RUN dotnet restore src/KnowledgeHub.Server/KnowledgeHub.Server.csproj
 
+# wasm-tools: without it the Blazor client publish skips the wasm
+# optimization passes (SDK warns "Publishing without optimizations").
+RUN dotnet workload install wasm-tools
+
 COPY src/ src/
 # RID follows the image's own arch (native or --platform/QEMU): plain
 # `docker build` doesn't inject TARGETARCH, so uname is the reliable source.

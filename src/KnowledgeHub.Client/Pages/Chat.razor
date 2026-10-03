@@ -56,14 +56,17 @@
                             {
                                 <Badge Color="Color.Info" class="me-2">contexto resumido</Badge>
                             }
-                            <Button Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash" Text="Excluir"
-                                    TooltipText="Excluir thread"
-                                    IsAsync="true" OnClick="DeleteThreadAsync" />
+                            <PopConfirmButton Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash" Text="Excluir"
+                                              TooltipText="Excluir thread"
+                                              Title="Excluir thread"
+                                              Content="A conversa e seu histórico serão removidos."
+                                              IsAsync="true" OnConfirm="DeleteThreadAsync" />
                         </div>
                     </div>
                 </HeaderTemplate>
                 <BodyTemplate>
-                    <div style="max-height: 480px; overflow-y: auto;">
+                    <div role="log" aria-live="polite" aria-label="Mensagens da conversa"
+                         style="max-height: 480px; overflow-y: auto;">
                         @foreach (var m in _current.Messages)
                         {
                             <div class="mb-2 p-2 rounded @MessageBubbleClass(m.Role)">
@@ -83,7 +86,8 @@
                     </div>
                     <div class="d-flex gap-2 mt-3">
                         <BootstrapInput @bind-Value="_draft" PlaceHolder="Mensagem…"
-                                        IsDisabled="_sending" />
+                                        IsDisabled="_sending"
+                                        OnEnterAsync="_ => SendAsync()" />
                         <Button Color="Color.Primary" Icon="fa-solid fa-paper-plane" Text="Enviar"
                                 TooltipText="Enviar mensagem"
                                 IsAsync="true" OnClick="SendAsync" IsDisabled="_sending" />

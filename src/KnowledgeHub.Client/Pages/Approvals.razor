@@ -37,14 +37,18 @@ else
                     <div class="d-flex gap-2">
                         <Button Size="Size.Small" Color="Color.Success" Icon="fa-solid fa-check" Text="Aprovar"
                                 TooltipText="Aprovar" IsAsync="true" OnClick="() => ApproveAsync(a)" />
-                        <Button Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-xmark" Text="Negar"
-                                TooltipText="Negar" IsAsync="true" OnClick="() => DenyAsync(a)" />
+                        <PopConfirmButton Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-xmark" Text="Negar"
+                                          TooltipText="Negar"
+                                          Title="Negar execução"
+                                          Content="A execução desta tool será negada."
+                                          IsAsync="true" OnConfirm="() => DenyAsync(a)" />
                     </div>
                 </div>
                 <pre class="border rounded p-2 mt-2 mb-2 bg-light" style="white-space: pre-wrap;">@a.ArgumentsJson</pre>
                 <div class="d-flex align-items-center gap-2">
-                    <small class="text-muted">args override (opcional):</small>
+                    <small class="text-muted" id="override-label-@a.Id">args override (opcional):</small>
                     <BootstrapInput @bind-Value="_argOverrides[a.Id]"
+                                    aria-labelledby="@($"override-label-{a.Id}")"
                                     PlaceHolder="deixe vazio para usar os args originais" />
                 </div>
             </div>

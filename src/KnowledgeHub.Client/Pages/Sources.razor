@@ -54,25 +54,25 @@
                     case "completed":
                         @* completed jobs can carry warnings — keep the detail
                            modal reachable (it lists them when present). *@
-                        <span role="button" tabindex="0" title="Clique para ver detalhes"
-                              style="cursor:pointer"
-                              @onclick="() => ShowStatusDetail(v.Row)">
+                        <button type="button" class="kh-badge-btn" title="Clique para ver detalhes"
+                                aria-label="Ver detalhes do status"
+                                @onclick="() => ShowStatusDetail(v.Row)">
                             <Badge Color="Color.Success">ok</Badge>
-                        </span>
+                        </button>
                         break;
                     case "failed":
-                        <span role="button" tabindex="0" title="Clique para ver detalhes"
-                              style="@(hasDetail ? "cursor:pointer" : null)"
-                              @onclick="() => ShowStatusDetail(v.Row)">
+                        <button type="button" class="kh-badge-btn" title="Clique para ver detalhes"
+                                aria-label="Ver detalhes do status"
+                                @onclick="() => ShowStatusDetail(v.Row)">
                             <Badge Color="Color.Danger">falhou</Badge>
-                        </span>
+                        </button>
                         break;
                     case "skipped":
-                        <span role="button" tabindex="0" title="Clique para ver detalhes"
-                              style="@(hasDetail ? "cursor:pointer" : null)"
-                              @onclick="() => ShowStatusDetail(v.Row)">
+                        <button type="button" class="kh-badge-btn" title="Clique para ver detalhes"
+                                aria-label="Ver detalhes do status"
+                                @onclick="() => ShowStatusDetail(v.Row)">
                             <Badge Color="Color.Warning">skip</Badge>
-                        </span>
+                        </button>
                         break;
                     default:
                         <span class="text-muted">—</span>

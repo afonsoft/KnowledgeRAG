@@ -1006,10 +1006,18 @@ else
                     <table class="table table-sm small mb-0">
                         <thead>
                             <tr>
-                                <th role="button" style="cursor:pointer" @onclick="() => ToggleEntitySort(0)">
+                                <th role="button" tabindex="0" style="cursor:pointer"
+                                    aria-label="Ordenar por tabela"
+                                    @onclick="() => ToggleEntitySort(0)"
+                                    @onkeydown="e => OnEntitySortKeyDown(e, 0)"
+                                    @onkeydown:preventDefault>
                                     Tabela @SortGlyph(0)
                                 </th>
-                                <th class="text-end" role="button" style="cursor:pointer" @onclick="() => ToggleEntitySort(1)">
+                                <th class="text-end" role="button" tabindex="0" style="cursor:pointer"
+                                    aria-label="Ordenar por linhas"
+                                    @onclick="() => ToggleEntitySort(1)"
+                                    @onkeydown="e => OnEntitySortKeyDown(e, 1)"
+                                    @onkeydown:preventDefault>
                                     Linhas @SortGlyph(1)
                                 </th>
                             </tr>
@@ -1267,6 +1275,12 @@ else
     {
         if (_entitySortCol == col) _entitySortDesc = !_entitySortDesc;
         else { _entitySortCol = col; _entitySortDesc = col == 1; }
+    }
+
+    private void OnEntitySortKeyDown(KeyboardEventArgs e, int col)
+    {
+        if (e.Key is "Enter" or " ")
+            ToggleEntitySort(col);
     }
 
     private IEnumerable<KnowledgeHub.Shared.Contracts.TableCountDto> SortedEntities() =>
