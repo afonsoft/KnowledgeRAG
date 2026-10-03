@@ -56,5 +56,32 @@ public static class EvalMetrics
         return 0;
     }
 
+    /// <summary>
+    /// Audit 2026-10-03 (R6): binary-graded nDCG@k — ranks hit placement, unlike
+    /// recall (coverage) or MRR (first hit only). IDCG is the hits-first
+    /// ordering of the same hit count, so nDCG is 1 whenever every hit precedes
+    /// every miss regardless of how many hits exist.
+    /// </summary>
+    public static double NdcgAtK(IReadOnlyList<SearchResultItem> results, EvalCase evalCase)
+    {
+        if (evalCase.ExpectNoAnswer)
+            return results.Count == 0 ? 1.0 : 0.0;
+        var dcg = 0.0;
+        var hits = 0;
+        for (var i = 0; i < results.Count; i++)
+        {
+            if (!IsHit(results[i], evalCase))
+                continue;
+            hits++;
+            dcg += 1.0 / Math.Log2(i + 2);
+        }
+        if (hits == 0)
+            return 0;
+        var idcg = 0.0;
+        for (var i = 0; i < Math.Min(hits, results.Count); i++)
+            idcg += 1.0 / Math.Log2(i + 2);
+        return dcg / idcg;
+    }
+
     public static double Round(double value) => Math.Round(value, 4);
 }

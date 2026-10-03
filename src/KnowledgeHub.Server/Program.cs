@@ -87,12 +87,22 @@ builder.Services.AddKnowledgeHubServer(builder.Configuration);
 // crawls/research) as task-required so capable clients get a taskId instead of
 // blocking. Clients without the io.modelcontextprotocol/tasks extension keep
 // the synchronous behavior.
+// Audit 2026-10-03 (R5): widened past the original four — firecrawl agent/
+// interact/map and tavily map/extract hold a call for tens of seconds up to
+// the provider timeout (300s firecrawl, 120s tavily). deepwiki/context7 stay
+// synchronous: ~60s budgets, latency comparable to local ask_knowledge.
+HashSet<string> taskEligibleTools = new(StringComparer.Ordinal)
+{
+    "agent_chat",
+    "firecrawl_crawl", "firecrawl_agent", "firecrawl_interact", "firecrawl_map",
+    "tavily_crawl", "tavily_research", "tavily_map", "tavily_extract"
+};
 builder.Services.AddKnowledgeHubMcp(builder.Configuration)
     .WithTasks(
         new EfMcpTaskStore(
             CatalogDatabase.Resolve(builder.Configuration), builder.Configuration),
         o => o.ExecutionModeSelector = ctx =>
-            ctx.Params?.Name is "agent_chat" or "firecrawl_crawl" or "tavily_crawl" or "tavily_research"
+            ctx.Params?.Name is { } toolName && taskEligibleTools.Contains(toolName)
                 && MrtrApproval.ClientDeclaredExtension(ctx, TasksProtocol.ExtensionId)
                 ? McpTaskExecutionMode.Required
                 : McpTaskExecutionMode.Synchronous);

@@ -75,6 +75,30 @@ public sealed class EvalMetricsTests
     }
 
     [Fact]
+    public void NdcgAtK_HitsFirstScoresOne()
+    {
+        // hits at ranks 1-2 → DCG == IDCG → 1 regardless of trailing misses
+        var results = new[] { Hit("a"), Hit("b"), Hit("x"), Hit("y") };
+        Assert.Equal(1.0, EvalMetrics.NdcgAtK(results, Case(uris: ["a", "b"])));
+    }
+
+    [Fact]
+    public void NdcgAtK_LateHitScoresBelowOne()
+    {
+        // one hit at rank 3 of 3 → DCG=1/log2(4)=0.5, IDCG=1 → 0.5
+        var results = new[] { Hit("x"), Hit("y"), Hit("a") };
+        Assert.Equal(0.5, EvalMetrics.NdcgAtK(results, Case(uris: ["a"])));
+    }
+
+    [Fact]
+    public void NdcgAtK_NoHitsIsZero_ExpectNoAnswerMirrorsRecall()
+    {
+        Assert.Equal(0.0, EvalMetrics.NdcgAtK([Hit("x")], Case(uris: ["a"])));
+        Assert.Equal(1.0, EvalMetrics.NdcgAtK([], Case(noAnswer: true)));
+        Assert.Equal(0.0, EvalMetrics.NdcgAtK([Hit("a")], Case(noAnswer: true)));
+    }
+
+    [Fact]
     public void ExpectNoAnswer_EmptyScoresOne_NonEmptyZeroAndSkipsRr()
     {
         var empty = Array.Empty<SearchResultItem>();
