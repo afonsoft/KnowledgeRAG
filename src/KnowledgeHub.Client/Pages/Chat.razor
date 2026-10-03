@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @using KnowledgeHub.Shared.Contracts
 @inject ThreadsApiClient Threads
+@inject StreamingApiClient Streaming
 @inject ToastService Toast
 
 <PageTitle>Chat — Knowledge</PageTitle>
@@ -76,7 +77,21 @@
                                 <div style="white-space: pre-wrap;">@m.Content</div>
                             </div>
                         }
-                        @if (_sending)
+                        @if (_pendingUser is not null)
+                        {
+                            <div class="mb-2 p-2 rounded bg-primary bg-opacity-10">
+                                <small class="text-muted">user</small>
+                                <div style="white-space: pre-wrap;">@_pendingUser</div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(_streamText))
+                        {
+                            <div class="mb-2 p-2 rounded bg-light">
+                                <small class="text-muted">assistant · streaming</small>
+                                <div style="white-space: pre-wrap;">@_streamText</div>
+                            </div>
+                        }
+                        else if (_sending)
                         {
                             <div class="mb-2 p-2 rounded bg-light kh-action-loading">
                                 <i class="fa-solid fa-spinner fa-spin"></i>
@@ -103,6 +118,8 @@
     private ThreadDetailDto? _current;
     private string? _draft;
     private bool _sending;
+    private string? _pendingUser;
+    private string _streamText = "";
 
     protected override async Task OnInitializedAsync() => await LoadThreadsAsync();
 
@@ -137,11 +154,42 @@
     {
         if (_current is null || string.IsNullOrWhiteSpace(_draft)) return;
         _sending = true;
+        _streamText = "";
+        var threadId = _current.Thread.Id;
+        var content = _draft!;
+        _pendingUser = content;
+        _draft = null;
+        var received = false;
         try
         {
-            await Threads.SendAsync(_current.Thread.Id, _draft);
-            _draft = null;
-            _current = await Threads.GetAsync(_current.Thread.Id);
+            // Stream via /api/agent/stream (same AgentRequest shape as the
+            // blocking /api/threads/{id}/messages). If the connection never
+            // yields an event — auth issue, proxy buffering — fall back to the
+            // sync POST so no send is silently lost.
+            try
+            {
+                await foreach (var msg in Streaming.StreamAsync(
+                                   "api/agent/stream",
+                                   new { prompt = content, threadId }))
+                {
+                    received = true;
+                    HandleStreamEvent(msg);
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!received)
+                {
+                    _streamText = "";
+                    await Threads.SendAsync(threadId, content);
+                }
+                else
+                {
+                    await Toast.Error("Streaming interrompido", ex.Message);
+                }
+            }
+            _current = await Threads.GetAsync(threadId);
             await LoadThreadsAsync();
         }
         catch (Exception ex)
@@ -151,6 +199,29 @@
         finally
         {
             _sending = false;
+            _pendingUser = null;
+            _streamText = "";
+        }
+    }
+
+    private void HandleStreamEvent(StreamingApiClient.SseMessage msg)
+    {
+        var data = msg.Data.TryGetProperty("data", out var d) ? d : msg.Data;
+        switch (msg.Event)
+        {
+            case "token":
+                _streamText += data.TryGetProperty("delta", out var delta) ? delta.GetString() : "";
+                break;
+            case "tool_start":
+                _streamText += $"\n\n— tool {(data.TryGetProperty("tool", out var t) ? t.GetString() : "?")} —\n\n";
+                break;
+            case "awaiting_approval":
+                _streamText += $"\n\nAguardando aprovação — veja /approvals.\n\n";
+                break;
+            case "error":
+                _streamText += $"\n\n[erro: {(data.TryGetProperty("message", out var m) ? m.GetString() : "stream error")}]";
+                break;
+            // done: the persisted thread is reloaded afterwards — ignore.
         }
     }
 
