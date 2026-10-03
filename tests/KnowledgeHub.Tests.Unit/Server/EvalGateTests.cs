@@ -12,7 +12,9 @@ public sealed class EvalGateTests
     {
         RecallAtK = 0.82,
         PrecisionAtK = 0.4,
-        Mrr = 0.7
+        Mrr = 0.7,
+        HitRate = 0.9,
+        NdcgAtK = 0.75
     };
     private static readonly EvalLatencySummary Latency = new()
     {
@@ -90,5 +92,27 @@ public sealed class EvalGateTests
 
         Assert.Equal("pass", EvalRunner.EvaluateGate(rules, Metrics, null, 3000, null).Status);
         Assert.Equal("fail", EvalRunner.EvaluateGate(rules, Metrics, null, 9000, null).Status);
+    }
+
+    [Fact]
+    public void Gate_RetrievalMetrics_HitRateAndNdcg()
+    {
+        // R6 (audit 2026-10-03): the gate must be able to regress on retrieval
+        // quality, not only synthesis — hit_rate + ndcg resolve from the summary.
+        var pass = new List<EvalGateRule>
+        {
+            new() { Metric = "hit_rate", Direction = "gte", Threshold = 0.8 },
+            new() { Metric = "ndcg_at_k", Direction = "gte", Threshold = 0.7 }
+        };
+        Assert.Equal("pass", EvalRunner.EvaluateGate(pass, Metrics, Latency, 100, null).Status);
+
+        var fail = new List<EvalGateRule>
+        {
+            new() { Metric = "hit_rate", Direction = "gte", Threshold = 0.95 },
+            new() { Metric = "ndcg", Direction = "gte", Threshold = 0.8 }
+        };
+        var result = EvalRunner.EvaluateGate(fail, Metrics, Latency, 100, null);
+        Assert.Equal("fail", result.Status);
+        Assert.Equal(2, result.Violations.Count);
     }
 }

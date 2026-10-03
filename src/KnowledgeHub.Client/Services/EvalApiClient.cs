@@ -97,6 +97,8 @@ public sealed record EvalMetricsDto
     public double RecallAtK { get; init; }
     public double PrecisionAtK { get; init; }
     public double Mrr { get; init; }
+    public double HitRate { get; init; }
+    public double NdcgAtK { get; init; }
     public double? Faithfulness { get; init; }
     public string? FaithfulnessSkippedReason { get; init; }
 }
@@ -115,6 +117,7 @@ public sealed record EvalCaseDto
     public double Recall { get; init; }
     public double Precision { get; init; }
     public double ReciprocalRank { get; init; }
+    public double Ndcg { get; init; }
     public bool Hit { get; init; }
     public bool Inconsistent { get; init; }
     public double? Faithfulness { get; init; }
@@ -128,6 +131,8 @@ public sealed record EvalDeltaDto
     public double RecallAtKDelta { get; init; }
     public double PrecisionAtKDelta { get; init; }
     public double MrrDelta { get; init; }
+    public double HitRateDelta { get; init; }
+    public double NdcgDelta { get; init; }
     public List<string> Regressions { get; init; } = [];
 }
 

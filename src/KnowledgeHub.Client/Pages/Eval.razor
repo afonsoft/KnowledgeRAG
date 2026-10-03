@@ -78,6 +78,8 @@
                     <div class="col-6 col-md-3"><strong>Recall@K</strong><br />@report.Metrics?.RecallAtK.ToString("F3")</div>
                     <div class="col-6 col-md-3"><strong>Precision@K</strong><br />@report.Metrics?.PrecisionAtK.ToString("F3")</div>
                     <div class="col-6 col-md-3"><strong>MRR</strong><br />@report.Metrics?.Mrr.ToString("F3")</div>
+                    <div class="col-6 col-md-3"><strong>Hit rate</strong><br />@report.Metrics?.HitRate.ToString("F3")</div>
+                    <div class="col-6 col-md-3"><strong>nDCG@K</strong><br />@report.Metrics?.NdcgAtK.ToString("F3")</div>
                     <div class="col-6 col-md-3"><strong>Faithfulness</strong><br />@(report.Metrics?.Faithfulness?.ToString("F3") ?? "—")</div>
                 </div>
                 @if (report.Latency is { } lat)
@@ -120,7 +122,7 @@
                         {
                             <li>
                                 <strong>@c.CaseId</strong> — @(c.Hit ? "hit" : "miss")
-                                (recall @c.Recall.ToString("F2"), prec @c.Precision.ToString("F2"))
+                                (recall @c.Recall.ToString("F2"), prec @c.Precision.ToString("F2"), ndcg @c.Ndcg.ToString("F2"))
                                 @if (c.Error is not null) { <span class="text-danger">@c.Error</span> }
                             </li>
                         }

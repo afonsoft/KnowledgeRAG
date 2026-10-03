@@ -84,6 +84,10 @@ public sealed class EvalRunner(
             RecallAtK = EvalMetrics.Round(results.Average(r => r.Recall)),
             PrecisionAtK = EvalMetrics.Round(results.Average(r => r.Precision)),
             Mrr = EvalMetrics.Round(results.Average(r => r.ReciprocalRank)),
+            // R6 (audit 2026-10-03): retrieval-side aggregates the gate can
+            // regress on — coverage alone (recall) misses ranking quality.
+            HitRate = EvalMetrics.Round(results.Average(r => r.Hit ? 1.0 : 0.0)),
+            NdcgAtK = EvalMetrics.Round(results.Average(r => r.Ndcg)),
             Faithfulness = faithValues.Count > 0 ? EvalMetrics.Round(faithValues.Average()) : null,
             FaithfulnessSkippedReason = FaithSkipReason(faith, faithValues.Count)
         };
@@ -218,6 +222,8 @@ public sealed class EvalRunner(
             "recall_at_k" or "recall" => metrics.RecallAtK,
             "precision_at_k" or "precision" => metrics.PrecisionAtK,
             "mrr" => metrics.Mrr,
+            "hit_rate" or "hitrate" => metrics.HitRate,
+            "ndcg" or "ndcg_at_k" => metrics.NdcgAtK,
             "faithfulness" => metrics.Faithfulness,
             "p50_ms" => latency?.P50,
             "p95_ms" => latency?.P95,
@@ -242,6 +248,7 @@ public sealed class EvalRunner(
         var recall = EvalMetrics.RecallAtK(results, evalCase);
         var precision = EvalMetrics.PrecisionAtK(results, evalCase);
         var rr = EvalMetrics.ReciprocalRank(results, evalCase);
+        var ndcg = EvalMetrics.NdcgAtK(results, evalCase);
         var hit = evalCase.ExpectNoAnswer ? results.Count == 0 : results.Any(r => EvalMetrics.IsHit(r, evalCase));
 
         double? faithfulness = null;
@@ -268,6 +275,7 @@ public sealed class EvalRunner(
             Recall = EvalMetrics.Round(recall),
             Precision = EvalMetrics.Round(precision),
             ReciprocalRank = EvalMetrics.Round(rr),
+            Ndcg = EvalMetrics.Round(ndcg),
             Hit = hit,
             Inconsistent = evalCase.ExpectNoAnswer && results.Count > 0,
             Faithfulness = faithfulness,
@@ -325,6 +333,8 @@ public sealed class EvalRunner(
             RecallAtKDelta = EvalMetrics.Round(current.Metrics.RecallAtK - prevMetrics.RecallAtK),
             PrecisionAtKDelta = EvalMetrics.Round(current.Metrics.PrecisionAtK - prevMetrics.PrecisionAtK),
             MrrDelta = EvalMetrics.Round(current.Metrics.Mrr - prevMetrics.Mrr),
+            HitRateDelta = EvalMetrics.Round(current.Metrics.HitRate - prevMetrics.HitRate),
+            NdcgDelta = EvalMetrics.Round(current.Metrics.NdcgAtK - prevMetrics.NdcgAtK),
             Regressions = current.Results
                 .Where(r => !r.Hit && prevHits.Contains(r.CaseId))
                 .Select(r => r.CaseId).ToList()
