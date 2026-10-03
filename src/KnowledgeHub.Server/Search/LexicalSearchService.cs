@@ -65,6 +65,10 @@ public sealed class LexicalSearchService(
                 await using (dedicated)
                 {
                     await dedicated.OpenAsync(cancellationToken);
+                    // Per-connection perf hints (cache/mmap/temp_store) — best
+                    // effort; a pragma failure must not fail the search.
+                    try { await Data.SqlitePragmas.ApplyAsync(dedicated, cancellationToken); }
+                    catch (SqliteException) { }
                     if (!await IsAvailableAsync(dedicated, cancellationToken))
                         return [];
                     return await SearchOnAsync(dedicated, match, topK, sourceIds, cancellationToken);

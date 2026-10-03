@@ -403,6 +403,13 @@ public sealed class AgentService(
     /// <summary>Rolling summary runs post-response; failures are logged, never thrown.</summary>
     private void ScheduleSummarization(Guid threadId, List<ConversationMessage> dropped)
     {
+        // Perf pass (2026-10-03): bound the transcript — the older portion of
+        // the dropped set is already covered by thread.Summary. Without the
+        // cap the summarization input grows O(history) per turn (O(N²) tokens
+        // over the thread's life) and can exceed the summarizer's context.
+        if (dropped.Count > options.SummarizationMaxMessages)
+            dropped = dropped.Skip(dropped.Count - options.SummarizationMaxMessages).ToList();
+
         var scopeFactory = services.GetService<IServiceScopeFactory>();
         var summarizer = services.GetService<Assistant.IAssistantChatClientProvider>()
             ?.ForSubtask("summarize", chatClient) ?? chatClient;

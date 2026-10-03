@@ -64,7 +64,7 @@ public sealed class EmbeddingHealthCheck(IEmbeddingProvider provider) : IHealthC
         }
         catch (Exception ex)
         {
-            return Task.FromResult(HealthCheckResult.Unhealthy("embedding provider check failed", ex)).Result;
+            return HealthCheckResult.Unhealthy("embedding provider check failed", ex);
         }
     }
 }

@@ -47,11 +47,18 @@ public static class DatabaseMigrator
         // with the single writer — shrinks the SQLITE_BUSY window that can
         // strand a dequeued ingestion job when its "running" save races a
         // concurrent write. Persisted in the db file; harmless if it fails.
+        // Performance pragmas (2026-10-03): synchronous=NORMAL is safe under
+        // WAL and removes a fsync per commit; temp_store/cache_size/mmap_size
+        // are per-connection hints applied to the migration connection —
+        // pooled scoped contexts inherit journal_mode (persisted) but get
+        // their own pragma state, so they are re-applied on each open by
+        // SqlitePragmaInterceptor. optimize refreshes planner statistics.
         if (db.Database.IsSqlite())
         {
             try
             {
-                await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", cancellationToken);
+                await db.Database.ExecuteSqlRawAsync(
+                    "PRAGMA journal_mode=WAL; PRAGMA optimize;", cancellationToken);
             }
             catch (Exception ex)
             {

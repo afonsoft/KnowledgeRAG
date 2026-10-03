@@ -80,9 +80,11 @@ public static class KnowledgeHubServiceCollectionExtensions
         {
             services.AddDbContextPool<KnowledgeHubDbContext>((sp, o) =>
                 o.UseSqlite($"Data Source={DatabasePath.Resolve(sp.GetRequiredService<IConfiguration>())}")
+                    .AddInterceptors(new Data.SqlitePragmaInterceptor())
                     .ReplaceService<IModelCacheKeyFactory, ProviderAwareModelCacheKeyFactory>());
             services.AddDbContextFactory<KnowledgeHubDbContext>((sp, o) =>
                 o.UseSqlite($"Data Source={DatabasePath.Resolve(sp.GetRequiredService<IConfiguration>())}")
+                    .AddInterceptors(new Data.SqlitePragmaInterceptor())
                     .ReplaceService<IModelCacheKeyFactory, ProviderAwareModelCacheKeyFactory>());
         }
     }

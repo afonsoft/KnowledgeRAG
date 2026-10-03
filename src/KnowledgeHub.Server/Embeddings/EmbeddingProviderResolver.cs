@@ -48,6 +48,28 @@ public sealed class EmbeddingProviderResolver(
     private IEmbeddingProvider? _provider;
     private LeaseCounter _counter = new();
 
+    /// <summary>Perf pass (2026-10-03): signature + fingerprint memoized per
+    /// effective-options snapshot — embed calls used to recompute SHA256 +
+    /// string.Join on every access. The settings service returns a shared
+    /// immutable snapshot, so reference equality means unchanged.</summary>
+    private SignatureEntry? _signatureEntry;
+    private sealed record SignatureEntry(EmbeddingOptions Options, string Signature)
+    {
+        public string Fingerprint { get; } = Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(Signature)))[..8].ToLowerInvariant();
+    }
+
+    private SignatureEntry EffectiveSignature()
+    {
+        var options = settings.GetEffectiveOptions();
+        var cached = Volatile.Read(ref _signatureEntry);
+        if (cached is not null && ReferenceEquals(cached.Options, options))
+            return cached;
+        var entry = new SignatureEntry(options, Signature(options));
+        Volatile.Write(ref _signatureEntry, entry);
+        return entry;
+    }
+
     /// <summary>RF-602: grace period before a drain is reported as slow —
     /// configurable via <c>Embeddings:SwapDrainSeconds</c>. The provider is
     /// NEVER disposed while a lease is held — the timeout only warns
@@ -111,7 +133,7 @@ public sealed class EmbeddingProviderResolver(
     {
         get
         {
-            var signature = Signature(settings.GetEffectiveOptions());
+            var signature = EffectiveSignature().Signature;
             if (_provider is not null && signature == _signature)
                 return _provider;
             lock (_gate)
@@ -154,8 +176,7 @@ public sealed class EmbeddingProviderResolver(
         }
     }
 
-    public string Fingerprint => Convert.ToHexString(SHA256.HashData(
-        Encoding.UTF8.GetBytes(Signature(settings.GetEffectiveOptions()))))[..8].ToLowerInvariant();
+    public string Fingerprint => EffectiveSignature().Fingerprint;
 
     private void DisposeQuietly(IEmbeddingProvider old)
     {

@@ -43,15 +43,14 @@ public sealed class SqliteVectorStore(KnowledgeHubDbContext db) : IVectorStore
 
     public async Task DeleteByDocumentAsync(Guid documentId, CancellationToken cancellationToken = default)
     {
-        var chunks = await db.Chunks
-            .Where(c => c.KnowledgeDocumentId == documentId)
-            .ToListAsync(cancellationToken);
-        foreach (var chunk in chunks)
-        {
-            chunk.Embedding = null;
-            chunk.EmbeddingModel = null;
-        }
-        await db.SaveChangesAsync(cancellationToken);
+        // Perf pass (2026-10-03): single UPDATE instead of loading every chunk
+        // into the change tracker and writing one UPDATE per row — same
+        // statement shape DeleteBySourceAsync already uses.
+        await db.Chunks
+            .Where(c => c.KnowledgeDocumentId == documentId && c.Embedding != null)
+            .ExecuteUpdateAsync(u => u
+                .SetProperty(c => c.Embedding, (byte[]?)null)
+                .SetProperty(c => c.EmbeddingModel, (string?)null), cancellationToken);
     }
 
     /// <summary>SPEC-20260925-pgvector-source-cascade RF-001: embeddings live on

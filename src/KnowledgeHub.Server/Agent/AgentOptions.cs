@@ -30,6 +30,11 @@ public sealed class AgentOptions
     /// </summary>
     public int MaxContextTokens { get; set; } = 8000;
 
+    /// <summary>Cap on dropped-history messages fed to the rolling summarizer
+    /// (older ones are already covered by <c>thread.Summary</c>) — bounds the
+    /// summarization transcript so long threads don't grow it O(N²) in tokens.</summary>
+    public int SummarizationMaxMessages { get; set; } = 100;
+
     /// <summary>Chain AST compaction + repair policy
     /// (<c>Agent:ContextManagement</c>, SPEC-20260927-chain-ast-thread-compactor).</summary>
     public McpEngine.Agents.ChainAst.ChainCompactionOptions ContextManagement { get; set; } = new();
