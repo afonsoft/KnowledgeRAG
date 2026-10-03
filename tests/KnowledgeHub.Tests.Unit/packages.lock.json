@@ -358,11 +358,6 @@
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
-      "Microsoft.DotNet.HotReload.WebAssembly.Browser": {
-        "type": "Transitive",
-        "resolved": "10.0.112",
-        "contentHash": "1k5ylG+88HAS1Gy72U6BXo+TVGkdGSMsKeaf3shHs46JuxwSbT8adKMcv22XWEi6ERr/blPZJc8tb49LtasLGQ=="
-      },
       "Microsoft.EntityFrameworkCore": {
         "type": "Transitive",
         "resolved": "10.0.12",
@@ -1305,8 +1300,7 @@
           "BootstrapBlazor.FontAwesome": "[10.0.3, )",
           "KnowledgeHub.Shared": "[1.0.0, )",
           "Microsoft.AspNetCore.Components.WebAssembly": "[10.0.12, )",
-          "Microsoft.AspNetCore.SignalR.Client": "[10.0.12, )",
-          "Microsoft.DotNet.HotReload.WebAssembly.Browser": "[10.0.112, )"
+          "Microsoft.AspNetCore.SignalR.Client": "[10.0.12, )"
         }
       },
       "knowledgehub.mcpengine": {
@@ -1316,6 +1310,13 @@
           "Microsoft.Extensions.AI.Abstractions": "[10.9.0, )",
           "ModelContextProtocol": "[2.2.0, )",
           "ModelContextProtocol.AspNetCore": "[2.2.0, )"
+        }
+      },
+      "knowledgehub.sdk": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.AI.Abstractions": "[10.9.0, )",
+          "ModelContextProtocol": "[2.2.0, )"
         }
       },
       "knowledgehub.shared": {

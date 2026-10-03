@@ -1,0 +1,64 @@
+name: 🧩 SDK CI
+
+# Continuous build+test for the client SDK libraries under sdks/.
+on:
+  push:
+    branches: [main]
+    paths: ['sdks/**', '.github/workflows/sdk-ci.yml']
+  pull_request:
+    paths: ['sdks/**', '.github/workflows/sdk-ci.yml']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  dotnet-sdk:
+    name: 🔷 .NET SDK build + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: 🗄️ Setup .NET
+        uses: actions/setup-dotnet@f2e9831d2d00e097556d494ed4e460fb3f606cc8   # v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: 🔧 Build SDK
+        run: dotnet build sdks/dotnet/KnowledgeHub.Sdk/KnowledgeHub.Sdk.csproj -c Release
+
+      - name: 📦 Pack (dry-run)
+        run: dotnet pack sdks/dotnet/KnowledgeHub.Sdk/KnowledgeHub.Sdk.csproj -c Release -o ./nupkgs
+
+      - name: 🧪 SDK unit tests
+        run: dotnet test tests/KnowledgeHub.Tests.Unit/KnowledgeHub.Tests.Unit.csproj --filter "FullyQualifiedName~Sdk"
+
+  python-sdk:
+    name: 🐍 Python SDK build + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@a26ff69c30b7e5d4f40e46eea0775234db9edc54   # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'sdks/python/pyproject.toml'
+
+      - name: 📦 Install + test
+        working-directory: sdks/python
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest tests/ -q
+
+      - name: 🏗️ Build sdist/wheel (dry-run)
+        working-directory: sdks/python
+        run: |
+          pip install build
+          python -m build --outdir ./dist

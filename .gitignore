@@ -83,3 +83,10 @@ backups/
 
 # SonarQube autofix artifacts
 .sonar_devin_auto_fix/**
+
+# Python SDK (sdks/python)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/

@@ -237,6 +237,33 @@ Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de
 - Quando usar: MCP = você chama as tools diretamente; A2A = outro agente delega uma tarefa a este hub (task lifecycle submitted → working → completed/failed).
 ```
 
+## SDKs de Cliente
+
+Bibliotecas para embutir as tools do hub em outros sistemas com LLM — estilo LangChain: facade tipada para as tools estáveis mais o catálogo dinâmico exposto ao framework de agentes de cada linguagem. Veja [`sdks/`](sdks/README.md).
+
+| SDK | Instalação | Adaptador LLM |
+|-----|-----------|---------------|
+| [.NET](sdks/dotnet/) | `dotnet add package KnowledgeHub.Sdk` (net8.0) | `AIFunction` → Microsoft.Extensions.AI / Semantic Kernel |
+| [Python](sdks/python/) | `pip install knowledgehub-sdk` (≥3.10) | `StructuredTool` → LangChain / LangGraph |
+| Java | `io.github.afonsoft:knowledgehub` (Maven) | `ToolSpecification` → LangChain4j |
+| Go | `github.com/afonsoft/KnowledgeRAG/sdks/go` | `tools.Tool` → langchaingo |
+
+```csharp
+// .NET — pluga o catálogo inteiro em qualquer IChatClient
+await using var kh = await KnowledgeHubClient.ConnectAsync("http://<host>:5000", "aft_...");
+var response = await chatClient.GetResponseAsync(messages,
+    new ChatOptions { Tools = [.. await kh.AsAIToolsAsync()] });
+```
+
+```python
+# Python — tools LangChain/LangGraph a partir do catálogo vivo
+async with KnowledgeHubClient("http://<host>:5000", api_key="aft_...") as kh:
+    tools = await kh.as_langchain_tools()
+    answer = await kh.ask("Qual é a política de retry?")
+```
+
+Cada SDK embrulha o client MCP oficial da linguagem (sem reimplementar protocolo), adiciona modelos tipados para `search_knowledge`/`ask_knowledge`/`agent_chat` e faz streaming dos eventos de `/api/ask/stream` + `/api/agent/stream`. Publicação: `git tag sdk-v*.*.*` → NuGet/PyPI quando existirem os secrets `NUGET_API_KEY`/`PYPI_API_TOKEN`.
+
 ## Configuração
 
 ```jsonc

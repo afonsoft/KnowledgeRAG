@@ -1,0 +1,101 @@
+name: 🧩 SDK Release & Publish
+
+# Publishes the client SDKs on tags `sdk-v*.*.*` (e.g. `git tag sdk-v0.1.0`).
+# NuGet push runs only when NUGET_API_KEY exists; PyPI push only when
+# PYPI_API_TOKEN exists — same opt-in pattern as DOCKERHUB_* in release.yml.
+on:
+  push:
+    tags:
+      - 'sdk-v*.*.*'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  validate-tag:
+    name: 🏷️ Validate Version Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: 🔍 Extract Version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/sdk-v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Using version: $VERSION"
+
+  publish-dotnet:
+    name: 🔷 Publish KnowledgeHub.Sdk → NuGet
+    runs-on: ubuntu-latest
+    needs: [validate-tag]
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: 🗄️ Setup .NET
+        uses: actions/setup-dotnet@f2e9831d2d00e097556d494ed4e460fb3f606cc8   # v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: 📦 Pack
+        run: |
+          dotnet pack sdks/dotnet/KnowledgeHub.Sdk/KnowledgeHub.Sdk.csproj \
+            -c Release -o ./nupkgs \
+            /p:Version=${{ needs.validate-tag.outputs.version }}
+
+      - name: 📤 Push to NuGet (optional — needs NUGET_API_KEY secret)
+        if: env.NUGET_API_KEY != ''
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          dotnet nuget push ./nupkgs/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      - name: 📤 Upload Package Artifact
+        uses: actions/upload-artifact@330a01d9f4bba7e692437fc1b3a2bb7a4e953bd7   # v7
+        with:
+          name: knowledgehub-sdk-dotnet-${{ needs.validate-tag.outputs.version }}
+          path: ./nupkgs
+          retention-days: 30
+
+  publish-python:
+    name: 🐍 Publish knowledgehub-sdk → PyPI
+    runs-on: ubuntu-latest
+    needs: [validate-tag]
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@a26ff69c30b7e5d4f40e46eea0775234db9edc54   # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 🏗️ Build sdist/wheel
+        working-directory: sdks/python
+        run: |
+          pip install build
+          python -m build --outdir ./dist
+
+      - name: 📤 Push to PyPI (optional — needs PYPI_API_TOKEN secret)
+        if: env.PYPI_API_TOKEN != ''
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        working-directory: sdks/python
+        run: |
+          pip install twine
+          twine upload ./dist/* -u __token__ -p "$PYPI_API_TOKEN" --skip-existing
+
+      - name: 📤 Upload Package Artifact
+        uses: actions/upload-artifact@330a01d9f4bba7e692437fc1b3a2bb7a4e953bd7   # v7
+        with:
+          name: knowledgehub-sdk-python-${{ needs.validate-tag.outputs.version }}
+          path: sdks/python/dist
+          retention-days: 30
