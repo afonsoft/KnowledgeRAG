@@ -37,8 +37,10 @@ public sealed class FirecrawlToolsProvider(
 
     private readonly FirecrawlOptions _options = options.Value;
     private readonly SemaphoreSlim _cacheGate = new(1, 1);
-    private IReadOnlyList<CatalogTool>? _dynamicTools;
-    private DateTimeOffset _cacheExpiresAt = DateTimeOffset.MinValue;
+    // Perf pass (2026-10-03): tools list + expiry travel in ONE reference so
+    // reads/invalidation are a single atomic swap — no lock on either path.
+    private ToolsCacheSnapshot? _toolsCache;
+    private sealed record ToolsCacheSnapshot(IReadOnlyList<CatalogTool> Tools, DateTimeOffset ExpiresAt);
 
     /// <summary>Test seam — supplies upstream protocol tools without a live
     /// <see cref="McpClient"/> session.</summary>
@@ -161,28 +163,23 @@ public sealed class FirecrawlToolsProvider(
     /// integration secret changes via Settings.</summary>
     public void InvalidateToolsCache()
     {
-        _cacheGate.Wait();
-        try
-        {
-            _dynamicTools = null;
-            _cacheExpiresAt = DateTimeOffset.MinValue;
-        }
-        finally
-        {
-            _cacheGate.Release();
-        }
+        // Lock-free: the next reader sees a null snapshot and re-fetches —
+        // no semaphore Wait() blocking a thread-pool thread on the settings path.
+        Interlocked.Exchange(ref _toolsCache, null);
     }
 
     private async Task<IReadOnlyList<CatalogTool>> GetDynamicToolsAsync(CancellationToken cancellationToken)
     {
-        if (_dynamicTools is not null && DateTimeOffset.UtcNow < _cacheExpiresAt)
-            return _dynamicTools;
+        var snapshot = Volatile.Read(ref _toolsCache);
+        if (snapshot is not null && DateTimeOffset.UtcNow < snapshot.ExpiresAt)
+            return snapshot.Tools;
 
         await _cacheGate.WaitAsync(cancellationToken);
         try
         {
-            if (_dynamicTools is not null && DateTimeOffset.UtcNow < _cacheExpiresAt)
-                return _dynamicTools;
+            snapshot = _toolsCache;
+            if (snapshot is not null && DateTimeOffset.UtcNow < snapshot.ExpiresAt)
+                return snapshot.Tools;
 
             try
             {
@@ -190,15 +187,16 @@ public sealed class FirecrawlToolsProvider(
                     ? await source(cancellationToken)
                     : (await upstream.ListToolsAsync(cancellationToken))
                         .Select(t => t.ProtocolTool).ToList();
-                _dynamicTools = protocolTools.Select(MapTool).ToList();
-                _cacheExpiresAt = DateTimeOffset.UtcNow.AddSeconds(_options.ToolsCacheSeconds);
+                _toolsCache = new ToolsCacheSnapshot(
+                    protocolTools.Select(MapTool).ToList(),
+                    DateTimeOffset.UtcNow.AddSeconds(_options.ToolsCacheSeconds));
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 // last-known-good wins; empty when nothing was ever fetched.
                 logger.LogWarning(ex, "firecrawl tools/list failed — serving cached/static set");
             }
-            return _dynamicTools ?? [];
+            return _toolsCache?.Tools ?? [];
         }
         finally
         {
