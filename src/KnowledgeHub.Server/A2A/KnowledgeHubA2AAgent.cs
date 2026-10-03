@@ -325,7 +325,7 @@ public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHand
                 // flow_<slug>: free-text maps to the conventional `input`
                 // arg; richer calls pass the flow's declared inputs via
                 // arguments.
-                if (skill!.StartsWith("flow_", StringComparison.OrdinalIgnoreCase))
+                if (skill.StartsWith("flow_", StringComparison.OrdinalIgnoreCase))
                     Primary("input");
                 break;
         }

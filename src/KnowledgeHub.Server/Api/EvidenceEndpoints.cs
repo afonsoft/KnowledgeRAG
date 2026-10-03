@@ -62,10 +62,10 @@ public static class EvidenceEndpoints
         var scope = await provider.GetAsync(ct);
         if (scope is null)
             return null;
-        if (scope.ApiKeyId is null)
+        if (scope.ApiKeyId is not { } keyId)
             return Results.Forbid();
         if (receipts.Any(r => !string.Equals(r.ApiKeyId,
-                scope.ApiKeyId.Value.ToString("N"), StringComparison.OrdinalIgnoreCase)))
+                keyId.ToString("N"), StringComparison.OrdinalIgnoreCase)))
             return Results.Forbid();
         return null;
     }

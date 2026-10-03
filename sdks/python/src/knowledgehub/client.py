@@ -284,20 +284,14 @@ class KnowledgeHubClient:
                 )
             event_type = "message"
             async for line in response.aiter_lines():
-                if not line:
+                parsed = _sse_line(line)
+                if parsed is None:
                     continue
-                if line.startswith(":"):
-                    continue  # heartbeat
-                if line.startswith("event:"):
-                    event_type = line[6:].strip()
-                elif line.startswith("data:"):
-                    raw = line[5:].strip()
-                    try:
-                        envelope = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    data = envelope.get("data", envelope) if isinstance(envelope, dict) else envelope
-                    yield StreamEvent(type=event_type, data=data if isinstance(data, dict) else {"value": data})
+                kind, value = parsed
+                if kind == "event":
+                    event_type = value
+                else:
+                    yield StreamEvent(type=event_type, data=value)
 
     # ------------------------------------------------------------ LangChain
 
@@ -340,6 +334,22 @@ class KnowledgeHubClient:
                 )
             )
         return tools
+
+
+def _sse_line(line: str) -> tuple[str, Any] | None:
+    """Parse one SSE line → ("event", type) or ("data", payload); None to skip."""
+    if not line or line.startswith(":"):
+        return None
+    if line.startswith("event:"):
+        return "event", line[6:].strip()
+    if not line.startswith("data:"):
+        return None
+    try:
+        envelope = json.loads(line[5:].strip())
+    except json.JSONDecodeError:
+        return None
+    data = envelope.get("data", envelope) if isinstance(envelope, dict) else envelope
+    return "data", data if isinstance(data, dict) else {"value": data}
 
 
 def _schema_to_pydantic(name: str, schema: dict[str, Any]) -> Any:

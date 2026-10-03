@@ -193,7 +193,7 @@ public sealed class OpsUiPolishTests
         // Gap-based (starvation-proof): total run duration minus case latency
         // must cover the ~300ms answer path — if LatencyMs still measured the
         // whole case the gap would be ~0.
-        Assert.True(report.DurationMs - result.LatencyMs.Value >= 250,
+        Assert.True(report.DurationMs - result.LatencyMs.GetValueOrDefault() >= 250,
             $"gap {report.DurationMs - result.LatencyMs}ms should include the 300ms LLM answer");
     }
 

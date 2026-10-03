@@ -19,7 +19,7 @@ internal static class CallerIdentity
     public static Guid? TryGetApiKeyId(ToolCallContext ctx)
     {
         var http = ctx.Services.GetService<IHttpContextAccessor>()?.HttpContext;
-        if (http?.User.FindFirst(ApiKeyAuthenticationHandler.AuthMethodClaim)?.Value != "apikey")
+        if (http is null || http.User.FindFirst(ApiKeyAuthenticationHandler.AuthMethodClaim)?.Value != "apikey")
             return null;
         return Guid.TryParse(http.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value, out var id)
             ? id

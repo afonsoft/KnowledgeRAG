@@ -133,9 +133,9 @@ public sealed class SqliteKnowledgeGraphStore(
             .Where(a => a.AliasNormalized == normalized)
             .Select(a => (Guid?)a.KgNodeId)
             .FirstOrDefaultAsync(ct);
-        return alias is null
-            ? null
-            : await db.KgNodes.FirstOrDefaultAsync(n => n.Id == alias.Value && n.ValidTo == null, ct);
+        return alias is { } aliasId
+            ? await db.KgNodes.FirstOrDefaultAsync(n => n.Id == aliasId && n.ValidTo == null, ct)
+            : null;
     }
 
     /// <inheritdoc />

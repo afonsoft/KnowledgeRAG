@@ -14,6 +14,8 @@ namespace KnowledgeHub.Server.Api;
 /// </summary>
 public static class SettingsEndpoints
 {
+    private const string HttpEndpointRequired = "endpoint must be an absolute http(s) URI";
+
     private const string BodyRequired = "body is required";
     private const string IntegrationsCacheKey = "settings:integrations";
     private const string ChatCacheKey = "settings:chat";
@@ -105,7 +107,7 @@ public static class SettingsEndpoints
             var endpoint = body?.Endpoint?.Trim();
             var model = body?.Model?.Trim();
             if (string.IsNullOrWhiteSpace(endpoint) || !IsHttpUri(endpoint))
-                return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+                return Results.BadRequest(new { error = HttpEndpointRequired });
             if (string.IsNullOrWhiteSpace(model))
                 return Results.BadRequest(new { error = "model is required" });
 
@@ -145,7 +147,7 @@ public static class SettingsEndpoints
         {
             var endpoint = body?.Endpoint?.Trim();
             if (!string.IsNullOrEmpty(endpoint) && !IsHttpUri(endpoint))
-                return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+                return Results.BadRequest(new { error = HttpEndpointRequired });
 
             return Results.Ok(await chat.TestAsync(body ?? new TestChatConnectionRequest(), ct));
         });
@@ -158,7 +160,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             if (!string.IsNullOrEmpty(endpoint) && !IsHttpUri(endpoint))
-                return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+                return Results.BadRequest(new { error = HttpEndpointRequired });
 
             return Results.Ok(await chat.ListModelsAsync(endpoint, ct));
         });
@@ -369,7 +371,7 @@ public static class SettingsEndpoints
             CancellationToken ct) =>
         {
             if (!string.IsNullOrEmpty(endpoint) && !IsHttpUri(endpoint))
-                return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+                return Results.BadRequest(new { error = HttpEndpointRequired });
 
             return Results.Ok(await assistant.ListModelsAsync(endpoint, ct));
         });
@@ -671,7 +673,7 @@ public static class SettingsEndpoints
         if (!EmbeddingProviders.Contains(provider))
             return Results.BadRequest(new { error = $"provider must be one of: {string.Join(", ", EmbeddingProviders)}" });
         if (!string.IsNullOrWhiteSpace(body.Endpoint) && !IsHttpUri(body.Endpoint.Trim()))
-            return Results.BadRequest(new { error = "endpoint must be an absolute http(s) URI" });
+            return Results.BadRequest(new { error = HttpEndpointRequired });
         if (body.Dimensions is < 64 or > 4096)
             return Results.BadRequest(new { error = "dimensions must be 64..4096" });
         // SPEC-20260926-embeddings-runtime-coherence RF-006: overlap cap —

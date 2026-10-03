@@ -44,6 +44,9 @@ public sealed class FlowEngine(
     IEnumerable<IFlowStepHandler> handlers,
     IConfiguration configuration) : IFlowEngine
 {
+    private const string StatusFailed = "failed";
+    private const string StepIdKey = "stepId";
+
     private readonly Dictionary<string, IFlowStepHandler> _handlers =
         handlers.ToDictionary(h => h.Type, StringComparer.OrdinalIgnoreCase);
     private readonly FlowLimits _limits = FlowLimits.FromConfiguration(configuration);
@@ -70,7 +73,7 @@ public sealed class FlowEngine(
             {
                 return new FlowRunResult
                 {
-                    Status = "failed",
+                    Status = StatusFailed,
                     Error = inputError,
                     Steps = ctx.Trace,
                     DurationMs = sw.ElapsedMilliseconds,
@@ -90,7 +93,7 @@ public sealed class FlowEngine(
         {
             await EmitAsync(ctx, FlowStreamEvent.Waiting, new JsonObject
             {
-                ["stepId"] = ex.Pending.StepId,
+                [StepIdKey] = ex.Pending.StepId,
                 ["message"] = ex.Pending.Message,
             }, CancellationToken.None);
             return new FlowRunResult
@@ -117,7 +120,7 @@ public sealed class FlowEngine(
 
         return new FlowRunResult
         {
-            Status = error is null ? "done" : "failed",
+            Status = error is null ? "done" : StatusFailed,
             Output = CapOutput(output, _limits),
             Error = error,
             Steps = ctx.Trace,
@@ -189,7 +192,7 @@ public sealed class FlowEngine(
             {
                 await EmitAsync(ctx, FlowStreamEvent.StepSkip, new JsonObject
                 {
-                    ["stepId"] = step.Id,
+                    [StepIdKey] = step.Id,
                     ["stepType"] = step.Type,
                 }, ct);
                 continue;
@@ -208,87 +211,96 @@ public sealed class FlowEngine(
             ctx.Trace.Add(result);
             await EmitAsync(ctx, FlowStreamEvent.StepStart, new JsonObject
             {
-                ["stepId"] = step.Id,
+                [StepIdKey] = step.Id,
                 ["stepType"] = step.Type,
                 ["name"] = step.Name,
             }, ct);
 
-            var sw = Stopwatch.StartNew();
-            var attempt = 1;
-            try
-            {
-                if (!_handlers.TryGetValue(step.Type, out var handler))
-                    throw new FlowStepException($"unknown step type '{step.Type}'");
+            await ExecuteStepAsync(step, ctx, result, ct);
+        }
+    }
 
-                // F3: per-step retry — config.retry {attempts (≤5), backoffMs}.
-                // Retries apply to ordinary step failures and timeouts; a
-                // suspension request (approval step) is never retried.
-                var (attempts, backoffMs) = RetryOf(step);
-                JsonNode? stepOutput = null;
-                for (; ; attempt++)
+    private async Task ExecuteStepAsync(
+        FlowStepDto step,
+        FlowExecContext ctx,
+        FlowStepResult result,
+        CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        var attempt = 1;
+        try
+        {
+            if (!_handlers.TryGetValue(step.Type, out var handler))
+                throw new FlowStepException($"unknown step type '{step.Type}'");
+
+            // F3: per-step retry — config.retry {attempts (≤5), backoffMs}.
+            // Retries apply to ordinary step failures and timeouts; a
+            // suspension request (approval step) is never retried.
+            var (attempts, backoffMs) = RetryOf(step);
+            JsonNode? stepOutput = null;
+            for (; attempt <= attempts; attempt++)
+            {
+                try
                 {
-                    try
-                    {
-                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                        timeoutCts.CancelAfter(TimeSpan.FromSeconds(ctx.Limits.StepTimeoutSeconds));
-                        stepOutput = await handler.ExecuteAsync(step, ctx, this, timeoutCts.Token);
-                        break;
-                    }
-                    catch (FlowSuspendException) { throw; }
-                    catch (Exception) when (attempt < attempts && !ct.IsCancellationRequested)
-                    {
-                        if (backoffMs > 0)
-                            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), ct);
-                    }
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(TimeSpan.FromSeconds(ctx.Limits.StepTimeoutSeconds));
+                    stepOutput = await handler.ExecuteAsync(step, ctx, this, timeoutCts.Token);
+                    break;
                 }
-                result.Attempts = attempt;
-
-                if (step.Type == "output")
-                    ctx.Vars["__flow_output"] = stepOutput;
-
-                ctx.StepOutputs[step.Id] = stepOutput;
-                result.Output = CapOutput(stepOutput, ctx.Limits);
-
-                // HITL: an approval step records its request, then the run
-                // suspends here — FlowService turns this into a ToolApproval
-                // plus a persisted resume state.
-                if (ctx.PendingApproval is { } pending)
-                    throw new FlowSuspendException(pending);
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                result.Status = "failed";
-                result.Error = $"step timed out after {ctx.Limits.StepTimeoutSeconds}s";
-                ctx.StepErrors[step.Id] = result.Error;
-                if (!ContinueOnError(step))
-                    throw new FlowAbortException($"step '{step.Id}' failed: {result.Error}");
-            }
-            catch (FlowSuspendException)
-            {
-                result.Status = "waiting";
-                throw;
-            }
-            catch (Exception ex)
-            {
-                result.Status = "failed";
-                result.Error = ex.Message;
-                result.Attempts = attempt;
-                ctx.StepErrors[step.Id] = ex.Message;
-                if (!ContinueOnError(step))
-                    throw new FlowAbortException($"step '{step.Id}' failed: {ex.Message}");
-            }
-            finally
-            {
-                result.DurationMs = sw.ElapsedMilliseconds;
-                await EmitAsync(ctx, FlowStreamEvent.StepEnd, new JsonObject
+                catch (FlowSuspendException) { throw; }
+                catch (Exception) when (attempt < attempts && !ct.IsCancellationRequested)
                 {
-                    ["stepId"] = step.Id,
-                    ["stepType"] = step.Type,
-                    ["status"] = result.Status,
-                    ["error"] = result.Error,
-                    ["durationMs"] = result.DurationMs,
-                }, CancellationToken.None);
+                    if (backoffMs > 0)
+                        await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), ct);
+                }
             }
+            result.Attempts = attempt;
+
+            if (step.Type == "output")
+                ctx.Vars["__flow_output"] = stepOutput;
+
+            ctx.StepOutputs[step.Id] = stepOutput;
+            result.Output = CapOutput(stepOutput, ctx.Limits);
+
+            // HITL: an approval step records its request, then the run
+            // suspends here — FlowService turns this into a ToolApproval
+            // plus a persisted resume state.
+            if (ctx.PendingApproval is { } pending)
+                throw new FlowSuspendException(pending);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            result.Status = StatusFailed;
+            result.Error = $"step timed out after {ctx.Limits.StepTimeoutSeconds}s";
+            ctx.StepErrors[step.Id] = result.Error;
+            if (!ContinueOnError(step))
+                throw new FlowAbortException($"step '{step.Id}' failed: {result.Error}");
+        }
+        catch (FlowSuspendException)
+        {
+            result.Status = "waiting";
+            throw;
+        }
+        catch (Exception ex)
+        {
+            result.Status = StatusFailed;
+            result.Error = ex.Message;
+            result.Attempts = attempt;
+            ctx.StepErrors[step.Id] = ex.Message;
+            if (!ContinueOnError(step))
+                throw new FlowAbortException($"step '{step.Id}' failed: {ex.Message}");
+        }
+        finally
+        {
+            result.DurationMs = sw.ElapsedMilliseconds;
+            await EmitAsync(ctx, FlowStreamEvent.StepEnd, new JsonObject
+            {
+                [StepIdKey] = step.Id,
+                ["stepType"] = step.Type,
+                ["status"] = result.Status,
+                ["error"] = result.Error,
+                ["durationMs"] = result.DurationMs,
+            }, CancellationToken.None);
         }
     }
 

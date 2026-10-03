@@ -92,22 +92,22 @@
                         <div class="col-6 col-md-3"><strong>mean</strong><br />@lat.Mean.ToString("F0")ms</div>
                     </div>
                 }
-                @if (report.Gate?.Violations.Count > 0)
+                @if (report.Gate is { } gate && gate.Violations.Count > 0)
                 {
                     <div class="small text-danger mt-2">
                         <strong>@L["Eval_GateViolations"]</strong>
                         <ul class="mb-0">
-                            @foreach (var v in report.Gate.Violations)
+                            @foreach (var v in gate.Violations)
                             {
                                 <li>@v</li>
                             }
                         </ul>
                     </div>
                 }
-                @if (report.Delta?.Regressions.Count > 0)
+                @if (report.Delta is { } delta && delta.Regressions.Count > 0)
                 {
                     <div class="small text-warning mt-2">
-                        <strong>@L["Eval_Regressions"]</strong> @string.Join(", ", report.Delta.Regressions)
+                        <strong>@L["Eval_Regressions"]</strong> @string.Join(", ", delta.Regressions)
                     </div>
                 }
                 <div class="mt-3 d-flex gap-2 align-items-center">

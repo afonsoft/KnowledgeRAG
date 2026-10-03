@@ -40,16 +40,16 @@ public sealed class FlowStepModel
 /// JSON all write through this object).</summary>
 public sealed class FlowEditModel
 {
-    public Guid? Id;
+    public Guid? Id { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
-    public bool Enabled = true;
+    public bool Enabled { get; set; } = true;
     public List<FlowInputModel> Inputs { get; } = new();
     public List<FlowStepModel> Steps { get; } = new();
     public string DefinitionJson { get; set; } = "{}";
     /// <summary>Active editor surface. When <see cref="FlowEditorView.Json"/>,
     /// <see cref="DefinitionJson"/> is authoritative over Inputs/Steps.</summary>
-    public FlowEditorView View = FlowEditorView.List;
+    public FlowEditorView View { get; set; } = FlowEditorView.List;
 
     public static readonly List<SelectedItem> InputTypes =
     [
@@ -66,7 +66,7 @@ public sealed class FlowEditModel
         new("llm", l["StepType_llm"].Value),
         new("http", l["StepType_http"].Value),
         new("condition", l["StepType_condition"].Value),
-        new("foreach", l["StepType_foreach"].Value),
+        new(FlowVisuals.ForeachType, l["StepType_foreach"].Value),
         new("transform", l["StepType_transform"].Value),
         new("output", l["StepType_output"].Value),
         new("fail", l["StepType_fail"].Value),
@@ -133,6 +133,9 @@ internal static class FlowStrings
 /// icons per step type and lane extraction for condition/foreach bodies.</summary>
 public static class FlowVisuals
 {
+    /// <summary>Loop step type — referenced by several helpers below.</summary>
+    internal const string ForeachType = "foreach";
+
     /// <summary>One rendered lane: a label (branch condition or loop) plus the
     /// nested steps that run inside it.</summary>
     public sealed record FlowLane(string Label, IReadOnlyList<FlowStepDto> Steps);
@@ -144,7 +147,7 @@ public static class FlowVisuals
         "llm" => "fa-brain",
         "http" => "fa-globe",
         "condition" => "fa-code-branch",
-        "foreach" => "fa-repeat",
+        ForeachType => "fa-repeat",
         "transform" => "fa-wand-magic-sparkles",
         "output" => "fa-flag-checkered",
         "fail" => "fa-circle-xmark",
@@ -157,7 +160,7 @@ public static class FlowVisuals
     /// stays editable in the drawer.</summary>
     public static List<FlowLane> DisplayLanes(FlowStepModel step)
     {
-        if (step.Type == "foreach")
+        if (step.Type == ForeachType)
             return LaneList("loop", step.StepsJson);
         if (step.Type != "condition")
             return [];
@@ -171,7 +174,7 @@ public static class FlowVisuals
     /// <summary>Lanes from a parsed DTO (nested chips recursion).</summary>
     public static List<FlowLane> DisplayLanes(FlowStepDto step)
     {
-        if (step.Type == "foreach")
+        if (step.Type == ForeachType)
             return [new FlowLane("loop", step.Steps ?? [])];
         if (step.Type != "condition")
             return [];
@@ -195,10 +198,8 @@ public static class FlowVisuals
         var lanes = new List<FlowLane>();
         if (config?["branches"] is JsonArray branches)
         {
-            foreach (var branch in branches)
+            foreach (var b in branches.OfType<JsonObject>())
             {
-                if (branch is not JsonObject b)
-                    continue;
                 var label = b["when"] is JsonObject when ? WhenText(when) : FlowStrings.Always;
                 lanes.Add(new FlowLane(label, ParseStepsNode(b["steps"])));
             }
@@ -248,13 +249,16 @@ public static class FlowVisuals
         {
             "tool" or "knowledge" => NodeText(config["tool"]),
             "http" => $"{NodeText(config["method"]) ?? "GET"} {NodeText(config["url"]) ?? ""}".Trim(),
-            "llm" => NodeText(config["prompt"]) is { } p ? (p.Length > 60 ? p[..60] + "…" : p) : null,
+            "llm" => Truncate(NodeText(config["prompt"])),
             "transform" => "reshape",
-            "output" => config["value"]?.ToJsonString() is { } v ? (v.Length > 60 ? v[..60] + "…" : v) : null,
+            "output" => Truncate(config["value"]?.ToJsonString()),
             "fail" => NodeText(config["message"]),
             "approval" => NodeText(config["message"]),
-            "foreach" => $"{FlowStrings.EachPrefix} {config["each"]?.ToJsonString() ?? "?"}",
+            ForeachType => $"{FlowStrings.EachPrefix} {config["each"]?.ToJsonString() ?? "?"}",
             _ => null,
         };
     }
+
+    private static string? Truncate(string? text) =>
+        text is { Length: > 60 } ? text[..60] + "…" : text;
 }

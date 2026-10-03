@@ -80,9 +80,9 @@ public sealed class TelemetryTests
         action();
         rootSpanId = root?.SpanId ?? default;
         var traceId = root?.TraceId;
-        return traceId is null
-            ? []
-            : activities.Where(a => a.TraceId == traceId.Value).ToList();
+        return traceId is { } tid
+            ? activities.Where(a => a.TraceId == tid).ToList()
+            : [];
     }
 
     [Fact]

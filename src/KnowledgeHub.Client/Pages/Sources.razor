@@ -47,9 +47,6 @@
             <Template Context="v">
                 @* SPEC-20260925-sources-grid-ux RF-003: status badge opens the
                    error/job detail modal when there is something to show. *@
-                @{
-                    var hasDetail = !string.IsNullOrEmpty(v.Row.LastError);
-                }
                 @switch (v.Row.LastSyncStatus)
                 {
                     case "completed":

@@ -23,6 +23,9 @@ public sealed class FlowService(
     IToolCatalogChangeNotifier notifier,
     ILogger<FlowService> logger)
 {
+    internal const string TriggerKindWebhook = "webhook";
+    internal const string TriggerKindSchedule = "schedule";
+
     public async Task<List<FlowDto>> ListAsync(bool enabledOnly, CancellationToken ct) =>
         await db.AgentFlows
             .Where(f => !enabledOnly || f.Enabled)
@@ -109,14 +112,11 @@ public sealed class FlowService(
 
     /// <summary>Validate a definition without running it — structure +
     /// duplicate ids + unknown step types.</summary>
-    public string? ValidateDefinition(FlowDefinitionDto definition)
+    public static string? ValidateDefinition(FlowDefinitionDto definition)
     {
         if (definition.Steps.Count == 0)
             return "definition must contain at least one step";
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        // inForeach tracks whether the step sits under a foreach body —
-        // an `approval` gate there could not be resumed faithfully (the
-        // engine would re-run the loop and skip every iteration's steps).
         var queue = new Queue<(FlowStepDto Step, bool InForeach)>();
         foreach (var s in definition.Steps)
             queue.Enqueue((s, false));
@@ -124,46 +124,54 @@ public sealed class FlowService(
         while (queue.Count > 0)
         {
             var (step, inForeach) = queue.Dequeue();
-            count++;
-            if (count > FlowLimits.DefaultMaxSteps * 4)
+            if (++count > FlowLimits.DefaultMaxSteps * 4)
                 return $"definition too large (> {FlowLimits.DefaultMaxSteps * 4} steps incl. nested)";
-            if (string.IsNullOrWhiteSpace(step.Id))
-                return "every step needs a non-empty 'id'";
-            if (!seen.Add(step.Id))
-                return $"duplicate step id '{step.Id}'";
-            if (!KnownTypes.Contains(step.Type))
-                return $"unknown step type '{step.Type}' (step '{step.Id}')";
-            if (inForeach && step.Type == "approval")
-                return $"approval step '{step.Id}' cannot be nested inside foreach (loop state is not resumable)";
-            var nestedForeach = inForeach || step.Type == "foreach";
-            foreach (var nested in step.Steps ?? [])
-                queue.Enqueue((nested, nestedForeach));
-            // condition branches live in config
-            if (step.Config?.TryGetPropertyValue("branches", out var br) == true && br is JsonArray arr)
-            {
-                foreach (var branch in arr)
-                {
-                    if (branch is JsonObject b && b["steps"] is JsonArray steps)
-                    {
-                        foreach (var nestedNode in steps)
-                        {
-                            var nested = nestedNode?.Deserialize<FlowStepDto>(SharedJson.Options);
-                            if (nested is not null) queue.Enqueue((nested, inForeach));
-                        }
-                    }
-                }
-            }
-            if (step.Config?.TryGetPropertyValue("else", out var el) == true && el is JsonArray elseArr)
-            {
-                foreach (var nestedNode in elseArr)
-                {
-                    var nested = nestedNode?.Deserialize<FlowStepDto>(SharedJson.Options);
-                    if (nested is not null) queue.Enqueue((nested, inForeach));
-                }
-            }
+            if (ValidateStep(step, seen, inForeach) is { } error)
+                return error;
+            EnqueueNested(step, queue, inForeach || step.Type == "foreach");
         }
         return null;
     }
+
+    /// <summary>Per-step checks; inForeach tracks whether the step sits under
+    /// a foreach body — an `approval` gate there could not be resumed
+    /// faithfully (the engine would re-run the loop and skip steps).</summary>
+    private static string? ValidateStep(FlowStepDto step, HashSet<string> seen, bool inForeach)
+    {
+        if (string.IsNullOrWhiteSpace(step.Id))
+            return "every step needs a non-empty 'id'";
+        if (!seen.Add(step.Id))
+            return $"duplicate step id '{step.Id}'";
+        if (!KnownTypes.Contains(step.Type))
+            return $"unknown step type '{step.Type}' (step '{step.Id}')";
+        if (inForeach && step.Type == "approval")
+            return $"approval step '{step.Id}' cannot be nested inside foreach (loop state is not resumable)";
+        return null;
+    }
+
+    private static void EnqueueNested(
+        FlowStepDto step, Queue<(FlowStepDto, bool)> queue, bool nestedForeach)
+    {
+        foreach (var nested in step.Steps ?? [])
+            queue.Enqueue((nested, nestedForeach));
+        foreach (var arr in ConditionNestedArrays(step))
+            foreach (var nested in DeserializeSteps(arr))
+                queue.Enqueue((nested, nestedForeach));
+    }
+
+    /// <summary>Step lists nested inside a condition's config: every branch's
+    /// "steps" array plus the top-level "else" array.</summary>
+    internal static IEnumerable<JsonArray> ConditionNestedArrays(FlowStepDto step)
+    {
+        if (step.Config?.TryGetPropertyValue("branches", out var br) == true && br is JsonArray branches)
+            foreach (var steps in branches.OfType<JsonObject>().Select(b => b["steps"]).OfType<JsonArray>())
+                yield return steps;
+        if (step.Config?.TryGetPropertyValue("else", out var el) == true && el is JsonArray elseArr)
+            yield return elseArr;
+    }
+
+    private static IEnumerable<FlowStepDto> DeserializeSteps(JsonArray arr) =>
+        arr.Select(n => n?.Deserialize<FlowStepDto>(SharedJson.Options)).OfType<FlowStepDto>();
 
     private static readonly HashSet<string> KnownTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -382,10 +390,10 @@ public sealed class FlowService(
         {
             FlowId = flowId,
             Kind = request.Kind.Trim().ToLowerInvariant(),
-            IntervalSeconds = request.Kind.Equals("schedule", StringComparison.OrdinalIgnoreCase)
+            IntervalSeconds = request.Kind.Equals(TriggerKindSchedule, StringComparison.OrdinalIgnoreCase)
                 ? request.IntervalSeconds
                 : null,
-            Secret = request.Kind.Equals("webhook", StringComparison.OrdinalIgnoreCase)
+            Secret = request.Kind.Equals(TriggerKindWebhook, StringComparison.OrdinalIgnoreCase)
                 ? "fwt_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant()
                 : null,
             ConfigJson = request.Inputs is null ? null : new JsonObject { ["inputs"] = request.Inputs }.ToJsonString(),
@@ -405,7 +413,7 @@ public sealed class FlowService(
             trigger.Enabled = enabled;
         if (request.IntervalSeconds is { } interval)
         {
-            if (trigger.Kind == "schedule" && interval < 60)
+            if (trigger.Kind == TriggerKindSchedule && interval < 60)
                 throw new FlowStepException("schedule interval must be ≥ 60 seconds");
             trigger.IntervalSeconds = interval;
         }
@@ -431,7 +439,7 @@ public sealed class FlowService(
         string token, JsonObject? body, IServiceProvider services, CancellationToken ct)
     {
         var trigger = await db.FlowTriggers
-            .FirstOrDefaultAsync(t => t.Secret == token && t.Enabled && t.Kind == "webhook", ct);
+            .FirstOrDefaultAsync(t => t.Secret == token && t.Enabled && t.Kind == TriggerKindWebhook, ct);
         if (trigger is null)
             return null;
         var flow = await db.AgentFlows.FirstOrDefaultAsync(f => f.Id == trigger.FlowId && f.Enabled, ct);
@@ -441,7 +449,7 @@ public sealed class FlowService(
         var inputs = StaticInputs(trigger);
         inputs["trigger"] = new JsonObject
         {
-            ["kind"] = "webhook",
+            ["kind"] = TriggerKindWebhook,
             ["triggerId"] = trigger.Id.ToString(),
             ["receivedAt"] = DateTimeOffset.UtcNow.ToString("o"),
         };
@@ -465,7 +473,7 @@ public sealed class FlowService(
         var inputs = StaticInputs(trigger);
         inputs["trigger"] = new JsonObject
         {
-            ["kind"] = "schedule",
+            ["kind"] = TriggerKindSchedule,
             ["triggerId"] = trigger.Id.ToString(),
             ["firedAt"] = DateTimeOffset.UtcNow.ToString("o"),
         };
@@ -477,7 +485,7 @@ public sealed class FlowService(
         // EF+SQLite can't compare DateTimeOffset in some versions — the
         // trigger set is small; evaluate in memory.
         (await db.FlowTriggers
-            .Where(t => t.Enabled && t.Kind == "schedule" && t.IntervalSeconds != null)
+            .Where(t => t.Enabled && t.Kind == TriggerKindSchedule && t.IntervalSeconds != null)
             .ToListAsync(ct))
         .Where(t => t.LastFiredAt is null
             || t.LastFiredAt.Value.AddSeconds(t.IntervalSeconds!.Value) <= now)
@@ -498,13 +506,13 @@ public sealed class FlowService(
 
     private static string? ValidateTrigger(string? kind, int? intervalSeconds) => kind?.Trim().ToLowerInvariant() switch
     {
-        "webhook" => null,
-        "schedule" when intervalSeconds is >= 60 => null,
-        "schedule" => "schedule triggers require intervalSeconds ≥ 60",
+        TriggerKindWebhook => null,
+        TriggerKindSchedule when intervalSeconds is >= 60 => null,
+        TriggerKindSchedule => "schedule triggers require intervalSeconds ≥ 60",
         _ => $"kind must be 'webhook' or 'schedule' (got '{kind}')",
     };
 
-    private FlowTriggerDto ToTriggerDto(FlowTrigger t, HttpRequest http) => new(
+    private static FlowTriggerDto ToTriggerDto(FlowTrigger t, HttpRequest http) => new(
         t.Id, t.FlowId, t.Kind, t.Enabled,
         t.Secret is null ? null : $"{http.Scheme}://{http.Host}/api/flowtriggers/{t.Secret}",
         t.IntervalSeconds, t.LastFiredAt, t.CreatedAt);

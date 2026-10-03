@@ -1,0 +1,7 @@
+# GitGuardian config — the live-e2e step of sdk-ci.yml authenticates with the
+# documented, public fresh-boot admin password of a disposable CI hub; it is
+# not a real credential (rotated immediately to CiTest1234! in the same step).
+version: 2
+matches-ignore:
+  - name: CI fresh-boot default admin password (public, documented)
+    match: "123qwe"
