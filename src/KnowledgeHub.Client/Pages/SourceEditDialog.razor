@@ -1,4 +1,5 @@
 @using System.Text.Json.Nodes
+@inject IStringLocalizer<SharedStrings> L
 
 @* SPEC-05 RF-002: create/edit form with per-type dynamic config fields.
    SPEC-20260915-sources-edit-dialog: readOnly flag, indexed-content summary,
@@ -10,39 +11,39 @@
         <div class="col-12">
             <div class="border rounded p-3">
                 <div class="d-flex justify-content-between gap-2 align-items-center mb-2">
-                    <strong>Resumo</strong>
+                    <strong>@L["SrcEd_Summary"]</strong>
                     <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-rotate"
-                            Text="@(SyncRunning ? "Sincronizando…" : "Sincronizar agora")"
-                            TooltipText="Sincronizar agora" TooltipPlacement="Placement.Left"
+                            Text="@(SyncRunning ? L["SrcEd_Syncing"].Value : L["SrcEd_SyncNow"].Value)"
+                            TooltipText="@L["SrcEd_SyncNow"]" TooltipPlacement="Placement.Left"
                             IsDisabled="SyncRunning" OnClick="RequestSyncAsync" />
                 </div>
                 @if (SummaryLoading)
                 {
                     <div class="text-muted small">
-                        <i class="fa-solid fa-spinner fa-spin"></i> Carregando resumo…
+                        <i class="fa-solid fa-spinner fa-spin"></i> @L["SrcEd_LoadingSummary"]
                     </div>
                 }
                 else if (SummaryFailed)
                 {
-                    <div class="text-muted small">Resumo indisponível — não foi possível carregar os documentos.</div>
+                    <div class="text-muted small">@L["SrcEd_SummaryFailed"]</div>
                 }
                 else
                 {
                     var docs = Documents ?? [];
                     <div class="small">
-                        <strong>@docs.Count</strong> documento(s) ·
-                        <strong>@docs.Sum(d => d.ChunkCount)</strong> chunks ·
-                        última indexação: @(docs.Count > 0 ? docs.Max(d => d.IndexedAt).LocalDateTime.ToString("g") : "—")
+                        <strong>@docs.Count</strong> @L["SrcEd_DocsSummary",
+                            docs.Sum(d => d.ChunkCount),
+                            docs.Count > 0 ? docs.Max(d => d.IndexedAt).LocalDateTime.ToString("g") : "—"]
                     </div>
                     <div class="small mt-1">
-                        Último sync: @(Source?.LastSyncAt?.LocalDateTime.ToString("g") ?? "—")
+                        @L["SrcEd_LastSync", Source?.LastSyncAt?.LocalDateTime.ToString("g") ?? "—"]
                         @switch (Source?.LastSyncStatus)
                         {
                             case "completed":
                                 <Badge Color="Color.Success">ok</Badge>
                                 break;
                             case "failed":
-                                <Badge Color="Color.Danger">falhou</Badge>
+                                <Badge Color="Color.Danger">@L["SrcEd_Failed"]</Badge>
                                 break;
                             case "skipped":
                                 <Badge Color="Color.Warning">skip</Badge>
@@ -51,12 +52,12 @@
                     </div>
                     @if (!string.IsNullOrEmpty(Source?.LastError))
                     {
-                        <div class="small text-danger mt-1">Último erro: @Source.LastError</div>
+                        <div class="small text-danger mt-1">@L["SrcEd_LastError", Source.LastError]</div>
                     }
                     @if (docs.Count > 0)
                     {
                         <details class="mt-1">
-                            <summary class="small">Documentos indexados (mostrando @Math.Min(docs.Count, 20) de @docs.Count)</summary>
+                            <summary class="small">@L["SrcEd_IndexedDocs", Math.Min(docs.Count, 20), docs.Count]</summary>
                             <ul class="small mb-0 mt-1">
                                 @foreach (var d in docs.OrderByDescending(x => x.IndexedAt).Take(20))
                                 {
@@ -69,9 +70,9 @@
                 @if (SyncResult is { } r)
                 {
                     <div class="small mt-2 @(r.Status == "failed" ? "text-danger" : "text-muted")">
-                        Sync: <strong>@r.Status</strong> — @r.DocumentsProcessed processados,
-                        @r.DocumentsSkipped ignorados, @r.DocumentsRemoved removidos,
-                        @r.ChunksCreated chunks em @r.DurationMs.ToString("F0")ms
+                        Sync: <strong>@r.Status</strong> — @L["SrcEd_SyncResult",
+                            r.DocumentsProcessed, r.DocumentsSkipped, r.DocumentsRemoved,
+                            r.ChunksCreated, r.DurationMs.ToString("F0")]
                         @if (!string.IsNullOrEmpty(r.Reason))
                         {
                             <span>(@r.Reason)</span>
@@ -80,26 +81,26 @@
                 }
                 @if (!string.IsNullOrEmpty(SyncError))
                 {
-                    <div class="small text-danger mt-2">Sync falhou: @SyncError</div>
+                    <div class="small text-danger mt-2">@L["SrcEd_SyncFailed", SyncError]</div>
                 }
             </div>
         </div>
     }
 
     <div class="col-12 col-md-6">
-        <BootstrapInput @bind-Value="Model.Name" DisplayText="Nome *" ShowLabel="true" />
+        <BootstrapInput @bind-Value="Model.Name" DisplayText="@L["SrcEd_Name"]" ShowLabel="true" />
     </div>
     <div class="col-12 col-md-6">
-        <Select @bind-Value="Model.Type" DisplayText="Tipo" ShowLabel="true" />
+        <Select @bind-Value="Model.Type" DisplayText="@L["Common_Type"]" ShowLabel="true" />
     </div>
     <div class="col-12">
-        <BootstrapInput @bind-Value="Model.Description" DisplayText="Descrição" ShowLabel="true" />
+        <BootstrapInput @bind-Value="Model.Description" DisplayText="@L["SrcEd_Description"]" ShowLabel="true" />
     </div>
 
     @if (Model.Type is SourceType.ObsidianVault or SourceType.DocumentFile)
     {
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.Path" DisplayText="Caminho (path) *" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.Path" DisplayText="@L["SrcEd_Path"]" ShowLabel="true" />
         </div>
     }
     @if (Model.Type is SourceType.WebPage)
@@ -111,47 +112,42 @@
     @if (Model.Type is SourceType.RssFeed)
     {
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.FeedUrl" DisplayText="URL do feed (RSS/Atom) *"
+            <BootstrapInput @bind-Value="Model.FeedUrl" DisplayText="@L["SrcEd_FeedUrl"]"
                             ShowLabel="true" PlaceHolder="https://blog.example.com/feed.xml" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.MaxItems" DisplayText="Máx. itens (padrão 100)"
+            <BootstrapInputNumber @bind-Value="Model.MaxItems" DisplayText="@L["SrcEd_MaxItems"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="500" />
         </div>
         <div class="col-12 col-md-3">
-            <Switch @bind-Value="Model.FetchFullContent" DisplayText="Buscar conteúdo completo"
+            <Switch @bind-Value="Model.FetchFullContent" DisplayText="@L["SrcEd_FetchFull"]"
                     ShowLabel="true" />
         </div>
         <div class="col-12 col-md-3">
-            <Switch @bind-Value="Model.ForceRefresh" DisplayText="Forçar refresh"
+            <Switch @bind-Value="Model.ForceRefresh" DisplayText="@L["SrcEd_ForceRefresh"]"
                     ShowLabel="true" />
         </div>
         <div class="col-12">
-            <div class="form-text">
-                Sincroniza RSS 2.0 e Atom 1.0. Sync incremental por <code>guid</code> do item.
-                "Buscar conteúdo completo" baixa a página linkada de cada item e extrai o texto
-                (útil quando o feed só traz teasers). "Forçar refresh" reprocessa todos os itens,
-                mesmo sem alterações de <code>guid</code>/data.
-            </div>
+            <div class="form-text">@L["SrcEd_RssHint"]</div>
         </div>
     }
     @if (Model.Type is SourceType.YouTube)
     {
         <div class="col-12">
-            <Textarea @bind-Value="Model.Urls" DisplayText="URLs dos vídeos/playlists/canais *"
+            <Textarea @bind-Value="Model.Urls" DisplayText="@L["SrcEd_YtUrls"]"
                       ShowLabel="true" rows="4"
                       PlaceHolder="https://www.youtube.com/watch?v=dQw4w9WgXcQ&#10;https://youtu.be/dQw4w9WgXcQ&#10;https://youtube.com/playlist?list=PL..." />
         </div>
         <div class="col-12 col-md-4">
-            <BootstrapInput @bind-Value="Model.Language" DisplayText="Idioma preferido (opcional)"
+            <BootstrapInput @bind-Value="Model.Language" DisplayText="@L["SrcEd_PrefLang"]"
                             ShowLabel="true" PlaceHolder="pt, en, pt-BR" />
         </div>
         <div class="col-12 col-md-4">
-            <BootstrapInputNumber @bind-Value="Model.MaxVideos" DisplayText="Máx. vídeos (padrão 100)"
+            <BootstrapInputNumber @bind-Value="Model.MaxVideos" DisplayText="@L["SrcEd_MaxVideos"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="500" />
         </div>
         <div class="col-6 col-md-2">
-            <Switch @bind-Value="Model.IncludeAutoCaptions" DisplayText="Auto-captions"
+            <Switch @bind-Value="Model.IncludeAutoCaptions" DisplayText="@L["SrcEd_AutoCaptions"]"
                     ShowLabel="true" />
         </div>
         <div class="col-6 col-md-2">
@@ -159,203 +155,192 @@
                     ShowLabel="true" />
         </div>
         <div class="col-12">
-            <Switch @bind-Value="Model.ForceRefresh" DisplayText="Forçar refresh (re-baixar legendas)"
+            <Switch @bind-Value="Model.ForceRefresh" DisplayText="@L["SrcEd_ForceRefreshYt"]"
                     ShowLabel="true" />
-            <div class="form-text">
-                Indexa transcrições (legendas) de vídeos públicos do YouTube via <strong>YoutubeExplode</strong>.
-                Aceita URLs de vídeos, playlists e canais (ou IDs crus). Sync incremental por
-                <code>yt:{videoId}</code> — vídeos já indexados são pulados. Sem credenciais.
-            </div>
+            <div class="form-text">@L["SrcEd_YtHint"]</div>
         </div>
     }
     @if (Model.Type is SourceType.RestApi)
     {
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="Endpoint *" ShowLabel="true"
+            <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="@L["SrcEd_EndpointStar"]" ShowLabel="true"
                             PlaceHolder="https://api.example.com/v1/items" />
         </div>
         <div class="col-12">
             <label class="form-label">
-                Headers (JSON) @(Model.HasStoredKey ? "(armazenados — em branco mantém)" : "(opcional)")
+                Headers (JSON) @(Model.HasStoredKey ? L["SrcEd_Stored"].Value : L["SrcEd_Optional"].Value)
             </label>
             <Textarea @bind-Value="Model.Headers" rows="2"
                       PlaceHolder='{"Authorization":"Bearer …"}' />
-            <div class="form-text">
-                Objeto JSON de headers — ex.: <code>X-Api-Key</code>, <code>Authorization</code>.
-                Armazenado criptografado; nunca retornado pela API.
-            </div>
+            <div class="form-text">@L["SrcEd_HeadersHint"]</div>
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.ItemsPath" DisplayText="Caminho dos itens (dot-path, opcional)"
+            <BootstrapInput @bind-Value="Model.ItemsPath" DisplayText="@L["SrcEd_ItemsPath"]"
                             ShowLabel="true" PlaceHolder="data.results" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.TitleField" DisplayText="Campo do título (opcional)"
+            <BootstrapInput @bind-Value="Model.TitleField" DisplayText="@L["SrcEd_TitleField"]"
                             ShowLabel="true" PlaceHolder="title" />
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.ContentFields" DisplayText="Campos de conteúdo (um por linha, opcional)"
+            <Textarea @bind-Value="Model.ContentFields" DisplayText="@L["SrcEd_ContentFields"]"
                       ShowLabel="true" rows="2" PlaceHolder="title&#10;body" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.IdField" DisplayText="Campo do ID (opcional)"
+            <BootstrapInput @bind-Value="Model.IdField" DisplayText="@L["SrcEd_IdField"]"
                             ShowLabel="true" PlaceHolder="id" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.UrlField" DisplayText="Campo da URL (opcional)"
+            <BootstrapInput @bind-Value="Model.UrlField" DisplayText="@L["SrcEd_UrlField"]"
                             ShowLabel="true" PlaceHolder="link" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.PageParam" DisplayText="Parâmetro de paginação (opcional)"
+            <BootstrapInput @bind-Value="Model.PageParam" DisplayText="@L["SrcEd_PageParam"]"
                             ShowLabel="true" PlaceHolder="page" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.MaxPages" DisplayText="Máx. páginas (padrão 1)"
+            <BootstrapInputNumber @bind-Value="Model.MaxPages" DisplayText="@L["SrcEd_MaxPages"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="50" />
         </div>
     }
     @if (Model.Type is SourceType.UnstructuredDocument)
     {
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.FolderPath" DisplayText="Pasta com documentos *"
+            <BootstrapInput @bind-Value="Model.FolderPath" DisplayText="@L["SrcEd_DocFolder"]"
                             ShowLabel="true" PlaceHolder="/data/reports" />
-            <div class="form-text">
-                Diretório local não recursivo. Aceita .pdf .docx .pptx .xlsx .jpg .jpeg .png .tiff.
-            </div>
+            <div class="form-text">@L["SrcEd_DocFolderHint"]</div>
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.Files" DisplayText="Arquivos avulsos (um por linha, opcional)"
+            <Textarea @bind-Value="Model.Files" DisplayText="@L["SrcEd_Files"]"
                       ShowLabel="true" rows="2" PlaceHolder="/data/report.pdf&#10;/data/deck.pptx" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.ApiUrl" DisplayText="Endpoint da API (opcional)"
+            <BootstrapInput @bind-Value="Model.ApiUrl" DisplayText="@L["SrcEd_ApiEndpoint"]"
                             ShowLabel="true"
                             PlaceHolder="https://api.unstructured.io/general/v0/general" />
         </div>
         <div class="col-12 col-md-6">
             <Select @bind-Value="Model.Strategy" Items="UnstructuredStrategyItems"
-                    DisplayText="Estratégia de extração" ShowLabel="true" />
+                    DisplayText="@L["SrcEd_Strategy"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeMb" DisplayText="Máx. MB por arquivo (padrão 25)"
+            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeMb" DisplayText="@L["SrcEd_MaxMb"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="100" />
         </div>
         <div class="col-12 col-md-6 d-flex align-items-end">
-            <Switch @bind-Value="Model.TableExtraction" DisplayText="Extrair tabelas (GFM)" ShowLabel="true" />
+            <Switch @bind-Value="Model.TableExtraction" DisplayText="@L["SrcEd_Tables"]" ShowLabel="true" />
         </div>
         <div class="col-12">
             <label class="form-label">
-                API Key @(Model.HasStoredKey ? "(armazenada — em branco mantém)" : "(opcional para endpoints locais)")
+                API Key @(Model.HasStoredKey ? L["SrcEd_Stored"].Value : L["SrcEd_OptLocal"].Value)
             </label>
             <BootstrapInput type="password" @bind-Value="Model.ApiKey"
                             PlaceHolder="unstructured-api-key" />
-            <div class="form-text">Armazenada criptografada; nunca retornada pela API.</div>
+            <div class="form-text">@L["SrcEd_SecretStoredF"]</div>
         </div>
     }
     @if (Model.Type is SourceType.GitRepository)
     {
         <div class="col-12 col-md-6">
             <Select @bind-Value="Model.GitProvider" Items="GitProviderItems"
-                    DisplayText="Plataforma" ShowLabel="true" />
+                    DisplayText="@L["SrcEd_Platform"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.RepoUrl" DisplayText="URL do repositório"
+            <BootstrapInput @bind-Value="Model.RepoUrl" DisplayText="@L["SrcEd_RepoUrl"]"
                             ShowLabel="true" PlaceHolder="https://github.com/owner/repo" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.Owner" DisplayText="Owner/organização"
+            <BootstrapInput @bind-Value="Model.Owner" DisplayText="@L["SrcEd_Owner"]"
                             ShowLabel="true" PlaceHolder="weaviate" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.RepoName" DisplayText="Nome do repositório"
+            <BootstrapInput @bind-Value="Model.RepoName" DisplayText="@L["SrcEd_RepoName"]"
                             ShowLabel="true" PlaceHolder="Verba" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.Branch" DisplayText="Branch (padrão main→master)"
+            <BootstrapInput @bind-Value="Model.Branch" DisplayText="@L["SrcEd_Branch"]"
                             ShowLabel="true" PlaceHolder="main" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.Path" DisplayText="Subdiretório raiz (opcional)"
+            <BootstrapInput @bind-Value="Model.Path" DisplayText="@L["SrcEd_Subdir"]"
                             ShowLabel="true" PlaceHolder="docs/" />
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.IncludePatterns" DisplayText="Include patterns (glob, um por linha)"
+            <Textarea @bind-Value="Model.IncludePatterns" DisplayText="@L["SrcEd_Include"]"
                       ShowLabel="true" rows="2" PlaceHolder="**/*.md&#10;**/README*" />
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.ExcludePatterns" DisplayText="Exclude patterns (glob, um por linha)"
+            <Textarea @bind-Value="Model.ExcludePatterns" DisplayText="@L["SrcEd_Exclude"]"
                       ShowLabel="true" rows="2" PlaceHolder=".git/**&#10;**/node_modules/**" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.InstanceUrl" DisplayText="Instance URL (self-hosted GitLab/Gitea)"
+            <BootstrapInput @bind-Value="Model.InstanceUrl" DisplayText="@L["SrcEd_InstanceUrl"]"
                             ShowLabel="true" PlaceHolder="https://gitlab.example.com" />
         </div>
         <div class="col-12 col-md-3">
-            <BootstrapInputNumber @bind-Value="Model.MaxFiles" DisplayText="Máx. arquivos (padrão 200)"
+            <BootstrapInputNumber @bind-Value="Model.MaxFiles" DisplayText="@L["SrcEd_MaxFiles"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="1000" />
         </div>
         <div class="col-12 col-md-3">
-            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeBytes" DisplayText="Máx. bytes/arquivo (padrão 500KB)"
+            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeBytes" DisplayText="@L["SrcEd_MaxBytes"]"
                                   ShowLabel="true" IsNullable="true" Min="10240" Max="5242880" />
         </div>
         <div class="col-12 col-md-6 d-flex align-items-end">
             <Switch @bind-Value="Model.AllowPrivateHosts"
-                    DisplayText="Permitir hosts privados (SSRF opt-in)" ShowLabel="true" />
+                    DisplayText="@L["SrcEd_PrivateHosts"]" ShowLabel="true" />
         </div>
         <div class="col-12">
             <label class="form-label">
-                Personal Access Token @(Model.HasStoredKey ? "(armazenado — em branco mantém)" : "(opcional — repos públicos)")
+                Personal Access Token @(Model.HasStoredKey ? L["SrcEd_Stored"].Value : L["SrcEd_OptPublicRepos"].Value)
             </label>
             <BootstrapInput type="password" @bind-Value="Model.GitToken"
                             PlaceHolder="ghp_… / glpat-…" />
-            <div class="form-text">Armazenado criptografado; nunca retornado pela API.</div>
+            <div class="form-text">@L["SrcEd_SecretStoredM"]</div>
         </div>
     }
     @if (Model.Type is SourceType.AudioTranscription)
     {
         <div class="col-12 col-md-6">
             <Select @bind-Value="Model.AudioProvider" Items="AudioProviderItems"
-                    DisplayText="Provedor de transcrição" ShowLabel="true" />
+                    DisplayText="@L["SrcEd_AudioProvider"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.Language" DisplayText="Idioma (código ou auto)"
+            <BootstrapInput @bind-Value="Model.Language" DisplayText="@L["SrcEd_Lang"]"
                             ShowLabel="true" PlaceHolder="pt" />
         </div>
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.FolderPath" DisplayText="Pasta com áudios *"
+            <BootstrapInput @bind-Value="Model.FolderPath" DisplayText="@L["SrcEd_AudioFolder"]"
                             ShowLabel="true" PlaceHolder="/data/recordings" />
-            <div class="form-text">
-                Diretório local não recursivo. Aceita .mp3 .wav .m4a .mp4 .aac .flac .ogg .webm.
-            </div>
+            <div class="form-text">@L["SrcEd_AudioFolderHint"]</div>
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.Files" DisplayText="Arquivos avulsos (um por linha, opcional)"
+            <Textarea @bind-Value="Model.Files" DisplayText="@L["SrcEd_Files"]"
                       ShowLabel="true" rows="2" PlaceHolder="/data/reuniao.mp3" />
         </div>
         @if (Model.AudioProvider == "whisper")
         {
             <div class="col-12 col-md-6">
-                <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="Endpoint whisper-compatible"
+                <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="@L["SrcEd_EndpointWhisper"]"
                                 ShowLabel="true" PlaceHolder="https://api.openai.com" />
             </div>
         }
         <div class="col-12 col-md-3">
-            <BootstrapInputNumber @bind-Value="Model.TimeoutMinutes" DisplayText="Timeout por arquivo (min)"
+            <BootstrapInputNumber @bind-Value="Model.TimeoutMinutes" DisplayText="@L["SrcEd_FileTimeout"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="120" />
         </div>
         <div class="col-12 col-md-4 d-flex align-items-end">
-            <Switch @bind-Value="Model.EnableSpeakerDiarization" DisplayText="Diarização (speakers)" ShowLabel="true" />
+            <Switch @bind-Value="Model.EnableSpeakerDiarization" DisplayText="@L["SrcEd_Diarization"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-4 d-flex align-items-end">
-            <Switch @bind-Value="Model.EnableAutoChapters" DisplayText="Capítulos automáticos" ShowLabel="true" />
+            <Switch @bind-Value="Model.EnableAutoChapters" DisplayText="@L["SrcEd_Chapters"]" ShowLabel="true" />
         </div>
         <div class="col-12">
             <label class="form-label">
-                API Key @(Model.HasStoredKey ? "(armazenada — em branco mantém)" : "(obrigatória p/ AssemblyAI)")
+                API Key @(Model.HasStoredKey ? L["SrcEd_Stored"].Value : L["SrcEd_ReqAssembly"].Value)
             </label>
             <BootstrapInput type="password" @bind-Value="Model.ApiKey"
                             PlaceHolder="assemblyai / openai api key" />
-            <div class="form-text">Armazenada criptografada; nunca retornada pela API.</div>
+            <div class="form-text">@L["SrcEd_SecretStoredF"]</div>
         </div>
     }
     @if (Model.Type is SourceType.SqlDatabase)
@@ -366,60 +351,57 @@
         </div>
         <div class="col-12">
             <label class="form-label">
-                Connection string @(Model.HasStoredKey ? "* (armazenada — em branco mantém)" : "*")
+                Connection string @(Model.HasStoredKey ? "* " + L["SrcEd_Stored"].Value : "*")
             </label>
             <Textarea @bind-Value="Model.ConnectionString" rows="2"
                       PlaceHolder="@(Model.Provider == "postgres"
                           ? "Host=localhost;Database=app;Username=readonly"
                           : "Data Source=notes.db")" />
-            <div class="form-text">
-                Armazenada criptografada; nunca retornada pela API. SQLite com caminho
-                relativo resolve ao lado do executável e abre em modo somente leitura.
-            </div>
+            <div class="form-text">@L["SrcEd_ConnHint"]</div>
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.Query" DisplayText="Query (SELECT/WITH somente, read-only) *"
+            <Textarea @bind-Value="Model.Query" DisplayText="@L["SrcEd_Query"]"
                       ShowLabel="true" rows="3" PlaceHolder="SELECT id, title, body FROM notes" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.IdColumn" DisplayText="Coluna(s) do ID (opcional, separadas por vírgula)"
+            <BootstrapInput @bind-Value="Model.IdColumn" DisplayText="@L["SrcEd_IdColumn"]"
                             ShowLabel="true" PlaceHolder="id" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.TitleColumn" DisplayText="Coluna do título (opcional)"
+            <BootstrapInput @bind-Value="Model.TitleColumn" DisplayText="@L["SrcEd_TitleColumn"]"
                             ShowLabel="true" PlaceHolder="title" />
         </div>
         <div class="col-12">
-            <Textarea @bind-Value="Model.ContentColumns" DisplayText="Colunas de conteúdo (uma por linha, opcional)"
+            <Textarea @bind-Value="Model.ContentColumns" DisplayText="@L["SrcEd_ContentColumns"]"
                       ShowLabel="true" rows="2" PlaceHolder="title&#10;body" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.UrlColumn" DisplayText="Coluna de URL (opcional)"
+            <BootstrapInput @bind-Value="Model.UrlColumn" DisplayText="@L["SrcEd_UrlColumn"]"
                             ShowLabel="true" PlaceHolder="url" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.MaxRows" DisplayText="Máx. linhas (padrão 1000)"
+            <BootstrapInputNumber @bind-Value="Model.MaxRows" DisplayText="@L["SrcEd_MaxRows"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="10000" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.CommandTimeoutSeconds" DisplayText="Timeout do comando em s (padrão 30)"
+            <BootstrapInputNumber @bind-Value="Model.CommandTimeoutSeconds" DisplayText="@L["SrcEd_CmdTimeout"]"
                                   ShowLabel="true" IsNullable="true" Min="5" Max="300" />
         </div>
     }
     @if (Model.Type is SourceType.McpProxy)
     {
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="Endpoint MCP upstream *" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.Endpoint" DisplayText="@L["SrcEd_McpEndpoint"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
             <Select @bind-Value="Model.Transport" Items="TransportItems" DisplayText="Transport" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.NamePrefix" DisplayText="Prefixo de tools (opcional)" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.NamePrefix" DisplayText="@L["SrcEd_NamePrefix"]" ShowLabel="true" />
         </div>
         <div class="col-12">
             <label class="form-label">
-                API key @(Model.HasStoredKey ? "(armazenada — em branco mantém a atual)" : "(opcional)")
+                API key @(Model.HasStoredKey ? L["SrcEd_StoredCurrent"].Value : L["SrcEd_Optional"].Value)
             </label>
             <input type="password" class="form-control font-monospace" @bind="Model.ApiKey"
                    autocomplete="new-password" placeholder="@(Model.HasStoredKey ? "••••••••" : "")" />
@@ -429,24 +411,22 @@
     {
         <div class="col-12">
             <label class="form-label">
-                Integration token * @(Model.HasStoredKey ? "(armazenado — em branco mantém o atual)" : "")
+                Integration token * @(Model.HasStoredKey ? L["SrcEd_StoredCurrent"].Value : "")
             </label>
             <input type="password" class="form-control font-monospace" @bind="Model.NotionToken"
                    autocomplete="new-password" placeholder="@(Model.HasStoredKey ? "••••••••" : "ntn_…")" />
-            <div class="form-text">
-                Crie uma integração interna em notion.so/my-integrations e compartilhe as páginas/databases com ela.
-            </div>
+            <div class="form-text">@L["SrcEd_NotionHint"]</div>
         </div>
         <div class="col-12 col-md-6">
-            <Textarea @bind-Value="Model.RootPageIds" DisplayText="Page IDs raiz (um por linha — vazio = tudo compartilhado)"
+            <Textarea @bind-Value="Model.RootPageIds" DisplayText="@L["SrcEd_PageIds"]"
                       ShowLabel="true" rows="3" />
         </div>
         <div class="col-12 col-md-6">
-            <Textarea @bind-Value="Model.RootDatabaseIds" DisplayText="Database IDs raiz (um por linha)"
+            <Textarea @bind-Value="Model.RootDatabaseIds" DisplayText="@L["SrcEd_DbIds"]"
                       ShowLabel="true" rows="3" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.MaxPages" DisplayText="Máx. páginas (1–1000, padrão 200)"
+            <BootstrapInputNumber @bind-Value="Model.MaxPages" DisplayText="@L["SrcEd_NotionMaxPages"]"
                                   ShowLabel="true" IsNullable="true" />
         </div>
     }
@@ -463,17 +443,17 @@
             <BootstrapInput @bind-Value="Model.BucketName" DisplayText="Bucket *" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-4">
-            <BootstrapInput @bind-Value="Model.Region" DisplayText="Região * (ex.: us-east-1, sa-saopaulo-1)" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.Region" DisplayText="@L["SrcEd_Region"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.Prefix" DisplayText="Prefixo / pasta" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.Prefix" DisplayText="@L["SrcEd_PrefixFolder"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.AccessKeyId" DisplayText="Access Key ID *" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.AccessKeyId" DisplayText="@L["SrcEd_AccessKeyId"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
             <label class="form-label">
-                Secret Access Key @(Model.HasStoredKey ? "(armazenada — em branco mantém a atual)" : "*")
+                Secret Access Key @(Model.HasStoredKey ? L["SrcEd_StoredCurrent"].Value : "*")
             </label>
             <input type="password" class="form-control font-monospace" @bind="Model.SecretAccessKey"
                    autocomplete="new-password" placeholder="@(Model.HasStoredKey ? "••••••••" : "")" />
@@ -482,34 +462,34 @@
     @if (Model.Type is SourceType.AzureFiles)
     {
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.ShareName" DisplayText="Share name *" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.ShareName" DisplayText="@L["SrcEd_ShareName"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.DirectoryPath" DisplayText="Diretório raiz" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.DirectoryPath" DisplayText="@L["SrcEd_RootDir"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.AccountName" DisplayText="Account name (se não usar connection string)" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.AccountName" DisplayText="@L["SrcEd_AccountName"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.Prefix" DisplayText="Prefixo (opcional)" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.Prefix" DisplayText="@L["SrcEd_PrefixOpt"]" ShowLabel="true" />
         </div>
         <div class="col-12">
             <label class="form-label">
-                Connection string ou Account Key @(Model.HasStoredKey ? "(armazenada — em branco mantém a atual)" : "*")
+                Connection string ou Account Key @(Model.HasStoredKey ? L["SrcEd_StoredCurrent"].Value : "*")
             </label>
             <input type="password" class="form-control font-monospace" @bind="Model.SecretAccessKey"
                    autocomplete="new-password" placeholder="@(Model.HasStoredKey ? "••••••••" : "")" />
-            <div class="form-text">Cole a connection string completa, ou só a account key com o account name acima.</div>
+            <div class="form-text">@L["SrcEd_AzureHint"]</div>
         </div>
     }
     @if (Model.Type is SourceType.AwsS3 or SourceType.AzureFiles or SourceType.OciStorage
         or SourceType.GoogleDrive)
     {
         <div class="col-12 col-md-6">
-            <BootstrapInput @bind-Value="Model.Glob" DisplayText="Filtro glob (ex.: **/*.{pdf,docx,md,txt})" ShowLabel="true" />
+            <BootstrapInput @bind-Value="Model.Glob" DisplayText="@L["SrcEd_Glob"]" ShowLabel="true" />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeMB" DisplayText="Tamanho máx. arquivo (MB, padrão 20)"
+            <BootstrapInputNumber @bind-Value="Model.MaxFileSizeMB" DisplayText="@L["SrcEd_MaxFileMb"]"
                                   ShowLabel="true" IsNullable="true" />
         </div>
     }
@@ -517,29 +497,26 @@
     @if (Model.Type is SourceType.GoogleDrive)
     {
         <div class="col-12">
-            <BootstrapInput @bind-Value="Model.SharedUrl" DisplayText="Link Compartilhado do Google Drive *"
+            <BootstrapInput @bind-Value="Model.SharedUrl" DisplayText="@L["SrcEd_GdriveLink"]"
                             ShowLabel="true"
                             PlaceHolder="https://drive.google.com/drive/folders/..." />
         </div>
         <div class="col-12 col-md-6">
-            <BootstrapInputNumber @bind-Value="Model.MaxFiles" DisplayText="Máximo de arquivos (padrão 200)"
+            <BootstrapInputNumber @bind-Value="Model.MaxFiles" DisplayText="@L["SrcEd_MaxFiles"]"
                                   ShowLabel="true" IsNullable="true" Min="1" Max="1000" />
         </div>
         <div class="col-12">
             <label class="form-label">
-                API Key do Google @(Model.HasStoredKey ? "(armazenada — em branco mantém a atual)" : "(opcional)")
+                @L["SrcEd_GoogleKey"] @(Model.HasStoredKey ? L["SrcEd_StoredCurrent"].Value : L["SrcEd_Optional"].Value)
             </label>
             <input type="password" class="form-control font-monospace" @bind="Model.ApiKey"
                    autocomplete="new-password" placeholder="@(Model.HasStoredKey ? "••••••••" : "AIza…")" />
-            <div class="form-text">
-                Sem key, links de arquivo único funcionam e pastas usam a listagem pública
-                (plana, sem recursão). Com key a listagem é recursiva via Drive API v3.
-            </div>
+            <div class="form-text">@L["SrcEd_GdriveHint"]</div>
         </div>
     }
 
     <div class="col-6 col-md-3">
-        <Switch @bind-Value="Model.IsActive" DisplayText="Ativa" ShowLabel="true" />
+        <Switch @bind-Value="Model.IsActive" DisplayText="@L["SrcEd_Active"]" ShowLabel="true" />
     </div>
     <div class="col-6 col-md-3">
         <Switch @bind-Value="Model.AutoSyncEnabled" DisplayText="Auto-sync" ShowLabel="true" />
@@ -552,34 +529,31 @@
         or SourceType.AudioTranscription)
     {
         <div class="col-12 col-md-6">
-            <Select @bind-Value="Model.Chunking" Items="ChunkingItems" DisplayText="Estratégia de chunking"
+            <Select @bind-Value="Model.Chunking" Items="ChunkingItems" DisplayText="@L["SrcEd_Chunking"]"
                     ShowLabel="true"
                     PlaceHolder="Auto" />
-            <div class="form-text">
-                Semantic embedda sentenças e corta por mudança de assunto (mais lento na ingestão).
-                VisionLayout preserva tabelas como blocos atômicos com cabeçalho repetido.
-            </div>
+            <div class="form-text">@L["SrcEd_ChunkingHint"]</div>
         </div>
     }
     @if (Model.Type is SourceType.ObsidianVault)
     {
         <div class="col-6 col-md-3">
-            <Switch @bind-Value="Model.ReadOnly" DisplayText="Somente leitura" ShowLabel="true" />
+            <Switch @bind-Value="Model.ReadOnly" DisplayText="@L["SrcEd_ReadOnly"]" ShowLabel="true" />
         </div>
     }
     <div class="col-12 col-md-6">
-        <BootstrapInputNumber @bind-Value="Model.SyncIntervalMinutes" DisplayText="Intervalo (min)" ShowLabel="true" IsNullable="true" />
+        <BootstrapInputNumber @bind-Value="Model.SyncIntervalMinutes" DisplayText="@L["SrcEd_Interval"]" ShowLabel="true" IsNullable="true" />
     </div>
 
     @if (!string.IsNullOrEmpty(Error))
     {
         <div class="col-12">
             <Alert Color="Color.Danger" ShowDismiss="false">
-                <strong>Não foi possível salvar.</strong> @Error
+                <strong>@L["SrcEd_SaveFail"]</strong> @Error
                 @if (!string.IsNullOrEmpty(ErrorDetail) && ErrorDetail != Error)
                 {
                     <details class="mt-1">
-                        <summary>Detalhes técnicos</summary>
+                        <summary>@L["SrcEd_TechDetails"]</summary>
                         <pre class="mb-0 small" style="white-space: pre-wrap;">@ErrorDetail</pre>
                     </details>
                 }
@@ -629,7 +603,7 @@
     /// <summary>Client-side required-field validation mirroring SPEC-02 server rules.</summary>
     public string? Validate()
     {
-        if (string.IsNullOrWhiteSpace(Model.Name)) return "Nome é obrigatório";
+        if (string.IsNullOrWhiteSpace(Model.Name)) return L["SrcEd_ValName"];
         return ValidateSingleFields() ?? ValidateCompoundFields();
     }
 
@@ -637,23 +611,23 @@
     private string? ValidateSingleFields() => Model.Type switch
     {
         SourceType.ObsidianVault or SourceType.DocumentFile
-            when string.IsNullOrWhiteSpace(Model.Path) => "Caminho é obrigatório",
+            when string.IsNullOrWhiteSpace(Model.Path) => L["SrcEd_ValPath"].Value,
         SourceType.WebPage
-            when string.IsNullOrWhiteSpace(Model.Url) => "URL é obrigatória",
+            when string.IsNullOrWhiteSpace(Model.Url) => L["SrcEd_ValUrl"].Value,
         SourceType.RssFeed
-            when string.IsNullOrWhiteSpace(Model.FeedUrl) => "URL do feed é obrigatória",
+            when string.IsNullOrWhiteSpace(Model.FeedUrl) => L["SrcEd_ValFeed"].Value,
         SourceType.YouTube
-            when string.IsNullOrWhiteSpace(Model.Urls) => "URLs são obrigatórias (uma por linha)",
+            when string.IsNullOrWhiteSpace(Model.Urls) => L["SrcEd_ValUrls"].Value,
         SourceType.RestApi or SourceType.McpProxy
-            when string.IsNullOrWhiteSpace(Model.Endpoint) => "Endpoint é obrigatório",
+            when string.IsNullOrWhiteSpace(Model.Endpoint) => L["SrcEd_ValEndpoint"].Value,
         SourceType.SqlDatabase
-            when string.IsNullOrWhiteSpace(Model.Query) => "Query é obrigatória",
+            when string.IsNullOrWhiteSpace(Model.Query) => L["SrcEd_ValQuery"].Value,
         SourceType.OciStorage
             when string.IsNullOrWhiteSpace(Model.Namespace)
-            => "Namespace é obrigatório para OCI",
+            => L["SrcEd_ValNamespace"].Value,
         SourceType.AzureFiles
             when string.IsNullOrWhiteSpace(Model.ShareName)
-            => "Share name é obrigatório",
+            => L["SrcEd_ValShare"].Value,
         _ => null
     };
 
@@ -663,33 +637,33 @@
     {
         SourceType.SqlDatabase
             when string.IsNullOrEmpty(Model.ConnectionString) && !Model.HasStoredKey
-            => "Connection string é obrigatória (em branco mantém a armazenada)",
+            => L["SrcEd_ValConnStr"].Value,
         SourceType.Notion
             when string.IsNullOrEmpty(Model.NotionToken) && !Model.HasStoredKey
-            => "Integration token é obrigatório",
+            => L["SrcEd_ValToken"].Value,
         SourceType.UnstructuredDocument
             when string.IsNullOrWhiteSpace(Model.FolderPath)
               && string.IsNullOrWhiteSpace(Model.Files)
-            => "Informe uma pasta ou ao menos um arquivo",
+            => L["SrcEd_ValFolderOrFile"].Value,
         SourceType.GitRepository
             when string.IsNullOrWhiteSpace(Model.RepoUrl)
               && (string.IsNullOrWhiteSpace(Model.Owner) || string.IsNullOrWhiteSpace(Model.RepoName))
-            => "Informe a URL do repositório ou owner + nome",
+            => L["SrcEd_ValRepo"].Value,
         SourceType.AudioTranscription
             when string.IsNullOrWhiteSpace(Model.FolderPath)
               && string.IsNullOrWhiteSpace(Model.Files)
-            => "Informe uma pasta ou ao menos um arquivo de áudio",
+            => L["SrcEd_ValAudio"].Value,
         SourceType.AwsS3 or SourceType.OciStorage
             when string.IsNullOrWhiteSpace(Model.BucketName)
               || string.IsNullOrWhiteSpace(Model.Region)
               || string.IsNullOrWhiteSpace(Model.AccessKeyId)
-            => "Bucket, região e access key são obrigatórios",
+            => L["SrcEd_ValCloudFields"].Value,
         SourceType.AwsS3 or SourceType.OciStorage
             when string.IsNullOrEmpty(Model.SecretAccessKey) && !Model.HasStoredKey
-            => "Secret access key é obrigatória",
+            => L["SrcEd_ValSecret"].Value,
         SourceType.AzureFiles
             when string.IsNullOrEmpty(Model.SecretAccessKey) && !Model.HasStoredKey
-            => "Connection string ou account key é obrigatória",
+            => L["SrcEd_ValAzureKey"].Value,
         _ => null
     };
 
@@ -714,9 +688,9 @@
     private static readonly List<SelectedItem> TransportItems =
         [new("auto", "auto"), new("http", "http"), new("sse", "sse")];
 
-    private static readonly List<SelectedItem> ChunkingItems =
-        [new("", "Auto (estrutural)"), new("semantic", "Semantic (por assunto)"),
-         new("visionlayout", "VisionLayout (tabelas/layout)")];
+    private List<SelectedItem> ChunkingItems =>
+        [new("", L["SrcEd_ChunkAuto"].Value), new("semantic", L["SrcEd_ChunkSemantic"].Value),
+         new("visionlayout", L["SrcEd_ChunkVision"].Value)];
 
     private static readonly List<SelectedItem> SqlProviderItems =
         [new("sqlite", "SQLite"), new("postgres", "PostgreSQL")];

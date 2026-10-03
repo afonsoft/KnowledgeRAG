@@ -1,0 +1,2480 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Approvals_ApproveError" xml:space="preserve">
+    <value>Falha ao aprovar</value>
+  </data>
+  <data name="Approvals_Approved" xml:space="preserve">
+    <value>Aprovada</value>
+  </data>
+  <data name="Approvals_ApprovedResumed" xml:space="preserve">
+    <value>Aprovada e retomada</value>
+  </data>
+  <data name="Approvals_ApprovedResumedBody" xml:space="preserve">
+    <value>{0} — o agente continuou</value>
+  </data>
+  <data name="Approvals_Denied" xml:space="preserve">
+    <value>Negada</value>
+  </data>
+  <data name="Approvals_DenyContent" xml:space="preserve">
+    <value>A execução desta tool será negada.</value>
+  </data>
+  <data name="Approvals_DenyError" xml:space="preserve">
+    <value>Falha ao negar</value>
+  </data>
+  <data name="Approvals_DenyTitle" xml:space="preserve">
+    <value>Negar execução</value>
+  </data>
+  <data name="Approvals_Empty" xml:space="preserve">
+    <value>Nenhuma aprovação pendente.</value>
+  </data>
+  <data name="Approvals_Heading" xml:space="preserve">
+    <value>Aprovações de tools</value>
+  </data>
+  <data name="Approvals_ListError" xml:space="preserve">
+    <value>Falha ao listar aprovações</value>
+  </data>
+  <data name="Approvals_OverrideLabel" xml:space="preserve">
+    <value>args override (opcional):</value>
+  </data>
+  <data name="Approvals_OverridePlaceholder" xml:space="preserve">
+    <value>deixe vazio para usar os args originais</value>
+  </data>
+  <data name="Approvals_PageTitle" xml:space="preserve">
+    <value>Aprovações — Knowledge</value>
+  </data>
+  <data name="Approvals_ResumeFailBody" xml:space="preserve">
+    <value>{0} — retomada falhou, retome manualmente: {1}</value>
+  </data>
+  <data name="Canvas_CloseDrawer" xml:space="preserve">
+    <value>Fechar painel</value>
+  </data>
+  <data name="Canvas_Config" xml:space="preserve">
+    <value>Config (JSON)</value>
+  </data>
+  <data name="Canvas_DrawerTitle" xml:space="preserve">
+    <value>Propriedades do step {0}</value>
+  </data>
+  <data name="Canvas_EndLabel" xml:space="preserve">
+    <value>Fim do flow</value>
+  </data>
+  <data name="Canvas_Hint" xml:space="preserve">
+    <value>clique no nó para editar · arraste para reordenar · + insere um step</value>
+  </data>
+  <data name="Canvas_InsertHere" xml:space="preserve">
+    <value>Inserir step aqui</value>
+  </data>
+  <data name="Canvas_Label" xml:space="preserve">
+    <value>Rótulo</value>
+  </data>
+  <data name="Canvas_MoveDown" xml:space="preserve">
+    <value>Descer</value>
+  </data>
+  <data name="Canvas_MoveUp" xml:space="preserve">
+    <value>Subir</value>
+  </data>
+  <data name="Canvas_Nested" xml:space="preserve">
+    <value>Steps aninhados (JSON) — foreach; condition usa config.branches[].steps</value>
+  </data>
+  <data name="Canvas_NoId" xml:space="preserve">
+    <value>(sem id)</value>
+  </data>
+  <data name="Canvas_NoInputs" xml:space="preserve">
+    <value>sem inputs</value>
+  </data>
+  <data name="Canvas_NodeAria" xml:space="preserve">
+    <value>Step {0}: {1} {2}</value>
+  </data>
+  <data name="Canvas_PickerLabel" xml:space="preserve">
+    <value>Tipo do novo step</value>
+  </data>
+  <data name="Canvas_Remove" xml:space="preserve">
+    <value>Remover</value>
+  </data>
+  <data name="Canvas_StartLabel" xml:space="preserve">
+    <value>Início do flow — inputs declarados</value>
+  </data>
+  <data name="Canvas_ZoomGroup" xml:space="preserve">
+    <value>Zoom do canvas</value>
+  </data>
+  <data name="Canvas_ZoomIn" xml:space="preserve">
+    <value>Aumentar zoom</value>
+  </data>
+  <data name="Canvas_ZoomOut" xml:space="preserve">
+    <value>Reduzir zoom</value>
+  </data>
+  <data name="Canvas_ZoomReset" xml:space="preserve">
+    <value>Zoom 100%</value>
+  </data>
+  <data name="ChangePwd_Confirm" xml:space="preserve">
+    <value>Confirmar nova senha</value>
+  </data>
+  <data name="ChangePwd_Current" xml:space="preserve">
+    <value>Senha atual</value>
+  </data>
+  <data name="ChangePwd_Fail" xml:space="preserve">
+    <value>Falha ao trocar a senha</value>
+  </data>
+  <data name="ChangePwd_Heading" xml:space="preserve">
+    <value>Troca de senha obrigatória</value>
+  </data>
+  <data name="ChangePwd_Hint" xml:space="preserve">
+    <value>Defina uma nova senha para continuar (mínimo 8 caracteres).</value>
+  </data>
+  <data name="ChangePwd_Mismatch" xml:space="preserve">
+    <value>A confirmação não confere com a nova senha.</value>
+  </data>
+  <data name="ChangePwd_New" xml:space="preserve">
+    <value>Nova senha</value>
+  </data>
+  <data name="ChangePwd_PageTitle" xml:space="preserve">
+    <value>Trocar senha — Knowledge</value>
+  </data>
+  <data name="ChangePwd_Submit" xml:space="preserve">
+    <value>Salvar nova senha</value>
+  </data>
+  <data name="Chat_AwaitingApproval" xml:space="preserve">
+    <value>
+
+Aguardando aprovação — veja /approvals.
+
+</value>
+  </data>
+  <data name="Chat_DeleteContent" xml:space="preserve">
+    <value>A conversa e seu histórico serão removidos.</value>
+  </data>
+  <data name="Chat_DeleteTitle" xml:space="preserve">
+    <value>Excluir thread</value>
+  </data>
+  <data name="Chat_DeleteTooltip" xml:space="preserve">
+    <value>Excluir thread</value>
+  </data>
+  <data name="Chat_Empty" xml:space="preserve">
+    <value>Selecione uma thread ou crie uma nova conversa.</value>
+  </data>
+  <data name="Chat_ListError" xml:space="preserve">
+    <value>Falha ao listar threads</value>
+  </data>
+  <data name="Chat_LogLabel" xml:space="preserve">
+    <value>Mensagens da conversa</value>
+  </data>
+  <data name="Chat_Msgs" xml:space="preserve">
+    <value>{0} msgs</value>
+  </data>
+  <data name="Chat_New" xml:space="preserve">
+    <value>Nova</value>
+  </data>
+  <data name="Chat_NewTooltip" xml:space="preserve">
+    <value>Nova conversa</value>
+  </data>
+  <data name="Chat_PageTitle" xml:space="preserve">
+    <value>Chat — Knowledge</value>
+  </data>
+  <data name="Chat_Placeholder" xml:space="preserve">
+    <value>Mensagem…</value>
+  </data>
+  <data name="Chat_Send" xml:space="preserve">
+    <value>Enviar</value>
+  </data>
+  <data name="Chat_SendError" xml:space="preserve">
+    <value>Falha ao enviar</value>
+  </data>
+  <data name="Chat_SendTooltip" xml:space="preserve">
+    <value>Enviar mensagem</value>
+  </data>
+  <data name="Chat_StreamErrFmt" xml:space="preserve">
+    <value>[erro: {0}]</value>
+  </data>
+  <data name="Chat_StreamError" xml:space="preserve">
+    <value>Streaming interrompido</value>
+  </data>
+  <data name="Chat_Summarized" xml:space="preserve">
+    <value>resumido</value>
+  </data>
+  <data name="Chat_SummaryBadge" xml:space="preserve">
+    <value>contexto resumido</value>
+  </data>
+  <data name="Chat_Threads" xml:space="preserve">
+    <value>Threads</value>
+  </data>
+  <data name="Chat_Waiting" xml:space="preserve">
+    <value>aguardando resposta do agente…</value>
+  </data>
+  <data name="Common_Actions" xml:space="preserve">
+    <value>Ações</value>
+  </data>
+  <data name="Common_Add" xml:space="preserve">
+    <value>Adicionar</value>
+  </data>
+  <data name="Common_Approve" xml:space="preserve">
+    <value>Aprovar</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Fechar</value>
+  </data>
+  <data name="Common_Confirm" xml:space="preserve">
+    <value>Confirmar</value>
+  </data>
+  <data name="Common_Copy" xml:space="preserve">
+    <value>Copiar</value>
+  </data>
+  <data name="Common_Create" xml:space="preserve">
+    <value>Criar</value>
+  </data>
+  <data name="Common_Default" xml:space="preserve">
+    <value>padrão</value>
+  </data>
+  <data name="Common_Delete" xml:space="preserve">
+    <value>Excluir</value>
+  </data>
+  <data name="Common_Deny" xml:space="preserve">
+    <value>Negar</value>
+  </data>
+  <data name="Common_Description" xml:space="preserve">
+    <value>Descrição</value>
+  </data>
+  <data name="Common_Disabled" xml:space="preserve">
+    <value>Desabilitado</value>
+  </data>
+  <data name="Common_Edit" xml:space="preserve">
+    <value>Editar</value>
+  </data>
+  <data name="Common_Enabled" xml:space="preserve">
+    <value>Habilitado</value>
+  </data>
+  <data name="Common_Error" xml:space="preserve">
+    <value>Erro</value>
+  </data>
+  <data name="Common_Loading" xml:space="preserve">
+    <value>Carregando…</value>
+  </data>
+  <data name="Common_Name" xml:space="preserve">
+    <value>Nome</value>
+  </data>
+  <data name="Common_No" xml:space="preserve">
+    <value>Não</value>
+  </data>
+  <data name="Common_None" xml:space="preserve">
+    <value>Nenhum</value>
+  </data>
+  <data name="Common_Notice" xml:space="preserve">
+    <value>Aviso</value>
+  </data>
+  <data name="Common_Open" xml:space="preserve">
+    <value>Abrir</value>
+  </data>
+  <data name="Common_Optional" xml:space="preserve">
+    <value>opcional</value>
+  </data>
+  <data name="Common_Or" xml:space="preserve">
+    <value>e</value>
+  </data>
+  <data name="Common_Refresh" xml:space="preserve">
+    <value>Recarregar</value>
+  </data>
+  <data name="Common_Remove" xml:space="preserve">
+    <value>Remover</value>
+  </data>
+  <data name="Common_Required" xml:space="preserve">
+    <value>Obrigatório</value>
+  </data>
+  <data name="Common_Save" xml:space="preserve">
+    <value>Salvar</value>
+  </data>
+  <data name="Common_Saving" xml:space="preserve">
+    <value>Salvando…</value>
+  </data>
+  <data name="Common_Search" xml:space="preserve">
+    <value>Buscar</value>
+  </data>
+  <data name="Common_Showing" xml:space="preserve">
+    <value>Mostrando {0} de {1}</value>
+  </data>
+  <data name="Common_Status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="Common_Success" xml:space="preserve">
+    <value>Sucesso</value>
+  </data>
+  <data name="Common_Type" xml:space="preserve">
+    <value>Tipo</value>
+  </data>
+  <data name="Common_Value" xml:space="preserve">
+    <value>Valor</value>
+  </data>
+  <data name="Common_Warning" xml:space="preserve">
+    <value>Atenção</value>
+  </data>
+  <data name="Common_Yes" xml:space="preserve">
+    <value>Sim</value>
+  </data>
+  <data name="Eval_BaselineName" xml:space="preserve">
+    <value>Nome do baseline</value>
+  </data>
+  <data name="Eval_BaselinePh" xml:space="preserve">
+    <value>ex.: main</value>
+  </data>
+  <data name="Eval_BaselineSaved" xml:space="preserve">
+    <value>Baseline salvo</value>
+  </data>
+  <data name="Eval_BaselineSavedBody" xml:space="preserve">
+    <value>'{0}' → run {1}</value>
+  </data>
+  <data name="Eval_Baselines" xml:space="preserve">
+    <value>Baselines</value>
+  </data>
+  <data name="Eval_Cases" xml:space="preserve">
+    <value>Casos ({0})</value>
+  </data>
+  <data name="Eval_Dataset" xml:space="preserve">
+    <value>Dataset (JSON array de cases)</value>
+  </data>
+  <data name="Eval_DatasetRequired" xml:space="preserve">
+    <value>Dataset é obrigatório (JSON array de cases).</value>
+  </data>
+  <data name="Eval_Date" xml:space="preserve">
+    <value>Data</value>
+  </data>
+  <data name="Eval_Done" xml:space="preserve">
+    <value>Eval concluído</value>
+  </data>
+  <data name="Eval_Empty" xml:space="preserve">
+    <value>Nenhum run ainda — execute um dataset ao lado.</value>
+  </data>
+  <data name="Eval_GateRules" xml:space="preserve">
+    <value>Gate rules (JSON, opcional)</value>
+  </data>
+  <data name="Eval_GateSuffix" xml:space="preserve">
+    <value> — gate {0}</value>
+  </data>
+  <data name="Eval_GateViolations" xml:space="preserve">
+    <value>Violações do gate:</value>
+  </data>
+  <data name="Eval_Heading" xml:space="preserve">
+    <value>Avaliação de retrieval</value>
+  </data>
+  <data name="Eval_LoadError" xml:space="preserve">
+    <value>Falha ao carregar evals: {0}</value>
+  </data>
+  <data name="Eval_NewRun" xml:space="preserve">
+    <value>Novo run</value>
+  </data>
+  <data name="Eval_NoBaseline" xml:space="preserve">
+    <value>Nenhum baseline nomeado.</value>
+  </data>
+  <data name="Eval_None" xml:space="preserve">
+    <value>nenhum</value>
+  </data>
+  <data name="Eval_PageTitle" xml:space="preserve">
+    <value>Eval — Knowledge</value>
+  </data>
+  <data name="Eval_Promote" xml:space="preserve">
+    <value>Promover a baseline</value>
+  </data>
+  <data name="Eval_Recall" xml:space="preserve">
+    <value>recall {0}</value>
+  </data>
+  <data name="Eval_RecentRuns" xml:space="preserve">
+    <value>Runs recentes</value>
+  </data>
+  <data name="Eval_Regressions" xml:space="preserve">
+    <value>Regressões vs baseline:</value>
+  </data>
+  <data name="Eval_Run" xml:space="preserve">
+    <value>Executar eval</value>
+  </data>
+  <data name="Eval_Running" xml:space="preserve">
+    <value>Executando…</value>
+  </data>
+  <data name="Eval_View" xml:space="preserve">
+    <value>Ver</value>
+  </data>
+  <data name="Eval_ViewTooltip" xml:space="preserve">
+    <value>Ver detalhes</value>
+  </data>
+  <data name="FC_FailExample" xml:space="preserve">
+    <value>condição não atendida</value>
+  </data>
+  <data name="FlowChip_Empty" xml:space="preserve">
+    <value>vazio</value>
+  </data>
+  <data name="Flow_Always" xml:space="preserve">
+    <value>sempre</value>
+  </data>
+  <data name="Flow_DefaultFailMessage" xml:space="preserve">
+    <value>condição não atendida</value>
+  </data>
+  <data name="Flow_EachPrefix" xml:space="preserve">
+    <value>em</value>
+  </data>
+  <data name="Flows_AddInput" xml:space="preserve">
+    <value>Adicionar input</value>
+  </data>
+  <data name="Flows_AddStep" xml:space="preserve">
+    <value>Adicionar step</value>
+  </data>
+  <data name="Flows_Caption" xml:space="preserve">
+    <value>Lista de agent flows</value>
+  </data>
+  <data name="Flows_ConfigNotObject" xml:space="preserve">
+    <value>config de '{0}' deve ser um objeto JSON</value>
+  </data>
+  <data name="Flows_ConfigPh" xml:space="preserve">
+    <value>Config JSON — ex.: {"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}</value>
+  </data>
+  <data name="Flows_DefaultCol" xml:space="preserve">
+    <value>Padrão</value>
+  </data>
+  <data name="Flows_DeleteConfirm" xml:space="preserve">
+    <value>Excluir este flow? A tool flow_{0} sai do catálogo.</value>
+  </data>
+  <data name="Flows_DeleteFail" xml:space="preserve">
+    <value>falha ao excluir</value>
+  </data>
+  <data name="Flows_Deleted" xml:space="preserve">
+    <value>Flow excluído</value>
+  </data>
+  <data name="Flows_DescLabel" xml:space="preserve">
+    <value>Descrição (o LLM usa para decidir quando chamar)</value>
+  </data>
+  <data name="Flows_Edit" xml:space="preserve">
+    <value>Editar — {0}</value>
+  </data>
+  <data name="Flows_EditorEmpty" xml:space="preserve">
+    <value>editor vazio</value>
+  </data>
+  <data name="Flows_EditorMode" xml:space="preserve">
+    <value>Modo do editor</value>
+  </data>
+  <data name="Flows_Empty" xml:space="preserve">
+    <value>Nenhum flow criado ainda.</value>
+  </data>
+  <data name="Flows_EnabledCol" xml:space="preserve">
+    <value>Habilitado</value>
+  </data>
+  <data name="Flows_InputNeedsName" xml:space="preserve">
+    <value>todo input precisa de nome</value>
+  </data>
+  <data name="Flows_InputsCaption" xml:space="preserve">
+    <value>Inputs declarados do flow</value>
+  </data>
+  <data name="Flows_InputsTitle" xml:space="preserve">
+    <value>Inputs (bloco start)</value>
+  </data>
+  <data name="Flows_Intro1" xml:space="preserve">
+    <value>Flows publicados viram tools </value>
+  </data>
+  <data name="Flows_Intro2" xml:space="preserve">
+    <value> no catálogo MCP — o agente (chat, SDKs, A2A) os invoca como qualquer outra tool.</value>
+  </data>
+  <data name="Flows_InvalidConfig" xml:space="preserve">
+    <value>config de '{0}' inválida: {1}</value>
+  </data>
+  <data name="Flows_InvalidDef" xml:space="preserve">
+    <value>definição JSON inválida</value>
+  </data>
+  <data name="Flows_InvalidDefault" xml:space="preserve">
+    <value>default de '{0}' inválido: {1}</value>
+  </data>
+  <data name="Flows_InvalidInputs" xml:space="preserve">
+    <value>inputs JSON inválidos: {0}</value>
+  </data>
+  <data name="Flows_InvalidJson" xml:space="preserve">
+    <value>JSON inválido: {0}</value>
+  </data>
+  <data name="Flows_InvalidNested" xml:space="preserve">
+    <value>steps aninhados de '{0}' inválidos: {1}</value>
+  </data>
+  <data name="Flows_JsonLabel" xml:space="preserve">
+    <value>Definição completa (inputs + steps)</value>
+  </data>
+  <data name="Flows_LabelPh" xml:space="preserve">
+    <value>rótulo</value>
+  </data>
+  <data name="Flows_List" xml:space="preserve">
+    <value>Lista</value>
+  </data>
+  <data name="Flows_MoveDown" xml:space="preserve">
+    <value>Mover para baixo</value>
+  </data>
+  <data name="Flows_MoveUp" xml:space="preserve">
+    <value>Mover para cima</value>
+  </data>
+  <data name="Flows_NameLabel" xml:space="preserve">
+    <value>Nome *</value>
+  </data>
+  <data name="Flows_NameRequired" xml:space="preserve">
+    <value>nome é obrigatório</value>
+  </data>
+  <data name="Flows_NestedPh" xml:space="preserve">
+    <value>Nested steps JSON — foreach usa a lista acima; condition usa config.branches[].steps</value>
+  </data>
+  <data name="Flows_New" xml:space="preserve">
+    <value>Novo flow</value>
+  </data>
+  <data name="Flows_No" xml:space="preserve">
+    <value>não</value>
+  </data>
+  <data name="Flows_NoRuns" xml:space="preserve">
+    <value>Nenhum run registrado.</value>
+  </data>
+  <data name="Flows_NoSteps" xml:space="preserve">
+    <value>Sem steps — adicione o primeiro.</value>
+  </data>
+  <data name="Flows_NotFound" xml:space="preserve">
+    <value>Flow não encontrado</value>
+  </data>
+  <data name="Flows_OutputAria" xml:space="preserve">
+    <value>Output do flow</value>
+  </data>
+  <data name="Flows_OutputError" xml:space="preserve">
+    <value>Saída/Erro</value>
+  </data>
+  <data name="Flows_PageTitle" xml:space="preserve">
+    <value>Agent Flows — Knowledge</value>
+  </data>
+  <data name="Flows_RemoveInput" xml:space="preserve">
+    <value>Remover input</value>
+  </data>
+  <data name="Flows_RemoveStep" xml:space="preserve">
+    <value>Remover step</value>
+  </data>
+  <data name="Flows_RequiredCol" xml:space="preserve">
+    <value>Obrigatório</value>
+  </data>
+  <data name="Flows_Run" xml:space="preserve">
+    <value>Executar</value>
+  </data>
+  <data name="Flows_RunFail" xml:space="preserve">
+    <value>falha ao executar</value>
+  </data>
+  <data name="Flows_RunGo" xml:space="preserve">
+    <value>Rodar</value>
+  </data>
+  <data name="Flows_RunInputs" xml:space="preserve">
+    <value>Inputs (JSON)</value>
+  </data>
+  <data name="Flows_RunTitle" xml:space="preserve">
+    <value>Executar — flow_{0}</value>
+  </data>
+  <data name="Flows_Runs" xml:space="preserve">
+    <value>Runs</value>
+  </data>
+  <data name="Flows_RunsCaption" xml:space="preserve">
+    <value>Histórico de runs</value>
+  </data>
+  <data name="Flows_RunsTitle" xml:space="preserve">
+    <value>Runs — flow_{0}</value>
+  </data>
+  <data name="Flows_RunsTooltip" xml:space="preserve">
+    <value>Histórico de runs</value>
+  </data>
+  <data name="Flows_Saved" xml:space="preserve">
+    <value>Flow salvo</value>
+  </data>
+  <data name="Flows_StepNeedsId" xml:space="preserve">
+    <value>todo step precisa de id</value>
+  </data>
+  <data name="Flows_Steps" xml:space="preserve">
+    <value>Steps</value>
+  </data>
+  <data name="Flows_TraceCaption" xml:space="preserve">
+    <value>Trace de steps do run</value>
+  </data>
+  <data name="Flows_Updated" xml:space="preserve">
+    <value>Atualizado</value>
+  </data>
+  <data name="Flows_Valid" xml:space="preserve">
+    <value>Definição válida</value>
+  </data>
+  <data name="Flows_Validate" xml:space="preserve">
+    <value>Validar</value>
+  </data>
+  <data name="Flows_Version" xml:space="preserve">
+    <value>Versão</value>
+  </data>
+  <data name="Flows_When" xml:space="preserve">
+    <value>Quando</value>
+  </data>
+  <data name="Flows_Yes" xml:space="preserve">
+    <value>sim</value>
+  </data>
+  <data name="Graph_All" xml:space="preserve">
+    <value>Tudo</value>
+  </data>
+  <data name="Graph_Current" xml:space="preserve">
+    <value>vigente</value>
+  </data>
+  <data name="Graph_Edges" xml:space="preserve">
+    <value>Arestas</value>
+  </data>
+  <data name="Graph_EdgesError" xml:space="preserve">
+    <value>Falha ao carregar arestas: {0}</value>
+  </data>
+  <data name="Graph_Empty1" xml:space="preserve">
+    <value>Nenhuma entidade no grafo. Registre uma fonte em</value>
+  </data>
+  <data name="Graph_Empty2" xml:space="preserve">
+    <value>e sincronize — a extração de entidades roda durante a ingestão quando</value>
+  </data>
+  <data name="Graph_Entity" xml:space="preserve">
+    <value>Entidade</value>
+  </data>
+  <data name="Graph_Episode" xml:space="preserve">
+    <value>Episódio</value>
+  </data>
+  <data name="Graph_Filter" xml:space="preserve">
+    <value>Filtrar</value>
+  </data>
+  <data name="Graph_From" xml:space="preserve">
+    <value>De</value>
+  </data>
+  <data name="Graph_Heading" xml:space="preserve">
+    <value>Grafo de conhecimento</value>
+  </data>
+  <data name="Graph_Historical" xml:space="preserve">
+    <value>Histórico</value>
+  </data>
+  <data name="Graph_Last24h" xml:space="preserve">
+    <value>Últimas 24h</value>
+  </data>
+  <data name="Graph_Last6h" xml:space="preserve">
+    <value>Últimas 6h</value>
+  </data>
+  <data name="Graph_Last7d" xml:space="preserve">
+    <value>Últimos 7 dias</value>
+  </data>
+  <data name="Graph_LastHour" xml:space="preserve">
+    <value>Última hora</value>
+  </data>
+  <data name="Graph_LoadError" xml:space="preserve">
+    <value>Falha ao carregar o grafo: {0}</value>
+  </data>
+  <data name="Graph_Loading" xml:space="preserve">
+    <value>Carregando grafo…</value>
+  </data>
+  <data name="Graph_LoadingEdges" xml:space="preserve">
+    <value>Carregando arestas…</value>
+  </data>
+  <data name="Graph_NoEdges" xml:space="preserve">
+    <value>Nenhuma aresta vigente para este nó.</value>
+  </data>
+  <data name="Graph_Observed" xml:space="preserve">
+    <value>Observado</value>
+  </data>
+  <data name="Graph_PageTitle" xml:space="preserve">
+    <value>Grafo — Knowledge</value>
+  </data>
+  <data name="Graph_To" xml:space="preserve">
+    <value>Até</value>
+  </data>
+  <data name="Graph_Validity" xml:space="preserve">
+    <value>Vigência</value>
+  </data>
+  <data name="Graph_Window" xml:space="preserve">
+    <value>Janela</value>
+  </data>
+  <data name="Graph_WindowTooltip" xml:space="preserve">
+    <value>Preset filtra por ObservedAt (quando o fato foi observado/ingerido): a janela é [agora−preset, agora]. 'Tudo' não filtra; 'De/Até' explícitos vencem o preset.</value>
+  </data>
+  <data name="Home_CardHelp1" xml:space="preserve">
+    <value>Copie o prompt abaixo e envie diretamente para o seu LLM ou agente de IA (Claude Code, OpenCode, Cursor, Devin) para configurá-lo e ensiná-lo a consultar a base de conhecimento.</value>
+  </data>
+  <data name="Home_CardHelp2" xml:space="preserve">
+    <value>Crie sua API key em</value>
+  </data>
+  <data name="Home_CardHelp3" xml:space="preserve">
+    <value>e substitua</value>
+  </data>
+  <data name="Home_CardMonitorBody" xml:space="preserve">
+    <value>Sessões e chamadas de tools em tempo real via SignalR.</value>
+  </data>
+  <data name="Home_CardPlaygroundBody" xml:space="preserve">
+    <value>Teste a busca semântica rankeada direto no navegador.</value>
+  </data>
+  <data name="Home_CardSourcesBody" xml:space="preserve">
+    <value>Cadastre vaults Obsidian, páginas web e outras fontes de conhecimento.</value>
+  </data>
+  <data name="Home_CardTitle" xml:space="preserve">
+    <value>Conectar Agente de IA ao MCP</value>
+  </data>
+  <data name="Home_ClipboardFail" xml:space="preserve">
+    <value>Não foi possível acessar a área de transferência: {0}</value>
+  </data>
+  <data name="Home_Copied" xml:space="preserve">
+    <value>Copiado!</value>
+  </data>
+  <data name="Home_CopiedBody" xml:space="preserve">
+    <value>Prompt para o LLM copiado para a área de transferência.</value>
+  </data>
+  <data name="Home_CopyTooltip" xml:space="preserve">
+    <value>Copiar prompt para o LLM</value>
+  </data>
+  <data name="Home_Lead" xml:space="preserve">
+    <value>Hub de conhecimento standalone — ingestão Obsidian, busca vetorial configurável e servidor MCP nativo (/mcp + /mcp/sse) num único processo .NET.</value>
+  </data>
+  <data name="Keys_Avg" xml:space="preserve">
+    <value>média</value>
+  </data>
+  <data name="Keys_BackToGlobal" xml:space="preserve">
+    <value>{0} voltou a usar a key global.</value>
+  </data>
+  <data name="Keys_Chat" xml:space="preserve">
+    <value>Chat (LLM)</value>
+  </data>
+  <data name="Keys_ChatSaved" xml:space="preserve">
+    <value>Configuração de chat atualizada.</value>
+  </data>
+  <data name="Keys_ClearContent" xml:space="preserve">
+    <value>A chave volta aos limites globais.</value>
+  </data>
+  <data name="Keys_ClearFail" xml:space="preserve">
+    <value>Falha ao limpar o override</value>
+  </data>
+  <data name="Keys_ClearOverride" xml:space="preserve">
+    <value>Limpar override</value>
+  </data>
+  <data name="Keys_Cleared" xml:space="preserve">
+    <value>Limpo</value>
+  </data>
+  <data name="Keys_ClientName" xml:space="preserve">
+    <value>Nome do client</value>
+  </data>
+  <data name="Keys_ClipboardWarn" xml:space="preserve">
+    <value>Não foi possível acessar a área de transferência.</value>
+  </data>
+  <data name="Keys_Config" xml:space="preserve">
+    <value>Config</value>
+  </data>
+  <data name="Keys_Copied" xml:space="preserve">
+    <value>Copiado</value>
+  </data>
+  <data name="Keys_CopiedBody" xml:space="preserve">
+    <value>Chave completa copiada para a área de transferência.</value>
+  </data>
+  <data name="Keys_CopyFull" xml:space="preserve">
+    <value>Copiar chave completa</value>
+  </data>
+  <data name="Keys_CopyNow1" xml:space="preserve">
+    <value>Copie a chave agora — ela </value>
+  </data>
+  <data name="Keys_CopyNow2" xml:space="preserve">
+    <value>não será exibida de novo</value>
+  </data>
+  <data name="Keys_CreateFail" xml:space="preserve">
+    <value>Falha ao criar a chave</value>
+  </data>
+  <data name="Keys_Created" xml:space="preserve">
+    <value>Criada</value>
+  </data>
+  <data name="Keys_CreatedAt" xml:space="preserve">
+    <value>criada {0}</value>
+  </data>
+  <data name="Keys_CreatedTitle" xml:space="preserve">
+    <value>Chave criada</value>
+  </data>
+  <data name="Keys_DetailError" xml:space="preserve">
+    <value>Falha ao carregar detalhes: {0}</value>
+  </data>
+  <data name="Keys_Empty" xml:space="preserve">
+    <value>Nenhuma chave criada.</value>
+  </data>
+  <data name="Keys_EmptyKey" xml:space="preserve">
+    <value>Key vazia</value>
+  </data>
+  <data name="Keys_EndpointGlobal" xml:space="preserve">
+    <value>Endpoint (global):</value>
+  </data>
+  <data name="Keys_EnterKey" xml:space="preserve">
+    <value>Informe a key de {0} antes de salvar.</value>
+  </data>
+  <data name="Keys_Errors" xml:space="preserve">
+    <value>erros</value>
+  </data>
+  <data name="Keys_HideSecret" xml:space="preserve">
+    <value>Ocultar segredo</value>
+  </data>
+  <data name="Keys_IntHint" xml:space="preserve">
+    <value>Key própria por integração — em branco a chave usa a key global de Settings.</value>
+  </data>
+  <data name="Keys_Integrations" xml:space="preserve">
+    <value>Integrações</value>
+  </data>
+  <data name="Keys_Intro1" xml:space="preserve">
+    <value>Chaves </value>
+  </data>
+  <data name="Keys_Intro2" xml:space="preserve">
+    <value> autenticam clients não-browser (Cursor, Claude Desktop, scripts) em </value>
+  </data>
+  <data name="Keys_Intro3" xml:space="preserve">
+    <value> via </value>
+  </data>
+  <data name="Keys_Key" xml:space="preserve">
+    <value>Key:</value>
+  </data>
+  <data name="Keys_KeyKeepPh" xml:space="preserve">
+    <value>deixe em branco para manter</value>
+  </data>
+  <data name="Keys_KeyNotSet" xml:space="preserve">
+    <value>não configurada</value>
+  </data>
+  <data name="Keys_KeyOverridden" xml:space="preserve">
+    <value>Key sobreposta:</value>
+  </data>
+  <data name="Keys_KeyRemoveFail" xml:space="preserve">
+    <value>Falha ao remover a key</value>
+  </data>
+  <data name="Keys_KeySaveFail" xml:space="preserve">
+    <value>Falha ao salvar a key</value>
+  </data>
+  <data name="Keys_KeySaved" xml:space="preserve">
+    <value>Key de {0} gravada para esta chave.</value>
+  </data>
+  <data name="Keys_LastUsed" xml:space="preserve">
+    <value>Último uso</value>
+  </data>
+  <data name="Keys_LegacyKey" xml:space="preserve">
+    <value>Chave legada ({0}): o segredo completo não está disponível para chaves criadas antes do armazenamento protegido.</value>
+  </data>
+  <data name="Keys_LimitSaved" xml:space="preserve">
+    <value>Rate limit da chave atualizado.</value>
+  </data>
+  <data name="Keys_LimitsSaveFail" xml:space="preserve">
+    <value>Falha ao salvar os limites</value>
+  </data>
+  <data name="Keys_LlmWindow" xml:space="preserve">
+    <value>LLM janela (s)</value>
+  </data>
+  <data name="Keys_LoadError" xml:space="preserve">
+    <value>Falha ao carregar chaves: {0}</value>
+  </data>
+  <data name="Keys_LoadingKey" xml:space="preserve">
+    <value>Carregando chave…</value>
+  </data>
+  <data name="Keys_LoadingMetrics" xml:space="preserve">
+    <value>Carregando métricas…</value>
+  </data>
+  <data name="Keys_ModelGlobal" xml:space="preserve">
+    <value>Model (global):</value>
+  </data>
+  <data name="Keys_ModelPh" xml:space="preserve">
+    <value>nome do modelo</value>
+  </data>
+  <data name="Keys_NamePh" xml:space="preserve">
+    <value>ex.: cursor-laptop</value>
+  </data>
+  <data name="Keys_NameRequired" xml:space="preserve">
+    <value>Informe um nome.</value>
+  </data>
+  <data name="Keys_New" xml:space="preserve">
+    <value>Nova chave</value>
+  </data>
+  <data name="Keys_NewTitle" xml:space="preserve">
+    <value>Nova API key</value>
+  </data>
+  <data name="Keys_NoCalls" xml:space="preserve">
+    <value>Nenhuma chamada registrada para esta chave.</value>
+  </data>
+  <data name="Keys_OverrideRemoved" xml:space="preserve">
+    <value>Override removido — configuração global volta a valer.</value>
+  </data>
+  <data name="Keys_OwnKey" xml:space="preserve">
+    <value>key própria</value>
+  </data>
+  <data name="Keys_PageTitle" xml:space="preserve">
+    <value>API Keys — Knowledge</value>
+  </data>
+  <data name="Keys_PermFail" xml:space="preserve">
+    <value>Falha ao atualizar a permissão</value>
+  </data>
+  <data name="Keys_Permissions" xml:space="preserve">
+    <value>Permissões</value>
+  </data>
+  <data name="Keys_Prefix" xml:space="preserve">
+    <value>Prefixo</value>
+  </data>
+  <data name="Keys_RateLimit" xml:space="preserve">
+    <value>Rate limit (override por chave)</value>
+  </data>
+  <data name="Keys_ReadOnly" xml:space="preserve">
+    <value>Chave agora é somente-leitura — write retorna 'sem permissão'.</value>
+  </data>
+  <data name="Keys_Remove" xml:space="preserve">
+    <value>Remover</value>
+  </data>
+  <data name="Keys_RemoveContent" xml:space="preserve">
+    <value>A key própria será removida; a integração volta a usar a key global.</value>
+  </data>
+  <data name="Keys_RemoveFail2" xml:space="preserve">
+    <value>Falha ao remover: {0}</value>
+  </data>
+  <data name="Keys_RemoveKeyTitle" xml:space="preserve">
+    <value>Remover key da chave</value>
+  </data>
+  <data name="Keys_RemoveOverride" xml:space="preserve">
+    <value>Remover override</value>
+  </data>
+  <data name="Keys_Removed" xml:space="preserve">
+    <value>Removido</value>
+  </data>
+  <data name="Keys_ReplaceKey" xml:space="preserve">
+    <value>Substituir API key</value>
+  </data>
+  <data name="Keys_ReplaceOwnPh" xml:space="preserve">
+    <value>substituir key própria</value>
+  </data>
+  <data name="Keys_RevealSecret" xml:space="preserve">
+    <value>Revelar segredo</value>
+  </data>
+  <data name="Keys_Revoke" xml:space="preserve">
+    <value>Revogar</value>
+  </data>
+  <data name="Keys_RevokeContent" xml:space="preserve">
+    <value>Clients usando esta chave perdem acesso imediatamente.</value>
+  </data>
+  <data name="Keys_RevokeTitle" xml:space="preserve">
+    <value>Confirmar revogação</value>
+  </data>
+  <data name="Keys_Revoked" xml:space="preserve">
+    <value>revogada</value>
+  </data>
+  <data name="Keys_RevokedBody" xml:space="preserve">
+    <value>Chave '{0}' revogada.</value>
+  </data>
+  <data name="Keys_RevokedToast" xml:space="preserve">
+    <value>Revogada</value>
+  </data>
+  <data name="Keys_SaveFail" xml:space="preserve">
+    <value>Falha ao salvar: {0}</value>
+  </data>
+  <data name="Keys_SaveLimits" xml:space="preserve">
+    <value>Salvar limites</value>
+  </data>
+  <data name="Keys_Saved" xml:space="preserve">
+    <value>Salvo</value>
+  </data>
+  <data name="Keys_SettingsLoadFail" xml:space="preserve">
+    <value>Falha ao carregar configuração: {0}</value>
+  </data>
+  <data name="Keys_SettingsTitle" xml:space="preserve">
+    <value>Configurações — {0}</value>
+  </data>
+  <data name="Keys_SettingsTitleFallback" xml:space="preserve">
+    <value>Configurações da chave</value>
+  </data>
+  <data name="Keys_SyncWindow" xml:space="preserve">
+    <value>Sync janela (s)</value>
+  </data>
+  <data name="Keys_Total" xml:space="preserve">
+    <value>total</value>
+  </data>
+  <data name="Keys_Usage" xml:space="preserve">
+    <value>Uso</value>
+  </data>
+  <data name="Keys_UsageTitle" xml:space="preserve">
+    <value>Detalhes e uso da chave</value>
+  </data>
+  <data name="Keys_UseGlobal" xml:space="preserve">
+    <value>Usar configuração global</value>
+  </data>
+  <data name="Keys_UseGlobalPh" xml:space="preserve">
+    <value>deixe em branco para usar a global</value>
+  </data>
+  <data name="Keys_UsesGlobal" xml:space="preserve">
+    <value>usa a key global</value>
+  </data>
+  <data name="Keys_WriteEnabled" xml:space="preserve">
+    <value>Tools de escrita habilitadas para esta chave.</value>
+  </data>
+  <data name="Keys_WriteHint" xml:space="preserve">
+    <value>Desligado a chave fica somente-leitura — tools que alteram dados respondem "sem permissão".</value>
+  </data>
+  <data name="Keys_WriteTools" xml:space="preserve">
+    <value>Tools de escrita (write)</value>
+  </data>
+  <data name="Layout_ChangePassword" xml:space="preserve">
+    <value>Trocar senha</value>
+  </data>
+  <data name="Layout_ToggleNav" xml:space="preserve">
+    <value>Alternar navegação</value>
+  </data>
+  <data name="Login_ClientsIntro1" xml:space="preserve">
+    <value>O KnowledgeHub é um servidor MCP nativo. Gere uma API key</value>
+  </data>
+  <data name="Login_ClientsIntro2" xml:space="preserve">
+    <value>em</value>
+  </data>
+  <data name="Login_ClientsIntro3" xml:space="preserve">
+    <value>após o login e aponte o seu client para:</value>
+  </data>
+  <data name="Login_ClientsTitle" xml:space="preserve">
+    <value>Como conectar um client</value>
+  </data>
+  <data name="Login_Fail" xml:space="preserve">
+    <value>Falha no login</value>
+  </data>
+  <data name="Login_NoHeader" xml:space="preserve">
+    <value> — sem suporte a header? use</value>
+  </data>
+  <data name="Login_PageTitle" xml:space="preserve">
+    <value>Login — Knowledge</value>
+  </data>
+  <data name="Login_Password" xml:space="preserve">
+    <value>Senha</value>
+  </data>
+  <data name="Login_PromptHelp1" xml:space="preserve">
+    <value>Copie o prompt abaixo e envie para o seu agente de IA (Claude Code, OpenCode, Cursor, Devin) — ele configura o MCP e o protocolo de onboarding. A API key</value>
+  </data>
+  <data name="Login_PromptHelp2" xml:space="preserve">
+    <value>é gerada em</value>
+  </data>
+  <data name="Login_PromptHelp3" xml:space="preserve">
+    <value>após o login.</value>
+  </data>
+  <data name="Login_Recommended" xml:space="preserve">
+    <value>(recomendado)</value>
+  </data>
+  <data name="Login_SseNote1" xml:space="preserve">
+    <value>Clients que só falam SSE legado usam</value>
+  </data>
+  <data name="Login_SseNote2" xml:space="preserve">
+    <value>; o token pode ir no</value>
+  </data>
+  <data name="Login_SseNote3" xml:space="preserve">
+    <value>query param quando o client não envia headers.</value>
+  </data>
+  <data name="Login_Submit" xml:space="preserve">
+    <value>Entrar</value>
+  </data>
+  <data name="Login_Subtitle" xml:space="preserve">
+    <value>Entre para administrar a plataforma.</value>
+  </data>
+  <data name="Login_Username" xml:space="preserve">
+    <value>Usuário</value>
+  </data>
+  <data name="Mon_Activity" xml:space="preserve">
+    <value>Atividade ({0} de {1})</value>
+  </data>
+  <data name="Mon_Anonymous" xml:space="preserve">
+    <value>anônimo</value>
+  </data>
+  <data name="Mon_Approvals" xml:space="preserve">
+    <value>aprovações</value>
+  </data>
+  <data name="Mon_AvgLatency" xml:space="preserve">
+    <value>latência média: {0}ms</value>
+  </data>
+  <data name="Mon_ConnError" xml:space="preserve">
+    <value>Falha na conexão em tempo real:</value>
+  </data>
+  <data name="Mon_ConnHint" xml:space="preserve">
+    <value>WebSocket pode estar bloqueado pela rede/proxy — a página continua funcional.</value>
+  </data>
+  <data name="Mon_ConnectCard" xml:space="preserve">
+    <value>Como conectar um client</value>
+  </data>
+  <data name="Mon_Connected" xml:space="preserve">
+    <value>conectado</value>
+  </data>
+  <data name="Mon_Connecting" xml:space="preserve">
+    <value>conectando…</value>
+  </data>
+  <data name="Mon_Detail" xml:space="preserve">
+    <value>Detalhe</value>
+  </data>
+  <data name="Mon_Disconnected" xml:space="preserve">
+    <value>desconectado</value>
+  </data>
+  <data name="Mon_ErrorBadge" xml:space="preserve">
+    <value>erro</value>
+  </data>
+  <data name="Mon_Errors" xml:space="preserve">
+    <value>erros</value>
+  </data>
+  <data name="Mon_Events" xml:space="preserve">
+    <value>eventos</value>
+  </data>
+  <data name="Mon_ExportCsv" xml:space="preserve">
+    <value>Exportar CSV</value>
+  </data>
+  <data name="Mon_Generic" xml:space="preserve">
+    <value>Genérico (qualquer client MCP)</value>
+  </data>
+  <data name="Mon_Health" xml:space="preserve">
+    <value>saúde:</value>
+  </data>
+  <data name="Mon_Intro1" xml:space="preserve">
+    <value>Crie uma API key em </value>
+  </data>
+  <data name="Mon_Intro2" xml:space="preserve">
+    <value> primeiro e substitua </value>
+  </data>
+  <data name="Mon_Intro3" xml:space="preserve">
+    <value>. Transporte principal: Streamable HTTP em </value>
+  </data>
+  <data name="Mon_Intro4" xml:space="preserve">
+    <value> — clientes SSE-only usam o legado </value>
+  </data>
+  <data name="Mon_KindAll" xml:space="preserve">
+    <value>tipo: todos</value>
+  </data>
+  <data name="Mon_Method" xml:space="preserve">
+    <value>Método</value>
+  </data>
+  <data name="Mon_NoMatch" xml:space="preserve">
+    <value>Nenhum evento corresponde aos filtros.</value>
+  </data>
+  <data name="Mon_NoSessions" xml:space="preserve">
+    <value>Nenhuma sessão MCP conectada.</value>
+  </data>
+  <data name="Mon_OnlyErrors" xml:space="preserve">
+    <value>somente erros</value>
+  </data>
+  <data name="Mon_OnlyOk" xml:space="preserve">
+    <value>somente ok</value>
+  </data>
+  <data name="Mon_OutcomeAll" xml:space="preserve">
+    <value>resultado: todos</value>
+  </data>
+  <data name="Mon_PageTitle" xml:space="preserve">
+    <value>Monitor MCP — Knowledge</value>
+  </data>
+  <data name="Mon_Reconnect" xml:space="preserve">
+    <value>Reconectar</value>
+  </data>
+  <data name="Mon_Reconnecting" xml:space="preserve">
+    <value>reconectando…</value>
+  </data>
+  <data name="Mon_SearchPh" xml:space="preserve">
+    <value>buscar método/detalhe/quem…</value>
+  </data>
+  <data name="Mon_Session" xml:space="preserve">
+    <value>Sessão</value>
+  </data>
+  <data name="Mon_Sessions" xml:space="preserve">
+    <value>Sessões ativas ({0})</value>
+  </data>
+  <data name="Mon_SessionsOpt" xml:space="preserve">
+    <value>sessões</value>
+  </data>
+  <data name="Mon_Since" xml:space="preserve">
+    <value>desde {0} ({1})</value>
+  </data>
+  <data name="Mon_Summary" xml:space="preserve">
+    <value>Resumo (buffer)</value>
+  </data>
+  <data name="Mon_Time" xml:space="preserve">
+    <value>Hora</value>
+  </data>
+  <data name="Mon_TopTools" xml:space="preserve">
+    <value>tools mais chamadas:</value>
+  </data>
+  <data name="Mon_Unavailable" xml:space="preserve">
+    <value>indisponível</value>
+  </data>
+  <data name="Mon_Waiting" xml:space="preserve">
+    <value>Aguardando chamadas MCP…</value>
+  </data>
+  <data name="Mon_Who" xml:space="preserve">
+    <value>Quem</value>
+  </data>
+  <data name="Nav_API_Keys" xml:space="preserve">
+    <value>API Keys</value>
+  </data>
+  <data name="Nav_Aprovacoes" xml:space="preserve">
+    <value>Aprovações</value>
+  </data>
+  <data name="Nav_Chat" xml:space="preserve">
+    <value>Chat</value>
+  </data>
+  <data name="Nav_CollapseMenu" xml:space="preserve">
+    <value>Recolher menu</value>
+  </data>
+  <data name="Nav_Eval" xml:space="preserve">
+    <value>Eval</value>
+  </data>
+  <data name="Nav_ExpandMenu" xml:space="preserve">
+    <value>Expandir menu</value>
+  </data>
+  <data name="Nav_Flows" xml:space="preserve">
+    <value>Flows</value>
+  </data>
+  <data name="Nav_Fontes" xml:space="preserve">
+    <value>Fontes</value>
+  </data>
+  <data name="Nav_Grafo" xml:space="preserve">
+    <value>Grafo</value>
+  </data>
+  <data name="Nav_Home" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="Nav_Language" xml:space="preserve">
+    <value>Idioma</value>
+  </data>
+  <data name="Nav_Monitor_MCP" xml:space="preserve">
+    <value>Monitor MCP</value>
+  </data>
+  <data name="Nav_Playground" xml:space="preserve">
+    <value>Playground</value>
+  </data>
+  <data name="Nav_Qualidade_RAG" xml:space="preserve">
+    <value>Qualidade RAG</value>
+  </data>
+  <data name="Nav_Sair" xml:space="preserve">
+    <value>Sair</value>
+  </data>
+  <data name="Nav_Settings" xml:space="preserve">
+    <value>Configurações</value>
+  </data>
+  <data name="NotFound_Body" xml:space="preserve">
+    <value>Desculpe, o conteúdo que você procura não existe.</value>
+  </data>
+  <data name="NotFound_Title" xml:space="preserve">
+    <value>Página não encontrada</value>
+  </data>
+  <data name="Pg_A2aEmpty" xml:space="preserve">
+    <value>Envie uma mensagem — a resposta mostra a task persistida (id, estado, artefatos).</value>
+  </data>
+  <data name="Pg_A2aFailed" xml:space="preserve">
+    <value>A2A falhou</value>
+  </data>
+  <data name="Pg_A2aTitle" xml:space="preserve">
+    <value>Teste A2A — Agent-to-Agent</value>
+  </data>
+  <data name="Pg_AgentHint" xml:space="preserve">
+    <value>o agente pode levar ~1 min — resposta e etapas aparecem em tempo real abaixo</value>
+  </data>
+  <data name="Pg_AgentSteps" xml:space="preserve">
+    <value>Etapas do agente — {0} iteraç(ões) · {1} ms</value>
+  </data>
+  <data name="Pg_AwaitingApproval" xml:space="preserve">
+    <value>⏳ Aguardando aprovação da tool '{0}' — veja /approvals.</value>
+  </data>
+  <data name="Pg_CallFailed" xml:space="preserve">
+    <value>Chamada falhou</value>
+  </data>
+  <data name="Pg_CancelFailed" xml:space="preserve">
+    <value>CancelTask falhou</value>
+  </data>
+  <data name="Pg_Citations" xml:space="preserve">
+    <value>Citações</value>
+  </data>
+  <data name="Pg_ConfirmBtn" xml:space="preserve">
+    <value>Confirmar escrita</value>
+  </data>
+  <data name="Pg_ConfirmWrite" xml:space="preserve">
+    <value>Confirma escrita?</value>
+  </data>
+  <data name="Pg_ContextHint" xml:space="preserve">
+    <value>(opcional — agrupa tasks num contexto)</value>
+  </data>
+  <data name="Pg_ContextPh" xml:space="preserve">
+    <value>32 hex chars ou vazio</value>
+  </data>
+  <data name="Pg_ExHint" xml:space="preserve">
+    <value> — ex.: {0}</value>
+  </data>
+  <data name="Pg_FillExample" xml:space="preserve">
+    <value>Preencher exemplo</value>
+  </data>
+  <data name="Pg_GetTaskFailed" xml:space="preserve">
+    <value>GetTask falhou</value>
+  </data>
+  <data name="Pg_Heading" xml:space="preserve">
+    <value>Playground de tools MCP</value>
+  </data>
+  <data name="Pg_InvalidVal" xml:space="preserve">
+    <value>Valor inválido em '{0}'</value>
+  </data>
+  <data name="Pg_ListFail" xml:space="preserve">
+    <value>Falha ao listar tools</value>
+  </data>
+  <data name="Pg_LoadingTools" xml:space="preserve">
+    <value>Carregando catálogo…</value>
+  </data>
+  <data name="Pg_Message" xml:space="preserve">
+    <value>Mensagem</value>
+  </data>
+  <data name="Pg_MsgPh" xml:space="preserve">
+    <value>Delegue uma tarefa ao hub…</value>
+  </data>
+  <data name="Pg_PageTitle" xml:space="preserve">
+    <value>Playground — Knowledge</value>
+  </data>
+  <data name="Pg_ReadOnly" xml:space="preserve">
+    <value>read-only</value>
+  </data>
+  <data name="Pg_Required" xml:space="preserve">
+    <value>Campos obrigatórios</value>
+  </data>
+  <data name="Pg_Result" xml:space="preserve">
+    <value>Resultado</value>
+  </data>
+  <data name="Pg_RunningFmt" xml:space="preserve">
+    <value>Executando </value>
+  </data>
+  <data name="Pg_SelectHint" xml:space="preserve">
+    <value>Selecione uma tool à esquerda para testá-la.</value>
+  </data>
+  <data name="Pg_SendTask" xml:space="preserve">
+    <value>Enviar task</value>
+  </data>
+  <data name="Pg_Tools" xml:space="preserve">
+    <value>Tools ({0})</value>
+  </data>
+  <data name="Pg_WriteBadge" xml:space="preserve">
+    <value>escrita real</value>
+  </data>
+  <data name="Pg_WriteWarn" xml:space="preserve">
+    <value>Esta tool modifica a base.</value>
+  </data>
+  <data name="RagQ_Evals7d" xml:space="preserve">
+    <value>Avaliações (7d)</value>
+  </data>
+  <data name="RagQ_Flagged" xml:space="preserve">
+    <value>Respostas sinalizadas recentes</value>
+  </data>
+  <data name="RagQ_FlaggedAt" xml:space="preserve">
+    <value>Sinalizada em</value>
+  </data>
+  <data name="RagQ_HallucinationRate" xml:space="preserve">
+    <value>Taxa de alucinação (7d):</value>
+  </data>
+  <data name="RagQ_Heading" xml:space="preserve">
+    <value>Qualidade RAG (Tríade Dourada)</value>
+  </data>
+  <data name="RagQ_Loading" xml:space="preserve">
+    <value>Carregando métricas…</value>
+  </data>
+  <data name="RagQ_NoneFlagged" xml:space="preserve">
+    <value>Nenhuma resposta sinalizada como alucinação no período.</value>
+  </data>
+  <data name="RagQ_PageTitle" xml:space="preserve">
+    <value>Qualidade RAG — Knowledge</value>
+  </data>
+  <data name="RagQ_Question" xml:space="preserve">
+    <value>Pergunta</value>
+  </data>
+  <data name="Set_ActivateInt" xml:space="preserve">
+    <value>Ativar integração</value>
+  </data>
+  <data name="Set_ActiveKey" xml:space="preserve">
+    <value>Key ativa ({0}):</value>
+  </data>
+  <data name="Set_AddAlternate" xml:space="preserve">
+    <value>Adicionar alternate</value>
+  </data>
+  <data name="Set_AddCap" xml:space="preserve">
+    <value>Adicionar capacidade</value>
+  </data>
+  <data name="Set_ApiKeyKeepPh" xml:space="preserve">
+    <value>apiKey (vazio mantém o salvo)</value>
+  </data>
+  <data name="Set_Applied" xml:space="preserve">
+    <value> aplicadas</value>
+  </data>
+  <data name="Set_Apply" xml:space="preserve">
+    <value>Aplicar</value>
+  </data>
+  <data name="Set_AsstCard" xml:space="preserve">
+    <value>Assistente de baixo custo</value>
+  </data>
+  <data name="Set_AsstConnOk" xml:space="preserve">
+    <value>conexão OK — {0} ms</value>
+  </data>
+  <data name="Set_AsstConnOkToast" xml:space="preserve">
+    <value>Assistente respondeu em {0} ms.</value>
+  </data>
+  <data name="Set_AsstFail" xml:space="preserve">
+    <value>falha — {0}</value>
+  </data>
+  <data name="Set_AsstIntro" xml:space="preserve">
+    <value>Provider secundário de baixo custo usado nas sub-tarefas do pipeline (rewrite de query, grading de chunks, expansão/HyDE, sumarização de thread). Segue o endpoint do provider de chat por padrão (a key do chat vale quando o endpoint é o mesmo) — 'Assistant:*' no ambiente sobrepõe. Falhas/timeout caem para o modelo principal.</value>
+  </data>
+  <data name="Set_AsstKeyRemoved" xml:space="preserve">
+    <value>Key do assistente removida do store.</value>
+  </data>
+  <data name="Set_AsstLoadFail" xml:space="preserve">
+    <value>Falha ao carregar configuração do assistente: {0}</value>
+  </data>
+  <data name="Set_AsstRequired" xml:space="preserve">
+    <value>Configure o provider de chat (aba Chat) — o assistente usa o mesmo endpoint.</value>
+  </data>
+  <data name="Set_AsstRestored" xml:space="preserve">
+    <value>Configuração do assistente voltou ao ambiente.</value>
+  </data>
+  <data name="Set_AsstSaved" xml:space="preserve">
+    <value>Assistente aplicado — já está em vigor.</value>
+  </data>
+  <data name="Set_Asym1" xml:space="preserve">
+    <value>usa </value>
+  </data>
+  <data name="Set_Asym2" xml:space="preserve">
+    <value> assimétrico automaticamente — </value>
+  </data>
+  <data name="Set_Asym3" xml:space="preserve">
+    <value> nas buscas e </value>
+  </data>
+  <data name="Set_Asym4" xml:space="preserve">
+    <value> na indexação. A API key e o modelo são enviados via </value>
+  </data>
+  <data name="Set_CacheClearFail" xml:space="preserve">
+    <value>Falha ao limpar cache</value>
+  </data>
+  <data name="Set_CacheCleared" xml:space="preserve">
+    <value>Cache limpo</value>
+  </data>
+  <data name="Set_CacheClearedN" xml:space="preserve">
+    <value>{0} key(s) removida(s).</value>
+  </data>
+  <data name="Set_CacheIntro" xml:space="preserve">
+    <value>Cache distribuído de busca, embeddings e respostas de tools. Em modo 'memory' os contadores vivem no processo; em 'redis' refletem o estado compartilhado do servidor.</value>
+  </data>
+  <data name="Set_CacheLoadFail" xml:space="preserve">
+    <value>Falha ao carregar cache: {0}</value>
+  </data>
+  <data name="Set_CachePages" xml:space="preserve">
+    <value>Cache (páginas)</value>
+  </data>
+  <data name="Set_CapErr" xml:space="preserve">
+    <value>Capacidade '{0}' precisa de nome e ao menos um provedor</value>
+  </data>
+  <data name="Set_CapHint" xml:space="preserve">
+    <value>Uma linha por capacidade. Em falha transitória de 'prov1_*', a tool equivalente do próximo provedor responde. Desmarcar uma capacidade a remove da política ao salvar.</value>
+  </data>
+  <data name="Set_CapOff" xml:space="preserve">
+    <value>Capacidade desativada — removida ao salvar</value>
+  </data>
+  <data name="Set_CapOn" xml:space="preserve">
+    <value>Capacidade ativa</value>
+  </data>
+  <data name="Set_CapPh" xml:space="preserve">
+    <value>capacidade (ex.: WebSearch)</value>
+  </data>
+  <data name="Set_Capabilities" xml:space="preserve">
+    <value>Capacidades de tools (cadeia de provedores)</value>
+  </data>
+  <data name="Set_ChatFallbacks" xml:space="preserve">
+    <value>Alternates de chat (ordem importa)</value>
+  </data>
+  <data name="Set_ChatIntro" xml:space="preserve">
+    <value>Provider OpenAI-compatible usado na síntese de respostas e no loop do agente. O endpoint vai sem '/v1' — o cliente adiciona '/v1/chat/completions'. A API key é criptografada em repouso e nunca retorna à interface — só os 4 últimos caracteres são exibidos.</value>
+  </data>
+  <data name="Set_ChatKeyRemoved" xml:space="preserve">
+    <value>Key do chat removida.</value>
+  </data>
+  <data name="Set_ChatLoadFail" xml:space="preserve">
+    <value>Falha ao carregar configuração de chat: {0}</value>
+  </data>
+  <data name="Set_ChatProviderCard" xml:space="preserve">
+    <value>Provider OpenAI-compatible</value>
+  </data>
+  <data name="Set_ChatRequired" xml:space="preserve">
+    <value>Informe endpoint e model antes de salvar.</value>
+  </data>
+  <data name="Set_ChatRestored" xml:space="preserve">
+    <value>Configuração de chat voltou às variáveis de ambiente.</value>
+  </data>
+  <data name="Set_ChatSaved" xml:space="preserve">
+    <value>Configuração de chat aplicada — já está em vigor.</value>
+  </data>
+  <data name="Set_ClearCache" xml:space="preserve">
+    <value>Limpar todo o cache</value>
+  </data>
+  <data name="Set_ClearCacheContent" xml:space="preserve">
+    <value>Todas as keys de busca, embeddings e tools serão removidas. Continuar?</value>
+  </data>
+  <data name="Set_ClearCacheTitle" xml:space="preserve">
+    <value>Limpar cache</value>
+  </data>
+  <data name="Set_ClearChatContent" xml:space="preserve">
+    <value>A configuração salva (endpoint, model e key) será removida; as variáveis de ambiente voltam a valer.</value>
+  </data>
+  <data name="Set_ClearContent" xml:space="preserve">
+    <value>A configuração salva será removida; as variáveis de ambiente voltam a valer.</value>
+  </data>
+  <data name="Set_ClearKey" xml:space="preserve">
+    <value>Limpar key</value>
+  </data>
+  <data name="Set_ClearResContent" xml:space="preserve">
+    <value>A configuração salva será removida; Resilience:Fallback volta a valer.</value>
+  </data>
+  <data name="Set_Clients" xml:space="preserve">
+    <value>Clientes</value>
+  </data>
+  <data name="Set_Configured" xml:space="preserve">
+    <value>configurada</value>
+  </data>
+  <data name="Set_ConnFail" xml:space="preserve">
+    <value>Falha na conexão: {0}</value>
+  </data>
+  <data name="Set_ConnOk" xml:space="preserve">
+    <value>Conexão OK em {0} ms.</value>
+  </data>
+  <data name="Set_ConnOkTitle" xml:space="preserve">
+    <value>Conexão OK</value>
+  </data>
+  <data name="Set_ConnOkToast" xml:space="preserve">
+    <value>Provider respondeu em {0} ms.</value>
+  </data>
+  <data name="Set_Connected" xml:space="preserve">
+    <value>conectado</value>
+  </data>
+  <data name="Set_Database" xml:space="preserve">
+    <value>Banco</value>
+  </data>
+  <data name="Set_DbIntro" xml:space="preserve">
+    <value>Estado do armazenamento — provider EF, tamanho do arquivo/WAL, contagens por entidade e diagnóstico do vector store.</value>
+  </data>
+  <data name="Set_DbLoadFail" xml:space="preserve">
+    <value>Falha ao carregar métricas do banco: {0}</value>
+  </data>
+  <data name="Set_DeactivateInt" xml:space="preserve">
+    <value>Desativar integração</value>
+  </data>
+  <data name="Set_DeepwikiHint" xml:space="preserve">
+    <value>Sem key o DeepWiki usa o endpoint público ('mcp.deepwiki.com/mcp'); com key passa a usar o privado ('mcp.devin.ai/mcp').</value>
+  </data>
+  <data name="Set_Dimensions" xml:space="preserve">
+    <value>Dimensões</value>
+  </data>
+  <data name="Set_DimsMismatch1" xml:space="preserve">
+    <value>o schema do vector store é fixo no startup. Ajuste </value>
+  </data>
+  <data name="Set_DimsMismatch2" xml:space="preserve">
+    <value> no ambiente, reinicie e rode reindex.</value>
+  </data>
+  <data name="Set_Disabled" xml:space="preserve">
+    <value>desativada</value>
+  </data>
+  <data name="Set_DisabledT" xml:space="preserve">
+    <value>Desativada</value>
+  </data>
+  <data name="Set_Disconnected" xml:space="preserve">
+    <value>desconectado</value>
+  </data>
+  <data name="Set_EffProvider1" xml:space="preserve">
+    <value>Provider efetivo: </value>
+  </data>
+  <data name="Set_EffProvider2" xml:space="preserve">
+    <value> — em vigor imediatamente.</value>
+  </data>
+  <data name="Set_EmbIntro" xml:space="preserve">
+    <value>Provider que gera os vetores dos chunks na ingestão e das queries na busca. Aplica sem restart nesta instância — em multi-réplica, re-aplique em cada uma (config por instância). 'dimensions' só é aceito quando igual ao schema do vector store — e a troca de modelo exige reindex das fontes: vetores já gravados mantêm as dimensões/modelo antigos.</value>
+  </data>
+  <data name="Set_EmbKeyRemoved" xml:space="preserve">
+    <value>Key de embeddings removida.</value>
+  </data>
+  <data name="Set_EmbLoadFail" xml:space="preserve">
+    <value>Falha ao carregar embeddings: {0}</value>
+  </data>
+  <data name="Set_EmbProviderCard" xml:space="preserve">
+    <value>Provider de embeddings</value>
+  </data>
+  <data name="Set_EmbRestored" xml:space="preserve">
+    <value>Embeddings voltou às variáveis de ambiente.</value>
+  </data>
+  <data name="Set_EmbSaveFail" xml:space="preserve">
+    <value>Falha ao salvar embeddings</value>
+  </data>
+  <data name="Set_EmbSaved" xml:space="preserve">
+    <value>Configuração de embeddings aplicada — se mudou model/dimensions, rode reindex das fontes.</value>
+  </data>
+  <data name="Set_EmbTitle" xml:space="preserve">
+    <value>Embeddings (indexação)</value>
+  </data>
+  <data name="Set_EnabledBadge" xml:space="preserve">
+    <value>ativo</value>
+  </data>
+  <data name="Set_EnabledT" xml:space="preserve">
+    <value>Ativada</value>
+  </data>
+  <data name="Set_Entities" xml:space="preserve">
+    <value>Entidades ({0})</value>
+  </data>
+  <data name="Set_Env" xml:space="preserve">
+    <value>ambiente</value>
+  </data>
+  <data name="Set_EnvNote" xml:space="preserve">
+    <value>Usando a configuração do ambiente — salve para sobrepor via interface.</value>
+  </data>
+  <data name="Set_FirecrawlHint" xml:space="preserve">
+    <value>Sem key, as tools 'firecrawl_*' aparecem no catálogo mas retornam erro orientando a configuração aqui.</value>
+  </data>
+  <data name="Set_FreePages" xml:space="preserve">
+    <value>Páginas livres</value>
+  </data>
+  <data name="Set_GraphCard" xml:space="preserve">
+    <value>Extração e travessia do grafo</value>
+  </data>
+  <data name="Set_GraphEnable" xml:space="preserve">
+    <value>Ativar GraphRAG</value>
+  </data>
+  <data name="Set_GraphEnableHint" xml:space="preserve">
+    <value>Expõe as tools no catálogo MCP e roda a extração na ingestão.</value>
+  </data>
+  <data name="Set_GraphIntro" xml:space="preserve">
+    <value>Extrai entidades e relações dos chunks indexados e expõe as tools 'find_dependencies', 'find_dependents', 'find_path' e 'analyze_impact' no catálogo MCP. A extração também exige '"graph": true' na configuração de cada source.</value>
+  </data>
+  <data name="Set_GraphLoadFail" xml:space="preserve">
+    <value>Falha ao carregar configuração do grafo: {0}</value>
+  </data>
+  <data name="Set_GraphMaxChars" xml:space="preserve">
+    <value>Max chars por chunk</value>
+  </data>
+  <data name="Set_GraphMaxCharsHint" xml:space="preserve">
+    <value>Truncamento no prompt de extração (200–50000)</value>
+  </data>
+  <data name="Set_GraphMaxChunks" xml:space="preserve">
+    <value>Max chunks por sync</value>
+  </data>
+  <data name="Set_GraphMaxChunksHint" xml:space="preserve">
+    <value>Budget de extração LLM por sync (1–10000)</value>
+  </data>
+  <data name="Set_GraphMaxResults" xml:space="preserve">
+    <value>Max resultados</value>
+  </data>
+  <data name="Set_GraphMaxResultsHint" xml:space="preserve">
+    <value>Teto de arestas por travessia (10–10000)</value>
+  </data>
+  <data name="Set_GraphRestored" xml:space="preserve">
+    <value>Configuração do grafo voltou às variáveis de ambiente.</value>
+  </data>
+  <data name="Set_GraphSaved" xml:space="preserve">
+    <value>Configuração do grafo aplicada — já está em vigor.</value>
+  </data>
+  <data name="Set_Index" xml:space="preserve">
+    <value>Índice</value>
+  </data>
+  <data name="Set_IndexPrefix" xml:space="preserve">
+    <value>índice: {0}</value>
+  </data>
+  <data name="Set_IntIntro" xml:space="preserve">
+    <value>API keys de serviços upstream consumidos pelo MCP interno. As chaves são criptografadas em repouso e nunca retornam à interface — só os 4 últimos caracteres são exibidos.</value>
+  </data>
+  <data name="Set_IntLoadFail" xml:space="preserve">
+    <value>Falha ao carregar integrações: {0}</value>
+  </data>
+  <data name="Set_KeepKeyPh" xml:space="preserve">
+    <value>em branco mantém a atual</value>
+  </data>
+  <data name="Set_KeepPh" xml:space="preserve">
+    <value>deixe em branco para manter</value>
+  </data>
+  <data name="Set_KeyConfigured" xml:space="preserve">
+    <value>Key do {0} configurada.</value>
+  </data>
+  <data name="Set_KeyEmptyMsg" xml:space="preserve">
+    <value>Informe a API key antes de salvar.</value>
+  </data>
+  <data name="Set_KeyEmptyT" xml:space="preserve">
+    <value>Key vazia</value>
+  </data>
+  <data name="Set_KeyOut" xml:space="preserve">
+    <value>'{0}' saiu do cache.</value>
+  </data>
+  <data name="Set_KeyRemovedInt" xml:space="preserve">
+    <value>Key do {0} removida.</value>
+  </data>
+  <data name="Set_KeyRemovedTitle" xml:space="preserve">
+    <value>Key removida</value>
+  </data>
+  <data name="Set_KeySaveFail" xml:space="preserve">
+    <value>Falha ao salvar a key</value>
+  </data>
+  <data name="Set_KeysSaved" xml:space="preserve">
+    <value>Keys salvas ({0})</value>
+  </data>
+  <data name="Set_KeysServer" xml:space="preserve">
+    <value>Keys (servidor)</value>
+  </data>
+  <data name="Set_LastMig" xml:space="preserve">
+    <value>— última: </value>
+  </data>
+  <data name="Set_ListModels" xml:space="preserve">
+    <value>Listar modelos do endpoint</value>
+  </data>
+  <data name="Set_LoadingAsst" xml:space="preserve">
+    <value>Carregando configuração do assistente…</value>
+  </data>
+  <data name="Set_LoadingCache" xml:space="preserve">
+    <value>Carregando cache…</value>
+  </data>
+  <data name="Set_LoadingChat" xml:space="preserve">
+    <value>Carregando configuração de chat…</value>
+  </data>
+  <data name="Set_LoadingDb" xml:space="preserve">
+    <value>Carregando métricas do banco…</value>
+  </data>
+  <data name="Set_LoadingEmb" xml:space="preserve">
+    <value>Carregando configuração de embeddings…</value>
+  </data>
+  <data name="Set_LoadingGraph" xml:space="preserve">
+    <value>Carregando configuração do grafo…</value>
+  </data>
+  <data name="Set_LoadingInt" xml:space="preserve">
+    <value>Carregando integrações…</value>
+  </data>
+  <data name="Set_LoadingRes" xml:space="preserve">
+    <value>Carregando política de fallback…</value>
+  </data>
+  <data name="Set_LogCurrent" xml:space="preserve">
+    <value>Atual: </value>
+  </data>
+  <data name="Set_LogFail" xml:space="preserve">
+    <value>falha ao mudar nível</value>
+  </data>
+  <data name="Set_LogHint" xml:space="preserve">
+    <value>Debug volta sozinho — não fica aberto para sempre.</value>
+  </data>
+  <data name="Set_LogLevel" xml:space="preserve">
+    <value>Nível de log</value>
+  </data>
+  <data name="Set_LogNow" xml:space="preserve">
+    <value>Nível agora: {0}.</value>
+  </data>
+  <data name="Set_LogReadFail" xml:space="preserve">
+    <value>Não foi possível ler o nível atual.</value>
+  </data>
+  <data name="Set_LogReset" xml:space="preserve">
+    <value> — volta a {0} em {1}min</value>
+  </data>
+  <data name="Set_LogTitle" xml:space="preserve">
+    <value>Log</value>
+  </data>
+  <data name="Set_MaxAlts" xml:space="preserve">
+    <value>Max alternates por request</value>
+  </data>
+  <data name="Set_MaxAltsHint" xml:space="preserve">
+    <value>Budget de tentativas após o primário (1–5)</value>
+  </data>
+  <data name="Set_MemServer" xml:space="preserve">
+    <value>Memória (servidor)</value>
+  </data>
+  <data name="Set_Mode" xml:space="preserve">
+    <value>Modo</value>
+  </data>
+  <data name="Set_ModeDisabled" xml:space="preserve">
+    <value>disabled — propaga a falha</value>
+  </data>
+  <data name="Set_ModeEnforce" xml:space="preserve">
+    <value>enforce — executa o fallback</value>
+  </data>
+  <data name="Set_ModeObserve" xml:space="preserve">
+    <value>observe — só classifica e loga</value>
+  </data>
+  <data name="Set_ModelFound" xml:space="preserve">
+    <value> Modelo encontrado na lista do provider.</value>
+  </data>
+  <data name="Set_ModelListFail" xml:space="preserve">
+    <value>lista indisponível ({0}) — digite o nome manualmente</value>
+  </data>
+  <data name="Set_ModelMissing" xml:space="preserve">
+    <value> O modelo informado não consta na lista do provider.</value>
+  </data>
+  <data name="Set_ModelPh" xml:space="preserve">
+    <value>nome do modelo</value>
+  </data>
+  <data name="Set_ModelsFail" xml:space="preserve">
+    <value>falha ao listar</value>
+  </data>
+  <data name="Set_NoDetail" xml:space="preserve">
+    <value>sem detalhe</value>
+  </data>
+  <data name="Set_NoKey" xml:space="preserve">
+    <value>sem key</value>
+  </data>
+  <data name="Set_NotConfigured" xml:space="preserve">
+    <value>não configurada</value>
+  </data>
+  <data name="Set_OffBadge" xml:space="preserve">
+    <value>desabilitado</value>
+  </data>
+  <data name="Set_OverlapMsg" xml:space="preserve">
+    <value>Overlap tokens deve ser menor que max tokens.</value>
+  </data>
+  <data name="Set_PageTitle" xml:space="preserve">
+    <value>Configurações — Knowledge</value>
+  </data>
+  <data name="Set_Pages" xml:space="preserve">
+    <value>Páginas</value>
+  </data>
+  <data name="Set_PartialStats" xml:space="preserve">
+    <value>stats parciais</value>
+  </data>
+  <data name="Set_ProvPh" xml:space="preserve">
+    <value>prov1,prov2,… (ordem importa)</value>
+  </data>
+  <data name="Set_ProviderFailed" xml:space="preserve">
+    <value>provider falhou</value>
+  </data>
+  <data name="Set_RemoveEntry" xml:space="preserve">
+    <value>Remover a entrada '{0}' do cache?</value>
+  </data>
+  <data name="Set_RemoveKey" xml:space="preserve">
+    <value>Remover key</value>
+  </data>
+  <data name="Set_RemoveKeyContent" xml:space="preserve">
+    <value>A key salva será removida; a env var (se houver) volta a valer.</value>
+  </data>
+  <data name="Set_RemoveKeyFail" xml:space="preserve">
+    <value>Falha ao remover a key</value>
+  </data>
+  <data name="Set_RemovedT" xml:space="preserve">
+    <value>Removida</value>
+  </data>
+  <data name="Set_ResIntro" xml:space="preserve">
+    <value>Política de fallback para providers de chat e tools MCP ('Resilience:Fallback'). Em falhas transitórias (429/5xx/timeout), uma chamada pode ser atendida por um candidato equivalente da mesma capacidade — nunca cruza permissão ou escopo do caller. 'observe' classifica e loga sem trocar; 'enforce' executa a troca dentro do budget.</value>
+  </data>
+  <data name="Set_ResLoadFail" xml:space="preserve">
+    <value>Falha ao carregar a política de fallback: {0}</value>
+  </data>
+  <data name="Set_ResRestored" xml:space="preserve">
+    <value>Política de fallback voltou às variáveis de ambiente.</value>
+  </data>
+  <data name="Set_ResSaveFail" xml:space="preserve">
+    <value>Falha ao salvar a política</value>
+  </data>
+  <data name="Set_ResSaved" xml:space="preserve">
+    <value>Política de fallback aplicada — já está em vigor.</value>
+  </data>
+  <data name="Set_RestoreEnv" xml:space="preserve">
+    <value>Restaurar ambiente</value>
+  </data>
+  <data name="Set_RestoreFail" xml:space="preserve">
+    <value>Falha ao restaurar o ambiente</value>
+  </data>
+  <data name="Set_Restored" xml:space="preserve">
+    <value>Restaurada</value>
+  </data>
+  <data name="Set_RoutedTasks" xml:space="preserve">
+    <value>Sub-tarefas roteadas</value>
+  </data>
+  <data name="Set_Rows" xml:space="preserve">
+    <value>Linhas</value>
+  </data>
+  <data name="Set_SaveFail" xml:space="preserve">
+    <value>Falha ao salvar a configuração</value>
+  </data>
+  <data name="Set_SavedT" xml:space="preserve">
+    <value>Salva</value>
+  </data>
+  <data name="Set_Size" xml:space="preserve">
+    <value>Tamanho</value>
+  </data>
+  <data name="Set_SortRows" xml:space="preserve">
+    <value>Ordenar por linhas</value>
+  </data>
+  <data name="Set_SortTable" xml:space="preserve">
+    <value>Ordenar por tabela</value>
+  </data>
+  <data name="Set_TabAssistant" xml:space="preserve">
+    <value>Assistente (A2A)</value>
+  </data>
+  <data name="Set_TabDb" xml:space="preserve">
+    <value>Banco de Dados</value>
+  </data>
+  <data name="Set_TabResilience" xml:space="preserve">
+    <value>Resiliência</value>
+  </data>
+  <data name="Set_Table" xml:space="preserve">
+    <value>Tabela</value>
+  </data>
+  <data name="Set_TestConn" xml:space="preserve">
+    <value>Testar conexão</value>
+  </data>
+  <data name="Set_TestFail" xml:space="preserve">
+    <value>Falha ao testar a conexão</value>
+  </data>
+  <data name="Set_ToggleFail" xml:space="preserve">
+    <value>Falha ao alternar a integração</value>
+  </data>
+  <data name="Set_ToolsBack" xml:space="preserve">
+    <value>Tools do {0} de volta ao catálogo MCP.</value>
+  </data>
+  <data name="Set_ToolsOut" xml:space="preserve">
+    <value>Tools do {0} removidas do catálogo MCP.</value>
+  </data>
+  <data name="Set_Validation" xml:space="preserve">
+    <value>Validação</value>
+  </data>
+  <data name="Set_VectorDown" xml:space="preserve">
+    <value>Diagnóstico do vector store indisponível.</value>
+  </data>
+  <data name="Set_VectorExplain" xml:space="preserve">
+    <value>Guarda os embeddings — vetores numéricos que representam o significado de cada chunk indexado. Na busca, a pergunta é vetorizada e comparada por similaridade (cosseno): encontra conteúdo relacionado mesmo sem palavras-chave exatas. É o que alimenta o RAG; o índice HNSW torna essa busca rápida em bases grandes.</value>
+  </data>
+  <data name="SrcEd_AccountName" xml:space="preserve">
+    <value>Account name (se não usar connection string)</value>
+  </data>
+  <data name="SrcEd_Active" xml:space="preserve">
+    <value>Ativa</value>
+  </data>
+  <data name="SrcEd_ApiEndpoint" xml:space="preserve">
+    <value>Endpoint da API (opcional)</value>
+  </data>
+  <data name="SrcEd_AudioFolder" xml:space="preserve">
+    <value>Pasta com áudios *</value>
+  </data>
+  <data name="SrcEd_AudioFolderHint" xml:space="preserve">
+    <value>Diretório local não recursivo. Aceita .mp3 .wav .m4a .mp4 .aac .flac .ogg .webm.</value>
+  </data>
+  <data name="SrcEd_AudioProvider" xml:space="preserve">
+    <value>Provedor de transcrição</value>
+  </data>
+  <data name="SrcEd_AutoCaptions" xml:space="preserve">
+    <value>Auto-captions</value>
+  </data>
+  <data name="SrcEd_AzureHint" xml:space="preserve">
+    <value>Cole a connection string completa, ou só a account key com o account name acima.</value>
+  </data>
+  <data name="SrcEd_Branch" xml:space="preserve">
+    <value>Branch (padrão main→master)</value>
+  </data>
+  <data name="SrcEd_Chapters" xml:space="preserve">
+    <value>Capítulos automáticos</value>
+  </data>
+  <data name="SrcEd_ChunkAuto" xml:space="preserve">
+    <value>Auto (estrutural)</value>
+  </data>
+  <data name="SrcEd_ChunkSemantic" xml:space="preserve">
+    <value>Semantic (por assunto)</value>
+  </data>
+  <data name="SrcEd_ChunkVision" xml:space="preserve">
+    <value>VisionLayout (tabelas/layout)</value>
+  </data>
+  <data name="SrcEd_Chunking" xml:space="preserve">
+    <value>Estratégia de chunking</value>
+  </data>
+  <data name="SrcEd_ChunkingHint" xml:space="preserve">
+    <value>Semantic embedda sentenças e corta por mudança de assunto (mais lento na ingestão). VisionLayout preserva tabelas como blocos atômicos com cabeçalho repetido.</value>
+  </data>
+  <data name="SrcEd_CmdTimeout" xml:space="preserve">
+    <value>Timeout do comando em s (padrão 30)</value>
+  </data>
+  <data name="SrcEd_ConnHint" xml:space="preserve">
+    <value>Armazenada criptografada; nunca retornada pela API. SQLite com caminho relativo resolve ao lado do executável e abre em modo somente leitura.</value>
+  </data>
+  <data name="SrcEd_ContentColumns" xml:space="preserve">
+    <value>Colunas de conteúdo (uma por linha, opcional)</value>
+  </data>
+  <data name="SrcEd_ContentFields" xml:space="preserve">
+    <value>Campos de conteúdo (um por linha, opcional)</value>
+  </data>
+  <data name="SrcEd_DbIds" xml:space="preserve">
+    <value>Database IDs raiz (um por linha)</value>
+  </data>
+  <data name="SrcEd_Description" xml:space="preserve">
+    <value>Descrição</value>
+  </data>
+  <data name="SrcEd_Diarization" xml:space="preserve">
+    <value>Diarização (speakers)</value>
+  </data>
+  <data name="SrcEd_DocFolder" xml:space="preserve">
+    <value>Pasta com documentos *</value>
+  </data>
+  <data name="SrcEd_DocFolderHint" xml:space="preserve">
+    <value>Diretório local não recursivo. Aceita .pdf .docx .pptx .xlsx .jpg .jpeg .png .tiff.</value>
+  </data>
+  <data name="SrcEd_DocsSummary" xml:space="preserve">
+    <value>documento(s) · {1} chunks · última indexação: {2}</value>
+  </data>
+  <data name="SrcEd_Exclude" xml:space="preserve">
+    <value>Exclude patterns (glob, um por linha)</value>
+  </data>
+  <data name="SrcEd_Failed" xml:space="preserve">
+    <value>falhou</value>
+  </data>
+  <data name="SrcEd_FeedUrl" xml:space="preserve">
+    <value>URL do feed (RSS/Atom) *</value>
+  </data>
+  <data name="SrcEd_FetchFull" xml:space="preserve">
+    <value>Buscar conteúdo completo</value>
+  </data>
+  <data name="SrcEd_FileTimeout" xml:space="preserve">
+    <value>Timeout por arquivo (min)</value>
+  </data>
+  <data name="SrcEd_Files" xml:space="preserve">
+    <value>Arquivos avulsos (um por linha, opcional)</value>
+  </data>
+  <data name="SrcEd_ForceRefresh" xml:space="preserve">
+    <value>Forçar refresh</value>
+  </data>
+  <data name="SrcEd_ForceRefreshYt" xml:space="preserve">
+    <value>Forçar refresh (re-baixar legendas)</value>
+  </data>
+  <data name="SrcEd_GdriveHint" xml:space="preserve">
+    <value>Sem key, links de arquivo único funcionam e pastas usam a listagem pública (plana, sem recursão). Com key a listagem é recursiva via Drive API v3.</value>
+  </data>
+  <data name="SrcEd_GdriveLink" xml:space="preserve">
+    <value>Link Compartilhado do Google Drive *</value>
+  </data>
+  <data name="SrcEd_Glob" xml:space="preserve">
+    <value>Filtro glob (ex.: **/*.{pdf,docx,md,txt})</value>
+  </data>
+  <data name="SrcEd_GoogleKey" xml:space="preserve">
+    <value>API Key do Google</value>
+  </data>
+  <data name="SrcEd_HeadersHint" xml:space="preserve">
+    <value>Objeto JSON de headers — ex.: 'X-Api-Key', 'Authorization'. Armazenado criptografado; nunca retornado pela API.</value>
+  </data>
+  <data name="SrcEd_IdColumn" xml:space="preserve">
+    <value>Coluna(s) do ID (opcional, separadas por vírgula)</value>
+  </data>
+  <data name="SrcEd_IdField" xml:space="preserve">
+    <value>Campo do ID (opcional)</value>
+  </data>
+  <data name="SrcEd_Include" xml:space="preserve">
+    <value>Include patterns (glob, um por linha)</value>
+  </data>
+  <data name="SrcEd_IndexedDocs" xml:space="preserve">
+    <value>Documentos indexados (mostrando {0} de {1})</value>
+  </data>
+  <data name="SrcEd_Interval" xml:space="preserve">
+    <value>Intervalo (min)</value>
+  </data>
+  <data name="SrcEd_ItemsPath" xml:space="preserve">
+    <value>Caminho dos itens (dot-path, opcional)</value>
+  </data>
+  <data name="SrcEd_Lang" xml:space="preserve">
+    <value>Idioma (código ou auto)</value>
+  </data>
+  <data name="SrcEd_LastError" xml:space="preserve">
+    <value>Último erro: {0}</value>
+  </data>
+  <data name="SrcEd_LastSync" xml:space="preserve">
+    <value>Último sync: {0}</value>
+  </data>
+  <data name="SrcEd_LoadingSummary" xml:space="preserve">
+    <value>Carregando resumo…</value>
+  </data>
+  <data name="SrcEd_MaxBytes" xml:space="preserve">
+    <value>Máx. bytes/arquivo (padrão 500KB)</value>
+  </data>
+  <data name="SrcEd_MaxFileMb" xml:space="preserve">
+    <value>Tamanho máx. arquivo (MB, padrão 20)</value>
+  </data>
+  <data name="SrcEd_MaxFiles" xml:space="preserve">
+    <value>Máx. arquivos (padrão 200)</value>
+  </data>
+  <data name="SrcEd_MaxItems" xml:space="preserve">
+    <value>Máx. itens (padrão 100)</value>
+  </data>
+  <data name="SrcEd_MaxMb" xml:space="preserve">
+    <value>Máx. MB por arquivo (padrão 25)</value>
+  </data>
+  <data name="SrcEd_MaxPages" xml:space="preserve">
+    <value>Máx. páginas (padrão 1)</value>
+  </data>
+  <data name="SrcEd_MaxRows" xml:space="preserve">
+    <value>Máx. linhas (padrão 1000)</value>
+  </data>
+  <data name="SrcEd_MaxVideos" xml:space="preserve">
+    <value>Máx. vídeos (padrão 100)</value>
+  </data>
+  <data name="SrcEd_McpEndpoint" xml:space="preserve">
+    <value>Endpoint MCP upstream *</value>
+  </data>
+  <data name="SrcEd_Name" xml:space="preserve">
+    <value>Nome *</value>
+  </data>
+  <data name="SrcEd_NamePrefix" xml:space="preserve">
+    <value>Prefixo de tools (opcional)</value>
+  </data>
+  <data name="SrcEd_NotionHint" xml:space="preserve">
+    <value>Crie uma integração interna em notion.so/my-integrations e compartilhe as páginas/databases com ela.</value>
+  </data>
+  <data name="SrcEd_NotionMaxPages" xml:space="preserve">
+    <value>Máx. páginas (1–1000, padrão 200)</value>
+  </data>
+  <data name="SrcEd_OptLocal" xml:space="preserve">
+    <value>(opcional para endpoints locais)</value>
+  </data>
+  <data name="SrcEd_OptPublicRepos" xml:space="preserve">
+    <value>(opcional — repos públicos)</value>
+  </data>
+  <data name="SrcEd_Optional" xml:space="preserve">
+    <value>(opcional)</value>
+  </data>
+  <data name="SrcEd_Owner" xml:space="preserve">
+    <value>Owner/organização</value>
+  </data>
+  <data name="SrcEd_PageIds" xml:space="preserve">
+    <value>Page IDs raiz (um por linha — vazio = tudo compartilhado)</value>
+  </data>
+  <data name="SrcEd_PageParam" xml:space="preserve">
+    <value>Parâmetro de paginação (opcional)</value>
+  </data>
+  <data name="SrcEd_Path" xml:space="preserve">
+    <value>Caminho (path) *</value>
+  </data>
+  <data name="SrcEd_Platform" xml:space="preserve">
+    <value>Plataforma</value>
+  </data>
+  <data name="SrcEd_PrefLang" xml:space="preserve">
+    <value>Idioma preferido (opcional)</value>
+  </data>
+  <data name="SrcEd_PrefixFolder" xml:space="preserve">
+    <value>Prefixo / pasta</value>
+  </data>
+  <data name="SrcEd_PrefixOpt" xml:space="preserve">
+    <value>Prefixo (opcional)</value>
+  </data>
+  <data name="SrcEd_PrivateHosts" xml:space="preserve">
+    <value>Permitir hosts privados (SSRF opt-in)</value>
+  </data>
+  <data name="SrcEd_Query" xml:space="preserve">
+    <value>Query (SELECT/WITH somente, read-only) *</value>
+  </data>
+  <data name="SrcEd_ReadOnly" xml:space="preserve">
+    <value>Somente leitura</value>
+  </data>
+  <data name="SrcEd_Region" xml:space="preserve">
+    <value>Região * (ex.: us-east-1, sa-saopaulo-1)</value>
+  </data>
+  <data name="SrcEd_RepoName" xml:space="preserve">
+    <value>Nome do repositório</value>
+  </data>
+  <data name="SrcEd_RepoUrl" xml:space="preserve">
+    <value>URL do repositório</value>
+  </data>
+  <data name="SrcEd_ReqAssembly" xml:space="preserve">
+    <value>(obrigatória p/ AssemblyAI)</value>
+  </data>
+  <data name="SrcEd_RootDir" xml:space="preserve">
+    <value>Diretório raiz</value>
+  </data>
+  <data name="SrcEd_RssHint" xml:space="preserve">
+    <value>Sincroniza RSS 2.0 e Atom 1.0. Sync incremental por 'guid' do item. 'Buscar conteúdo completo' baixa a página linkada de cada item e extrai o texto (útil quando o feed só traz teasers). 'Forçar refresh' reprocessa todos os itens, mesmo sem alterações de 'guid'/data.</value>
+  </data>
+  <data name="SrcEd_SaveFail" xml:space="preserve">
+    <value>Não foi possível salvar.</value>
+  </data>
+  <data name="SrcEd_SecretStoredF" xml:space="preserve">
+    <value>Armazenada criptografada; nunca retornada pela API.</value>
+  </data>
+  <data name="SrcEd_SecretStoredM" xml:space="preserve">
+    <value>Armazenado criptografado; nunca retornado pela API.</value>
+  </data>
+  <data name="SrcEd_Stored" xml:space="preserve">
+    <value>(armazenada — em branco mantém)</value>
+  </data>
+  <data name="SrcEd_StoredCurrent" xml:space="preserve">
+    <value>(armazenada — em branco mantém a atual)</value>
+  </data>
+  <data name="SrcEd_Strategy" xml:space="preserve">
+    <value>Estratégia de extração</value>
+  </data>
+  <data name="SrcEd_Subdir" xml:space="preserve">
+    <value>Subdiretório raiz (opcional)</value>
+  </data>
+  <data name="SrcEd_Summary" xml:space="preserve">
+    <value>Resumo</value>
+  </data>
+  <data name="SrcEd_SummaryFailed" xml:space="preserve">
+    <value>Resumo indisponível — não foi possível carregar os documentos.</value>
+  </data>
+  <data name="SrcEd_SyncFailed" xml:space="preserve">
+    <value>Sync falhou: {0}</value>
+  </data>
+  <data name="SrcEd_SyncNow" xml:space="preserve">
+    <value>Sincronizar agora</value>
+  </data>
+  <data name="SrcEd_SyncResult" xml:space="preserve">
+    <value>{0} processados, {1} ignorados, {2} removidos, {3} chunks em {4}ms</value>
+  </data>
+  <data name="SrcEd_Syncing" xml:space="preserve">
+    <value>Sincronizando…</value>
+  </data>
+  <data name="SrcEd_Tables" xml:space="preserve">
+    <value>Extrair tabelas (GFM)</value>
+  </data>
+  <data name="SrcEd_TechDetails" xml:space="preserve">
+    <value>Detalhes técnicos</value>
+  </data>
+  <data name="SrcEd_TitleColumn" xml:space="preserve">
+    <value>Coluna do título (opcional)</value>
+  </data>
+  <data name="SrcEd_TitleField" xml:space="preserve">
+    <value>Campo do título (opcional)</value>
+  </data>
+  <data name="SrcEd_UrlColumn" xml:space="preserve">
+    <value>Coluna de URL (opcional)</value>
+  </data>
+  <data name="SrcEd_UrlField" xml:space="preserve">
+    <value>Campo da URL (opcional)</value>
+  </data>
+  <data name="SrcEd_ValAudio" xml:space="preserve">
+    <value>Informe uma pasta ou ao menos um arquivo de áudio</value>
+  </data>
+  <data name="SrcEd_ValAzureKey" xml:space="preserve">
+    <value>Connection string ou account key é obrigatória</value>
+  </data>
+  <data name="SrcEd_ValCloudFields" xml:space="preserve">
+    <value>Bucket, região e access key são obrigatórios</value>
+  </data>
+  <data name="SrcEd_ValConnStr" xml:space="preserve">
+    <value>Connection string é obrigatória (em branco mantém a armazenada)</value>
+  </data>
+  <data name="SrcEd_ValEndpoint" xml:space="preserve">
+    <value>Endpoint é obrigatório</value>
+  </data>
+  <data name="SrcEd_ValFeed" xml:space="preserve">
+    <value>URL do feed é obrigatória</value>
+  </data>
+  <data name="SrcEd_ValFolderOrFile" xml:space="preserve">
+    <value>Informe uma pasta ou ao menos um arquivo</value>
+  </data>
+  <data name="SrcEd_ValName" xml:space="preserve">
+    <value>Nome é obrigatório</value>
+  </data>
+  <data name="SrcEd_ValNamespace" xml:space="preserve">
+    <value>Namespace é obrigatório para OCI</value>
+  </data>
+  <data name="SrcEd_ValPath" xml:space="preserve">
+    <value>Caminho é obrigatório</value>
+  </data>
+  <data name="SrcEd_ValQuery" xml:space="preserve">
+    <value>Query é obrigatória</value>
+  </data>
+  <data name="SrcEd_ValRepo" xml:space="preserve">
+    <value>Informe a URL do repositório ou owner + nome</value>
+  </data>
+  <data name="SrcEd_ValSecret" xml:space="preserve">
+    <value>Secret access key é obrigatória</value>
+  </data>
+  <data name="SrcEd_ValShare" xml:space="preserve">
+    <value>Share name é obrigatório</value>
+  </data>
+  <data name="SrcEd_ValToken" xml:space="preserve">
+    <value>Integration token é obrigatório</value>
+  </data>
+  <data name="SrcEd_ValUrl" xml:space="preserve">
+    <value>URL é obrigatória</value>
+  </data>
+  <data name="SrcEd_ValUrls" xml:space="preserve">
+    <value>URLs são obrigatórias (uma por linha)</value>
+  </data>
+  <data name="SrcEd_YtHint" xml:space="preserve">
+    <value>Indexa transcrições (legendas) de vídeos públicos do YouTube via YoutubeExplode. Aceita URLs de vídeos, playlists e canais (ou IDs crus). Sync incremental por 'yt:{videoId}' — vídeos já indexados são pulados. Sem credenciais.</value>
+  </data>
+  <data name="SrcEd_YtUrls" xml:space="preserve">
+    <value>URLs dos vídeos/playlists/canais *</value>
+  </data>
+  <data name="Src_Activate" xml:space="preserve">
+    <value>Ativar</value>
+  </data>
+  <data name="Src_ActiveBadge" xml:space="preserve">
+    <value>ativa</value>
+  </data>
+  <data name="Src_ActiveCol" xml:space="preserve">
+    <value>Ativa</value>
+  </data>
+  <data name="Src_ClickDetail" xml:space="preserve">
+    <value>Clique para ver detalhes</value>
+  </data>
+  <data name="Src_Deactivate" xml:space="preserve">
+    <value>Desativar</value>
+  </data>
+  <data name="Src_DeleteContent" xml:space="preserve">
+    <value>Documentos e chunks indexados serão removidos.</value>
+  </data>
+  <data name="Src_DeleteTitle" xml:space="preserve">
+    <value>Confirmar exclusão</value>
+  </data>
+  <data name="Src_Deleted" xml:space="preserve">
+    <value>Excluída</value>
+  </data>
+  <data name="Src_Docs" xml:space="preserve">
+    <value>Docs</value>
+  </data>
+  <data name="Src_EditTitle" xml:space="preserve">
+    <value>Editar — {0}</value>
+  </data>
+  <data name="Src_Empty" xml:space="preserve">
+    <value>Nenhuma fonte cadastrada.</value>
+  </data>
+  <data name="Src_ErrorLog" xml:space="preserve">
+    <value>Erro / log</value>
+  </data>
+  <data name="Src_ExistingJob" xml:space="preserve">
+    <value>Já existe um job em andamento para esta fonte.</value>
+  </data>
+  <data name="Src_FailedBadge" xml:space="preserve">
+    <value>falhou</value>
+  </data>
+  <data name="Src_FailedSuffix" xml:space="preserve">
+    <value> — {0} doc(s) falharam</value>
+  </data>
+  <data name="Src_Failures" xml:space="preserve">
+    <value>falhas</value>
+  </data>
+  <data name="Src_GraphPrefix" xml:space="preserve">
+    <value>grafo: {0}</value>
+  </data>
+  <data name="Src_Heading" xml:space="preserve">
+    <value>Fontes de conhecimento</value>
+  </data>
+  <data name="Src_InactiveBadge" xml:space="preserve">
+    <value>inativa</value>
+  </data>
+  <data name="Src_JobBackground" xml:space="preserve">
+    <value>O job continua em background.</value>
+  </data>
+  <data name="Src_JobId" xml:space="preserve">
+    <value>Job {0}</value>
+  </data>
+  <data name="Src_LastJob" xml:space="preserve">
+    <value>Último job</value>
+  </data>
+  <data name="Src_LastSync" xml:space="preserve">
+    <value>Último sync</value>
+  </data>
+  <data name="Src_LoadError" xml:space="preserve">
+    <value>Falha ao carregar fontes: {0}</value>
+  </data>
+  <data name="Src_MoreDocs" xml:space="preserve">
+    <value>… e mais {0} documento(s)</value>
+  </data>
+  <data name="Src_New" xml:space="preserve">
+    <value>Nova fonte</value>
+  </data>
+  <data name="Src_NoJob" xml:space="preserve">
+    <value>Nenhum job registrado.</value>
+  </data>
+  <data name="Src_PageTitle" xml:space="preserve">
+    <value>Fontes — Knowledge</value>
+  </data>
+  <data name="Src_RemovedBody" xml:space="preserve">
+    <value>'{0}' removida.</value>
+  </data>
+  <data name="Src_Saved" xml:space="preserve">
+    <value>Fonte salva</value>
+  </data>
+  <data name="Src_SavedBody" xml:space="preserve">
+    <value>'{0}' salva com sucesso.</value>
+  </data>
+  <data name="Src_Skipped" xml:space="preserve">
+    <value>pulados</value>
+  </data>
+  <data name="Src_StartEnd" xml:space="preserve">
+    <value>Início/Fim</value>
+  </data>
+  <data name="Src_StatusDetail" xml:space="preserve">
+    <value>Ver detalhes do status</value>
+  </data>
+  <data name="Src_StatusTitle" xml:space="preserve">
+    <value>Status — {0}</value>
+  </data>
+  <data name="Src_SyncDone" xml:space="preserve">
+    <value>Sync concluído</value>
+  </data>
+  <data name="Src_SyncDoneBody" xml:space="preserve">
+    <value>{0} docs, {1} chunks</value>
+  </data>
+  <data name="Src_SyncFailed" xml:space="preserve">
+    <value>Sync falhou</value>
+  </data>
+  <data name="Src_SyncQueued" xml:space="preserve">
+    <value>Sync enfileirado</value>
+  </data>
+  <data name="Src_SyncRunning" xml:space="preserve">
+    <value>Sync em andamento</value>
+  </data>
+  <data name="Src_SyncStatus" xml:space="preserve">
+    <value>Sync {0}</value>
+  </data>
+  <data name="Src_WarningFallback" xml:space="preserve">
+    <value>aviso</value>
+  </data>
+  <data name="Src_WarningsTitle" xml:space="preserve">
+    <value>Falhas / avisos ({0})</value>
+  </data>
+  <data name="StepType_condition" xml:space="preserve">
+    <value>condition — branches</value>
+  </data>
+  <data name="StepType_fail" xml:space="preserve">
+    <value>fail — abortar</value>
+  </data>
+  <data name="StepType_foreach" xml:space="preserve">
+    <value>foreach — loop</value>
+  </data>
+  <data name="StepType_http" xml:space="preserve">
+    <value>http — chamada externa</value>
+  </data>
+  <data name="StepType_knowledge" xml:space="preserve">
+    <value>knowledge — search/ask</value>
+  </data>
+  <data name="StepType_llm" xml:space="preserve">
+    <value>llm — prompt</value>
+  </data>
+  <data name="StepType_output" xml:space="preserve">
+    <value>output — resultado</value>
+  </data>
+  <data name="StepType_tool" xml:space="preserve">
+    <value>tool — catálogo MCP</value>
+  </data>
+  <data name="StepType_transform" xml:space="preserve">
+    <value>transform — reshape</value>
+  </data>
+</root>

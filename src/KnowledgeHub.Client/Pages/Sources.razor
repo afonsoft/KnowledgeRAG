@@ -4,45 +4,46 @@
 @inject SourceApiClient Api
 @inject ToastService Toast
 @inject McpMonitorClient Hub
+@inject IStringLocalizer<SharedStrings> L
 @implements IAsyncDisposable
 
-<PageTitle>Fontes — Knowledge</PageTitle>
+<PageTitle>@L["Src_PageTitle"]</PageTitle>
 
-<h1 class="h3 mb-3">Fontes de conhecimento</h1>
+<h1 class="h3 mb-3">@L["Src_Heading"]</h1>
 
 <div class="table-responsive-wrapper">
     <Table TItem="KnowledgeSourceDto" Items="_sources" ShowLoading="true" ShowLoadingInFirstRender="true"
            IsStriped="true" ShowToolbar="true" ShowDefaultButtons="false" ShowEmpty="true"
-           EmptyText="Nenhuma fonte cadastrada.">
+           EmptyText="@L["Src_Empty"]">
     <TableToolbarTemplate>
-        <TableToolbarButton TItem="KnowledgeSourceDto" Text="Nova fonte" Icon="fa-solid fa-plus"
-                            Title="Nova fonte" Color="Color.Primary" OnClick="ShowCreate" />
+        <TableToolbarButton TItem="KnowledgeSourceDto" Text="@L["Src_New"]" Icon="fa-solid fa-plus"
+                            Title="@L["Src_New"]" Color="Color.Primary" OnClick="ShowCreate" />
     </TableToolbarTemplate>
     <TableColumns>
-        <TableColumn Field="@context.Name" FieldExpression="@(() => context.Name)" Text="Nome" />
-        <TableColumn Field="@context.Type" FieldExpression="@(() => context.Type)" Text="Tipo">
+        <TableColumn Field="@context.Name" FieldExpression="@(() => context.Name)" Text="@L["Common_Name"]" />
+        <TableColumn Field="@context.Type" FieldExpression="@(() => context.Type)" Text="@L["Common_Type"]">
             <Template Context="v">
                 <Badge Color="Color.Info">@v.Value</Badge>
             </Template>
         </TableColumn>
-        <TableColumn Field="@context.IsActive" FieldExpression="@(() => context.IsActive)" Text="Ativa">
+        <TableColumn Field="@context.IsActive" FieldExpression="@(() => context.IsActive)" Text="@L["Src_ActiveCol"]">
             <Template Context="v">
                 @if (v.Value)
                 {
-                    <Badge Color="Color.Success">ativa</Badge>
+                    <Badge Color="Color.Success">@L["Src_ActiveBadge"]</Badge>
                 }
                 else
                 {
-                    <Badge Color="Color.Secondary">inativa</Badge>
+                    <Badge Color="Color.Secondary">@L["Src_InactiveBadge"]</Badge>
                 }
             </Template>
         </TableColumn>
-        <TableColumn Field="@context.LastSyncAt" FieldExpression="@(() => context.LastSyncAt)" Text="Último sync" Width="120">
+        <TableColumn Field="@context.LastSyncAt" FieldExpression="@(() => context.LastSyncAt)" Text="@L["Src_LastSync"]" Width="120">
             <Template Context="v">
                 @(v.Value?.LocalDateTime.ToString("dd/MM/yy HH:mm") ?? "—")
             </Template>
         </TableColumn>
-        <TableColumn Field="@context.LastSyncStatus" FieldExpression="@(() => context.LastSyncStatus)" Text="Status" Width="110">
+        <TableColumn Field="@context.LastSyncStatus" FieldExpression="@(() => context.LastSyncStatus)" Text="@L["Common_Status"]" Width="110">
             <Template Context="v">
                 @* SPEC-20260925-sources-grid-ux RF-003: status badge opens the
                    error/job detail modal when there is something to show. *@
@@ -54,22 +55,22 @@
                     case "completed":
                         @* completed jobs can carry warnings — keep the detail
                            modal reachable (it lists them when present). *@
-                        <button type="button" class="kh-badge-btn" title="Clique para ver detalhes"
-                                aria-label="Ver detalhes do status"
+                        <button type="button" class="kh-badge-btn" title="@L["Src_ClickDetail"]"
+                                aria-label="@L["Src_StatusDetail"]"
                                 @onclick="() => ShowStatusDetail(v.Row)">
                             <Badge Color="Color.Success">ok</Badge>
                         </button>
                         break;
                     case "failed":
-                        <button type="button" class="kh-badge-btn" title="Clique para ver detalhes"
-                                aria-label="Ver detalhes do status"
+                        <button type="button" class="kh-badge-btn" title="@L["Src_ClickDetail"]"
+                                aria-label="@L["Src_StatusDetail"]"
                                 @onclick="() => ShowStatusDetail(v.Row)">
-                            <Badge Color="Color.Danger">falhou</Badge>
+                            <Badge Color="Color.Danger">@L["Src_FailedBadge"]</Badge>
                         </button>
                         break;
                     case "skipped":
-                        <button type="button" class="kh-badge-btn" title="Clique para ver detalhes"
-                                aria-label="Ver detalhes do status"
+                        <button type="button" class="kh-badge-btn" title="@L["Src_ClickDetail"]"
+                                aria-label="@L["Src_StatusDetail"]"
                                 @onclick="() => ShowStatusDetail(v.Row)">
                             <Badge Color="Color.Warning">skip</Badge>
                         </button>
@@ -80,10 +81,10 @@
                 }
             </Template>
         </TableColumn>
-        <TableColumn Field="@context.Id" FieldExpression="@(() => context.Id)" Text="Ações" Width="120">
+        <TableColumn Field="@context.Id" FieldExpression="@(() => context.Id)" Text="@L["Common_Actions"]" Width="120">
             <Template Context="v">
                 <div class="kh-actions">
-                    <Button Size="Size.ExtraSmall" Icon="fa-solid fa-pen" TooltipText="Editar"
+                    <Button Size="Size.ExtraSmall" Icon="fa-solid fa-pen" TooltipText="@L["Common_Edit"]"
                             TooltipPlacement="Placement.Top"
                             OnClick="() => ShowEdit(v.Row)" />
                     <Button Size="Size.ExtraSmall" Icon="fa-solid fa-rotate" TooltipText="Sync"
@@ -91,13 +92,13 @@
                             OnClick="() => SyncNow(v.Row)" />
                     <Button Size="Size.ExtraSmall" Color="Color.Warning"
                             Icon="@(v.Row.IsActive ? "fa-solid fa-pause" : "fa-solid fa-play")"
-                            TooltipText="@(v.Row.IsActive ? "Desativar" : "Ativar")"
+                            TooltipText="@(v.Row.IsActive ? L["Src_Deactivate"] : L["Src_Activate"])"
                             TooltipPlacement="Placement.Top"
                             OnClick="() => ToggleActive(v.Row)" />
                     <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
-                                      TooltipText="Excluir" TooltipPlacement="Placement.Top"
-                                      Title="Confirmar exclusão"
-                                      Content="Documentos e chunks indexados serão removidos."
+                                      TooltipText="@L["Common_Delete"]" TooltipPlacement="Placement.Top"
+                                      Title="@L["Src_DeleteTitle"]"
+                                      Content="@L["Src_DeleteContent"]"
                                       OnConfirm="() => DeleteSource(v.Row)" />
                 </div>
             </Template>
@@ -107,9 +108,9 @@
 </div>
 
 <Modal @ref="_modal">
-    <ModalDialog Title="@(_editModel.Id is null ? "Nova fonte" : $"Editar — {_editModel.Name}")"
-                 Size="Size.Large" ShowSaveButton="true" SaveButtonText="Salvar" SaveButtonIcon="fa-solid fa-floppy-disk"
-                 CloseButtonText="Cancelar" CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="SaveAsync">
+    <ModalDialog Title="@(_editModel.Id is null ? L["Src_New"] : L["Src_EditTitle", _editModel.Name])"
+                 Size="Size.Large" ShowSaveButton="true" SaveButtonText="@L["Common_Save"]" SaveButtonIcon="fa-solid fa-floppy-disk"
+                 CloseButtonText="@L["Common_Cancel"]" CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="SaveAsync">
         <BodyTemplate>
             @* String params need @ — bare Error="_editError" passes the literal
                text, not the field value (Blazor string-attribute rule). *@
@@ -124,20 +125,20 @@
 
 @* SPEC-20260925-sources-grid-ux RF-003: status/error detail modal. *@
 <Modal @ref="_statusModal">
-    <ModalDialog Title="@($"Status — {_statusSource?.Name}")" ShowSaveButton="false" CloseButtonText="Fechar" CloseButtonIcon="fa-solid fa-xmark">
+    <ModalDialog Title="@L["Src_StatusTitle", _statusSource?.Name ?? ""]" ShowSaveButton="false" CloseButtonText="@L["Common_Close"]" CloseButtonIcon="fa-solid fa-xmark">
         <BodyTemplate>
             @if (_statusSource is not null)
             {
                 <dl class="row mb-3">
                     <dt class="col-sm-3">Status</dt>
                     <dd class="col-sm-9">@_statusSource.LastSyncStatus</dd>
-                    <dt class="col-sm-3">Último sync</dt>
+                    <dt class="col-sm-3">@L["Src_LastSync"]</dt>
                     <dd class="col-sm-9">@(_statusSource.LastSyncAt?.LocalDateTime.ToString("g") ?? "—")</dd>
                 </dl>
 
                 @if (!string.IsNullOrEmpty(_statusSource.LastError))
                 {
-                    <h6>Erro / log</h6>
+                    <h6>@L["Src_ErrorLog"]</h6>
                     <div style="max-height:200px;overflow-y:auto">
                         <ul class="mb-0 small">
                             @foreach (var line in _statusSource.LastError.Split("; ", StringSplitOptions.RemoveEmptyEntries))
@@ -148,37 +149,37 @@
                     </div>
                 }
 
-                <h6 class="mt-3">Último job</h6>
+                <h6 class="mt-3">@L["Src_LastJob"]</h6>
                 @if (_statusJobLoading)
                 {
-                    <p class="text-muted small mb-0">Carregando…</p>
+                    <p class="text-muted small mb-0">@L["Common_Loading"]</p>
                 }
                 else if (_statusJob is null)
                 {
-                    <p class="text-muted small mb-0">Nenhum job registrado.</p>
+                    <p class="text-muted small mb-0">@L["Src_NoJob"]</p>
                 }
                 else
                 {
                     <dl class="row mb-0 small">
-                        <dt class="col-sm-3">Tipo</dt>
+                        <dt class="col-sm-3">@L["Common_Type"]</dt>
                         <dd class="col-sm-9">@_statusJob.Kind</dd>
                         <dt class="col-sm-3">Status</dt>
                         <dd class="col-sm-9">@_statusJob.Status</dd>
-                        <dt class="col-sm-3">Docs</dt>
+                        <dt class="col-sm-3">@L["Src_Docs"]</dt>
                         <dd class="col-sm-9">
                             <Badge Color="Color.Success">@_statusJob.DocsProcessed ok</Badge>
-                            <Badge Color="Color.Secondary">@_statusJob.DocsSkipped pulados</Badge>
-                            <Badge Color="Color.Danger">@_statusJob.DocsFailed falhas</Badge>
+                            <Badge Color="Color.Secondary">@_statusJob.DocsSkipped @L["Src_Skipped"]</Badge>
+                            <Badge Color="Color.Danger">@_statusJob.DocsFailed @L["Src_Failures"]</Badge>
                             <span class="text-muted"> — @_statusJob.ChunksCreated chunks</span>
                         </dd>
-                        <dt class="col-sm-3">Início/Fim</dt>
+                        <dt class="col-sm-3">@L["Src_StartEnd"]</dt>
                         <dd class="col-sm-9">
                             @(_statusJob.StartedAt?.LocalDateTime.ToString("g") ?? "—")
                             → @(_statusJob.FinishedAt?.LocalDateTime.ToString("g") ?? "—")
                         </dd>
                         @if (!string.IsNullOrEmpty(_statusJob.Error))
                         {
-                            <dt class="col-sm-3">Erro</dt>
+                            <dt class="col-sm-3">@L["Common_Error"]</dt>
                             <dd class="col-sm-9 text-danger">@_statusJob.Error</dd>
                         }
                     </dl>
@@ -187,7 +188,7 @@
                        por causa raiz — 465 docs com a mesma exceção viram um grupo. *@
                     @if (_statusJob.Warnings is { Count: > 0 } warnings)
                     {
-                        <h6 class="mt-3">Falhas / avisos (@warnings.Count)</h6>
+                        <h6 class="mt-3">@L["Src_WarningsTitle", warnings.Count]</h6>
                         <div style="max-height:240px;overflow-y:auto">
                             @foreach (var group in GroupWarnings(warnings))
                             {
@@ -202,7 +203,7 @@
                                         }
                                         @if (group.Docs.Count > 5)
                                         {
-                                            <li>… e mais @(group.Docs.Count - 5) documento(s)</li>
+                                            <li>@L["Src_MoreDocs", group.Docs.Count - 5]</li>
                                         }
                                     </ul>
                                 </div>
@@ -245,7 +246,7 @@
         catch (Exception ex)
         {
             _sources = [];
-            await Toast.Error("Erro", $"Falha ao carregar fontes: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Src_LoadError", ex.Message]);
         }
     }
 
@@ -358,7 +359,7 @@
             return false;
         }
 
-        await Toast.Success("Fonte salva", $"'{_editModel.Name}' salva com sucesso.");
+        await Toast.Success(L["Src_Saved"], L["Src_SavedBody", _editModel.Name]);
         await ReloadAsync();
         return true;
     }
@@ -368,7 +369,7 @@
         var result = await Api.SetActiveAsync(dto.Id, !dto.IsActive);
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error!);
+            await Toast.Error(L["Common_Error"], result.Error!);
             return;
         }
         await ReloadAsync();
@@ -380,12 +381,12 @@
         var enqueued = await Api.EnqueueSyncAsync(dto.Id);
         if (!enqueued.IsSuccess)
         {
-            await Toast.Error("Sync falhou", enqueued.Error!);
+            await Toast.Error(L["Src_SyncFailed"], enqueued.Error!);
             return;
         }
         var job = enqueued.Value!;
-        await Toast.Information("Sync enfileirado",
-            job.Existing ? "Já existe um job em andamento para esta fonte." : $"Job {job.JobId:N}");
+        await Toast.Information(L["Src_SyncQueued"],
+            job.Existing ? L["Src_ExistingJob"].Value : L["Src_JobId", job.JobId.ToString("N")].Value);
 
         // SPEC-20260925-job-progress-feed RF-002: pushed terminal event wins;
         // polling remains the fallback when the hub is unavailable.
@@ -424,7 +425,7 @@
                 await ReloadAsync();
                 return;
             }
-            await Toast.Warning("Sync em andamento", "O job continua em background.");
+            await Toast.Warning(L["Src_SyncRunning"], L["Src_JobBackground"]);
         }
         finally
         {
@@ -436,10 +437,10 @@
     private async Task ReportJobTerminal(string status, int processed, int chunks, int failed, string? error)
     {
         if (status == "done")
-            await Toast.Success("Sync concluído",
-                $"{processed} docs, {chunks} chunks" + (failed > 0 ? $" — {failed} doc(s) falharam" : ""));
+            await Toast.Success(L["Src_SyncDone"],
+                L["Src_SyncDoneBody", processed, chunks].Value + (failed > 0 ? L["Src_FailedSuffix", failed].Value : ""));
         else
-            await Toast.Error($"Sync {status}", error ?? "");
+            await Toast.Error(L["Src_SyncStatus", status], error ?? "");
     }
 
     /// <summary>SPEC-20260925-sources-grid-ux RF-003: opens the status detail
@@ -473,7 +474,7 @@
     /// texto do erro. Formatos emitidos pelo server: "{doc}: {erro}",
     /// "graph extraction failed for '{doc}': {erro}" e flags livres
     /// ("{doc}: N chunk(s) flagged (...)").</summary>
-    private static List<(string Message, List<string> Docs)> GroupWarnings(IReadOnlyList<string> warnings)
+    private List<(string Message, List<string> Docs)> GroupWarnings(IReadOnlyList<string> warnings)
     {
         var groups = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var w in warnings)
@@ -481,14 +482,14 @@
             var idx = w.IndexOf(": ", StringComparison.Ordinal);
             if (idx < 0)
             {
-                AddGroup(w, "aviso");
+                AddGroup(w, L["Src_WarningFallback"]);
                 continue;
             }
             var doc = w[..idx];
             var msg = w[(idx + 2)..];
             if (doc.StartsWith("graph extraction failed for '", StringComparison.Ordinal)
                 && doc.EndsWith('\''))
-                doc = $"grafo: {doc["graph extraction failed for '".Length..^1]}";
+                doc = L["Src_GraphPrefix", doc["graph extraction failed for '".Length..^1]];
             AddGroup(msg, doc);
         }
         return groups.Select(kv => (kv.Key, kv.Value))
@@ -507,10 +508,10 @@
         var result = await Api.DeleteAsync(dto.Id);
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error!);
+            await Toast.Error(L["Common_Error"], result.Error!);
             return;
         }
-        await Toast.Success("Excluída", $"'{dto.Name}' removida.");
+        await Toast.Success(L["Src_Deleted"], L["Src_RemovedBody", dto.Name]);
         await ReloadAsync();
     }
 

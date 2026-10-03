@@ -1,6 +1,7 @@
 @using System.Text.Json
 @using System.Text.Json.Nodes
 @using KnowledgeHub.Shared.Contracts
+@inject IStringLocalizer<SharedStrings> L
 
 @foreach (var lane in Lanes)
 {
@@ -28,7 +29,7 @@
             }
             @if (lane.Steps.Count == 0)
             {
-                <span class="fc-chip fc-chip--empty">vazio</span>
+                <span class="fc-chip fc-chip--empty">@L["FlowChip_Empty"]</span>
             }
         </div>
     </div>

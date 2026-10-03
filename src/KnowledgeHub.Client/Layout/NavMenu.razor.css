@@ -79,6 +79,36 @@
             color: #fff; /* NOSONAR S7924 — white over dark sidebar; transparent bg reads as dark */
         }
 
+.nav-culture ::deep .culture-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--kh-sidebar-fg, #cbd5e1);
+    padding: 0 0.75rem;
+    height: 2.75rem;
+}
+
+    .nav-culture ::deep .culture-selector select {
+        flex: 1;
+        min-width: 0;
+        background-color: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.15);
+        color: #fff;
+    }
+
+        .nav-culture ::deep .culture-selector select option {
+            color: #1e293b;
+        }
+
+.sidebar.collapsed .nav-culture ::deep .culture-selector {
+    padding: 0;
+    justify-content: center;
+}
+
+    .sidebar.collapsed .nav-culture ::deep .culture-selector select {
+        display: none;
+    }
+
 @media (min-width: 768px) {
     .nav-scrollable {
         /* Allow sidebar to scroll for tall menus */

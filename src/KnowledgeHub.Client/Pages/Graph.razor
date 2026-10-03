@@ -2,44 +2,45 @@
 @attribute [Authorize]
 @inject GraphApiClient Api
 @inject ToastService Toast
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Grafo — Knowledge</PageTitle>
+<PageTitle>@L["Graph_PageTitle"]</PageTitle>
 
 @* SPEC-20260928-graph-timeline-viewer RF-002: visualizador tabular do grafo
    temporal/episódico — filtro de janela (presets + range), badges de episódio,
    expansão de arestas por nó, toggle de histórico. *@
 
-<h1 class="h3 mb-3">Grafo de conhecimento</h1>
+<h1 class="h3 mb-3">@L["Graph_Heading"]</h1>
 
 <div class="border rounded p-3 mb-3">
     <div class="row g-2 align-items-end">
         <div class="col-6 col-md-2">
-            <label class="form-label" title="Preset filtra por ObservedAt (quando o fato foi observado/ingerido): a janela é [agora−preset, agora]. 'Tudo' não filtra; 'De/Até' explícitos vencem o preset.">
-                Janela <i class="fa-solid fa-circle-info text-muted small"></i>
+            <label class="form-label" title="@L["Graph_WindowTooltip"]">
+                @L["Graph_Window"] <i class="fa-solid fa-circle-info text-muted small"></i>
             </label>
             <Select @bind-Value="_preset">
                 <Options>
-                    <SelectOption Text="Tudo" Value="" />
-                    <SelectOption Text="Última hora" Value="1h" />
-                    <SelectOption Text="Últimas 6h" Value="6h" />
-                    <SelectOption Text="Últimas 24h" Value="24h" />
-                    <SelectOption Text="Últimos 7 dias" Value="7d" />
+                    <SelectOption Text="@L["Graph_All"]" Value="" />
+                    <SelectOption Text="@L["Graph_LastHour"]" Value="1h" />
+                    <SelectOption Text="@L["Graph_Last6h"]" Value="6h" />
+                    <SelectOption Text="@L["Graph_Last24h"]" Value="24h" />
+                    <SelectOption Text="@L["Graph_Last7d"]" Value="7d" />
                 </Options>
             </Select>
         </div>
         <div class="col-6 col-md-3">
-            <label class="form-label" for="graph-from">De</label>
+            <label class="form-label" for="graph-from">@L["Graph_From"]</label>
             <input type="datetime-local" class="form-control form-control-sm" id="graph-from" @bind="_from" />
         </div>
         <div class="col-6 col-md-3">
-            <label class="form-label" for="graph-to">Até</label>
+            <label class="form-label" for="graph-to">@L["Graph_To"]</label>
             <input type="datetime-local" class="form-control form-control-sm" id="graph-to" @bind="_to" />
         </div>
         <div class="col-6 col-md-2">
-            <Switch @bind-Value="_includeHistorical" DisplayText="Histórico" ShowLabel="true" />
+            <Switch @bind-Value="_includeHistorical" DisplayText="@L["Graph_Historical"]" ShowLabel="true" />
         </div>
         <div class="col-6 col-md-2">
-            <Button Color="Color.Primary" Icon="fa-solid fa-filter" Text="Filtrar"
+            <Button Color="Color.Primary" Icon="fa-solid fa-filter" Text="@L["Graph_Filter"]"
                     IsAsync="true" OnClick="ReloadAsync" />
         </div>
     </div>
@@ -47,15 +48,14 @@
 
 @if (_nodes is null)
 {
-    <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> Carregando grafo…</div>
+    <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> @L["Graph_Loading"]</div>
 }
 else if (_nodes.Count == 0)
 {
     <div class="text-center text-muted p-5 border rounded">
         <i class="fa-solid fa-diagram-project fa-2x mb-2 d-block"></i>
-        Nenhuma entidade no grafo. Registre uma fonte em
-        <NavLink href="sources">Fontes</NavLink> e sincronize — a extração de
-        entidades roda durante a ingestão quando <code>"graph": true</code>.
+        @L["Graph_Empty1"]
+        <NavLink href="sources">@L["Nav_Fontes"]</NavLink> @L["Graph_Empty2"] <code>"graph": true</code>.
     </div>
 }
 else
@@ -64,8 +64,8 @@ else
     <table class="table table-sm align-middle">
         <thead>
             <tr>
-                <th>Entidade</th><th>Tipo</th><th>Observado</th>
-                <th>Vigência</th><th>Episódio</th><th></th>
+                <th>@L["Graph_Entity"]</th><th>@L["Common_Type"]</th><th>@L["Graph_Observed"]</th>
+                <th>@L["Graph_Validity"]</th><th>@L["Graph_Episode"]</th><th></th>
             </tr>
         </thead>
         <tbody>
@@ -83,7 +83,7 @@ else
                     <td class="small">@n.ObservedAt.ToString("dd/MM HH:mm")</td>
                     <td class="small">
                         @n.ValidFrom.ToString("dd/MM")
-                        → @(n.ValidTo?.ToString("dd/MM") ?? "vigente")
+                        → @(n.ValidTo?.ToString("dd/MM") ?? L["Graph_Current"].Value)
                     </td>
                     <td>
                         @if (n.EpisodeId is not null)
@@ -100,7 +100,7 @@ else
                     <td>
                         <Button Size="Size.ExtraSmall" Color="Color.Secondary"
                                 Icon="@(_expanded == n.Id ? "fa-solid fa-chevron-up" : "fa-solid fa-chevron-down")"
-                                TooltipText="Arestas" IsAsync="true"
+                                TooltipText="@L["Graph_Edges"]" IsAsync="true"
                                 OnClick="() => ToggleEdgesAsync(n.Id)" />
                     </td>
                 </tr>
@@ -110,11 +110,11 @@ else
                         <td colspan="6" class="bg-light">
                             @if (_edges is null)
                             {
-                                <div class="text-muted small"><i class="fa-solid fa-spinner fa-spin"></i> Carregando arestas…</div>
+                                <div class="text-muted small"><i class="fa-solid fa-spinner fa-spin"></i> @L["Graph_LoadingEdges"]</div>
                             }
                             else if (_edges.Count == 0)
                             {
-                                <div class="text-muted small">Nenhuma aresta vigente para este nó.</div>
+                                <div class="text-muted small">@L["Graph_NoEdges"]</div>
                             }
                             else
                             {
@@ -173,7 +173,7 @@ else
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await Toast.Error("Erro", $"Falha ao carregar o grafo: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Graph_LoadError", ex.Message]);
         }
     }
 
@@ -209,7 +209,7 @@ else
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await Toast.Error("Erro", $"Falha ao carregar arestas: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Graph_EdgesError", ex.Message]);
         }
     }
 }

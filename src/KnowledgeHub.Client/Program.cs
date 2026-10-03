@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using KnowledgeHub.Client;
 using KnowledgeHub.Client.Services;
 
+using System.Globalization;
+using Microsoft.JSInterop;
+
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
@@ -43,5 +46,19 @@ builder.Services.AddScoped<EvalApiClient>();
 builder.Services.AddScoped<GraphApiClient>();
 builder.Services.AddScoped<FlowsApiClient>();
 builder.Services.AddTransient<McpMonitorClient>();
+builder.Services.AddLocalization();
 
-await builder.Build().RunAsync();
+var host = builder.Build();
+
+// Restore the persisted culture BEFORE the first render so every
+// IStringLocalizer lookup resolves against the right satellite.
+var js = host.Services.GetRequiredService<IJSRuntime>();
+var culture = await js.InvokeAsync<string?>("localStorage.getItem", "kh:culture");
+if (!string.IsNullOrWhiteSpace(culture))
+{
+    var ci = new CultureInfo(culture);
+    CultureInfo.DefaultThreadCurrentCulture = ci;
+    CultureInfo.DefaultThreadCurrentUICulture = ci;
+}
+
+await host.RunAsync();

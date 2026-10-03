@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IStringLocalizer<SharedStrings> L
 @implements IDisposable
 
 @if (_navigating)
@@ -26,7 +27,7 @@
                definida apenas dentro de .navbar — fora dele o ícone fica invisível.
                kh-nav-toggler é próprio e usa o FA icon já carregado. *@
             <button class="kh-nav-toggler d-md-none me-2" type="button"
-                    aria-label="Toggle navigation" aria-expanded="@_mobileNavOpen"
+                    aria-label="@L["Layout_ToggleNav"]" aria-expanded="@_mobileNavOpen"
                     @onclick="ToggleMobileNav">
                 <i class="fa-solid fa-bars" aria-hidden="true"></i>
             </button>
@@ -42,18 +43,21 @@
 @code {
     private const string SidebarStateKey = "kh.sidebar.collapsed";
 
-    private static readonly Dictionary<string, string> PageTitles = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> PageTitleKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["/"] = "Home",
-        ["/sources"] = "Fontes",
-        ["/mcp-monitor"] = "Monitor MCP",
-        ["/approvals"] = "Aprovações",
-        ["/chat"] = "Chat",
-        ["/playground"] = "Playground",
-        ["/api-keys"] = "API Keys",
-        ["/eval"] = "Eval",
-        ["/settings"] = "Settings",
-        ["/change-password"] = "Trocar senha",
+        ["/"] = "Nav_Home",
+        ["/sources"] = "Nav_Fontes",
+        ["/mcp-monitor"] = "Nav_Monitor_MCP",
+        ["/approvals"] = "Nav_Aprovacoes",
+        ["/chat"] = "Nav_Chat",
+        ["/playground"] = "Nav_Playground",
+        ["/api-keys"] = "Nav_API_Keys",
+        ["/eval"] = "Nav_Eval",
+        ["/settings"] = "Nav_Settings",
+        ["/change-password"] = "Layout_ChangePassword",
+        ["/flows"] = "Nav_Flows",
+        ["/graph"] = "Nav_Grafo",
+        ["/rag-quality"] = "Nav_Qualidade_RAG",
     };
 
     private bool _navigating;
@@ -107,10 +111,10 @@
         });
     }
 
-    private static string ResolveTitle(string uri)
+    private string ResolveTitle(string uri)
     {
         var path = new Uri(uri).LocalPath;
-        return PageTitles.TryGetValue(path, out var title) ? title : "Knowledge";
+        return PageTitleKeys.TryGetValue(path, out var key) ? L[key].Value : "Knowledge";
     }
 
     /// <summary>Alterna a visibilidade do menu mobile.</summary>

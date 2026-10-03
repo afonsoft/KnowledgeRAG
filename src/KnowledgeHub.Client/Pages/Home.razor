@@ -3,15 +3,13 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject ToastService Toast
+@inject IStringLocalizer<SharedStrings> L
 
 <PageTitle>Knowledge</PageTitle>
 
 <h1>Knowledge</h1>
 
-<p class="lead">
-    Hub de conhecimento standalone — ingestão Obsidian, busca vetorial configurável
-    e servidor MCP nativo (<code>/mcp</code> + <code>/mcp/sse</code>) num único processo .NET.
-</p>
+<p class="lead">@L["Home_Lead"]</p>
 
 @* SPEC-20260926-home-mcp-prompt-and-agents-recommendations RF-001:
    Painel central com o prompt para o LLM configurar o servidor MCP. *@
@@ -19,17 +17,17 @@
     <HeaderTemplate>
         <div class="d-flex justify-content-between gap-2 align-items-center">
             <span class="fw-semibold">
-                <i class="fa-solid fa-robot text-primary me-2"></i>Conectar Agente de IA ao MCP
+                <i class="fa-solid fa-robot text-primary me-2"></i>@L["Home_CardTitle"]
             </span>
             <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-copy"
-                    TooltipText="Copiar prompt para o LLM" TooltipPlacement="Placement.Left"
+                    TooltipText="@L["Home_CopyTooltip"]" TooltipPlacement="Placement.Left"
                     OnClick="CopyPromptAsync" />
         </div>
     </HeaderTemplate>
     <BodyTemplate>
         <p class="text-muted small mb-2">
-            Copie o prompt abaixo e envie diretamente para o seu LLM ou agente de IA (Claude Code, OpenCode, Cursor, Devin) para configurá-lo e ensiná-lo a consultar a base de conhecimento.
-            Crie sua API key em <a href="api-keys" class="fw-semibold">/api-keys</a> e substitua <code>aft_SUA_CHAVE</code>.
+            @L["Home_CardHelp1"]
+            @L["Home_CardHelp2"] <a href="api-keys" class="fw-semibold">/api-keys</a> @L["Home_CardHelp3"] <code>aft_SUA_CHAVE</code>.
         </p>
         <pre class="bg-light border rounded p-3 mb-0 small" style="white-space: pre-wrap; font-family: var(--bs-font-monospace); font-size: 0.85rem; max-height: 380px; overflow-y: auto;"><code>@LlmConfigPrompt</code></pre>
     </BodyTemplate>
@@ -38,28 +36,28 @@
 <div class="row g-3">
     <div class="col-12 col-md-4">
         <Card>
-            <HeaderTemplate>Fontes</HeaderTemplate>
+            <HeaderTemplate>@L["Nav_Fontes"]</HeaderTemplate>
             <BodyTemplate>
-                Cadastre vaults Obsidian, páginas web e outras fontes de conhecimento.
-                <div class="mt-2"><a class="btn btn-primary btn-sm" href="sources">Abrir</a></div>
+                @L["Home_CardSourcesBody"]
+                <div class="mt-2"><a class="btn btn-primary btn-sm" href="sources">@L["Common_Open"]</a></div>
             </BodyTemplate>
         </Card>
     </div>
     <div class="col-12 col-md-4">
         <Card>
-            <HeaderTemplate>Monitor MCP</HeaderTemplate>
+            <HeaderTemplate>@L["Nav_Monitor_MCP"]</HeaderTemplate>
             <BodyTemplate>
-                Sessões e chamadas de tools em tempo real via SignalR.
-                <div class="mt-2"><a class="btn btn-primary btn-sm" href="mcp-monitor">Abrir</a></div>
+                @L["Home_CardMonitorBody"]
+                <div class="mt-2"><a class="btn btn-primary btn-sm" href="mcp-monitor">@L["Common_Open"]</a></div>
             </BodyTemplate>
         </Card>
     </div>
     <div class="col-12 col-md-4">
         <Card>
-            <HeaderTemplate>Playground</HeaderTemplate>
+            <HeaderTemplate>@L["Nav_Playground"]</HeaderTemplate>
             <BodyTemplate>
-                Teste a busca semântica rankeada direto no navegador.
-                <div class="mt-2"><a class="btn btn-primary btn-sm" href="playground">Abrir</a></div>
+                @L["Home_CardPlaygroundBody"]
+                <div class="mt-2"><a class="btn btn-primary btn-sm" href="playground">@L["Common_Open"]</a></div>
             </BodyTemplate>
         </Card>
     </div>
@@ -73,11 +71,11 @@
         try
         {
             await JS.InvokeVoidAsync("navigator.clipboard.writeText", LlmConfigPrompt);
-            await Toast.Success("Copiado!", "Prompt para o LLM copiado para a área de transferência.");
+            await Toast.Success(L["Home_Copied"], L["Home_CopiedBody"]);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await Toast.Warning("Atenção", $"Não foi possível acessar a área de transferência: {ex.Message}");
+            await Toast.Warning(L["Common_Warning"], L["Home_ClipboardFail", ex.Message]);
         }
     }
 }

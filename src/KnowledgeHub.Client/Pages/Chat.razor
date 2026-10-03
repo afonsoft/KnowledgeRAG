@@ -4,8 +4,9 @@
 @inject ThreadsApiClient Threads
 @inject StreamingApiClient Streaming
 @inject ToastService Toast
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Chat — Knowledge</PageTitle>
+<PageTitle>@L["Chat_PageTitle"]</PageTitle>
 <h1 class="visually-hidden">Chat</h1>
 
 <div class="row g-3">
@@ -13,8 +14,8 @@
         <Card>
             <HeaderTemplate>
                 <div class="d-flex justify-content-between gap-2 align-items-center">
-                    <span>Threads</span>
-                    <Button Size="Size.Small" Icon="fa-solid fa-plus" Text="Nova" TooltipText="Nova conversa" IsAsync="true"
+                    <span>@L["Chat_Threads"]</span>
+                    <Button Size="Size.Small" Icon="fa-solid fa-plus" Text="@L["Chat_New"]" TooltipText="@L["Chat_NewTooltip"]" IsAsync="true"
                             OnClick="NewThreadAsync" />
                 </div>
             </HeaderTemplate>
@@ -27,10 +28,10 @@
                                 @onclick="() => OpenThreadAsync(t.Id)">
                             <div class="text-truncate">@t.Title</div>
                             <small class="@(t.Id == _current?.Thread.Id ? "" : "text-muted")">
-                                @t.MessageCount msgs
+                                @L["Chat_Msgs", t.MessageCount]
                                 @if (t.Summarized)
                                 {
-                                    <span>· resumido</span>
+                                    <span>· @L["Chat_Summarized"]</span>
                                 }
                             </small>
                         </button>
@@ -44,7 +45,7 @@
         @if (_current is null)
         {
             <div class="text-center text-muted py-5">
-                Selecione uma thread ou crie uma nova conversa.
+                @L["Chat_Empty"]
             </div>
         }
         else
@@ -56,18 +57,18 @@
                         <div>
                             @if (_current.Summary is not null)
                             {
-                                <Badge Color="Color.Info" class="me-2">contexto resumido</Badge>
+                                <Badge Color="Color.Info" class="me-2">@L["Chat_SummaryBadge"]</Badge>
                             }
-                            <PopConfirmButton Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash" Text="Excluir"
-                                              TooltipText="Excluir thread"
-                                              Title="Excluir thread"
-                                              Content="A conversa e seu histórico serão removidos."
+                            <PopConfirmButton Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash" Text="@L["Common_Delete"]"
+                                              TooltipText="@L["Chat_DeleteTooltip"]"
+                                              Title="@L["Chat_DeleteTitle"]"
+                                              Content="@L["Chat_DeleteContent"]"
                                               IsAsync="true" OnConfirm="DeleteThreadAsync" />
                         </div>
                     </div>
                 </HeaderTemplate>
                 <BodyTemplate>
-                    <div role="log" aria-live="polite" aria-label="Mensagens da conversa"
+                    <div role="log" aria-live="polite" aria-label="@L["Chat_LogLabel"]"
                          style="max-height: 480px; overflow-y: auto;">
                         @foreach (var m in _current.Messages)
                         {
@@ -96,16 +97,16 @@
                         {
                             <div class="mb-2 p-2 rounded bg-light kh-action-loading">
                                 <i class="fa-solid fa-spinner fa-spin"></i>
-                                <small class="text-muted">aguardando resposta do agente…</small>
+                                <small class="text-muted">@L["Chat_Waiting"]</small>
                             </div>
                         }
                     </div>
                     <div class="d-flex gap-2 mt-3">
-                        <BootstrapInput @bind-Value="_draft" PlaceHolder="Mensagem…"
+                        <BootstrapInput @bind-Value="_draft" PlaceHolder="@L["Chat_Placeholder"]"
                                         IsDisabled="_sending"
                                         OnEnterAsync="_ => SendAsync()" />
-                        <Button Color="Color.Primary" Icon="fa-solid fa-paper-plane" Text="Enviar"
-                                TooltipText="Enviar mensagem"
+                        <Button Color="Color.Primary" Icon="fa-solid fa-paper-plane" Text="@L["Chat_Send"]"
+                                TooltipText="@L["Chat_SendTooltip"]"
                                 IsAsync="true" OnClick="SendAsync" IsDisabled="_sending" />
                     </div>
                 </BodyTemplate>
@@ -127,7 +128,7 @@
     private async Task LoadThreadsAsync()
     {
         try { _threads = (await Threads.ListAsync()).ToList(); }
-        catch (Exception ex) { await Toast.Error("Falha ao listar threads", ex.Message); }
+        catch (Exception ex) { await Toast.Error(L["Chat_ListError"], ex.Message); }
     }
 
     private async Task NewThreadAsync()
@@ -187,7 +188,7 @@
                 }
                 else
                 {
-                    await Toast.Error("Streaming interrompido", ex.Message);
+                    await Toast.Error(L["Chat_StreamError"], ex.Message);
                 }
             }
             _current = await Threads.GetAsync(threadId);
@@ -195,7 +196,7 @@
         }
         catch (Exception ex)
         {
-            await Toast.Error("Falha ao enviar", ex.Message);
+            await Toast.Error(L["Chat_SendError"], ex.Message);
         }
         finally
         {
@@ -217,10 +218,10 @@
                 _streamText += $"\n\n— tool {(data.TryGetProperty("tool", out var t) ? t.GetString() : "?")} —\n\n";
                 break;
             case "awaiting_approval":
-                _streamText += $"\n\nAguardando aprovação — veja /approvals.\n\n";
+                _streamText += L["Chat_AwaitingApproval"].Value;
                 break;
             case "error":
-                _streamText += $"\n\n[erro: {(data.TryGetProperty("message", out var m) ? m.GetString() : "stream error")}]";
+                _streamText += "\n\n" + L["Chat_StreamErrFmt", (data.TryGetProperty("message", out var m) ? m.GetString() : null) ?? "stream error"].Value;
                 break;
             // done: the persisted thread is reloaded afterwards — ignore.
         }

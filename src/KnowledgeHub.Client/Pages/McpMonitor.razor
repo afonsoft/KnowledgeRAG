@@ -4,21 +4,22 @@
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IStringLocalizer<SharedStrings> L
 @implements IAsyncDisposable
 
-<PageTitle>Monitor MCP — Knowledge</PageTitle>
+<PageTitle>@L["Mon_PageTitle"]</PageTitle>
 
-<h1 class="h3 mb-3">Monitor MCP</h1>
+<h1 class="h3 mb-3">@L["Nav_Monitor_MCP"]</h1>
 
 <div class="mb-3 d-flex align-items-center flex-wrap">
     <Badge Color="@StateColor">@StateLabel</Badge>
     <span class="ms-2 text-muted">hub: /hubs/mcp</span>
     <span class="ms-3">
         @* SPEC-20260914-health-checks: aggregated readiness shown in the monitor. *@
-        saúde: <Badge Color="@HealthColor">@HealthLabel</Badge>
+        @L["Mon_Health"] <Badge Color="@HealthColor">@HealthLabel</Badge>
     </span>
     <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-rotate"
-            TooltipText="Atualizar" TooltipPlacement="Placement.Left"
+            TooltipText="@L["Common_Refresh"]" TooltipPlacement="Placement.Left"
             IsAsync="true" OnClick="RefreshHealthAsync" class="ms-auto" />
 </div>
 
@@ -28,11 +29,11 @@
 {
     <div class="alert alert-warning py-2 d-flex justify-content-between gap-2 align-items-center">
         <span>
-            Falha na conexão em tempo real: @monitorError<br />
-            <small class="text-muted">WebSocket pode estar bloqueado pela rede/proxy — a página continua funcional.</small>
+            @L["Mon_ConnError"] @monitorError<br />
+            <small class="text-muted">@L["Mon_ConnHint"]</small>
         </span>
         <Button Size="Size.ExtraSmall" Color="Color.Warning" Icon="fa-solid fa-rotate"
-                Text="Reconectar" TooltipText="Reconectar" TooltipPlacement="Placement.Left"
+                Text="@L["Mon_Reconnect"]" TooltipText="@L["Mon_Reconnect"]" TooltipPlacement="Placement.Left"
                 IsAsync="true" OnClick="ReconnectAsync" />
     </div>
 }
@@ -40,11 +41,11 @@
 <div class="row g-3">
     <div class="col-12 col-lg-4">
         <Card>
-            <HeaderTemplate>Sessões ativas (@_sessions.Count)</HeaderTemplate>
+            <HeaderTemplate>@L["Mon_Sessions", _sessions.Count]</HeaderTemplate>
             <BodyTemplate>
                 @if (_sessions.Count == 0)
                 {
-                    <div class="text-muted">Nenhuma sessão MCP conectada.</div>
+                    <div class="text-muted">@L["Mon_NoSessions"]</div>
                 }
                 else
                 {
@@ -54,8 +55,7 @@
                             <li class="list-group-item">
                                 <div><code title="@s.Key">@ShortId(s.Key)</code></div>
                                 <small class="text-muted">
-                                    @(s.Value.Caller ?? "anônimo") · desde @s.Value.ConnectedAt.LocalDateTime.ToString("T")
-                                    (@FormatAge(DateTimeOffset.UtcNow - s.Value.ConnectedAt))
+                                    @(s.Value.Caller ?? L["Mon_Anonymous"].Value) · @L["Mon_Since", s.Value.ConnectedAt.LocalDateTime.ToString("T"), FormatAge(DateTimeOffset.UtcNow - s.Value.ConnectedAt)]
                                 </small>
                             </li>
                         }
@@ -66,21 +66,21 @@
 
         @* SPEC-20260925-mcp-monitor-audit: resumo agregado do feed em buffer. *@
         <Card class="mt-3">
-            <HeaderTemplate>Resumo (buffer)</HeaderTemplate>
+            <HeaderTemplate>@L["Mon_Summary"]</HeaderTemplate>
             <BodyTemplate>
                 <div class="row small text-center">
-                    <div class="col-4"><strong>@_activity.Count</strong><br />eventos</div>
+                    <div class="col-4"><strong>@_activity.Count</strong><br />@L["Mon_Events"]</div>
                     <div class="col-4"><strong class="text-success">@OkCount</strong><br />ok</div>
-                    <div class="col-4"><strong class="text-danger">@ErrorCount</strong><br />erros</div>
+                    <div class="col-4"><strong class="text-danger">@ErrorCount</strong><br />@L["Mon_Errors"]</div>
                 </div>
                 @if (GetAvgMs() is { } avg)
                 {
-                    <div class="small text-muted mt-2">latência média: @avg.ToString("F0")ms</div>
+                    <div class="small text-muted mt-2">@L["Mon_AvgLatency", avg.ToString("F0")]</div>
                 }
                 @if (GetTopTools() is { Count: > 0 } topTools)
                 {
                     <div class="mt-2">
-                        <div class="small text-muted mb-1">tools mais chamadas:</div>
+                        <div class="small text-muted mb-1">@L["Mon_TopTools"]</div>
                         @foreach (var t in topTools)
                         {
                             <Badge Color="Color.Secondary" class="me-1 mb-1">@t.Key (@t.Value)</Badge>
@@ -88,37 +88,37 @@
                     </div>
                 }
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-file-csv"
-                        Text="Exportar CSV" TooltipText="Exportar CSV" TooltipPlacement="Placement.Top"
+                        Text="@L["Mon_ExportCsv"]" TooltipText="@L["Mon_ExportCsv"]" TooltipPlacement="Placement.Top"
                         IsDisabled="_activity.Count == 0" OnClick="ExportCsvAsync" class="mt-2" />
             </BodyTemplate>
         </Card>
     </div>
     <div class="col-12 col-lg-8">
         <Card>
-            <HeaderTemplate>Atividade (@FilteredActivity.Count() de @_activity.Count)</HeaderTemplate>
+            <HeaderTemplate>@L["Mon_Activity", FilteredActivity.Count(), _activity.Count]</HeaderTemplate>
             <BodyTemplate>
                 @* SPEC-20260925-mcp-monitor-audit: filtros de auditoria. *@
                 <div class="d-flex gap-2 mb-2 flex-wrap">
                     <select class="form-select form-select-sm" style="max-width:170px" @bind="_kindFilter">
-                        <option value="">tipo: todos</option>
+                        <option value="">@L["Mon_KindAll"]</option>
                         <option value="ToolCall">tools/call</option>
                         <option value="Request">requests</option>
-                        <option value="Approval">aprovações</option>
-                        <option value="Session">sessões</option>
+                        <option value="Approval">@L["Mon_Approvals"]</option>
+                        <option value="Session">@L["Mon_SessionsOpt"]</option>
                     </select>
                     <select class="form-select form-select-sm" style="max-width:140px" @bind="_outcomeFilter">
-                        <option value="">resultado: todos</option>
-                        <option value="ok">somente ok</option>
-                        <option value="erro">somente erros</option>
+                        <option value="">@L["Mon_OutcomeAll"]</option>
+                        <option value="ok">@L["Mon_OnlyOk"]</option>
+                        <option value="erro">@L["Mon_OnlyErrors"]</option>
                     </select>
                     <input class="form-control form-control-sm" style="max-width:240px"
-                           placeholder="buscar método/detalhe/quem…" @bind="_textFilter" @bind:event="oninput" />
+                           placeholder="@L["Mon_SearchPh"]" @bind="_textFilter" @bind:event="oninput" />
                 </div>
                 <div style="max-height: 480px; overflow-y: auto;">
                     <div class="table-responsive-wrapper">
                         <table class="table table-sm table-striped mb-0">
                         <thead>
-                            <tr><th>Hora</th><th>Quem</th><th>Sessão</th><th>Método</th><th>Detalhe</th><th>ms</th><th></th></tr>
+                            <tr><th>@L["Mon_Time"]</th><th>@L["Mon_Who"]</th><th>@L["Mon_Session"]</th><th>@L["Mon_Method"]</th><th>@L["Mon_Detail"]</th><th>ms</th><th></th></tr>
                         </thead>
                         <tbody>
                             @foreach (var a in FilteredActivity)
@@ -137,7 +137,7 @@
                                         }
                                         else if (a.Succeeded == false)
                                         {
-                                            <Badge Color="Color.Danger">erro</Badge>
+                                            <Badge Color="Color.Danger">@L["Mon_ErrorBadge"]</Badge>
                                         }
                                     </td>
                                 </tr>
@@ -147,11 +147,11 @@
                     </div>
                     @if (_activity.Count == 0)
                     {
-                        <div class="text-muted p-2">Aguardando chamadas MCP…</div>
+                        <div class="text-muted p-2">@L["Mon_Waiting"]</div>
                     }
                     else if (!FilteredActivity.Any())
                     {
-                        <div class="text-muted p-2">Nenhum evento corresponde aos filtros.</div>
+                        <div class="text-muted p-2">@L["Mon_NoMatch"]</div>
                     }
                 </div>
             </BodyTemplate>
@@ -163,19 +163,19 @@
    ready-to-copy client configs — order Claude Code → Devin → opencode → agy,
    generic SSE block last (Claude Desktop removed per user request). *@
 <Card class="mt-3">
-    <HeaderTemplate>Como conectar um client</HeaderTemplate>
+    <HeaderTemplate>@L["Mon_ConnectCard"]</HeaderTemplate>
     <BodyTemplate>
         <p class="text-muted mb-3">
-            Crie uma API key em <a href="/api-keys">/api-keys</a> primeiro e substitua
-            <code>aft_SUA_CHAVE</code>. Transporte principal: Streamable HTTP em
-            <code>@McpUrl</code> — clientes SSE-only usam o legado <code>@SseUrl</code>.
+            @L["Mon_Intro1"]<a href="/api-keys">/api-keys</a>@L["Mon_Intro2"]
+            <code>aft_SUA_CHAVE</code>@L["Mon_Intro3"]
+            <code>@McpUrl</code>@L["Mon_Intro4"]<code>@SseUrl</code>.
         </p>
 
         <div class="mb-3">
             <div class="d-flex justify-content-between gap-2 align-items-center mb-1">
                 <strong>Claude Code</strong>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        TooltipText="@L["Common_Copy"]" TooltipPlacement="Placement.Left"
                         OnClick="() => Copy(ClaudeCodeConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@ClaudeCodeConfig</code></pre>
@@ -186,7 +186,7 @@
                 <strong>Devin</strong>
                 <small class="text-muted me-auto ms-2">Settings → MCP Servers</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        TooltipText="@L["Common_Copy"]" TooltipPlacement="Placement.Left"
                         OnClick="() => Copy(DevinConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@DevinConfig</code></pre>
@@ -197,7 +197,7 @@
                 <strong>opencode</strong>
                 <small class="text-muted me-auto ms-2">opencode.json</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        TooltipText="@L["Common_Copy"]" TooltipPlacement="Placement.Left"
                         OnClick="() => Copy(OpencodeConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@OpencodeConfig</code></pre>
@@ -208,7 +208,7 @@
                 <strong>agy (Antigravity)</strong>
                 <small class="text-muted me-auto ms-2">mcp_config.json</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        TooltipText="@L["Common_Copy"]" TooltipPlacement="Placement.Left"
                         OnClick="() => Copy(AgyConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@AgyConfig</code></pre>
@@ -216,10 +216,10 @@
 
         <div>
             <div class="d-flex justify-content-between gap-2 align-items-center mb-1">
-                <strong>Genérico (qualquer client MCP)</strong>
+                <strong>@L["Mon_Generic"]</strong>
                 <small class="text-muted me-auto ms-2">SSE / mcp-remote</small>
                 <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-copy"
-                        TooltipText="Copiar" TooltipPlacement="Placement.Left"
+                        TooltipText="@L["Common_Copy"]" TooltipPlacement="Placement.Left"
                         OnClick="() => Copy(GenericConfig)" />
             </div>
             <pre class="bg-light border rounded p-2 mb-0 small"><code>@GenericConfig</code></pre>
@@ -390,7 +390,7 @@
     private string HealthLabel => _healthy switch
     {
         true => "ready",
-        false => "indisponível",
+        false => L["Mon_Unavailable"],
         _ => "…"
     };
 
@@ -416,10 +416,10 @@
 
     private string StateLabel => Monitor.State switch
     {
-        Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected => "conectado",
-        Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connecting => "conectando…",
-        Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Reconnecting => "reconectando…",
-        _ => "desconectado"
+        Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected => L["Mon_Connected"],
+        Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connecting => L["Mon_Connecting"],
+        Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Reconnecting => L["Mon_Reconnecting"],
+        _ => L["Mon_Disconnected"]
     };
 
     private Color StateColor => Monitor.State switch

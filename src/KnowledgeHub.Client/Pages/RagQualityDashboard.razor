@@ -2,14 +2,15 @@
 @attribute [Authorize]
 @inject HttpClient Http
 @inject NavigationManager Nav
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Qualidade RAG — Knowledge</PageTitle>
+<PageTitle>@L["RagQ_PageTitle"]</PageTitle>
 
-<h1 class="h3 mb-3">Qualidade RAG (Tríade Dourada)</h1>
+<h1 class="h3 mb-3">@L["RagQ_Heading"]</h1>
 
 @if (_loading)
 {
-    <div class="text-muted">Carregando métricas…</div>
+    <div class="text-muted">@L["RagQ_Loading"]</div>
 }
 else if (_error is not null)
 {
@@ -20,7 +21,7 @@ else if (_stats is not null)
     <div class="row g-3 mb-3">
         <div class="col-6 col-lg-3">
             <div class="card h-100"><div class="card-body">
-                <div class="text-muted small">Avaliações (7d)</div>
+                <div class="text-muted small">@L["RagQ_Evals7d"]</div>
                 <div class="h4 mb-0">@_stats.TotalEvaluations</div>
             </div></div>
         </div>
@@ -45,19 +46,19 @@ else if (_stats is not null)
     </div>
 
     <div class="alert alert-@(_stats.HallucinationRatePercent > 0 ? "warning" : "success") py-2">
-        Taxa de alucinação (7d): <strong>@_stats.HallucinationRatePercent.ToString("F1")%</strong>
+        @L["RagQ_HallucinationRate"] <strong>@_stats.HallucinationRatePercent.ToString("F1")%</strong>
     </div>
 
-    <h5>Respostas sinalizadas recentes</h5>
+    <h5>@L["RagQ_Flagged"]</h5>
     @if (_stats.RecentFlaggedQueries.Count == 0)
     {
-        <div class="text-muted">Nenhuma resposta sinalizada como alucinação no período.</div>
+        <div class="text-muted">@L["RagQ_NoneFlagged"]</div>
     }
     else
     {
         <div class="table-responsive-wrapper">
         <table class="table table-sm align-middle">
-            <thead><tr><th>Pergunta</th><th>Groundedness</th><th>Sinalizada em</th></tr></thead>
+            <thead><tr><th>@L["RagQ_Question"]</th><th>Groundedness</th><th>@L["RagQ_FlaggedAt"]</th></tr></thead>
             <tbody>
             @foreach (var q in _stats.RecentFlaggedQueries)
             {

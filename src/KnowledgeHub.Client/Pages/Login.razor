@@ -5,9 +5,10 @@
 @inject NavigationManager Nav
 @inject KhAuthenticationStateProvider AuthState
 @inject IJSRuntime JS
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Login — Knowledge</PageTitle>
-<h1 class="visually-hidden">Login — Knowledge</h1>
+<PageTitle>@L["Login_PageTitle"]</PageTitle>
+<h1 class="visually-hidden">@L["Login_PageTitle"]</h1>
 
 @* SPEC-20260926-login-split-layout: split panel — login card on the left/top,
    "Conectar Agente de IA ao MCP" first item of the right column followed by the
@@ -17,7 +18,7 @@
         <div class="card shadow-sm mx-auto" style="max-width: 380px;">
             <div class="card-body">
                 <h4 class="card-title mb-1">Knowledge</h4>
-                <p class="text-muted mb-4">Entre para administrar a plataforma.</p>
+                <p class="text-muted mb-4">@L["Login_Subtitle"]</p>
 
                 @if (_error is not null)
                 {
@@ -25,16 +26,16 @@
                 }
 
                 <div class="mb-3">
-                    <label class="form-label" for="login-username">Usuário</label>
+                    <label class="form-label" for="login-username">@L["Login_Username"]</label>
                     <input class="form-control" id="login-username" @bind="_username" @bind:event="oninput" autocomplete="username" />
                 </div>
                 <div class="mb-4">
-                    <label class="form-label" for="login-password">Senha</label>
+                    <label class="form-label" for="login-password">@L["Login_Password"]</label>
                     <input class="form-control" id="login-password" type="password" @bind="_password" @bind:event="oninput"
                            autocomplete="current-password" @onkeydown="OnEnter" />
                 </div>
 
-                <Button Color="Color.Primary" Text="Entrar" IsAsync="true" IsBlock="true"
+                <Button Color="Color.Primary" Text="@L["Login_Submit"]" IsAsync="true" IsBlock="true"
                         OnClick="DoLogin" IsDisabled="_busy" />
             </div>
         </div>
@@ -46,33 +47,31 @@
                 <div class="card-header bg-transparent">
                     <div class="d-flex justify-content-between gap-2 align-items-center">
                         <span class="fw-semibold">
-                            <i class="fa-solid fa-robot text-primary me-2"></i>Conectar Agente de IA ao MCP
+                            <i class="fa-solid fa-robot text-primary me-2"></i>@L["Home_CardTitle"]
                         </span>
                         <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-copy"
-                                TooltipText="Copiar prompt para o LLM" TooltipPlacement="Placement.Left"
+                                TooltipText="@L["Home_CopyTooltip"]" TooltipPlacement="Placement.Left"
                                 OnClick="() => CopySnippet(LlmConfigPrompt)" />
                     </div>
                 </div>
                 <div class="card-body">
                     <p class="text-muted small mb-2">
-                        Copie o prompt abaixo e envie para o seu agente de IA (Claude Code, OpenCode, Cursor, Devin) — ele configura o MCP e o protocolo de onboarding. A API key <code>aft_*</code> é gerada em <strong>API Keys</strong> após o login.
+                        @L["Login_PromptHelp1"] <code>aft_*</code> @L["Login_PromptHelp2"] <strong>API Keys</strong> @L["Login_PromptHelp3"]
                     </p>
                     <pre class="bg-light border rounded p-3 mb-0 small" style="white-space: pre-wrap; font-family: var(--bs-font-monospace); font-size: 0.85rem; max-height: 300px; overflow-y: auto;"><code>@LlmConfigPrompt</code></pre>
                 </div>
             </div>
 
-            <h5 class="mb-1">Como conectar um client</h5>
+            <h5 class="mb-1">@L["Login_ClientsTitle"]</h5>
             <p class="text-muted small mb-3">
-                O KnowledgeHub é um servidor MCP nativo. Gere uma API key
-                <code>aft_*</code> em <strong>API Keys</strong> após o login e
-                aponte o seu client para:
+                @L["Login_ClientsIntro1"] <code>aft_*</code> @L["Login_ClientsIntro2"] <strong>API Keys</strong> @L["Login_ClientsIntro3"]
             </p>
             <div class="border rounded bg-body-tertiary p-2 mb-3 small">
-                <div><strong>Streamable HTTP</strong> (recomendado): <code>@_mcpUrl</code></div>
+                <div><strong>Streamable HTTP</strong> @L["Login_Recommended"]: <code>@_mcpUrl</code></div>
                 @if (_legacySse)
                 {
                     <div class="mt-1"><strong>Legacy SSE</strong>: <code>@_sseUrl</code>
-                        <span class="text-muted"> — sem suporte a header? use <code>?access_token=aft_...</code></span></div>
+                        <span class="text-muted">@L["Login_NoHeader"] <code>?access_token=aft_...</code></span></div>
                 }
             </div>
 
@@ -82,7 +81,7 @@
                     <div class="d-flex justify-content-between gap-2 align-items-center">
                         <strong class="small">@c.Name</strong>
                         <Button Size="Size.ExtraSmall" Color="Color.Secondary" IsOutline="true"
-                                Icon="fa-solid fa-copy" TooltipText="Copiar"
+                                Icon="fa-solid fa-copy" TooltipText="@L["Common_Copy"]"
                                 TooltipPlacement="Placement.Left"
                                 OnClick="() => CopySnippet(c.Snippet)" />
                     </div>
@@ -93,8 +92,7 @@
             @if (_legacySse)
             {
                 <p class="text-muted small mt-3 mb-0">
-                    Clients que só falam SSE legado usam <code>@_sseUrl</code>; o token pode ir no
-                    query param <code>?access_token=</code> quando o client não envia headers.
+                    @L["Login_SseNote1"] <code>@_sseUrl</code>@L["Login_SseNote2"] <code>?access_token=</code> @L["Login_SseNote3"]
                 </p>
             }
         </div>
@@ -165,7 +163,7 @@
             var result = await Auth.LoginAsync(_username.Trim(), _password);
             if (!result.IsSuccess || result.Value is null)
             {
-                _error = result.Error ?? "Falha no login";
+                _error = result.Error ?? L["Login_Fail"];
                 return;
             }
 
