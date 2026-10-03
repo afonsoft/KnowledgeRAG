@@ -56,7 +56,10 @@ EXPOSE 8080
 VOLUME ["/data"]
 USER app
 
+# Probe /health/ready (db, embeddings, ingestion, vectorstore) — hitting `/`
+# only proves the static SPA serves, so a broken database would still report
+# healthy. Degraded checks keep the endpoint at 200 by design.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -fsS http://localhost:8080/ -o /dev/null || exit 1
+  CMD curl -fsS http://localhost:8080/health/ready -o /dev/null || exit 1
 
 ENTRYPOINT ["./KnowledgeHub"]

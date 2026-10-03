@@ -84,3 +84,10 @@ services:
     restart: unless-stopped
     mem_limit: 8g
     memswap_limit: 8g
+    # stdout/stderr rotation — the Serilog file sink already rotates (14d),
+    # but container stdout would otherwise grow unbounded in json-file.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

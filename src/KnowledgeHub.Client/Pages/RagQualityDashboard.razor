@@ -13,7 +13,7 @@
 }
 else if (_error is not null)
 {
-    <div class="alert alert-danger py-2">@_error</div>
+    <div class="alert alert-danger py-2" role="alert">@_error</div>
 }
 else if (_stats is not null)
 {
@@ -55,6 +55,7 @@ else if (_stats is not null)
     }
     else
     {
+        <div class="table-responsive-wrapper">
         <table class="table table-sm align-middle">
             <thead><tr><th>Pergunta</th><th>Groundedness</th><th>Sinalizada em</th></tr></thead>
             <tbody>
@@ -68,6 +69,7 @@ else if (_stats is not null)
             }
             </tbody>
         </table>
+        </div>
     }
 }
 
