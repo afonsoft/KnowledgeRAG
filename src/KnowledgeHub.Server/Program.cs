@@ -515,6 +515,7 @@ public partial class Program
         app.MapSettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapApiKeySettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapEvalApi().RequireAuthorization(AuthPolicies.Operational);
+        app.MapFlowsApi(); // auth + rate limiting per-endpoint inside
         app.MapEvidenceApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         // CookieSession: the stats payload embeds flagged questions from every caller —
         // API keys must not enumerate other users' queries (Devin Review PR #367).

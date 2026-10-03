@@ -41,6 +41,7 @@ builder.Services.AddScoped<A2aApiClient>();
 builder.Services.AddScoped<SettingsApiClient>();
 builder.Services.AddScoped<EvalApiClient>();
 builder.Services.AddScoped<GraphApiClient>();
+builder.Services.AddScoped<FlowsApiClient>();
 builder.Services.AddTransient<McpMonitorClient>();
 
 await builder.Build().RunAsync();

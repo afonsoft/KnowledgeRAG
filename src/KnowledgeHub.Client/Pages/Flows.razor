@@ -1,0 +1,559 @@
+@page "/flows"
+@attribute [Authorize]
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@using KnowledgeHub.Shared
+@using KnowledgeHub.Shared.Contracts
+@inject FlowsApiClient Api
+@inject ToastService Toast
+
+<PageTitle>Agent Flows — Knowledge</PageTitle>
+
+<div class="d-flex justify-content-between gap-2 align-items-center mb-3">
+    <h1 class="h3 mb-0">Agent Flows</h1>
+    <div class="d-flex gap-2">
+        <Button Size="Size.Small" Icon="fa-solid fa-plus" Text="Novo flow" TooltipText="Novo flow"
+                OnClick="NewFlow" />
+        <Button Size="Size.Small" Icon="fa-solid fa-rotate" Text="Atualizar" TooltipText="Atualizar"
+                IsAsync="true" OnClick="LoadAsync" IsDisabled="_loading" />
+    </div>
+</div>
+
+<p class="text-muted small">
+    Flows publicados viram tools <code>flow_&lt;slug&gt;</code> no catálogo MCP — o agente (chat, SDKs, A2A)
+    os invoca como qualquer outra tool.
+</p>
+
+@if (_flows is null)
+{
+    <div class="text-muted kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando…</div>
+}
+else if (_flows.Count == 0 && _edit is null)
+{
+    <div class="text-muted">Nenhum flow criado ainda.</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <caption class="visually-hidden">Lista de agent flows</caption>
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Tool MCP</th>
+                    <th>Habilitado</th>
+                    <th>Versão</th>
+                    <th>Atualizado</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in _flows)
+                {
+                    <tr>
+                        <td>@f.Name</td>
+                        <td><code>flow_@f.Slug</code></td>
+                        <td>
+                            @if (f.Enabled)
+                            {
+                                <Badge Color="Color.Success">sim</Badge>
+                            }
+                            else
+                            {
+                                <Badge Color="Color.Secondary">não</Badge>
+                            }
+                        </td>
+                        <td>v@f.Version</td>
+                        <td><small class="text-muted">@f.UpdatedAt.LocalDateTime.ToString("g")</small></td>
+                        <td>
+                            <div class="d-flex gap-1 flex-wrap">
+                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-pen" Text="Editar" TooltipText="Editar"
+                                        OnClick="() => EditFlowAsync(f)" />
+                                <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-play" Text="Executar"
+                                        TooltipText="Executar" IsAsync="true" OnClick="() => OpenRun(f)" />
+                                <Button Size="Size.ExtraSmall" Color="Color.Info" Icon="fa-solid fa-clock-rotate-left"
+                                        Text="Runs" TooltipText="Histórico de runs" IsAsync="true"
+                                        OnClick="() => ShowRunsAsync(f)" />
+                                <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
+                                                  Text="Excluir" TooltipText="Excluir"
+                                                  Content="@($"Excluir este flow? A tool flow_{f.Slug} sai do catálogo.")"
+                                                  OnConfirm="() => DeleteFlowAsync(f)" />
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_edit is not null)
+{
+    <div class="card mt-3" id="flow-editor">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>@(_edit.Id is null ? "Novo flow" : $"Editar — {_edit.Name}")</strong>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="Fechar" TooltipText="Fechar"
+                    OnClick="() => _edit = null" />
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <BootstrapInput @bind-Value="_edit.Name" DisplayText="Nome *" ShowLabel="true" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <BootstrapInput @bind-Value="_edit.Description" DisplayText="Descrição (o LLM usa para decidir quando chamar)" ShowLabel="true" />
+                </div>
+                <div class="col-12 col-md-2">
+                    <Switch @bind-Value="_edit.Enabled" DisplayText="Habilitado" ShowLabel="true" />
+                </div>
+            </div>
+
+            <h2 class="h6 mt-4">Inputs (bloco start)</h2>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <caption class="visually-hidden">Inputs declarados do flow</caption>
+                    <thead><tr><th>Nome</th><th>Tipo</th><th>Obrigatório</th><th>Padrão</th><th>Descrição</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var input in _edit.Inputs)
+                        {
+                            <tr>
+                                <td><BootstrapInput @bind-Value="input.Name" placeholder="customer_id" /></td>
+                                <td>
+                                    <Select @bind-Value="input.Type" Items="InputTypes" />
+                                </td>
+                                <td><Switch @bind-Value="input.Required" /></td>
+                                <td><BootstrapInput @bind-Value="input.DefaultJson" placeholder="JSON" /></td>
+                                <td><BootstrapInput @bind-Value="input.Description" /></td>
+                                <td>
+                                    <Button Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
+                                            TooltipText="Remover input" OnClick="() => _edit.Inputs.Remove(input)" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="Adicionar input"
+                    OnClick="AddInput" />
+
+            <h2 class="h6 mt-4">Steps</h2>
+            @if (_edit.Steps.Count == 0)
+            {
+                <div class="text-muted small">Sem steps — adicione o primeiro.</div>
+            }
+            @for (var i = 0; i < _edit.Steps.Count; i++)
+            {
+                var idx = i;
+                var s = _edit.Steps[idx];
+                <div class="border rounded p-2 mb-2">
+                    <div class="d-flex gap-2 flex-wrap align-items-center">
+                        <span class="badge bg-secondary">#@(idx + 1)</span>
+                        <BootstrapInput @bind-Value="s.Id" placeholder="id (ex.: fetch)" style="width:10rem" />
+                        <Select @bind-Value="s.Type" Items="StepTypes" style="width:9rem" />
+                        <BootstrapInput @bind-Value="s.Name" placeholder="rótulo" style="width:12rem" />
+                        <div class="ms-auto d-flex gap-1">
+                            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-up" TooltipText="Mover para cima"
+                                    IsDisabled="idx == 0" OnClick="() => MoveStep(idx, -1)" />
+                            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-down" TooltipText="Mover para baixo"
+                                    IsDisabled="idx == _edit.Steps.Count - 1" OnClick="() => MoveStep(idx, 1)" />
+                            <Button Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
+                                    TooltipText="Remover step" OnClick="() => _edit.Steps.RemoveAt(idx)" />
+                        </div>
+                    </div>
+                    <Textarea @bind-Value="s.ConfigJson" placeholder='Config JSON — ex.: {"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}'
+                              rows="3" class="font-monospace mt-2" />
+                    @if (s.Type is "condition" or "foreach")
+                    {
+                        <Textarea @bind-Value="s.StepsJson" rows="2" class="font-monospace mt-1"
+                                  placeholder='Nested steps JSON — foreach usa a lista acima; condition usa config.branches[].steps' />
+                    }
+                </div>
+            }
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="Adicionar step" OnClick="AddStep" />
+
+            <div class="mt-3">
+                <Switch @bind-Value="_edit.RawMode" DisplayText="Editar JSON diretamente (modo avançado)" ShowLabel="true" />
+            </div>
+            @if (_edit.RawMode)
+            {
+                <Textarea @bind-Value="_edit.DefinitionJson" rows="10" class="font-monospace mt-2" />
+            }
+
+            @if (!string.IsNullOrEmpty(_editError))
+            {
+                <div class="alert alert-danger mt-3" role="alert">@_editError</div>
+            }
+
+            <div class="d-flex gap-2 mt-3">
+                <Button Color="Color.Secondary" Icon="fa-solid fa-check-double" Text="Validar" IsAsync="true"
+                        OnClick="ValidateAsync" />
+                <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar" IsAsync="true"
+                        OnClick="SaveAsync" />
+            </div>
+        </div>
+    </div>
+}
+
+@if (_runTarget is not null)
+{
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Executar — flow_@_runTarget.Slug</strong>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="Fechar" TooltipText="Fechar"
+                    OnClick="() => { _runTarget = null; _runResult = null; }" />
+        </div>
+        <div class="card-body">
+            <Textarea @bind-Value="_runInputsJson" DisplayText="Inputs (JSON)"
+                      ShowLabel="true" rows="4" class="font-monospace" placeholder="{}" />
+            <Button Color="Color.Primary" Icon="fa-solid fa-play" Text="Rodar" IsAsync="true"
+                    OnClick="RunFlowAsync" class="mt-2" />
+
+            @if (_runResult is not null)
+            {
+                <div class="mt-3">
+                    <Badge Color="@(_runResult.Status == "done" ? Color.Success : Color.Danger)">
+                        @_runResult.Status
+                    </Badge>
+                    <small class="text-muted ms-2">@_runResult.DurationMs ms</small>
+                    @if (!string.IsNullOrEmpty(_runResult.Error))
+                    {
+                        <div class="alert alert-danger mt-2" role="alert">@_runResult.Error</div>
+                    }
+                    <div class="table-responsive mt-2">
+                        <table class="table table-sm">
+                            <caption class="visually-hidden">Trace de steps do run</caption>
+                            <thead><tr><th>Step</th><th>Tipo</th><th>Status</th><th>ms</th><th>Saída/Erro</th></tr></thead>
+                            <tbody>
+                                @foreach (var s in _runResult.Steps)
+                                {
+                                    <tr>
+                                        <td><code>@s.StepId</code></td>
+                                        <td>@s.StepType</td>
+                                        <td>@s.Status</td>
+                                        <td>@s.DurationMs</td>
+                                        <td><small class="text-break">@(s.Error ?? s.Output?.ToJsonString() ?? "")</small></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (_runResult.Output is not null)
+                    {
+                        <pre class="bg-light border rounded p-2 mt-2 small" aria-label="Output do flow"><code>@_runResult.Output.ToJsonString()</code></pre>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (_runsTarget is not null)
+{
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Runs — flow_@_runsTarget.Slug</strong>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="Fechar" TooltipText="Fechar"
+                    OnClick="() => _runsTarget = null" />
+        </div>
+        <div class="card-body">
+            @if (_runs is null)
+            {
+                <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> Carregando…</div>
+            }
+            else if (_runs.Count == 0)
+            {
+                <div class="text-muted">Nenhum run registrado.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <caption class="visually-hidden">Histórico de runs</caption>
+                        <thead><tr><th>Quando</th><th>Status</th><th>v</th><th>ms</th><th>Erro</th></tr></thead>
+                        <tbody>
+                            @foreach (var r in _runs)
+                            {
+                                <tr>
+                                    <td><small>@r.CreatedAt.LocalDateTime.ToString("g")</small></td>
+                                    <td>@r.Status</td>
+                                    <td>v@r.FlowVersion</td>
+                                    <td>@r.DurationMs</td>
+                                    <td><small class="text-break">@r.Error</small></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<FlowDto>? _flows;
+    private bool _loading;
+    private FlowEditModel? _edit;
+    private string? _editError;
+    private FlowDto? _runTarget;
+    private string _runInputsJson = "{}";
+    private FlowRunResultDto? _runResult;
+    private FlowDto? _runsTarget;
+    private IReadOnlyList<FlowRunDto>? _runs;
+
+    private static readonly List<SelectedItem> InputTypes =
+    [
+        new("string", "string"), new("number", "number"), new("boolean", "boolean"),
+        new("object", "object"), new("array", "array"),
+    ];
+
+    private static readonly List<SelectedItem> StepTypes =
+    [
+        new("tool", "tool — catálogo MCP"),
+        new("knowledge", "knowledge — search/ask"),
+        new("llm", "llm — prompt"),
+        new("http", "http — chamada externa"),
+        new("condition", "condition — branches"),
+        new("foreach", "foreach — loop"),
+        new("transform", "transform — reshape"),
+        new("output", "output — resultado"),
+        new("fail", "fail — abortar"),
+    ];
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try { _flows = await Api.ListAsync(); }
+        finally { _loading = false; }
+    }
+
+    private void NewFlow() => _edit = FlowEditModel.Empty();
+
+    private async Task EditFlowAsync(FlowDto f)
+    {
+        var detail = await Api.GetAsync(f.Id);
+        if (detail is null)
+        {
+            await Toast.Error("Erro", "Flow não encontrado");
+            return;
+        }
+        _edit = FlowEditModel.From(detail);
+    }
+
+    private async Task DeleteFlowAsync(FlowDto f)
+    {
+        var (ok, error) = await Api.DeleteAsync(f.Id);
+        if (ok)
+        {
+            await Toast.Success("Flow excluído", "");
+            await LoadAsync();
+        }
+        else await Toast.Error("Erro", error ?? "falha ao excluir");
+    }
+
+    private void AddInput() => _edit?.Inputs.Add(new FlowInputModel());
+    private void AddStep() => _edit?.Steps.Add(new FlowStepModel());
+
+    private void MoveStep(int idx, int delta)
+    {
+        if (_edit is null) return;
+        var j = idx + delta;
+        if (j < 0 || j >= _edit.Steps.Count) return;
+        (_edit.Steps[idx], _edit.Steps[j]) = (_edit.Steps[j], _edit.Steps[idx]);
+    }
+
+    private (FlowDefinitionDto? Def, string? Error) BuildDefinition()
+    {
+        if (_edit is null) return (null, "editor vazio");
+        // Raw JSON mode wins over the structured editors
+        if (_edit.RawMode && !string.IsNullOrWhiteSpace(_edit.DefinitionJson))
+        {
+            try
+            {
+                var def = JsonSerializer.Deserialize<FlowDefinitionDto>(_edit.DefinitionJson, SharedJson.Options);
+                return def is null ? (null, "definição JSON inválida") : (def, null);
+            }
+            catch (JsonException ex) { return (null, $"JSON inválido: {ex.Message}"); }
+        }
+
+        var inputs = new List<FlowInputDto>();
+        foreach (var i in _edit.Inputs)
+        {
+            if (string.IsNullOrWhiteSpace(i.Name))
+                return (null, "todo input precisa de nome");
+            JsonNode? def = null;
+            if (!string.IsNullOrWhiteSpace(i.DefaultJson))
+            {
+                try { def = JsonNode.Parse(i.DefaultJson); }
+                catch (JsonException ex) { return (null, $"default de '{i.Name}' inválido: {ex.Message}"); }
+            }
+            inputs.Add(new FlowInputDto(i.Name.Trim(), i.Type, i.Required, i.Description, def));
+        }
+
+        var steps = new List<FlowStepDto>();
+        foreach (var s in _edit.Steps)
+        {
+            if (string.IsNullOrWhiteSpace(s.Id))
+                return (null, "todo step precisa de id");
+            JsonObject? config = null;
+            if (!string.IsNullOrWhiteSpace(s.ConfigJson))
+            {
+                try { config = JsonNode.Parse(s.ConfigJson) as JsonObject; }
+                catch (JsonException ex) { return (null, $"config de '{s.Id}' inválida: {ex.Message}"); }
+                if (config is null)
+                    return (null, $"config de '{s.Id}' deve ser um objeto JSON");
+            }
+            List<FlowStepDto>? nested = null;
+            if (!string.IsNullOrWhiteSpace(s.StepsJson))
+            {
+                try { nested = JsonSerializer.Deserialize<List<FlowStepDto>>(s.StepsJson, SharedJson.Options); }
+                catch (JsonException ex) { return (null, $"steps aninhados de '{s.Id}' inválidos: {ex.Message}"); }
+            }
+            steps.Add(new FlowStepDto(s.Id.Trim(), s.Type, s.Name, config, nested));
+        }
+        return (new FlowDefinitionDto(inputs, steps), null);
+    }
+
+    private async Task ValidateAsync()
+    {
+        var (def, error) = BuildDefinition();
+        if (def is null) { _editError = error; return; }
+        var (valid, err) = await Api.ValidateAsync(def);
+        _editError = valid ? null : err;
+        if (valid) await Toast.Success("Definição válida", "");
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_edit is null) return;
+        var (def, error) = BuildDefinition();
+        if (def is null) { _editError = error; return; }
+
+        if (string.IsNullOrWhiteSpace(_edit.Name))
+        {
+            _editError = "nome é obrigatório";
+            return;
+        }
+
+        var (detail, err) = _edit.Id is null
+            ? await Api.CreateAsync(new CreateFlowRequest(_edit.Name, _edit.Description, def))
+            : await Api.UpdateAsync(_edit.Id.Value,
+                new UpdateFlowRequest(_edit.Name, _edit.Description, _edit.Enabled, def));
+
+        if (detail is null)
+        {
+            _editError = err;
+            return;
+        }
+        _editError = null;
+        _edit = null;
+        await Toast.Success("Flow salvo", $"flow_{detail.Flow.Slug}");
+        await LoadAsync();
+    }
+
+    private void OpenRun(FlowDto f)
+    {
+        _runTarget = f;
+        _runResult = null;
+        _runInputsJson = "{}";
+    }
+
+    private async Task RunFlowAsync()
+    {
+        if (_runTarget is null) return;
+        JsonObject? inputs;
+        try { inputs = JsonNode.Parse(_runInputsJson) as JsonObject; }
+        catch (JsonException ex)
+        {
+            await Toast.Error("Erro", $"inputs JSON inválidos: {ex.Message}");
+            return;
+        }
+        var (result, error) = await Api.RunAsync(_runTarget.Id, inputs);
+        if (result is not null) _runResult = result;
+        else await Toast.Error("Erro", error ?? "falha ao executar");
+    }
+
+    private async Task ShowRunsAsync(FlowDto f)
+    {
+        _runsTarget = f;
+        _runs = null;
+        _runs = await Api.RunsAsync(f.Id);
+    }
+
+    private sealed class FlowInputModel
+    {
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "string";
+        public bool Required { get; set; }
+        public string? DefaultJson { get; set; }
+        public string? Description { get; set; }
+    }
+
+    private sealed class FlowStepModel
+    {
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "tool";
+        public string? Name { get; set; }
+        public string ConfigJson { get; set; } = "{}";
+        public string StepsJson { get; set; } = "";
+    }
+
+    private sealed class FlowEditModel
+    {
+        public Guid? Id;
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public bool Enabled = true;
+        public List<FlowInputModel> Inputs { get; } = new();
+        public List<FlowStepModel> Steps { get; } = new();
+        public string DefinitionJson { get; set; } = "{}";
+        /// <summary>When true, DefinitionJson is authoritative over the
+        /// structured inputs/steps editors.</summary>
+        public bool RawMode;
+
+        public static FlowEditModel Empty() => new()
+        {
+            DefinitionJson = """
+                {"inputs":[],"steps":[{"id":"step1","type":"tool","config":{"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}}]}
+                """,
+        };
+
+        public static FlowEditModel From(FlowDetailDto detail)
+        {
+            var model = new FlowEditModel
+            {
+                Id = detail.Flow.Id,
+                Name = detail.Flow.Name,
+                Description = detail.Flow.Description,
+                Enabled = detail.Flow.Enabled,
+                DefinitionJson = JsonSerializer.Serialize(detail.Definition, SharedJson.Options),
+            };
+            foreach (var i in detail.Definition.Inputs)
+            {
+                model.Inputs.Add(new FlowInputModel
+                {
+                    Name = i.Name,
+                    Type = i.Type,
+                    Required = i.Required,
+                    Description = i.Description,
+                    DefaultJson = i.Default?.ToJsonString(),
+                });
+            }
+            foreach (var s in detail.Definition.Steps)
+            {
+                model.Steps.Add(new FlowStepModel
+                {
+                    Id = s.Id,
+                    Type = s.Type,
+                    Name = s.Name,
+                    ConfigJson = s.Config?.ToJsonString() ?? "{}",
+                    StepsJson = s.Steps is { Count: > 0 }
+                        ? JsonSerializer.Serialize(s.Steps, SharedJson.Options)
+                        : "",
+                });
+            }
+            return model;
+        }
+    }
+}

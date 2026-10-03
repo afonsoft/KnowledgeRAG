@@ -64,6 +64,52 @@ namespace KnowledgeHub.Server.Migrations
                     b.ToTable("A2aTasks");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.AgentFlow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DefinitionJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Enabled");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("AgentFlows");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ApiKey", b =>
                 {
                     b.Property<Guid>("Id")
@@ -599,6 +645,53 @@ namespace KnowledgeHub.Server.Migrations
                     b.HasIndex("Timestamp");
 
                     b.ToTable("EvidenceReceipts");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.FlowRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("DurationMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("FlowId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FlowVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("InputsJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OutputJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StepResultsJson")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("FlowId");
+
+                    b.ToTable("FlowRuns");
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.GraphSettings", b =>
@@ -1294,6 +1387,15 @@ namespace KnowledgeHub.Server.Migrations
                         .IsRequired();
 
                     b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.FlowRun", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.AgentFlow", null)
+                        .WithMany()
+                        .HasForeignKey("FlowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.IngestionJob", b =>

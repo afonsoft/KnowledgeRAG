@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using KnowledgeHub.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace KnowledgeHub.Server.Migrations.Postgres
 {
     [DbContext(typeof(PostgresKnowledgeHubDbContext))]
-    partial class PostgresKnowledgeHubDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003184222_AddAgentFlows")]
+    partial class AddAgentFlows
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
