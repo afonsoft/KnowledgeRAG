@@ -22,12 +22,15 @@ public static partial class EntityResolver
         PunctuationRuns().Replace(name.Trim().ToLowerInvariant(), " ").Trim();
 
     /// <summary>Unknown/unsupported types collapse to the catch-all.</summary>
-    public static string NormalizeType(string? type) =>
-        type?.Trim().ToLowerInvariant() switch
+    public static string NormalizeType(string? type)
+    {
+        var normalized = type?.Trim().ToLowerInvariant();
+        return normalized switch
         {
-            "service" or "database" or "api" or "person" or "team" or "concept" => type.Trim().ToLowerInvariant(),
+            "service" or "database" or "api" or "person" or "team" or "concept" => normalized,
             _ => "concept"
         };
+    }
 
     /// <summary>Unknown/unsupported kinds collapse to MENTIONS.</summary>
     public static string NormalizeKind(string? kind) =>

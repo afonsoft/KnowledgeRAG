@@ -58,20 +58,12 @@ public static class ProviderModelProbe
             using var doc = await JsonDocument.ParseAsync(
                 await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
 
-            var array = doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array
-                ? data
-                : doc.RootElement.TryGetProperty("models", out var models) && models.ValueKind == JsonValueKind.Array
-                    ? models
-                    : (JsonElement?)null;
+            var array = FirstArrayProperty(doc.RootElement, "data", "models");
             if (array is null)
                 return [];
 
             return array.Value.EnumerateArray()
-                .Select(m =>
-                    m.TryGetProperty("id", out var id) ? id.GetString()
-                    : m.TryGetProperty("name", out var name) ? name.GetString()
-                    : m.TryGetProperty("model", out var model) ? model.GetString()
-                    : null)
+                .Select(m => FirstStringProperty(m, "id", "name", "model"))
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Cast<string>()
                 .Distinct(StringComparer.Ordinal)
@@ -81,5 +73,23 @@ public static class ProviderModelProbe
         {
             return [];
         }
+    }
+
+    /// <summary>First named property whose value is a JSON array, or null.</summary>
+    private static JsonElement? FirstArrayProperty(JsonElement root, params string[] names)
+    {
+        foreach (var name in names)
+            if (root.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Array)
+                return el;
+        return null;
+    }
+
+    /// <summary>First named property whose value is a JSON string, or null.</summary>
+    private static string? FirstStringProperty(JsonElement el, params string[] names)
+    {
+        foreach (var name in names)
+            if (el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String)
+                return v.GetString();
+        return null;
     }
 }

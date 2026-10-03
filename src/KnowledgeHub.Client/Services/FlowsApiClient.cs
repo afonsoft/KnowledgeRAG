@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using KnowledgeHub.Shared;
 using KnowledgeHub.Shared.Contracts;
@@ -93,7 +94,11 @@ public sealed class FlowsApiClient(HttpClient http)
             var node = JsonNode.Parse(await r.Content.ReadAsStringAsync(ct));
             return node?["error"]?.GetValue<string>() ?? $"HTTP {(int)r.StatusCode}";
         }
-        catch
+        catch (JsonException)
+        {
+            return $"HTTP {(int)r.StatusCode}";
+        }
+        catch (InvalidOperationException)
         {
             return $"HTTP {(int)r.StatusCode}";
         }

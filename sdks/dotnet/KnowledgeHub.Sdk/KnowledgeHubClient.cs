@@ -76,7 +76,7 @@ public sealed class KnowledgeHubClient : IAsyncDisposable
     /// <summary>The tool catalog as <see cref="AIFunction"/>s — pass to
     /// <c>ChatOptions.Tools</c> of Microsoft.Extensions.AI or Semantic Kernel.</summary>
     public async Task<IReadOnlyList<AIFunction>> AsAIToolsAsync(CancellationToken cancellationToken = default)
-        => (IReadOnlyList<AIFunction>)(await ListToolsAsync(cancellationToken).ConfigureAwait(false))
+        => (await ListToolsAsync(cancellationToken).ConfigureAwait(false))
             .Select(t => (AIFunction)t).ToList();
 
     /// <summary>Calls any tool by name with raw arguments; normalizes the result.</summary>
@@ -120,10 +120,10 @@ public sealed class KnowledgeHubClient : IAsyncDisposable
 
     private static string ExtractRpcError(string body)
     {
-        foreach (var line in body.Split('\n'))
+        foreach (var l in body.Split('\n')
+                     .Select(l => l.TrimStart())
+                     .Where(l => l.StartsWith("data:", StringComparison.Ordinal)))
         {
-            var l = line.TrimStart();
-            if (!l.StartsWith("data:", StringComparison.Ordinal)) continue;
             try
             {
                 using var doc = JsonDocument.Parse(l[5..].Trim());

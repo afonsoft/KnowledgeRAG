@@ -43,7 +43,7 @@ class SyncKnowledgeHubClient:
             factory, fut = item
             try:
                 fut.set_result(await factory())
-            except BaseException as exc:  # noqa: BLE001 — forward to caller
+            except BaseException as exc:  # NOSONAR — every outcome must reach the caller's future (CancelledError included)
                 fut.set_exception(exc)
 
     def _run(self, factory: Callable[[], Coroutine[Any, Any, Any]]) -> Any:

@@ -142,7 +142,10 @@ public sealed class SqliteVecVectorStore : IVectorStore
                 // Per-connection perf hints (cache/mmap/temp_store) — best
                 // effort; a pragma failure must not fail the search.
                 try { await Data.SqlitePragmas.ApplyAsync(dedicated, cancellationToken); }
-                catch (SqliteException) { }
+                catch (SqliteException)
+                {
+                    // Perf hints are best-effort — a pragma failure must not fail the search.
+                }
                 await EnsureInitializedOnAsync(dedicated, cancellationToken);
                 return await QueryAsync(dedicated, queryVector, model, topK, sourceIds, cancellationToken);
             }

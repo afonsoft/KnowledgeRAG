@@ -80,37 +80,50 @@ func buildDescription(d knowledgehub.ToolDescriptor) string {
 	if len(props) == 0 {
 		return desc
 	}
-	required := map[string]bool{}
-	if req, ok := d.InputSchema["required"].([]any); ok {
-		for _, r := range req {
-			if s, ok := r.(string); ok {
-				required[s] = true
-			}
-		}
-	}
+	required := requiredSet(d.InputSchema)
 	names := make([]string, 0, len(props))
 	for name, spec := range props {
-		typ := "any"
-		if m, ok := spec.(map[string]any); ok {
-			switch t := m["type"].(type) {
-			case string:
-				typ = t
-			case []any:
-				for _, candidate := range t {
-					if s, ok := candidate.(string); ok && s != "null" {
-						typ = s
-						break
-					}
-				}
-			}
-		}
-		if required[name] {
-			names = append(names, name+" ("+typ+", required)")
-		} else {
-			names = append(names, name+" ("+typ+")")
-		}
+		names = append(names, argSummary(name, propType(spec), required[name]))
 	}
 	return desc + " Arguments (JSON object): " + joinComma(names) + "."
+}
+
+func requiredSet(schema map[string]any) map[string]bool {
+	required := map[string]bool{}
+	req, _ := schema["required"].([]any)
+	for _, r := range req {
+		if s, ok := r.(string); ok {
+			required[s] = true
+		}
+	}
+	return required
+}
+
+// propType resolves a JSON-schema property spec to a display type — the
+// first non-null member for union types like ["string","null"].
+func propType(spec any) string {
+	m, ok := spec.(map[string]any)
+	if !ok {
+		return "any"
+	}
+	switch t := m["type"].(type) {
+	case string:
+		return t
+	case []any:
+		for _, candidate := range t {
+			if s, ok := candidate.(string); ok && s != "null" {
+				return s
+			}
+		}
+	}
+	return "any"
+}
+
+func argSummary(name, typ string, required bool) string {
+	if required {
+		return name + " (" + typ + ", required)"
+	}
+	return name + " (" + typ + ")"
 }
 
 func joinComma(parts []string) string {

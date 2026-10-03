@@ -14,10 +14,22 @@ namespace KnowledgeHub.Server.Api;
 /// </summary>
 public static class FlowEndpoints
 {
+    private const string FlowNotFound = "flow not found";
+
     public static RouteGroupBuilder MapFlowsApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/flows");
 
+        MapFlowCrudEndpoints(group);
+        MapTriggerEndpoints(group);
+        MapRunSurfaceEndpoints(app);
+
+        return group;
+    }
+
+    /// <summary>CRUD + validate + run endpoints under /api/flows.</summary>
+    private static void MapFlowCrudEndpoints(RouteGroupBuilder group)
+    {
         group.MapGet("/", async (bool? enabledOnly, FlowService svc, CancellationToken ct) =>
             Results.Ok(await svc.ListAsync(enabledOnly == true, ct)))
             .RequireAuthorization(AuthPolicies.CookieSession);
@@ -25,7 +37,7 @@ public static class FlowEndpoints
         group.MapGet("/{id:guid}", async (Guid id, FlowService svc, CancellationToken ct) =>
             await svc.GetAsync(id, ct) is { } detail
                 ? Results.Ok(detail)
-                : Results.NotFound(new { error = "flow not found" }))
+                : Results.NotFound(new { error = FlowNotFound }))
             .RequireAuthorization(AuthPolicies.CookieSession);
 
         group.MapPost("/", async (CreateFlowRequest request, FlowService svc, CancellationToken ct) =>
@@ -49,7 +61,7 @@ public static class FlowEndpoints
             {
                 return await svc.UpdateAsync(id, request, ct) is { } detail
                     ? Results.Ok(detail)
-                    : Results.NotFound(new { error = "flow not found" });
+                    : Results.NotFound(new { error = FlowNotFound });
             }
             catch (FlowStepException ex)
             {
@@ -60,11 +72,11 @@ public static class FlowEndpoints
         group.MapDelete("/{id:guid}", async (Guid id, FlowService svc, CancellationToken ct) =>
             await svc.DeleteAsync(id, ct)
                 ? Results.NoContent()
-                : Results.NotFound(new { error = "flow not found" }))
+                : Results.NotFound(new { error = FlowNotFound }))
             .RequireAuthorization(AuthPolicies.CookieSession);
 
         group.MapPost("/validate", (ValidateFlowRequest request, FlowService svc) =>
-            svc.ValidateDefinition(request.Definition) is { } error
+            FlowService.ValidateDefinition(request.Definition) is { } error
                 ? Results.BadRequest(new { error })
                 : Results.Ok(new { valid = true }))
             .RequireAuthorization(AuthPolicies.CookieSession);
@@ -75,46 +87,11 @@ public static class FlowEndpoints
         group.MapGet("/{id:guid}/runs", async (Guid id, int? take, FlowService svc, CancellationToken ct) =>
             Results.Ok(await svc.ListRunsAsync(id, take ?? 50, ct)))
             .RequireAuthorization(AuthPolicies.CookieSession);
+    }
 
-        // ── Triggers (CookieSession admin) ───────────────────────────
-        group.MapGet("/{id:guid}/triggers", async (Guid id, HttpRequest http, FlowService svc, CancellationToken ct) =>
-            Results.Ok(await svc.ListTriggersAsync(id, http, ct)))
-            .RequireAuthorization(AuthPolicies.CookieSession);
-
-        group.MapPost("/{id:guid}/triggers", async (Guid id, CreateFlowTriggerRequest request, HttpRequest http, FlowService svc, CancellationToken ct) =>
-        {
-            try
-            {
-                return await svc.CreateTriggerAsync(id, request, http, ct) is { } dto
-                    ? Results.Created($"/api/flowtriggers/{dto.Id}", dto)
-                    : Results.NotFound(new { error = "flow not found" });
-            }
-            catch (FlowStepException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).RequireAuthorization(AuthPolicies.CookieSession);
-
-        group.MapPut("/triggers/{triggerId:guid}", async (Guid triggerId, UpdateFlowTriggerRequest request, HttpRequest http, FlowService svc, CancellationToken ct) =>
-        {
-            try
-            {
-                return await svc.UpdateTriggerAsync(triggerId, request, http, ct) is { } dto
-                    ? Results.Ok(dto)
-                    : Results.NotFound(new { error = "trigger not found" });
-            }
-            catch (FlowStepException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).RequireAuthorization(AuthPolicies.CookieSession);
-
-        group.MapDelete("/triggers/{triggerId:guid}", async (Guid triggerId, FlowService svc, CancellationToken ct) =>
-            await svc.DeleteTriggerAsync(triggerId, ct)
-                ? Results.NoContent()
-                : Results.NotFound(new { error = "trigger not found" }))
-            .RequireAuthorization(AuthPolicies.CookieSession);
-
+    /// <summary>Run inspection/resume + the anonymous inbound webhook.</summary>
+    private static void MapRunSurfaceEndpoints(IEndpointRouteBuilder app)
+    {
         app.MapGet("/api/flowruns/{runId:guid}", async (Guid runId, FlowService svc, CancellationToken ct) =>
             await svc.GetRunAsync(runId, ct) is { } run
                 ? Results.Ok(run)
@@ -153,11 +130,11 @@ public static class FlowEndpoints
                 var result = await svc.InvokeWebhookAsync(token, body, http.RequestServices, ct);
                 if (result is null)
                     return Results.NotFound(new { error = "trigger not found or disabled" });
-                return result.Status == "waiting_approval"
-                    ? Results.Accepted($"/api/flowruns/{result.RunId}", result)
-                    : result.Status == "done"
-                        ? Results.Ok(result)
-                        : Results.UnprocessableEntity(result);
+                if (result.Status == "waiting_approval")
+                    return Results.Accepted($"/api/flowruns/{result.RunId}", result);
+                return result.Status == "done"
+                    ? Results.Ok(result)
+                    : Results.UnprocessableEntity(result);
             }
             catch (FlowStepException ex)
             {
@@ -168,8 +145,48 @@ public static class FlowEndpoints
                 return Results.BadRequest(new { error = ex.Message });
             }
         }).AllowAnonymous().RequireRateLimiting("llm");
+    }
 
-        return group;
+    /// <summary>Trigger CRUD under /api/flows (CookieSession admin).</summary>
+    private static void MapTriggerEndpoints(RouteGroupBuilder group)
+    {
+        group.MapGet("/{id:guid}/triggers", async (Guid id, HttpRequest http, FlowService svc, CancellationToken ct) =>
+            Results.Ok(await svc.ListTriggersAsync(id, http, ct)))
+            .RequireAuthorization(AuthPolicies.CookieSession);
+
+        group.MapPost("/{id:guid}/triggers", async (Guid id, CreateFlowTriggerRequest request, HttpRequest http, FlowService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                return await svc.CreateTriggerAsync(id, request, http, ct) is { } dto
+                    ? Results.Created($"/api/flowtriggers/{dto.Id}", dto)
+                    : Results.NotFound(new { error = FlowNotFound });
+            }
+            catch (FlowStepException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).RequireAuthorization(AuthPolicies.CookieSession);
+
+        group.MapPut("/triggers/{triggerId:guid}", async (Guid triggerId, UpdateFlowTriggerRequest request, HttpRequest http, FlowService svc, CancellationToken ct) =>
+        {
+            try
+            {
+                return await svc.UpdateTriggerAsync(triggerId, request, http, ct) is { } dto
+                    ? Results.Ok(dto)
+                    : Results.NotFound(new { error = "trigger not found" });
+            }
+            catch (FlowStepException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).RequireAuthorization(AuthPolicies.CookieSession);
+
+        group.MapDelete("/triggers/{triggerId:guid}", async (Guid triggerId, FlowService svc, CancellationToken ct) =>
+            await svc.DeleteTriggerAsync(triggerId, ct)
+                ? Results.NoContent()
+                : Results.NotFound(new { error = "trigger not found" }))
+            .RequireAuthorization(AuthPolicies.CookieSession);
     }
 
     private static async Task RunAsync(

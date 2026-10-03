@@ -23,10 +23,10 @@ public sealed class FlowExecContext
     public Dictionary<string, string?> StepErrors { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Total executed steps across nesting — MaxSteps cap.</summary>
-    public int ExecutedCount;
+    public int ExecutedCount { get; set; }
 
     /// <summary>Total foreach iterations consumed — MaxIterations cap.</summary>
-    public int IterationsCount;
+    public int IterationsCount { get; set; }
 
     /// <summary>Run-wide flat trace — nested steps (condition branches,
     /// foreach bodies) append here so the audit trail is complete.</summary>

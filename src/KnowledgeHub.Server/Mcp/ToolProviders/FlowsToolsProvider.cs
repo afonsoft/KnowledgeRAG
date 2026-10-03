@@ -64,7 +64,7 @@ public sealed class FlowsToolsProvider(
                 DestructiveHint = false,
                 IdempotentHint = true,
                 OpenWorldHint = false,
-                Handler = (ctx, ct) => ListFlowsAsync(ctx, flows, ct),
+                Handler = (ctx, ct) => ListFlowsAsync(ctx, ct),
             },
             new()
             {
@@ -151,16 +151,15 @@ public sealed class FlowsToolsProvider(
         // Resolved lazily: injecting IEnumerable<IToolProvider> into a provider
         // creates a DI circularity (we are ourselves an IToolProvider).
         var map = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-        foreach (var provider in providerScope.GetServices<IToolProvider>())
+        foreach (var provider in providerScope.GetServices<IToolProvider>()
+                     .Where(p => p is not FlowsToolsProvider))
         {
-            if (provider is FlowsToolsProvider)
-                continue;
             try
             {
                 foreach (var tool in await provider.GetToolsAsync(services, ct))
                     map[tool.Name] = tool.ReadOnly;
             }
-            catch
+            catch (Exception)
             {
                 // provider failure → its tools resolve to non-readonly (safe default)
             }
@@ -191,43 +190,37 @@ public sealed class FlowsToolsProvider(
         while (stack.Count > 0)
         {
             var s = stack.Pop();
-            if (s.Type is "tool" or "knowledge")
-            {
-                if (s.Config?.TryGetPropertyValue("tool", out var t) == true
-                    && t is JsonValue jv && jv.TryGetValue<string>(out var name))
-                    yield return name;
-                else if (s.Type == "knowledge")
-                    yield return "search_knowledge";
-            }
-            foreach (var nested in s.Steps ?? [])
-                stack.Push(nested);
-            if (s.Config?.TryGetPropertyValue("branches", out var br) == true && br is JsonArray arr)
-            {
-                foreach (var b in arr)
-                {
-                    if (b is JsonObject bo && bo["steps"] is JsonArray steps)
-                    {
-                        foreach (var node in steps)
-                        {
-                            var nested = node?.Deserialize<FlowStepDto>(Shared.SharedJson.Options);
-                            if (nested is not null) stack.Push(nested);
-                        }
-                    }
-                }
-            }
-            if (s.Config?.TryGetPropertyValue("else", out var el) == true && el is JsonArray elseArr)
-            {
-                foreach (var node in elseArr)
-                {
-                    var nested = node?.Deserialize<FlowStepDto>(Shared.SharedJson.Options);
-                    if (nested is not null) stack.Push(nested);
-                }
-            }
+            if (ToolNameOf(s) is { } name)
+                yield return name;
+            PushNested(s, stack);
         }
     }
 
+    /// <summary>Catalog tool invoked by a tool/knowledge step — the explicit
+    /// config.tool, or search_knowledge (the knowledge-step default).</summary>
+    private static string? ToolNameOf(FlowStepDto s)
+    {
+        if (s.Type is not ("tool" or "knowledge"))
+            return null;
+        if (s.Config?.TryGetPropertyValue("tool", out var t) == true
+            && t is JsonValue jv && jv.TryGetValue<string>(out var name))
+            return name;
+        return s.Type == "knowledge" ? "search_knowledge" : null;
+    }
+
+    private static void PushNested(FlowStepDto s, Stack<FlowStepDto> stack)
+    {
+        foreach (var nested in s.Steps ?? [])
+            stack.Push(nested);
+        foreach (var arr in FlowService.ConditionNestedArrays(s))
+            foreach (var nested in arr
+                         .Select(n => n?.Deserialize<FlowStepDto>(Shared.SharedJson.Options))
+                         .OfType<FlowStepDto>())
+                stack.Push(nested);
+    }
+
     private static async ValueTask<CallToolResult> ListFlowsAsync(
-        ToolCallContext ctx, List<Domain.Entities.AgentFlow> flows, CancellationToken ct)
+        ToolCallContext ctx, CancellationToken ct)
     {
         var db = ctx.Services.GetRequiredService<Data.KnowledgeHubDbContext>();
         var items = await db.AgentFlows.AsNoTracking()

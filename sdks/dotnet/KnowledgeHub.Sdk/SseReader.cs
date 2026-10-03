@@ -20,24 +20,14 @@ internal static class SseReader
         {
             if (line.Length == 0)
             {
-                if (data.Length > 0)
-                {
-                    var text = data.ToString();
-                    data.Clear();
-                    JsonElement parsed;
-                    try { parsed = JsonDocument.Parse(text).RootElement.Clone(); }
-                    catch (JsonException) { parsed = JsonDocument.Parse($"\"{JsonEncodedText.Encode(text)}\"").RootElement.Clone(); }
+                if (TryFlushFrame(data, out var parsed))
                     yield return (eventType, parsed);
-                }
                 eventType = "message";
                 continue;
             }
             if (line[0] == ':') continue; // heartbeat comment
 
-            var colon = line.IndexOf(':');
-            var field = colon < 0 ? line : line[..colon];
-            var value = colon < 0 ? "" : line[(colon + 1)..].TrimStart(' ');
-
+            var (field, value) = SplitField(line);
             switch (field)
             {
                 case "event": eventType = value; break;
@@ -48,12 +38,30 @@ internal static class SseReader
             }
         }
 
-        if (data.Length > 0)
+        if (data.Length > 0 && TryFlushFrame(data, out var last))
+            yield return (eventType, last);
+    }
+
+    /// <summary>Empties <paramref name="data"/> and parses it as a JSON frame,
+    /// quoting it as a plain string when it isn't valid JSON.</summary>
+    private static bool TryFlushFrame(StringBuilder data, out JsonElement parsed)
+    {
+        parsed = default;
+        if (data.Length == 0)
+            return false;
+        var text = data.ToString();
+        data.Clear();
+        try { parsed = JsonDocument.Parse(text).RootElement.Clone(); }
+        catch (JsonException)
         {
-            JsonElement parsed;
-            try { parsed = JsonDocument.Parse(data.ToString()).RootElement.Clone(); }
-            catch (JsonException) { yield break; }
-            yield return (eventType, parsed);
+            parsed = JsonDocument.Parse($"\"{JsonEncodedText.Encode(text)}\"").RootElement.Clone();
         }
+        return true;
+    }
+
+    private static (string Field, string Value) SplitField(string line)
+    {
+        var colon = line.IndexOf(':');
+        return colon < 0 ? (line, "") : (line[..colon], line[(colon + 1)..].TrimStart(' '));
     }
 }

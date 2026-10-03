@@ -55,7 +55,7 @@ public sealed class EmbeddingProviderResolver(
     private SignatureEntry? _signatureEntry;
     private sealed record SignatureEntry(EmbeddingOptions Options, string Signature)
     {
-        public string Fingerprint { get; } = Convert.ToHexString(
+        public string SignatureDigest { get; } = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(Signature)))[..8].ToLowerInvariant();
     }
 
@@ -176,7 +176,7 @@ public sealed class EmbeddingProviderResolver(
         }
     }
 
-    public string Fingerprint => EffectiveSignature().Fingerprint;
+    public string Fingerprint => EffectiveSignature().SignatureDigest;
 
     private void DisposeQuietly(IEmbeddingProvider old)
     {

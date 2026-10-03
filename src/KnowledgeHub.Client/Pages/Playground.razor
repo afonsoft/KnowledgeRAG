@@ -169,7 +169,7 @@
                     <BodyTemplate>
                         @if (_showRaw)
                         {
-                            <pre class="border rounded p-3 bg-light mb-0" style="max-height: 480px; overflow: auto;">@_result.Value.ToString()</pre>
+                            <pre class="border rounded p-3 bg-light mb-0" style="max-height: 480px; overflow: auto;">@_result.GetValueOrDefault().ToString()</pre>
                         }
                         else if (_structuredAnswer is not null)
                         {
@@ -229,7 +229,7 @@
                         }
                         else
                         {
-                            <pre class="border rounded p-3 bg-light mb-0" style="max-height: 480px; overflow: auto;">@_result.Value.ToString()</pre>
+                            <pre class="border rounded p-3 bg-light mb-0" style="max-height: 480px; overflow: auto;">@_result.GetValueOrDefault().ToString()</pre>
                         }
                     </BodyTemplate>
                 </Card>

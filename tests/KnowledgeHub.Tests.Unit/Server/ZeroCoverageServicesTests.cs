@@ -218,9 +218,10 @@ public sealed class ZeroCoverageServicesTests : IDisposable
         }
 
         var http = new DefaultHttpContext { User = ApiKeyPrincipal(keyId) };
+        using var cache = new MemoryCache(new MemoryCacheOptions());
         var provider = new CallerScopeProvider(
             new HttpContextAccessor { HttpContext = http },
-            new MemoryCache(new MemoryCacheOptions()),
+            cache,
             Open());
 
         var scope = await provider.GetAsync(CancellationToken.None);
@@ -237,16 +238,18 @@ public sealed class ZeroCoverageServicesTests : IDisposable
     public async Task CallerScope_NonApiKeyAndMissingRow_AreUnrestricted()
     {
         var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) };
+        using var cache = new MemoryCache(new MemoryCacheOptions());
         var provider = new CallerScopeProvider(
             new HttpContextAccessor { HttpContext = http },
-            new MemoryCache(new MemoryCacheOptions()),
+            cache,
             Open());
         Assert.Same(CallerScope.Unrestricted, await provider.GetAsync(CancellationToken.None));
 
         var keyed = new DefaultHttpContext { User = ApiKeyPrincipal(Guid.NewGuid()) };
+        using var cache2 = new MemoryCache(new MemoryCacheOptions());
         var provider2 = new CallerScopeProvider(
             new HttpContextAccessor { HttpContext = keyed },
-            new MemoryCache(new MemoryCacheOptions()),
+            cache2,
             Open());
         Assert.True((await provider2.GetAsync(CancellationToken.None)).IsUnrestricted);
     }

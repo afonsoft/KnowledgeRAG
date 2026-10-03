@@ -361,7 +361,7 @@ else
                                             }
                                             else
                                             {
-                                                <span class="text-muted">@L["Flows_EverySeconds", t.IntervalSeconds]</span>
+                                                <span class="text-muted">@L["Flows_EverySeconds", t.IntervalSeconds ?? 0]</span>
                                             }
                                         </td>
                                         <td>
@@ -482,8 +482,17 @@ else
             catch (JsonException ex) { return (null, L["Flows_InvalidJson", ex.Message].Value); }
         }
 
+        var (inputs, inputsError) = BuildInputs();
+        if (inputsError is not null) return (null, inputsError);
+        var (steps, stepsError) = BuildSteps();
+        if (stepsError is not null) return (null, stepsError);
+        return (new FlowDefinitionDto(inputs!, steps!), null);
+    }
+
+    private (List<FlowInputDto>?, string?) BuildInputs()
+    {
         var inputs = new List<FlowInputDto>();
-        foreach (var i in _edit.Inputs)
+        foreach (var i in _edit!.Inputs)
         {
             if (string.IsNullOrWhiteSpace(i.Name))
                 return (null, L["Flows_InputNeedsName"].Value);
@@ -495,29 +504,41 @@ else
             }
             inputs.Add(new FlowInputDto(i.Name.Trim(), i.Type, i.Required, i.Description, def));
         }
+        return (inputs, null);
+    }
 
+    private (List<FlowStepDto>?, string?) BuildSteps()
+    {
         var steps = new List<FlowStepDto>();
-        foreach (var s in _edit.Steps)
+        foreach (var s in _edit!.Steps)
         {
             if (string.IsNullOrWhiteSpace(s.Id))
                 return (null, L["Flows_StepNeedsId"].Value);
-            JsonObject? config = null;
-            if (!string.IsNullOrWhiteSpace(s.ConfigJson))
-            {
-                try { config = JsonNode.Parse(s.ConfigJson) as JsonObject; }
-                catch (JsonException ex) { return (null, L["Flows_InvalidConfig", s.Id, ex.Message].Value); }
-                if (config is null)
-                    return (null, L["Flows_ConfigNotObject", s.Id].Value);
-            }
-            List<FlowStepDto>? nested = null;
-            if (!string.IsNullOrWhiteSpace(s.StepsJson))
-            {
-                try { nested = JsonSerializer.Deserialize<List<FlowStepDto>>(s.StepsJson, SharedJson.Options); }
-                catch (JsonException ex) { return (null, L["Flows_InvalidNested", s.Id, ex.Message].Value); }
-            }
+            var (config, configError) = ParseStepConfig(s);
+            if (configError is not null) return (null, configError);
+            var (nested, nestedError) = ParseNestedSteps(s);
+            if (nestedError is not null) return (null, nestedError);
             steps.Add(new FlowStepDto(s.Id.Trim(), s.Type, s.Name, config, nested));
         }
-        return (new FlowDefinitionDto(inputs, steps), null);
+        return (steps, null);
+    }
+
+    private (JsonObject?, string?) ParseStepConfig(FlowStepModel s)
+    {
+        if (string.IsNullOrWhiteSpace(s.ConfigJson))
+            return (null, null);
+        JsonObject? config;
+        try { config = JsonNode.Parse(s.ConfigJson) as JsonObject; }
+        catch (JsonException ex) { return (null, L["Flows_InvalidConfig", s.Id, ex.Message].Value); }
+        return config is null ? (null, L["Flows_ConfigNotObject", s.Id].Value) : (config, null);
+    }
+
+    private (List<FlowStepDto>?, string?) ParseNestedSteps(FlowStepModel s)
+    {
+        if (string.IsNullOrWhiteSpace(s.StepsJson))
+            return (null, null);
+        try { return (JsonSerializer.Deserialize<List<FlowStepDto>>(s.StepsJson, SharedJson.Options), null); }
+        catch (JsonException ex) { return (null, L["Flows_InvalidNested", s.Id, ex.Message].Value); }
     }
 
     private async Task ValidateAsync()

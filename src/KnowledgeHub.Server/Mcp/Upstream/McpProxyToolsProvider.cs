@@ -70,7 +70,7 @@ public sealed partial class McpProxyToolsProvider(
         try
         {
             if (_sessions.TryGetValue(config.SourceId, out var existing)
-                && existing.Fingerprint == config.Fingerprint)
+                && existing is not null && existing.Fingerprint == config.Fingerprint)
                 return existing;
 
             if (existing is not null)

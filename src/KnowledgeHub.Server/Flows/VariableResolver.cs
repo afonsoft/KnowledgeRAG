@@ -59,41 +59,40 @@ public static class VariableResolver
         if (segments.Count == 0)
             return null;
 
-        JsonNode? current;
-        var head = segments[0];
-        if (head == "vars" && segments.Count > 1)
-        {
-            current = ctx.Vars[segments[1]];
-            segments = segments.Skip(2).ToList();
-        }
-        else if (head == "steps" && segments.Count > 2)
-        {
-            var stepId = segments[1];
-            // steps.<id>.output[.path] | steps.<id>.error | steps.<id>[.path]
-            if (segments[2] == "error")
-            {
-                ctx.StepErrors.TryGetValue(stepId, out var err);
-                current = err is null ? null : JsonValue.Create(err);
-            }
-            else
-            {
-                ctx.StepOutputs.TryGetValue(stepId, out var output);
-                current = output;
-            }
-            segments = segments[2] == "error" || segments[2] == "output"
-                ? segments.Skip(3).ToList()
-                : segments.Skip(2).ToList();
-        }
-        else
-        {
-            // Bare name → vars.<name>
-            current = ctx.Vars[head];
-            segments = segments.Skip(1).ToList();
-        }
-
-        foreach (var seg in segments)
+        var (current, skip) = ResolveHead(segments, ctx);
+        foreach (var seg in segments.Skip(skip))
             current = WalkSegment(current, seg);
         return current;
+    }
+
+    /// <summary>Resolve the path head (vars.&lt;name&gt; | steps.&lt;id&gt;.field |
+    /// bare input name) and return the node plus how many segments it used.</summary>
+    private static (JsonNode? Node, int Consumed) ResolveHead(
+        List<string> segments, FlowExecContext ctx)
+    {
+        var head = segments[0];
+        if (head == "vars" && segments.Count > 1)
+            return (ctx.Vars[segments[1]], 2);
+        if (head == "steps" && segments.Count > 2)
+        {
+            // steps.<id>.output[.path] | steps.<id>.error | steps.<id>[.path]
+            var field = segments[2];
+            var node = ResolveStepHead(segments[1], field, ctx);
+            return (node, field is "error" or "output" ? 3 : 2);
+        }
+        // Bare name → vars.<name>
+        return (ctx.Vars[head], 1);
+    }
+
+    private static JsonNode? ResolveStepHead(string stepId, string field, FlowExecContext ctx)
+    {
+        if (field == "error")
+        {
+            ctx.StepErrors.TryGetValue(stepId, out var err);
+            return err is null ? null : JsonValue.Create(err);
+        }
+        ctx.StepOutputs.TryGetValue(stepId, out var output);
+        return output;
     }
 
     private static JsonNode? WalkSegment(JsonNode? node, string segment)
@@ -119,29 +118,56 @@ public static class VariableResolver
         var cur = new System.Text.StringBuilder();
         var inBracket = false;
         var inQuote = false;
-        for (var i = 0; i < path.Length; i++)
-        {
-            var ch = path[i];
-            if (inBracket)
-            {
-                if (inQuote)
-                {
-                    if (ch == '"') inQuote = false;
-                    else cur.Append(ch);
-                }
-                else if (ch == '"') inQuote = true;
-                else if (ch == ']') { segments.Add(cur.ToString()); cur.Clear(); inBracket = false; }
-                else cur.Append(ch);
-            }
-            else if (ch == '.')
-            {
-                if (cur.Length > 0) { segments.Add(cur.ToString()); cur.Clear(); }
-            }
-            else if (ch == '[') { if (cur.Length > 0) { segments.Add(cur.ToString()); cur.Clear(); } inBracket = true; }
-            else cur.Append(ch);
-        }
-        if (cur.Length > 0) segments.Add(cur.ToString());
+        foreach (var ch in path)
+            (inBracket, inQuote) = Consume(ch, segments, cur, inBracket, inQuote);
+        FlushSegment(segments, cur);
         return segments;
+    }
+
+    private static (bool InBracket, bool InQuote) Consume(
+        char ch, List<string> segments, System.Text.StringBuilder cur,
+        bool inBracket, bool inQuote)
+    {
+        if (inBracket)
+            return ConsumeInBracket(ch, segments, cur, inQuote);
+        switch (ch)
+        {
+            case '.':
+            case '[':
+                FlushSegment(segments, cur);
+                return (ch == '[', false);
+            default:
+                cur.Append(ch);
+                return (false, false);
+        }
+    }
+
+    private static (bool, bool) ConsumeInBracket(
+        char ch, List<string> segments, System.Text.StringBuilder cur, bool inQuote)
+    {
+        if (inQuote)
+        {
+            if (ch != '"') cur.Append(ch);
+            return (true, ch != '"');
+        }
+        switch (ch)
+        {
+            case '"':
+                return (true, true);
+            case ']':
+                // Preserve empty-bracket semantics: add even when cur is empty.
+                segments.Add(cur.ToString());
+                cur.Clear();
+                return (false, false);
+            default:
+                cur.Append(ch);
+                return (true, false);
+        }
+    }
+
+    private static void FlushSegment(List<string> segments, System.Text.StringBuilder cur)
+    {
+        if (cur.Length > 0) { segments.Add(cur.ToString()); cur.Clear(); }
     }
 
     private static bool IsSingleExpression(string s, out string expr)

@@ -71,8 +71,11 @@ public sealed class ToolStepHandler : IFlowStepHandler
 
     internal static string? ConfigString(FlowStepDto step, string key) =>
         step.Config?.TryGetPropertyValue(key, out var v) == true && v is JsonValue jv
-            ? jv.TryGetValue<string>(out var s) ? s : jv.ToJsonString()
+            ? ScalarString(jv)
             : null;
+
+    private static string ScalarString(JsonValue jv) =>
+        jv.TryGetValue<string>(out var s) ? s : jv.ToJsonString();
 }
 
 /// <summary><c>knowledge</c>: sugar over <see cref="ToolStepHandler"/> —
@@ -173,7 +176,15 @@ public sealed class HttpStepHandler : IFlowStepHandler
             Timeout = TimeSpan.FromSeconds(Math.Max(10, ctx.Limits.StepTimeoutSeconds)),
         };
 
-        using var request = new HttpRequestMessage(new HttpMethod(method.ToUpperInvariant()), uri);
+        using var request = await BuildRequestAsync(step, ctx, uri, method, ct);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        return await ReadResponseAsync(response, ctx.Limits.MaxHttpBodyBytes, ct);
+    }
+
+    private static async Task<HttpRequestMessage> BuildRequestAsync(
+        FlowStepDto step, FlowExecContext ctx, Uri uri, string method, CancellationToken ct)
+    {
+        var request = new HttpRequestMessage(new HttpMethod(method.ToUpperInvariant()), uri);
 
         // Secret by reference: {secretRef: "provider", secretHeader?: "Authorization",
         // secretPrefix?: "Bearer "} — resolved inside the handler, never templated.
@@ -208,8 +219,13 @@ public sealed class HttpStepHandler : IFlowStepHandler
                 payload, System.Text.Encoding.UTF8, isRawString ? "text/plain" : "application/json");
         }
 
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        var bodyBytes = await ReadCappedAsync(response.Content, ctx.Limits.MaxHttpBodyBytes, ct);
+        return request;
+    }
+
+    private static async Task<JsonObject> ReadResponseAsync(
+        HttpResponseMessage response, int maxBodyBytes, CancellationToken ct)
+    {
+        var bodyBytes = await ReadCappedAsync(response.Content, maxBodyBytes, ct);
         var bodyText = System.Text.Encoding.UTF8.GetString(bodyBytes);
         JsonNode? body;
         try { body = JsonNode.Parse(bodyText); }
@@ -260,14 +276,12 @@ public sealed class ConditionStepHandler : IFlowStepHandler
     {
         var branches = step.Config?.TryGetPropertyValue("branches", out var br) == true
             && br is JsonArray arr
-            ? arr
-            : throw new FlowStepException($"step '{step.Id}': 'branches' array is required");
+                ? arr
+                : throw new FlowStepException($"step '{step.Id}': 'branches' array is required");
 
         JsonArray? selected = null;
-        foreach (var branch in branches)
+        foreach (var b in branches.OfType<JsonObject>())
         {
-            if (branch is not JsonObject b)
-                continue;
             var when = b["when"] as JsonObject;
             if (when is null || Evaluate(when, ctx))
             {
@@ -308,9 +322,9 @@ public sealed class ConditionStepHandler : IFlowStepHandler
             "truthy" => IsTruthy(left),
             "eq" => Compare(left, right) == 0,
             "neq" => Compare(left, right) != 0,
-            "contains" => Text(left)?.Contains(Text(right) ?? "", StringComparison.OrdinalIgnoreCase) == true,
-            "startswith" => Text(left)?.StartsWith(Text(right) ?? "", StringComparison.OrdinalIgnoreCase) == true,
-            "endswith" => Text(left)?.EndsWith(Text(right) ?? "", StringComparison.OrdinalIgnoreCase) == true,
+            "contains" => Text(left) is { } ltc && ltc.Contains(Text(right) ?? "", StringComparison.OrdinalIgnoreCase),
+            "startswith" => Text(left) is { } lts && lts.StartsWith(Text(right) ?? "", StringComparison.OrdinalIgnoreCase),
+            "endswith" => Text(left) is { } lte && lte.EndsWith(Text(right) ?? "", StringComparison.OrdinalIgnoreCase),
             "gt" => Compare(left, right) > 0,
             "gte" => Compare(left, right) >= 0,
             "lt" => Compare(left, right) < 0,
@@ -326,7 +340,7 @@ public sealed class ConditionStepHandler : IFlowStepHandler
     {
         null => false,
         JsonValue v when v.TryGetValue<bool>(out var b) => b,
-        JsonValue v when v.TryGetValue<double>(out var d) => d != 0,
+        JsonValue v when v.TryGetValue<double>(out var d) => d.CompareTo(0) != 0,
         JsonValue v when v.TryGetValue<string>(out var s) => !string.IsNullOrEmpty(s),
         JsonArray a => a.Count > 0,
         JsonObject o => o.Count > 0,
@@ -348,8 +362,10 @@ public sealed class ConditionStepHandler : IFlowStepHandler
             return l.CompareTo(r);
         var lt = Text(left);
         var rt = Text(right);
-        if (lt is null || rt is null)
-            return lt is null ? (rt is null ? 0 : -1) : 1;
+        if (lt is null)
+            return rt is null ? 0 : -1;
+        if (rt is null)
+            return 1;
         return string.Equals(lt, rt, StringComparison.Ordinal) ? 0
             : string.CompareOrdinal(lt, rt);
     }

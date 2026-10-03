@@ -85,7 +85,7 @@ jobs:
 
       - name: 📦 Install pinned toolchain
         working-directory: sdks/python
-        run: pip install --only-binary ":all:" -r requirements-ci.txt
+        run: pip install --require-hashes --only-binary ":all:" -r requirements-ci.txt
 
       - name: 🏷️ Set version + build sdist/wheel
         working-directory: sdks/python

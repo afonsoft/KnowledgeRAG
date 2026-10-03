@@ -63,6 +63,7 @@ public sealed class EvalApiClient(HttpClient http)
             using var doc = JsonDocument.Parse(body);
             return doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : null;
         }
-        catch { return null; }
+        catch (JsonException) { return null; }
+        catch (InvalidOperationException) { return null; }
     }
 }

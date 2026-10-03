@@ -61,7 +61,7 @@ jobs:
 
       - name: 📦 Install pinned toolchain
         working-directory: sdks/python
-        run: pip install --only-binary ":all:" -r requirements-ci.txt
+        run: pip install --require-hashes --only-binary ":all:" -r requirements-ci.txt
 
       - name: 🏗️ Build wheel
         working-directory: sdks/python
@@ -184,7 +184,7 @@ jobs:
             -d '{"currentPassword":"123qwe","newPassword":"CiTest1234!"}' -o /dev/null
           KEY=$(curl -sf -b /tmp/jar -c /tmp/jar -X POST http://localhost:5009/api/apikeys \
             -H 'Content-Type: application/json' \
-            -d '{"name":"sdk-ci-e2e"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["key"])')
+            -d '{"name":"sdk-ci-e2e"}' | jq -r .key)
           echo "::add-mask::$KEY"
           echo "KNOWLEDGEHUB_KEY=$KEY" >> $GITHUB_ENV
           echo "KNOWLEDGEHUB_URL=http://localhost:5009" >> $GITHUB_ENV

@@ -524,8 +524,8 @@ button.fc-node {
 }
 
 /* type accents (bootstrap semantic colors) */
-.fc-node--start     { border-left-color: var(--bs-success); }
-.fc-node--end       { border-left-color: var(--bs-secondary); }
+.fc-node--start     { border-left-color: var(--bs-success); border-top-color: var(--bs-success); }
+.fc-node--end       { border-left-color: var(--bs-secondary); border-top-color: var(--bs-secondary); }
 .fc-node--tool      { border-left-color: var(--bs-primary); }
 .fc-node--knowledge { border-left-color: var(--bs-info); }
 .fc-node--llm       { border-left-color: #6f42c1; }
@@ -545,8 +545,6 @@ button.fc-node {
     border-top-width: 4px;
     cursor: default;
 }
-.fc-node--start { border-top-color: var(--bs-success); }
-.fc-node--end   { border-top-color: var(--bs-secondary); }
 .fc-node--start .fc-node-head,
 .fc-node--end   .fc-node-head { justify-content: center; }
 .fc-node--start .fc-io { justify-content: center; }
