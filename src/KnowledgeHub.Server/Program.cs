@@ -14,6 +14,7 @@ using KnowledgeHub.Server.Hubs;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.Options;
 using Serilog;
 
@@ -52,6 +53,22 @@ builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout =
 // SPEC-20260914-error-handling: RFC 7807 ProblemDetails for unhandled errors.
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+// Audit 2026-10-03 (P5): source-generated STJ metadata for shared contracts —
+// unregistered types fall back to reflection via the resolver chain.
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.TypeInfoResolverChain.Insert(0, KnowledgeHub.Shared.SharedJsonContext.Default));
+
+// Audit 2026-10-03 (P4): brotli/gzip for API JSON. Defaults already exclude
+// text/event-stream (SSE streams stay unbuffered) and pre-compressed
+// fingerprinted WASM assets carry Content-Encoding so they pass through.
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+    o.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/problem+json"]);
+});
 
 // SPEC-20260914-health-checks: /health/live + /health/ready.
 builder.Services.AddHealthChecks()
@@ -364,6 +381,7 @@ public partial class Program
     private static void ConfigurePipeline(WebApplication app)
     {
         app.UseExceptionHandler();
+        app.UseResponseCompression();
         app.UseAuthentication();
         app.UseAuthorization();
 

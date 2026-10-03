@@ -46,7 +46,7 @@ public sealed record SaveEmbeddingSettingsRequest
     public required string Provider { get; init; }
     public string? Endpoint { get; init; }
     public string? Model { get; init; }
-    public int Dimensions { get; init; } = 384;
+    public int Dimensions { get; set; } = 384;
     public string? ModelPath { get; init; }
     public int? MaxTokens { get; init; }
     public int? OverlapTokens { get; init; }

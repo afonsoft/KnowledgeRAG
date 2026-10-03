@@ -23,7 +23,7 @@ public sealed class AssistantChatClientProvider(
     ILogger<AssistantChatClientProvider> logger) : IAssistantChatClientProvider
 {
     private readonly object _gate = new();
-    private volatile Snapshot? _snapshot;
+    private volatile Lazy<Task<Snapshot>>? _pending;
 
     private sealed record Snapshot(bool Enabled, string Mode, HashSet<string> Route,
         IChatClient? Client, TimeSpan Timeout);
@@ -41,23 +41,29 @@ public sealed class AssistantChatClientProvider(
     public void Invalidate()
     {
         lock (_gate)
-            _snapshot = null;
+            _pending = null;
     }
 
     private Snapshot Current()
     {
-        var snap = _snapshot;
-        if (snap is not null)
-            return snap;
+        // R4 (audit 2026-10-03): the load runs outside the lock inside a shared
+        // Lazy — concurrent misses wait on one in-flight load instead of
+        // serializing DB + Agent-Card fetches through the gate.
+        if (_pending is { Value.IsCompletedSuccessfully: true } ready)
+            return ready.Value.Result;
+        Lazy<Task<Snapshot>> pending;
         lock (_gate)
         {
-            snap ??= LoadSnapshot();
-            _snapshot = snap;
-            return snap;
+            // A failed load must not poison the cache — retry next call.
+            if (_pending is null || (_pending.IsValueCreated && _pending.Value.IsCompleted))
+                _pending = new Lazy<Task<Snapshot>>(LoadSnapshotAsync,
+                    LazyThreadSafetyMode.ExecutionAndPublication);
+            pending = _pending;
         }
+        return pending.Value.GetAwaiter().GetResult();
     }
 
-    private Snapshot LoadSnapshot()
+    private async Task<Snapshot> LoadSnapshotAsync()
     {
         var env = envOptions.Value;
         var route = new HashSet<string>(env.Route, StringComparer.OrdinalIgnoreCase);
@@ -87,7 +93,7 @@ public sealed class AssistantChatClientProvider(
                 catch (System.Text.Json.JsonException) { /* keep env routes */ }
             }
         }
-        key = secrets.GetAsync("assistant").GetAwaiter().GetResult() ?? env.ApiKey;
+        key = await secrets.GetAsync("assistant") ?? env.ApiKey;
         // Endpoint herdado do provider de chat ⇒ a key do chat vale também
         // (mesmo provider); nunca mandamos a key do chat a outro endpoint.
         if (key is null && AssistantSettingsService.IsSameEndpoint(endpoint, chatSettings.GetEffectiveOptions().Endpoint))
@@ -99,7 +105,7 @@ public sealed class AssistantChatClientProvider(
             try
             {
                 client = mode.Equals("remote", StringComparison.OrdinalIgnoreCase)
-                    ? BuildRemoteClient(endpoint, key)
+                    ? await BuildRemoteClientAsync(endpoint, key)
                     : ChatClientFactory.Create(new ChatProviderOptions
                     {
                         Provider = "openai",
@@ -117,7 +123,7 @@ public sealed class AssistantChatClientProvider(
         return new Snapshot(enabled, mode, route, client, timeout);
     }
 
-    private IChatClient? BuildRemoteClient(string baseUrl, string? key)
+    private async Task<IChatClient?> BuildRemoteClientAsync(string baseUrl, string? key)
     {
         var http = httpFactory.CreateClient("assistant-a2a");
         if (!string.IsNullOrEmpty(key))
@@ -125,7 +131,7 @@ public sealed class AssistantChatClientProvider(
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", key);
         var resolver = new A2ACardResolver(new Uri(baseUrl), http,
             "/.well-known/agent-card.json", logger);
-        var card = resolver.GetAgentCardAsync().GetAwaiter().GetResult();
+        var card = await resolver.GetAgentCardAsync();
         var url = card.SupportedInterfaces
             .FirstOrDefault(i => i.ProtocolBinding == ProtocolBindingNames.JsonRpc)?.Url
             ?? card.SupportedInterfaces.FirstOrDefault()?.Url;

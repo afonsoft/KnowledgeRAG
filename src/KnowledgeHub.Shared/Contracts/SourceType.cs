@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace KnowledgeHub.Shared.Contracts;
 
 /// <summary>Supported knowledge source connector types (SPEC-02 RF-001).</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(JsonStringEnumConverter<SourceType>))]
 public enum SourceType
 {
     WebPage = 1,

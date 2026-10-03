@@ -9,7 +9,7 @@
 <PageTitle>Aprovações — Knowledge</PageTitle>
 
 <div class="d-flex justify-content-between gap-2 align-items-center mb-3">
-    <h3 class="mb-0">Aprovações de tools</h3>
+    <h1 class="h3 mb-0">Aprovações de tools</h1>
     <Button Size="Size.Small" Icon="fa-solid fa-rotate" Text="Atualizar" TooltipText="Atualizar" IsAsync="true"
             OnClick="LoadAsync" IsDisabled="_loading" />
 </div>
@@ -93,7 +93,17 @@ else
         {
             var overrideArgs = _argOverrides.TryGetValue(a.Id, out var o) ? o : null;
             await Api.ApproveAsync(a.Id, string.IsNullOrWhiteSpace(overrideArgs) ? null : overrideArgs);
-            await Toast.Success("Aprovada", $"{a.ToolName} — use POST /api/agent/resume para continuar o agente");
+            // R7 (audit 2026-10-03): auto-resume — a aprovação já é o sinal do
+            // operador; exigir POST /api/agent/resume manual era passo extra.
+            try
+            {
+                await Api.ResumeAgentAsync(a.Id);
+                await Toast.Success("Aprovada e retomada", $"{a.ToolName} — o agente continuou");
+            }
+            catch (Exception ex)
+            {
+                await Toast.Warning("Aprovada", $"{a.ToolName} — retomada falhou, retome manualmente: {ex.Message}");
+            }
             await LoadAsync();
         }
         catch (Exception ex)

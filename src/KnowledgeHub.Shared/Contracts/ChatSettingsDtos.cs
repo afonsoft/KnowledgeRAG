@@ -60,7 +60,7 @@ public sealed record TestChatConnectionResponse
 public sealed record ProviderModelsResponse
 {
     public required bool Ok { get; init; }
-    public string[] Models { get; init; } = [];
+    public string[] Models { get; set; } = [];
     public string? Detail { get; init; }
 }
 

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using KnowledgeHub.Shared;
 using KnowledgeHub.Shared.Contracts;
 
 namespace KnowledgeHub.Client.Services;
@@ -14,12 +15,12 @@ public sealed class SettingsApiClient(HttpClient http)
     {
         try
         {
-            return await http.GetFromJsonAsync<T>(url, ct);
+            return await http.GetFromJsonAsync<T>(url, SharedJson.Options, ct);
         }
         catch (HttpRequestException) when (!ct.IsCancellationRequested)
         {
             await Task.Delay(300, ct);
-            return await http.GetFromJsonAsync<T>(url, ct);
+            return await http.GetFromJsonAsync<T>(url, SharedJson.Options, ct);
         }
     }
 
@@ -32,7 +33,7 @@ public sealed class SettingsApiClient(HttpClient http)
     {
         var response = await http.PutAsJsonAsync(
             $"api/settings/integrations/{Uri.EscapeDataString(provider)}",
-            new SetIntegrationKeyRequest { ApiKey = apiKey }, ct);
+            new SetIntegrationKeyRequest { ApiKey = apiKey }, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -41,7 +42,7 @@ public sealed class SettingsApiClient(HttpClient http)
     {
         var response = await http.PutAsJsonAsync(
             $"api/settings/integrations/{Uri.EscapeDataString(provider)}/enabled",
-            new SetIntegrationEnabledRequest { Enabled = enabled }, ct);
+            new SetIntegrationEnabledRequest { Enabled = enabled }, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -62,7 +63,7 @@ public sealed class SettingsApiClient(HttpClient http)
     public async Task<ApiResult<object>> SaveChatAsync(string endpoint, string model, string? apiKey, CancellationToken ct = default)
     {
         var response = await http.PutAsJsonAsync("api/settings/chat",
-            new SaveChatSettingsRequest { Endpoint = endpoint, Model = model, ApiKey = apiKey }, ct);
+            new SaveChatSettingsRequest { Endpoint = endpoint, Model = model, ApiKey = apiKey }, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -83,7 +84,7 @@ public sealed class SettingsApiClient(HttpClient http)
     /// <summary>Testa a conexão com o provider usando os valores informados, sem persistir nada.</summary>
     public async Task<ApiResult<TestChatConnectionResponse>> TestChatAsync(TestChatConnectionRequest request, CancellationToken ct = default)
     {
-        var response = await http.PostAsJsonAsync("api/settings/chat/test", request, ct);
+        var response = await http.PostAsJsonAsync("api/settings/chat/test", request, SharedJson.Options, ct);
         return await ReadAsync<TestChatConnectionResponse>(response, ct);
     }
 
@@ -101,7 +102,7 @@ public sealed class SettingsApiClient(HttpClient http)
     /// <summary>Salva enabled/mode/endpoint/model/route do assistente; key em branco mantém a atual.</summary>
     public async Task<ApiResult<object>> SaveAssistantAsync(SaveAssistantSettingsRequest request, CancellationToken ct = default)
     {
-        var response = await http.PutAsJsonAsync("api/settings/assistant", request, ct);
+        var response = await http.PutAsJsonAsync("api/settings/assistant", request, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -122,7 +123,7 @@ public sealed class SettingsApiClient(HttpClient http)
     /// <summary>Testa a conexão (local: /v1/models; remote: resolve o Agent Card).</summary>
     public async Task<ApiResult<TestChatConnectionResponse>> TestAssistantAsync(TestAssistantConnectionRequest request, CancellationToken ct = default)
     {
-        var response = await http.PostAsJsonAsync("api/settings/assistant/test", request, ct);
+        var response = await http.PostAsJsonAsync("api/settings/assistant/test", request, SharedJson.Options, ct);
         return await ReadAsync<TestChatConnectionResponse>(response, ct);
     }
 
@@ -143,7 +144,7 @@ public sealed class SettingsApiClient(HttpClient http)
     /// <summary>Salva a configuração do grafo; efeito imediato, sem restart.</summary>
     public async Task<ApiResult<object>> SaveGraphAsync(SaveGraphSettingsRequest request, CancellationToken ct = default)
     {
-        var response = await http.PutAsJsonAsync("api/settings/graph", request, ct);
+        var response = await http.PutAsJsonAsync("api/settings/graph", request, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -163,7 +164,7 @@ public sealed class SettingsApiClient(HttpClient http)
     /// <summary>Salva a política de fallback; efeito imediato, sem restart.</summary>
     public async Task<ApiResult<object>> SaveResilienceAsync(SaveResilienceSettingsRequest request, CancellationToken ct = default)
     {
-        var response = await http.PutAsJsonAsync("api/settings/resilience", request, ct);
+        var response = await http.PutAsJsonAsync("api/settings/resilience", request, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -184,7 +185,7 @@ public sealed class SettingsApiClient(HttpClient http)
     public async Task<ApiResult<object>> SaveApiKeyChatAsync(Guid apiKeyId, string? endpoint, string? model, string? apiKey, CancellationToken ct = default)
     {
         var response = await http.PutAsJsonAsync($"api/api-keys/{apiKeyId}/settings/chat",
-            new SaveApiKeyChatSettingsRequest { Endpoint = endpoint, Model = model, ApiKey = apiKey }, ct);
+            new SaveApiKeyChatSettingsRequest { Endpoint = endpoint, Model = model, ApiKey = apiKey }, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -201,7 +202,7 @@ public sealed class SettingsApiClient(HttpClient http)
     {
         var response = await http.PutAsJsonAsync(
             $"api/api-keys/{apiKeyId}/settings/integrations/{Uri.EscapeDataString(provider)}",
-            new SetIntegrationKeyRequest { ApiKey = apiKey }, ct);
+            new SetIntegrationKeyRequest { ApiKey = apiKey }, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -235,7 +236,7 @@ public sealed class SettingsApiClient(HttpClient http)
     public async Task<ApiResult<LogLevelState>> SetLogLevelAsync(string level, int minutes, CancellationToken ct = default)
     {
         var response = await http.PutAsJsonAsync("api/settings/log-level",
-            new { level, minutes }, ct);
+            new { level, minutes }, SharedJson.Options, ct);
         return await ReadAsync<LogLevelState>(response, ct);
     }
 
@@ -248,7 +249,7 @@ public sealed class SettingsApiClient(HttpClient http)
     /// <summary>Salva provider/endpoint/model/dims/chunking de embeddings; key em branco mantém.</summary>
     public async Task<ApiResult<object>> SaveEmbeddingsAsync(SaveEmbeddingSettingsRequest request, CancellationToken ct = default)
     {
-        var response = await http.PutAsJsonAsync("api/settings/embeddings", request, ct);
+        var response = await http.PutAsJsonAsync("api/settings/embeddings", request, SharedJson.Options, ct);
         return await ReadAsync<object>(response, ct);
     }
 
@@ -289,7 +290,7 @@ public sealed class SettingsApiClient(HttpClient http)
         if (response.IsSuccessStatusCode)
         {
             T? value = default;
-            try { value = await response.Content.ReadFromJsonAsync<T>(cancellationToken: ct); }
+            try { value = await response.Content.ReadFromJsonAsync<T>(SharedJson.Options, cancellationToken: ct); }
             catch { /* 204 or non-JSON body */ }
             return new ApiResult<T>(value, null);
         }
@@ -297,7 +298,7 @@ public sealed class SettingsApiClient(HttpClient http)
         string? error = null;
         try
         {
-            var doc = await response.Content.ReadFromJsonAsync<Dictionary<string, System.Text.Json.JsonElement>>(cancellationToken: ct);
+            var doc = await response.Content.ReadFromJsonAsync<Dictionary<string, System.Text.Json.JsonElement>>(SharedJson.Options, cancellationToken: ct);
             if (doc is not null && doc.TryGetValue("error", out var e))
                 error = e.GetString();
         }

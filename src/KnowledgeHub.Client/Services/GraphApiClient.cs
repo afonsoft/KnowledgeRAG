@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using KnowledgeHub.Shared;
 using KnowledgeHub.Shared.Contracts;
 
 namespace KnowledgeHub.Client.Services;
@@ -11,7 +12,7 @@ public sealed class GraphApiClient(HttpClient http)
         int skip = 0, int take = 100, bool includeHistorical = false,
         CancellationToken ct = default) =>
         http.GetFromJsonAsync<GraphNodesResponse>(
-            $"api/graph/nodes?skip={skip}&take={take}&includeHistorical={includeHistorical}", ct);
+            $"api/graph/nodes?skip={skip}&take={take}&includeHistorical={includeHistorical}", SharedJson.Options, ct);
 
     /// <summary>GET /api/graph/timeline — nodes whose validity window intersects [from,to].</summary>
     public async Task<List<GraphNodeDto>?> TimelineAsync(
@@ -21,16 +22,16 @@ public sealed class GraphApiClient(HttpClient http)
         var url = $"api/graph/timeline?take={take}&includeHistorical={includeHistorical}";
         if (from is { } f) url += $"&from={f:O}";
         if (to is { } t) url += $"&to={t:O}";
-        return await http.GetFromJsonAsync<List<GraphNodeDto>>(url, ct);
+        return await http.GetFromJsonAsync<List<GraphNodeDto>>(url, SharedJson.Options, ct);
     }
 
     /// <summary>GET /api/graph/nodes/{id}/edges — edges for one node.</summary>
     public Task<List<GraphEdgeDto>?> EdgesAsync(
         string nodeId, bool includeHistorical = false, CancellationToken ct = default) =>
         http.GetFromJsonAsync<List<GraphEdgeDto>>(
-            $"api/graph/nodes/{nodeId}/edges?includeHistorical={includeHistorical}", ct);
+            $"api/graph/nodes/{nodeId}/edges?includeHistorical={includeHistorical}", SharedJson.Options, ct);
 
     /// <summary>GET /api/graph/episodes — recent ingestion/session episodes.</summary>
     public Task<List<GraphEpisodeDto>?> EpisodesAsync(int take = 100, CancellationToken ct = default) =>
-        http.GetFromJsonAsync<List<GraphEpisodeDto>>($"api/graph/episodes?take={take}", ct);
+        http.GetFromJsonAsync<List<GraphEpisodeDto>>($"api/graph/episodes?take={take}", SharedJson.Options, ct);
 }

@@ -63,28 +63,36 @@ public interface ISingleRowSettings
 
 /// <summary>
 /// Lazily-loaded volatile snapshot with invalidation — the lock + double-check
-/// that single-row settings services share. Async load happens under the gate
-/// (the pattern Graph/Resilience settings use — callers are cheap paths).
+/// that single-row settings services share. The async load runs outside the
+/// lock inside a shared <see cref="Lazy{T}"/>, so concurrent misses wait on a
+/// single in-flight load instead of serializing through the gate.
 /// </summary>
 public sealed class SnapshotCache<T> where T : class
 {
     private readonly object _gate = new();
-    private T? _snapshot;
+    private volatile Lazy<Task<T>>? _pending;
 
     /// <summary>Returns the cached snapshot, loading via <paramref name="load"/>
     /// on first access or after <see cref="Invalidate"/>.</summary>
     public T Get(Func<Task<T>> load)
     {
-        if (_snapshot is { } hit)
-            return hit;
+        if (_pending is { Value.IsCompletedSuccessfully: true } ready)
+            return ready.Value.Result;
+        Lazy<Task<T>> pending;
         lock (_gate)
-            return _snapshot ??= load().GetAwaiter().GetResult();
+        {
+            // A failed load must not poison the cache — retry next call.
+            if (_pending is null || (_pending.IsValueCreated && _pending.Value.IsCompleted))
+                _pending = new Lazy<Task<T>>(load, LazyThreadSafetyMode.ExecutionAndPublication);
+            pending = _pending;
+        }
+        return pending.Value.GetAwaiter().GetResult();
     }
 
     /// <summary>Drops the snapshot — next <see cref="Get"/> reloads.</summary>
     public void Invalidate()
     {
         lock (_gate)
-            _snapshot = null;
+            _pending = null;
     }
 }
