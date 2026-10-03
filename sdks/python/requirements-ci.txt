@@ -1,0 +1,10 @@
+# Pinned toolchain for CI (sdk-ci.yml / sdk-release.yml).
+# Keeps installs reproducible and satisfies the SonarCloud pip-install gate
+# (versions locked + workflows install with --only-binary ":all:").
+mcp==2.3.0
+httpx2==2.13.1
+pydantic==2.13.5
+pytest==9.1.1
+pytest-asyncio==1.4.0
+build==1.6.1
+twine==7.0.0

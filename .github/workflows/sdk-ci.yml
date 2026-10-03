@@ -14,6 +14,8 @@ permissions:
 env:
   DOTNET_VERSION: '10.0.x'
   PYTHON_VERSION: '3.12'
+  JAVA_VERSION: '17'
+  GO_VERSION: '1.27.x'
 
 jobs:
   dotnet-sdk:
@@ -49,16 +51,65 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'sdks/python/pyproject.toml'
+          cache-dependency-path: |
+            sdks/python/pyproject.toml
+            sdks/python/requirements-ci.txt
 
-      - name: 📦 Install + test
+      - name: 📦 Install pinned toolchain
+        working-directory: sdks/python
+        run: pip install --only-binary ":all:" -r requirements-ci.txt
+
+      - name: 🏗️ Build wheel
+        working-directory: sdks/python
+        run: python -m build --outdir ./dist
+
+      - name: 📦 Install wheel + test
         working-directory: sdks/python
         run: |
-          pip install -e ".[dev]"
+          pip install --only-binary ":all:" ./dist/*.whl
           python -m pytest tests/ -q
 
-      - name: 🏗️ Build sdist/wheel (dry-run)
-        working-directory: sdks/python
+  java-sdk:
+    name: ☕ Java SDK build + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: ☕ Setup JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: 🔧 Build + test
+        working-directory: sdks/java
+        run: mvn -B verify
+
+      - name: 📦 Upload jar (dry-run artifacts)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
+        with:
+          name: knowledgehub-sdk-java-ci
+          path: sdks/java/target/*.jar
+          retention-days: 7
+
+  go-sdk:
+    name: 🐹 Go SDK build + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16   # v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: sdks/go/go.sum
+
+      - name: 🔧 Vet + build + test
+        working-directory: sdks/go
         run: |
-          pip install build
-          python -m build --outdir ./dist
+          go vet ./...
+          go build ./...
+          go test ./...

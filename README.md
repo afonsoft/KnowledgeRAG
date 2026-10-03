@@ -243,8 +243,8 @@ Libraries that embed the hub's tools into other LLM systems — LangChain-style:
 |-----|---------|-------------|
 | [.NET](sdks/dotnet/) | `dotnet add package KnowledgeHub.Sdk` (net8.0) | `AIFunction` → Microsoft.Extensions.AI / Semantic Kernel |
 | [Python](sdks/python/) | `pip install knowledgehub-sdk` (≥3.10) | `StructuredTool` → LangChain / LangGraph |
-| Java | `io.github.afonsoft:knowledgehub` (Maven) | `ToolSpecification` → LangChain4j |
-| Go | `github.com/afonsoft/KnowledgeRAG/sdks/go` | `tools.Tool` → langchaingo |
+| [Java](sdks/java/) | `io.github.afonsoft:knowledgehub-sdk` (Maven) | `ToolSpecification`/`ToolExecutor` → LangChain4j |
+| [Go](sdks/go/) | `github.com/afonsoft/KnowledgeRAG/sdks/go` | `tools.Tool` → langchaingo |
 
 ```csharp
 // .NET — plug the whole catalog into any IChatClient

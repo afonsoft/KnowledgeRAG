@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.afonsoft</groupId>
+    <artifactId>knowledgehub-sdk</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>KnowledgeHub Client SDK</name>
+    <description>
+        Client SDK for the Knowledge MCP Hub. Wraps the hub's native MCP endpoint
+        (Streamable HTTP) in a typed facade and adapts its tools for LLM
+        frameworks (LangChain4j) — LangChain-style tool injection for Java apps.
+    </description>
+    <url>https://github.com/afonsoft/KnowledgeRAG</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
+    </licenses>
+
+    <scm>
+        <url>https://github.com/afonsoft/KnowledgeRAG</url>
+        <connection>scm:git:https://github.com/afonsoft/KnowledgeRAG.git</connection>
+        <tag>HEAD</tag>
+    </scm>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <mcp.version>2.0.0</mcp.version>
+        <jackson.version>2.19.2</jackson.version>
+        <langchain4j.version>1.0.0</langchain4j.version>
+        <junit.version>5.10.3</junit.version>
+    </properties>
+
+    <dependencies>
+        <!-- Official MCP Java SDK: Streamable HTTP transport + JSON-RPC. -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp</artifactId>
+            <version>${mcp.version}</version>
+        </dependency>
+
+        <!-- JSON mapping for the hub's structured tool results. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- LangChain4j adapter. Optional: only needed when calling
+             KnowledgeHubLangChain4j.asTools(). -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>${langchain4j.version}</version>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <phase>package</phase>
+                        <goals><goal>jar-no-fork</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.11.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <phase>package</phase>
+                        <goals><goal>jar</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
