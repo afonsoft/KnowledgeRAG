@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+
+    <PackageId>KnowledgeHub.Sdk</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Afonso Dutra Nogueira Filho</Authors>
+    <Description>
+      Official .NET client SDK for the Knowledge MCP Hub. Wraps the MCP server
+      (Streamable HTTP) with a typed facade for search_knowledge / ask_knowledge /
+      agent_chat and exposes the tool catalog as AIFunctions for
+      Microsoft.Extensions.AI and Semantic Kernel.
+    </Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/afonsoft/KnowledgeRAG</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/afonsoft/KnowledgeRAG</RepositoryUrl>
+    <PackageTags>mcp;rag;knowledge;a2a;agent;llm</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.9.0" />
+  </ItemGroup>
+
+</Project>

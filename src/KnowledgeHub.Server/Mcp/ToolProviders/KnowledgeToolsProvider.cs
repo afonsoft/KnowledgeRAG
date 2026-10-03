@@ -93,10 +93,12 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             "sourceName":{"type":"string"},"sourceId":{"type":"string"},
             "score":{"type":"number"},"uriReference":{"type":"string"},
             "sourceType":{"type":"string"}},"required":["chunkText","documentTitle","sourceName","score","uriReference"]}},
-          "grade":{"type":"string"},"retried":{"type":"boolean"},
-          "totalMatches":{"type":"integer"},"limitModeApplied":{"type":"string"},
-          "truncatedByTokens":{"type":"boolean"},
-          "warnings":{"type":"array","items":{"type":"string"}}},
+          "grade":{"type":["string","null"]},"retried":{"type":"boolean"},
+          "totalMatches":{"type":"integer"},"limitModeApplied":{"type":["string","null"]},
+          "truncatedByTokens":{"type":"boolean"},"filterRelaxed":{"type":"boolean"},
+          "originalFilter":{"type":["string","null"]},"appliedFilter":{"type":["string","null"]},
+          "warnings":{"type":["array","null"],"items":{"type":"string"}},
+          "suggestedActions":{"type":["array","null"],"items":{"type":"object"}}},
          "required":["results"]}
         """)!.AsObject();
 
