@@ -417,3 +417,322 @@ img, table, pre, code, .table-responsive {
     line-height: 1;
     cursor: pointer;
 }
+/* Flow canvas — vertical chain auto-layout. Pure CSS connectors (no SVG
+   coordinate bookkeeping): each connector is a thin centered line whose
+   arrowhead is a rotated square. */
+
+.fc-wrap {
+    overflow: auto;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    background:
+        radial-gradient(circle, var(--bs-border-color-translucent, rgba(0,0,0,.08)) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
+    max-height: 70vh;
+}
+
+.fc-canvas {
+    transform-origin: top center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+    min-width: 32rem;
+    width: 100%;
+}
+
+/* ---------- nodes ---------- */
+
+.fc-node {
+    display: block;
+    width: 20rem;
+    max-width: 90%;
+    text-align: left;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-left-width: 4px;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    color: var(--bs-body-color);
+    cursor: pointer;
+    font: inherit;
+    position: relative;
+}
+
+button.fc-node {
+    appearance: none;
+}
+
+.fc-node:hover {
+    border-color: var(--bs-primary);
+}
+
+.fc-node--sel {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 3px var(--bs-primary-border-subtle, rgba(13,110,253,.25));
+}
+
+.fc-node--drag {
+    opacity: 0.4;
+}
+
+.fc-node-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    min-width: 0;
+}
+
+.fc-node-id {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-node-name {
+    font-size: 0.8125rem;
+    color: var(--bs-secondary-color);
+    margin-top: 0.125rem;
+}
+
+.fc-node-summary {
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color);
+    margin-top: 0.25rem;
+    font-family: var(--bs-font-monospace);
+}
+
+.fc-grip {
+    color: var(--bs-secondary-color);
+    cursor: grab;
+}
+
+.fc-badge {
+    margin-left: auto;
+    background: var(--bs-secondary-bg);
+    color: var(--bs-secondary-color);
+    font-weight: 500;
+}
+
+.fc-io {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.375rem;
+}
+
+/* type accents (bootstrap semantic colors) */
+.fc-node--start     { border-left-color: var(--bs-success); }
+.fc-node--end       { border-left-color: var(--bs-secondary); }
+.fc-node--tool      { border-left-color: var(--bs-primary); }
+.fc-node--knowledge { border-left-color: var(--bs-info); }
+.fc-node--llm       { border-left-color: #6f42c1; }
+.fc-node--http      { border-left-color: var(--bs-warning); }
+.fc-node--condition { border-left-color: var(--bs-danger); }
+.fc-node--foreach   { border-left-color: var(--bs-orange, #fd7e14); }
+.fc-node--transform { border-left-color: var(--bs-teal, #20c997); }
+.fc-node--output    { border-left-color: var(--bs-success); }
+.fc-node--fail      { border-left-color: var(--bs-danger); }
+
+.fc-node--start,
+.fc-node--end {
+    width: 14rem;
+    text-align: center;
+    border-left-width: 1px;
+    border-top-width: 4px;
+    cursor: default;
+}
+.fc-node--start { border-top-color: var(--bs-success); }
+.fc-node--end   { border-top-color: var(--bs-secondary); }
+.fc-node--start .fc-node-head,
+.fc-node--end   .fc-node-head { justify-content: center; }
+.fc-node--start .fc-io { justify-content: center; }
+
+/* ---------- connectors (line + arrow + insert button) ---------- */
+
+.fc-connector {
+    position: relative;
+    width: 2px;
+    height: 2.75rem;
+    background: var(--bs-border-color);
+}
+
+.fc-connector::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--bs-border-color);
+    border-bottom: 2px solid var(--bs-border-color);
+    transform: translateX(-50%) translateY(-4px) rotate(45deg);
+}
+
+.fc-connector--drop {
+    background: var(--bs-primary);
+    outline: 2px dashed var(--bs-primary);
+    outline-offset: 3px;
+}
+
+.fc-add {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1.5rem;
+    height: 1.5rem;
+    min-width: 1.5rem;
+    border-radius: 50%;
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    color: var(--bs-secondary-color);
+    font-size: 0.75rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    z-index: 2;
+}
+
+.fc-connector:hover .fc-add,
+.fc-add:focus-visible,
+.fc-add[aria-expanded="true"] {
+    opacity: 1;
+}
+
+.fc-add:hover {
+    color: var(--bs-primary);
+    border-color: var(--bs-primary);
+}
+
+/* show add buttons on touch devices (no hover) */
+@media (hover: none) {
+    .fc-add { opacity: 1; }
+}
+
+/* ---------- insert picker ---------- */
+
+.fc-picker {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
+    padding: 0.25rem;
+    display: flex;
+    flex-direction: column;
+    min-width: 14rem;
+}
+
+.fc-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0;
+    background: transparent;
+    color: var(--bs-body-color);
+    text-align: left;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    min-height: 2.75rem;
+}
+
+.fc-picker-item:hover,
+.fc-picker-item:focus-visible {
+    background: var(--bs-secondary-bg);
+}
+
+/* ---------- lanes & chips (nested steps) ---------- */
+
+.fc-lanes {
+    margin-top: 0.5rem;
+    border-top: 1px dashed var(--bs-border-color);
+    padding-top: 0.375rem;
+}
+
+.fc-lane {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-top: 0.25rem;
+}
+
+.fc-lane-label {
+    flex: 0 0 auto;
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.6875rem;
+    font-family: var(--bs-font-monospace);
+    color: var(--bs-secondary-color);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    background: var(--bs-tertiary-bg, #f8f9fa);
+}
+
+.fc-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.fc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.6875rem;
+    font-family: var(--bs-font-monospace);
+    border: 1px solid var(--bs-border-color);
+    border-left-width: 3px;
+    border-radius: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fc-chip--more,
+.fc-chip--empty {
+    border-style: dashed;
+    color: var(--bs-secondary-color);
+}
+
+/* ---------- drawer ---------- */
+
+.fc-drawer {
+    position: sticky;
+    bottom: 0;
+    margin-top: 0.5rem;
+    border-color: var(--bs-primary);
+    z-index: 5;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 576px) {
+    .fc-canvas { min-width: 24rem; padding: 1rem 0.5rem; }
+    .fc-node { width: 16rem; }
+    .fc-node--start, .fc-node--end { width: 11rem; }
+}
+
+/* picker abre para cima nos connectors da metade inferior — o wrap tem
+   overflow e clipa menus que passam da borda inferior do canvas. */
+.fc-picker--up {
+    top: auto;
+    bottom: 100%;
+}

@@ -1,0 +1,48 @@
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@using KnowledgeHub.Shared.Contracts
+
+@foreach (var lane in Lanes)
+{
+    <div class="fc-lane">
+        <span class="fc-lane-label" title="@lane.Label">@lane.Label</span>
+        <div class="fc-chips">
+            @foreach (var s in lane.Steps.Take(MaxChips))
+            {
+                <span class="fc-chip fc-node--@s.Type" title="@(s.Name ?? s.Id)">
+                    <i class="fa-solid @FlowVisuals.TypeIcon(s.Type)" aria-hidden="true"></i>
+                    @s.Id
+                </span>
+                @if (Depth < 3)
+                {
+                    var nested = FlowVisuals.DisplayLanes(s);
+                    if (nested.Count > 0)
+                    {
+                        <FlowStepChipList Lanes="nested" Depth="Depth + 1" />
+                    }
+                }
+            }
+            @if (lane.Steps.Count > MaxChips)
+            {
+                <span class="fc-chip fc-chip--more">+@(lane.Steps.Count - MaxChips)</span>
+            }
+            @if (lane.Steps.Count == 0)
+            {
+                <span class="fc-chip fc-chip--empty">vazio</span>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private const int MaxChips = 6;
+
+    /// <summary>Display lanes (label + steps) to render — one per branch for
+    /// conditions, a single loop lane for foreach.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<FlowVisuals.FlowLane> Lanes { get; set; } = [];
+
+    /// <summary>Recursion depth guard for nested lanes.</summary>
+    [Parameter]
+    public int Depth { get; set; }
+}
