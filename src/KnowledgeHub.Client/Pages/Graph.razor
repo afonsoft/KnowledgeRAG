@@ -28,12 +28,12 @@
             </Select>
         </div>
         <div class="col-6 col-md-3">
-            <label class="form-label">De</label>
-            <input type="datetime-local" class="form-control form-control-sm" @bind="_from" />
+            <label class="form-label" for="graph-from">De</label>
+            <input type="datetime-local" class="form-control form-control-sm" id="graph-from" @bind="_from" />
         </div>
         <div class="col-6 col-md-3">
-            <label class="form-label">Até</label>
-            <input type="datetime-local" class="form-control form-control-sm" @bind="_to" />
+            <label class="form-label" for="graph-to">Até</label>
+            <input type="datetime-local" class="form-control form-control-sm" id="graph-to" @bind="_to" />
         </div>
         <div class="col-6 col-md-2">
             <Switch @bind-Value="_includeHistorical" DisplayText="Histórico" ShowLabel="true" />
@@ -60,6 +60,7 @@ else if (_nodes.Count == 0)
 }
 else
 {
+    <div class="table-responsive-wrapper">
     <table class="table table-sm align-middle">
         <thead>
             <tr>
@@ -143,6 +144,7 @@ else
             }
         </tbody>
     </table>
+    </div>
 }
 
 @code {
