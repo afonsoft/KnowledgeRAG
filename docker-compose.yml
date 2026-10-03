@@ -2,8 +2,11 @@
 # Same result as `./install.sh --docker`, declared declaratively.
 services:
   knowledgerag:
+    # The local build tags itself as the published image — so a host without
+    # the repo can skip the build entirely: `docker compose pull && up -d`
+    # (or just remove the `build:` line) pulls the released image.
     build: .
-    image: knowledgerag:latest
+    image: ghcr.io/afonsoft/knowledgerag:latest
     container_name: knowledgerag
     # Vars in .env reach the container directly (ASP.NET Core reads
     # `Section__Key` env names case-insensitively) — same pattern as
