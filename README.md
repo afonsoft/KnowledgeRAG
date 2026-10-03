@@ -54,6 +54,23 @@ flowchart LR
 - **A2A** — `/.well-known/agent-card.json` advertises the agent; `/a2a` executes `ask_knowledge`/`search_knowledge`/`agent_chat`/`read_document` under the caller's `aft_*` key scope, with streaming, push notifications and durable tasks.
 - **Auth** — cookie login for the SPA (forced password change on first boot), `aft_*` API keys for programmatic access with per-key scopes (allowed sources/tools), rate limits and usage auditing.
 
+## How it compares
+
+| | **Knowledge MCP Hub** | LangChain stack (LangServe + LangGraph) | Open WebUI | AnythingLLM / Dify |
+|---|---|---|---|---|
+| Stack | Single .NET 10 process | Python services + separate UI | Python + Svelte/Node | Node.js/Python + web app |
+| Deploy units | 1 container (or `install.sh` on bare metal) | API + UI + vector DB + queue — usually 3+ | 1–2 containers | 2–3 containers |
+| MCP **server** | Native, hybrid transport (Streamable HTTP + SSE) | Adapter needed (LangServe isn't MCP) | Client only | Client only / limited |
+| A2A v1.0 | Agent Card + JSON-RPC + push notifications | No | No | No |
+| RAG pipeline | Hybrid FTS5+vector+graph RRF, MMR, corrective loop, eval gates | Assembled per-project (retrievers + graph) | Basic RAG | Platform RAG, varies |
+| Agent loop | Tool-calling + HITL approvals + auto-resume + task-eligible tools | LangGraph state machines (code-defined) | Function calling | Agent flows (UI-defined) |
+| Connectors | 15+ incl. Obsidian, SQL, REST, S3/Azure/OCI, RSS, YouTube, Git, Unstructured | DIY per connector | Files/URLs | Workspace docs |
+| Auth & keys | Cookie + `aft_*` keys with per-key source/tool scopes, rate limits, usage audit | Auth usually custom | Single-user/multi-user login | Workspace ACLs |
+| Persistence | SQLite by default, Postgres/pgvector opt-in | External DB required | SQLite/Postgres | External DB |
+| Observability | Serilog + OTel spans + live MCP monitor (SignalR) + eval/RAG-quality dashboards | LangSmith (SaaS) or DIY | Logs | Vendor dashboards |
+
+Differentiators in one line: **one process** that is simultaneously the admin UI, the REST API, an MCP server *and* an A2A agent — no sidecar services to wire.
+
 ## Endpoints
 
 | Route | Purpose |

@@ -54,6 +54,23 @@ flowchart LR
 - **A2A** — `/.well-known/agent-card.json` anuncia o agente; `/a2a` executa `ask_knowledge`/`search_knowledge`/`agent_chat`/`read_document` sob o escopo da chave `aft_*` do chamador, com streaming, push notifications e tasks duráveis.
 - **Autenticação** — login por cookie na SPA (troca de senha obrigatória no primeiro boot), chaves `aft_*` para acesso programático com escopos por chave (fontes/tools permitidas), rate limits e auditoria de uso.
 
+## Comparativo
+
+| | **Knowledge MCP Hub** | Stack LangChain (LangServe + LangGraph) | Open WebUI | AnythingLLM / Dify |
+|---|---|---|---|---|
+| Stack | Processo .NET 10 único | Serviços Python + UI separada | Python + Svelte/Node | Node.js/Python + web app |
+| Unidades de deploy | 1 container (ou `install.sh` em bare metal) | API + UI + vector DB + fila — geralmente 3+ | 1–2 containers | 2–3 containers |
+| Servidor **MCP** | Nativo, transporte híbrido (Streamable HTTP + SSE) | Precisa de adapter (LangServe não é MCP) | Só client | Só client / limitado |
+| A2A v1.0 | Agent Card + JSON-RPC + push notifications | Não | Não | Não |
+| Pipeline RAG | Híbrido FTS5+vetor+grafo com RRF, MMR, loop corretivo, gates de eval | Montado por projeto (retrievers + grafo) | RAG básico | RAG de plataforma, varia |
+| Loop de agente | Tool-calling + aprovações HITL + auto-resume + tools elegíveis a tasks | Máquinas de estado LangGraph (definidas em código) | Function calling | Fluxos de agente (definidos na UI) |
+| Conectores | 15+ incl. Obsidian, SQL, REST, S3/Azure/OCI, RSS, YouTube, Git, Unstructured | DIY por conector | Arquivos/URLs | Docs de workspace |
+| Auth & chaves | Cookie + chaves `aft_*` com escopo por chave (fontes/tools), rate limits, auditoria | Auth geralmente custom | Login single/multi-user | ACLs de workspace |
+| Persistência | SQLite por padrão, Postgres/pgvector opt-in | DB externo obrigatório | SQLite/Postgres | DB externo |
+| Observabilidade | Serilog + spans OTel + monitor MCP ao vivo (SignalR) + dashboards de eval/qualidade RAG | LangSmith (SaaS) ou DIY | Logs | Dashboards do vendor |
+
+Diferencial em uma linha: **um único processo** que é ao mesmo tempo a UI administrativa, a API REST, um servidor MCP *e* um agente A2A — sem serviços sidecar para integrar.
+
 ## Endpoints
 
 | Rota | Propósito |
