@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using KnowledgeHub.Shared;
 
 namespace KnowledgeHub.Client.Services;
 
@@ -16,7 +17,7 @@ public sealed class A2aApiClient(HttpClient http)
 
     /// <summary>Fetches the Agent Card — anonymous endpoint, safe to call pre-login.</summary>
     public async Task<JsonElement> GetAgentCardAsync(CancellationToken ct = default)
-        => await http.GetFromJsonAsync<JsonElement>(".well-known/agent-card.json", ct);
+        => await http.GetFromJsonAsync<JsonElement>(".well-known/agent-card.json", SharedJson.Options, ct);
 
     /// <summary>Delegates a text message to a skill; returns the created/updated Task JSON.</summary>
     public async Task<JsonElement> SendMessageAsync(
@@ -68,7 +69,7 @@ public sealed class A2aApiClient(HttpClient http)
             @params
         }, JsonOpts, ct);
         response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(SharedJson.Options, ct);
         if (body.TryGetProperty("error", out var error))
             throw new InvalidOperationException(
                 $"A2A {method} falhou: {error.GetRawText()}");

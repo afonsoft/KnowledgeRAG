@@ -18,7 +18,7 @@ public sealed record IntegrationSettingsDto
     public string? Note { get; init; }
     /// <summary>Runtime toggle — disabled integrations drop out of the MCP
     /// tools catalog entirely (SPEC-20260926-integration-toggle).</summary>
-    public bool Enabled { get; init; } = true;
+    public bool Enabled { get; set; } = true;
 }
 
 public sealed record IntegrationSettingsResponse

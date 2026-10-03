@@ -134,9 +134,28 @@ public sealed class AgentService(
         List<ConversationMessage> droppedFromWindow = [];
         if (request.ThreadId is { } threadId)
         {
-            thread = await db.Threads.Include(t => t.Messages)
+            thread = await db.Threads
                 .FirstOrDefaultAsync(t => t.Id == threadId, ct)
                 ?? throw new KeyNotFoundException($"thread '{threadId}' not found");
+            // R3 (audit 2026-10-03): bounded tail instead of Include-all.
+            // The window needs at most MaxContextTokens rows (worst case one
+            // token each) and the summarizer only consumes the most recent
+            // SummarizationMaxMessages of the dropped backlog — anything
+            // older is already covered by thread.Summary. Two queries: a
+            // lightweight id/timestamp index (SQLite can't ORDER BY
+            // DateTimeOffset server-side) then the full rows for just the tail.
+            var index = await db.ThreadMessages.AsNoTracking()
+                .Where(m => m.ThreadId == threadId)
+                .Select(m => new { m.Id, m.CreatedAt })
+                .ToListAsync(ct);
+            var tailIds = index
+                .OrderByDescending(m => m.CreatedAt)
+                .Take(options.MaxContextTokens + options.SummarizationMaxMessages)
+                .Select(m => m.Id)
+                .ToHashSet();
+            thread.Messages = await db.ThreadMessages
+                .Where(m => tailIds.Contains(m.Id))
+                .ToListAsync(ct);
             (var history, droppedFromWindow) = BuildContextWindow(thread);
             messages.AddRange(history);
         }

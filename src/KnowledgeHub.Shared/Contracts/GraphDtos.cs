@@ -7,7 +7,7 @@ public sealed record GraphNodeDto
     public required string Id { get; init; }
     public required string Name { get; init; }
     public required string Type { get; init; }
-    public IReadOnlyList<string> Labels { get; init; } = [];
+    public IReadOnlyList<string> Labels { get; set; } = [];
     public DateTimeOffset FirstSeenAt { get; init; }
     /// <summary>UTC — last observation by extraction/traversal.</summary>
     public DateTime ObservedAt { get; init; }
@@ -33,8 +33,8 @@ public sealed record GraphEdgeDto
     public DateTime? ValidTo { get; init; }
     public string? EpisodeId { get; init; }
     /// <summary>Evidence anchor — chunk + doc that back the edge.</summary>
-    public string EvidenceChunkId { get; init; } = "";
-    public string DocumentId { get; init; } = "";
+    public string EvidenceChunkId { get; set; } = "";
+    public string DocumentId { get; set; } = "";
 }
 
 /// <summary>Ingestion/session episode row.</summary>

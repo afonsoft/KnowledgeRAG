@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using KnowledgeHub.Shared;
 using KnowledgeHub.Shared.Contracts;
 
 namespace KnowledgeHub.Client.Services;
@@ -9,17 +10,17 @@ namespace KnowledgeHub.Client.Services;
 public sealed class SourceApiClient(HttpClient http)
 {
     public Task<List<KnowledgeSourceDto>?> ListAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<List<KnowledgeSourceDto>>("api/sources", ct);
+        http.GetFromJsonAsync<List<KnowledgeSourceDto>>("api/sources", SharedJson.Options, ct);
 
     public async Task<ApiResult<KnowledgeSourceDto>> CreateAsync(CreateKnowledgeSourceRequest request, CancellationToken ct = default)
     {
-        var response = await http.PostAsJsonAsync("api/sources", request, ct);
+        var response = await http.PostAsJsonAsync("api/sources", request, SharedJson.Options, ct);
         return await ReadResultAsync<KnowledgeSourceDto>(response, ct);
     }
 
     public async Task<ApiResult<KnowledgeSourceDto>> UpdateAsync(Guid id, UpdateKnowledgeSourceRequest request, CancellationToken ct = default)
     {
-        var response = await http.PutAsJsonAsync($"api/sources/{id}", request, ct);
+        var response = await http.PutAsJsonAsync($"api/sources/{id}", request, SharedJson.Options, ct);
         return await ReadResultAsync<KnowledgeSourceDto>(response, ct);
     }
 
@@ -46,13 +47,13 @@ public sealed class SourceApiClient(HttpClient http)
 
     /// <summary>Poll a queued/running ingestion job.</summary>
     public Task<IngestionJobDto?> GetJobAsync(Guid jobId, CancellationToken ct = default) =>
-        http.GetFromJsonAsync<IngestionJobDto>($"api/ingestion/jobs/{jobId}", ct);
+        http.GetFromJsonAsync<IngestionJobDto>($"api/ingestion/jobs/{jobId}", SharedJson.Options, ct);
 
     /// <summary>SPEC-20260925-sources-grid-ux RF-003: latest jobs of a source
     /// (status detail popup).</summary>
     public Task<List<IngestionJobDto>?> JobsAsync(Guid sourceId, int limit = 5, CancellationToken ct = default) =>
         http.GetFromJsonAsync<List<IngestionJobDto>>(
-            $"api/ingestion/jobs?sourceId={sourceId}&limit={limit}", ct);
+            $"api/ingestion/jobs?sourceId={sourceId}&limit={limit}", SharedJson.Options, ct);
 
     public async Task<ApiResult<object>> DeleteAsync(Guid id, CancellationToken ct = default)
     {
@@ -61,13 +62,13 @@ public sealed class SourceApiClient(HttpClient http)
     }
 
     public Task<List<KnowledgeDocumentDto>?> DocumentsAsync(Guid id, CancellationToken ct = default) =>
-        http.GetFromJsonAsync<List<KnowledgeDocumentDto>>($"api/sources/{id}/documents", ct);
+        http.GetFromJsonAsync<List<KnowledgeDocumentDto>>($"api/sources/{id}/documents", SharedJson.Options, ct);
 
     private static async Task<ApiResult<T>> ReadResultAsync<T>(HttpResponseMessage response, CancellationToken ct)
     {
         if (response.IsSuccessStatusCode)
         {
-            var value = await response.Content.ReadFromJsonAsync<T>(cancellationToken: ct);
+            var value = await response.Content.ReadFromJsonAsync<T>(SharedJson.Options, cancellationToken: ct);
             return new ApiResult<T>(value, null);
         }
 

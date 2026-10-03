@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using KnowledgeHub.Shared;
 using KnowledgeHub.Shared.Contracts;
 
 namespace KnowledgeHub.Client.Services;
@@ -9,15 +10,15 @@ public sealed class EvalApiClient(HttpClient http)
 {
     /// <summary>GET /api/eval/runs — summaries (may include gate + baselineName).</summary>
     public Task<List<EvalRunSummaryDto>?> RunsAsync(int limit = 20, CancellationToken ct = default) =>
-        http.GetFromJsonAsync<List<EvalRunSummaryDto>>($"api/eval/runs?limit={limit}", ct);
+        http.GetFromJsonAsync<List<EvalRunSummaryDto>>($"api/eval/runs?limit={limit}", SharedJson.Options, ct);
 
     /// <summary>GET /api/eval/runs/{id} — full report.</summary>
     public Task<EvalReportDto?> RunAsync(Guid id, CancellationToken ct = default) =>
-        http.GetFromJsonAsync<EvalReportDto>($"api/eval/runs/{id}", ct);
+        http.GetFromJsonAsync<EvalReportDto>($"api/eval/runs/{id}", SharedJson.Options, ct);
 
     /// <summary>GET /api/eval/baselines.</summary>
     public Task<List<EvalBaselineDto>?> BaselinesAsync(CancellationToken ct = default) =>
-        http.GetFromJsonAsync<List<EvalBaselineDto>>("api/eval/baselines", ct);
+        http.GetFromJsonAsync<List<EvalBaselineDto>>("api/eval/baselines", SharedJson.Options, ct);
 
     /// <summary>POST /api/eval/run.</summary>
     public async Task<ApiResult<EvalReportDto>> RunEvalAsync(
@@ -33,7 +34,7 @@ public sealed class EvalApiClient(HttpClient http)
         if (!string.IsNullOrWhiteSpace(gateJson))
             payload["gate"] = JsonSerializer.Deserialize<JsonElement>(gateJson);
 
-        var response = await http.PostAsJsonAsync("api/eval/run", payload, ct);
+        var response = await http.PostAsJsonAsync("api/eval/run", payload, SharedJson.Options, ct);
         return await ReadResultAsync<EvalReportDto>(response, ct);
     }
 
@@ -41,14 +42,14 @@ public sealed class EvalApiClient(HttpClient http)
     public async Task<ApiResult<object>> PromoteBaselineAsync(
         string name, Guid runId, CancellationToken ct = default)
     {
-        var response = await http.PostAsJsonAsync("api/eval/baselines", new { name, runId }, ct);
+        var response = await http.PostAsJsonAsync("api/eval/baselines", new { name, runId }, SharedJson.Options, ct);
         return await ReadResultAsync<object>(response, ct);
     }
 
     private static async Task<ApiResult<T>> ReadResultAsync<T>(HttpResponseMessage response, CancellationToken ct)
     {
         if (response.IsSuccessStatusCode)
-            return new ApiResult<T>((await response.Content.ReadFromJsonAsync<T>(ct))!, null);
+            return new ApiResult<T>((await response.Content.ReadFromJsonAsync<T>(SharedJson.Options, ct))!, null);
         var body = await response.Content.ReadAsStringAsync(ct);
         var error = ExtractError(body) ?? $"{(int)response.StatusCode} {response.ReasonPhrase}";
         return new ApiResult<T>(default, error, body);

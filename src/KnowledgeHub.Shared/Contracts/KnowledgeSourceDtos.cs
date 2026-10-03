@@ -9,7 +9,7 @@ public sealed record CreateKnowledgeSourceRequest
     public string? Description { get; init; }
     public required SourceType Type { get; init; }
     public JsonObject? Configuration { get; init; }
-    public bool IsActive { get; init; } = true;
+    public bool IsActive { get; set; } = true;
     public bool AutoSyncEnabled { get; init; }
     public int? SyncIntervalMinutes { get; init; }
 }
