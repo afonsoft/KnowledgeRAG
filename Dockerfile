@@ -27,7 +27,13 @@ RUN dotnet restore src/KnowledgeHub.Server/KnowledgeHub.Server.csproj
 
 # wasm-tools: without it the Blazor client publish skips the wasm
 # optimization passes (SDK warns "Publishing without optimizations").
-RUN dotnet workload install wasm-tools
+# The native compile step runs emcc, which shells out to `python` —
+# absent in the sdk image, so install python3 and alias it.
+RUN dotnet workload install wasm-tools \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends python3 \
+ && ln -sf /usr/bin/python3 /usr/local/bin/python \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY src/ src/
 # RID follows the image's own arch (native or --platform/QEMU): plain
