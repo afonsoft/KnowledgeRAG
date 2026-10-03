@@ -34,7 +34,7 @@
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mcp.version>2.0.0</mcp.version>
-        <jackson.version>2.19.2</jackson.version>
+        <jackson.version>2.21.7</jackson.version>
         <langchain4j.version>1.0.0</langchain4j.version>
         <junit.version>5.10.3</junit.version>
     </properties>
