@@ -1,5 +1,6 @@
 @using System.Text.Json
 @using KnowledgeHub.Shared.Contracts
+@inject IStringLocalizer<SharedStrings> L
 
 @* Visual canvas for a flow definition: vertical chain auto-layout (START →
    steps → END), drag nodes to reorder via connector drop zones, "+" on a
@@ -8,17 +9,17 @@
 <div class="fc-toolbar d-flex align-items-center gap-2 mb-2">
     <small class="text-muted">
         <i class="fa-solid fa-hand-pointer" aria-hidden="true"></i>
-        clique no nó para editar · arraste para reordenar · + insere um step
+        @L["Canvas_Hint"]
     </small>
-    <div class="ms-auto btn-group btn-group-sm" role="group" aria-label="Zoom do canvas">
+    <div class="ms-auto btn-group btn-group-sm" role="group" aria-label="@L["Canvas_ZoomGroup"]">
         <button type="button" class="btn btn-outline-secondary" @onclick="ZoomOut"
-                aria-label="Reduzir zoom" disabled="@(_zoom <= 50)">
+                aria-label="@L["Canvas_ZoomOut"]" disabled="@(_zoom <= 50)">
             <i class="fa-solid fa-magnifying-glass-minus" aria-hidden="true"></i>
         </button>
         <button type="button" class="btn btn-outline-secondary" @onclick="() => _zoom = 100"
-                aria-label="Zoom 100%">@_zoom%</button>
+                aria-label="@L["Canvas_ZoomReset"]">@_zoom%</button>
         <button type="button" class="btn btn-outline-secondary" @onclick="ZoomIn"
-                aria-label="Aumentar zoom" disabled="@(_zoom >= 150)">
+                aria-label="@L["Canvas_ZoomIn"]" disabled="@(_zoom >= 150)">
             <i class="fa-solid fa-magnifying-glass-plus" aria-hidden="true"></i>
         </button>
     </div>
@@ -27,7 +28,7 @@
 <div class="fc-wrap">
     <div class="fc-canvas" style="transform:scale(@((_zoom / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture)))"
          @onclick="() => _insertAt = null">
-        <div class="fc-node fc-node--start" role="img" aria-label="Início do flow — inputs declarados">
+        <div class="fc-node fc-node--start" role="img" aria-label="@L["Canvas_StartLabel"]">
             <div class="fc-node-head">
                 <i class="fa-solid fa-play" aria-hidden="true"></i>
                 <strong>START</strong>
@@ -45,7 +46,7 @@
             }
             else
             {
-                <div class="text-muted small">sem inputs</div>
+                <div class="text-muted small">@L["Canvas_NoInputs"]</div>
             }
         </div>
 
@@ -60,14 +61,14 @@
                  @ondrop:preventDefault>
                 <button type="button" class="fc-add" @onclick="() => ToggleInsert(insertIdx)"
                         @onclick:stopPropagation
-                        aria-label="Inserir step aqui" title="Inserir step aqui">
+                        aria-label="@L["Canvas_InsertHere"]" title="@L["Canvas_InsertHere"]">
                     <i class="fa-solid fa-plus" aria-hidden="true"></i>
                 </button>
                 @if (_insertAt == insertIdx)
                 {
-                    <div class="fc-picker @(insertIdx * 2 > Steps.Count ? "fc-picker--up" : "")" role="menu" aria-label="Tipo do novo step"
+                    <div class="fc-picker @(insertIdx * 2 > Steps.Count ? "fc-picker--up" : "")" role="menu" aria-label="@L["Canvas_PickerLabel"]"
                          @onclick:stopPropagation>
-                        @foreach (var t in FlowEditModel.StepTypes)
+                        @foreach (var t in FlowEditModel.StepTypeItems(L))
                         {
                             <button type="button" class="fc-picker-item" role="menuitem"
                                     @onclick="() => InsertAt(insertIdx, t.Value)">
@@ -91,11 +92,11 @@
                         @ondragstart="() => _dragIndex = idx"
                         @ondragend="() => { _dragIndex = null; _dropIndex = null; }"
                         @onclick="() => Select(idx)"
-                        aria-label="Step @(idx + 1): @s.Type @(s.Id)">
+                        aria-label="@L["Canvas_NodeAria", idx + 1, s.Type, s.Id]">
                     <div class="fc-node-head">
                         <i class="fa-solid fa-grip-vertical fc-grip" aria-hidden="true"></i>
                         <i class="fa-solid @FlowVisuals.TypeIcon(s.Type)" aria-hidden="true"></i>
-                        <strong class="fc-node-id">@(string.IsNullOrWhiteSpace(s.Id) ? "(sem id)" : s.Id)</strong>
+                        <strong class="fc-node-id">@(string.IsNullOrWhiteSpace(s.Id) ? L["Canvas_NoId"].Value : s.Id)</strong>
                         <span class="badge fc-badge">@s.Type</span>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(s.Name))
@@ -116,7 +117,7 @@
             }
         }
 
-        <div class="fc-node fc-node--end" role="img" aria-label="Fim do flow">
+        <div class="fc-node fc-node--end" role="img" aria-label="@L["Canvas_EndLabel"]">
             <div class="fc-node-head">
                 <i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>
                 <strong>END</strong>
@@ -128,11 +129,11 @@
 @if (_selected is { } sel && sel < Steps.Count)
 {
     var s = Steps[sel];
-    <div class="fc-drawer card" role="dialog" aria-label="Propriedades do step @s.Id">
+    <div class="fc-drawer card" role="dialog" aria-label="@L["Canvas_DrawerTitle", s.Id]">
         <div class="card-header d-flex justify-content-between align-items-center py-1">
             <strong><i class="fa-solid @FlowVisuals.TypeIcon(s.Type)" aria-hidden="true"></i> @s.Type — <code>@s.Id</code></strong>
             <button type="button" class="btn btn-sm btn-link" @onclick="() => _selected = null"
-                    aria-label="Fechar painel"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    aria-label="@L["Canvas_CloseDrawer"]"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
         </div>
         <div class="card-body py-2">
             <div class="row g-2">
@@ -140,32 +141,32 @@
                     <BootstrapInput @bind-Value="s.Id" DisplayText="Id *" ShowLabel="true" />
                 </div>
                 <div class="col-12 col-md-4">
-                    <Select @bind-Value="s.Type" Items="FlowEditModel.StepTypes" DisplayText="Tipo" ShowLabel="true" />
+                    <Select @bind-Value="s.Type" Items="FlowEditModel.StepTypeItems(L)" DisplayText="@L["Common_Type"]" ShowLabel="true" />
                 </div>
                 <div class="col-12 col-md-4">
-                    <BootstrapInput @bind-Value="s.Name" DisplayText="Rótulo" ShowLabel="true" />
+                    <BootstrapInput @bind-Value="s.Name" DisplayText="@L["Canvas_Label"]" ShowLabel="true" />
                 </div>
             </div>
-            <Textarea @bind-Value="s.ConfigJson" DisplayText="Config (JSON)" ShowLabel="true"
+            <Textarea @bind-Value="s.ConfigJson" DisplayText="@L["Canvas_Config"]" ShowLabel="true"
                       rows="4" class="font-monospace mt-2" />
             @if (s.Type is "condition" or "foreach")
             {
                 <Textarea @bind-Value="s.StepsJson" rows="3" class="font-monospace mt-2"
-                          DisplayText="Steps aninhados (JSON) — foreach; condition usa config.branches[].steps"
+                          DisplayText="@L["Canvas_Nested"]"
                           ShowLabel="true" />
             }
             <div class="d-flex gap-2 mt-2">
                 <button type="button" class="btn btn-sm btn-outline-secondary"
                         disabled="@(sel == 0)" @onclick="() => Move(sel, -1)">
-                    <i class="fa-solid fa-arrow-up" aria-hidden="true"></i> Subir
+                    <i class="fa-solid fa-arrow-up" aria-hidden="true"></i> @L["Canvas_MoveUp"]
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-secondary"
                         disabled="@(sel == Steps.Count - 1)" @onclick="() => Move(sel, 1)">
-                    <i class="fa-solid fa-arrow-down" aria-hidden="true"></i> Descer
+                    <i class="fa-solid fa-arrow-down" aria-hidden="true"></i> @L["Canvas_MoveDown"]
                 </button>
                 <button type="button" class="btn btn-sm btn-outline-danger ms-auto"
                         @onclick="() => Remove(sel)">
-                    <i class="fa-solid fa-trash" aria-hidden="true"></i> Remover
+                    <i class="fa-solid fa-trash" aria-hidden="true"></i> @L["Canvas_Remove"]
                 </button>
             </div>
         </div>
@@ -258,7 +259,7 @@
         return $"step{n}";
     }
 
-    private static string DefaultConfig(string type) => type switch
+    private string DefaultConfig(string type) => type switch
     {
         "tool" => """{"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}""",
         "knowledge" => """{"tool":"search_knowledge","args":{"query":"{{vars.q}}","topK":5}}""",
@@ -268,7 +269,7 @@
         "foreach" => """{"each":"{{vars.items}}"}""",
         "transform" => """{"value":{"result":"{{steps.prev.output}}"}}""",
         "output" => """{"value":"{{steps.prev.output}}"}""",
-        "fail" => """{"message":"condição não atendida"}""",
+        "fail" => "{\"message\":\"" + L["FC_FailExample"].Value + "\"}",
         _ => "{}",
     };
 }

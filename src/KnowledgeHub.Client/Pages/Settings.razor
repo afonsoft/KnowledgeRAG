@@ -2,10 +2,11 @@
 @attribute [Authorize]
 @inject SettingsApiClient Api
 @inject ToastService Toast
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Settings — Knowledge</PageTitle>
+<PageTitle>@L["Set_PageTitle"]</PageTitle>
 
-<h1 class="h3 mb-3">Settings</h1>
+<h1 class="h3 mb-3">@L["Nav_Settings"]</h1>
 
 @* SPEC-20260926-settings-tabs-database-metrics RF-001: seções em abas —
    Chat (LLM) / GraphRAG / Integrações / Cache / Banco de Dados.
@@ -14,16 +15,11 @@
 <Tab TabStyle="TabStyle.Chrome" ShowNavigatorButtons="true">
     <TabItem Text="Chat (LLM)" Icon="fa-solid fa-comments">
 
-<p class="text-muted">
-    Provider OpenAI-compatible usado na síntese de respostas e no loop do agente.
-    O endpoint vai sem <code>/v1</code> — o cliente adiciona
-    <code>/v1/chat/completions</code>. A API key é criptografada em repouso e
-    nunca retorna à interface — só os 4 últimos caracteres são exibidos.
-</p>
+<p class="text-muted">@L["Set_ChatIntro"]</p>
 
 @if (_chat is null)
 {
-    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando configuração de chat…</div>
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingChat"]</div>
 }
 else
 {
@@ -32,27 +28,25 @@ else
             <Card>
                 <HeaderTemplate>
                     <div class="d-flex justify-content-between gap-2 align-items-center">
-                        <span>Provider OpenAI-compatible</span>
+                        <span>@L["Set_ChatProviderCard"]</span>
                         @if (_chat.Source == "store")
                         {
-                            <Badge Color="Color.Success">configurada</Badge>
+                            <Badge Color="Color.Success">@L["Set_Configured"]</Badge>
                         }
                         else if (_chat.Source == "env")
                         {
-                            <Badge Color="Color.Info">ambiente</Badge>
+                            <Badge Color="Color.Info">@L["Set_Env"]</Badge>
                         }
                         else
                         {
-                            <Badge Color="Color.Secondary">não configurada</Badge>
+                            <Badge Color="Color.Secondary">@L["Set_NotConfigured"]</Badge>
                         }
                     </div>
                 </HeaderTemplate>
                 <BodyTemplate>
                     @if (_chat.Source == "env")
                     {
-                        <small class="text-muted d-block mb-2">
-                            Usando a configuração do ambiente — salve para sobrepor via interface.
-                        </small>
+                        <small class="text-muted d-block mb-2">@L["Set_EnvNote"]</small>
                     }
 
                     <div class="row g-2 mb-2">
@@ -60,15 +54,15 @@ else
                             <label class="form-label">Endpoint</label>
                             <input type="text" class="form-control font-monospace"
                                    @bind="_chatForm.Endpoint"
-                                   placeholder="https://api.exemplo.com" autocomplete="off" />
+                                   placeholder="@L["Keys_ExamplePh"]" autocomplete="off" />
                         </div>
                         <div class="col-12 col-md-5">
                             <label class="form-label">Model</label>
                             <div class="input-group">
                                 <input type="text" class="form-control font-monospace" list="kh-chat-models"
                                        @bind="_chatForm.Model"
-                                       placeholder="nome do modelo" autocomplete="off" />
-                                <button type="button" class="btn btn-outline-secondary" title="Listar modelos do endpoint"
+                                       placeholder="@L["Set_ModelPh"]" autocomplete="off" />
+                                <button type="button" class="btn btn-outline-secondary" title="@L["Set_ListModels"]"
                                         @onclick="LoadChatModelsAsync" disabled="@_chatModelsLoading">
                                     <i class="fa-solid @(_chatModelsLoading ? "fa-spinner fa-spin" : "fa-rotate")"></i>
                                 </button>
@@ -81,7 +75,7 @@ else
                             </datalist>
                             @if (_chatModelsDetail is { } cmd)
                             {
-                                <small class="text-muted">lista indisponível (@cmd) — digite o nome manualmente</small>
+                                <small class="text-muted">@L["Set_ModelListFail", cmd]</small>
                             }
                         </div>
                     </div>
@@ -89,38 +83,38 @@ else
                     @if (_chat.HasApiKey)
                     {
                         <div class="mb-2">
-                            <small class="text-muted">Key ativa (@_chat.ApiKeySource):</small>
+                            <small class="text-muted">@L["Set_ActiveKey", _chat.ApiKeySource]</small>
                             <code class="ms-1">@_chat.ApiKeyHint</code>
                         </div>
                     }
 
                     <label class="form-label">
-                        @(_chat.HasApiKey ? "Substituir API key" : "API key")
+                        @(_chat.HasApiKey ? L["Keys_ReplaceKey"].Value : "API key")
                     </label>
                     <input type="password" class="form-control font-monospace mb-2"
                            @bind="_chatForm.ApiKey"
-                           placeholder="@(_chat.HasApiKey ? "deixe em branco para manter" : "sk-…")"
+                           placeholder="@(_chat.HasApiKey ? L["Set_KeepPh"].Value : "sk-…")"
                            autocomplete="off" />
 
                     <div class="d-flex gap-2 flex-wrap kh-icon-btns">
-                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="@L["Common_Save"]"
                                 IsAsync="true" IsDisabled="_chatForm.Saving"
                                 OnClick="SaveChatAsync" />
-                        <Button Color="Color.Secondary" Icon="fa-solid fa-plug" Text="Testar conexão"
+                        <Button Color="Color.Secondary" Icon="fa-solid fa-plug" Text="@L["Set_TestConn"]"
                                 IsAsync="true" IsDisabled="_chatForm.Testing"
                                 OnClick="TestChatAsync" />
                         @if (_chat.ApiKeySource == "store")
                         {
                             <PopConfirmButton Color="Color.Danger" Icon="fa-solid fa-trash"
-                                              Text="Remover key" Title="Remover key"
-                                              Content="A key salva será removida; a env var (se houver) volta a valer."
+                                              Text="@L["Set_RemoveKey"]" Title="@L["Set_RemoveKey"]"
+                                              Content="@L["Set_RemoveKeyContent"]"
                                               OnConfirm="RemoveChatKeyAsync" />
                         }
                         @if (_chat.Source == "store")
                         {
                             <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
-                                              Text="Restaurar ambiente" Title="Restaurar ambiente"
-                                              Content="A configuração salva (endpoint, model e key) será removida; as variáveis de ambiente voltam a valer."
+                                              Text="@L["Set_RestoreEnv"]" Title="@L["Set_RestoreEnv"]"
+                                              Content="@L["Set_ClearChatContent"]"
                                               OnConfirm="ClearChatAsync" />
                         }
                     </div>
@@ -131,15 +125,15 @@ else
                             @if (test.Ok)
                             {
                                 <span>
-                                    Conexão OK em @($"{test.LatencyMs:F0}") ms.@if (test.ModelListed == true)
-                                    {<text> Modelo encontrado na lista do provider.</text>}
+                                    @L["Set_ConnOk", $"{test.LatencyMs:F0}"]@if (test.ModelListed == true)
+                                    {<text>@L["Set_ModelFound"]</text>}
                                     else if (test.ModelListed == false)
-                                    {<text> O modelo informado <strong>não</strong> consta na lista do provider.</text>}
+                                    {<text>@L["Set_ModelMissing"]</text>}
                                 </span>
                             }
                             else
                             {
-                                <span>Falha na conexão: @test.Detail</span>
+                                <span>@L["Set_ConnFail", test.Detail ?? ""]</span>
                             }
                         </div>
                     }
@@ -151,19 +145,12 @@ else
 
 @* SPEC-20260926-settings-ux-embeddings RF-004: embedding/indexing provider —
    mesma linha do chat (LLM): configuração persistida, sem restart. *@
-<h5 class="mb-2 text-muted">Embeddings (indexação)</h5>
-<p class="text-muted">
-    Provider que gera os vetores dos chunks na ingestão e das queries na busca.
-    Aplica sem restart <strong>nesta instância</strong> — em multi-réplica,
-    re-aplique em cada uma (config por instância).
-    <code>dimensions</code> só é aceito quando igual ao schema do vector store —
-    e a troca de modelo <strong>exige reindex das fontes</strong>: vetores já
-    gravados mantêm as dimensões/modelo antigos.
-</p>
+<h5 class="mb-2 text-muted">@L["Set_EmbTitle"]</h5>
+<p class="text-muted">@L["Set_EmbIntro"]</p>
 
 @if (_embeddings is null)
 {
-    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando configuração de embeddings…</div>
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingEmb"]</div>
 }
 else
 {
@@ -172,21 +159,21 @@ else
             <Card>
                 <HeaderTemplate>
                     <div class="d-flex justify-content-between gap-2 align-items-center">
-                        <span>Provider de embeddings</span>
+                        <span>@L["Set_EmbProviderCard"]</span>
                         @* SPEC-20260926-embeddings-runtime-coherence RF-002:
                            provider build failures surface here — the editor
                            still renders (GET is fail-soft). *@
                         @if (_embeddings.ProviderError is { } perr)
                         {
-                            <Badge Color="Color.Danger" title="@perr">provider falhou</Badge>
+                            <Badge Color="Color.Danger" title="@perr">@L["Set_ProviderFailed"]</Badge>
                         }
                         else if (_embeddings.Source == "store")
                         {
-                            <Badge Color="Color.Success">configurada</Badge>
+                            <Badge Color="Color.Success">@L["Set_Configured"]</Badge>
                         }
                         else
                         {
-                            <Badge Color="Color.Info">ambiente</Badge>
+                            <Badge Color="Color.Info">@L["Set_Env"]</Badge>
                         }
                     </div>
                 </HeaderTemplate>
@@ -221,10 +208,10 @@ else
                     {
                         <div class="alert alert-info py-2 mb-2 small" role="status">
                             <strong>@(_embForm.Provider == "voyage" ? "Voyage AI" : "Cohere")</strong>:
-                            usa <code>input_type</code> assimétrico automaticamente —
-                            <code>query</code>/<code>search_query</code> nas buscas e
-                            <code>document</code>/<code>search_document</code> na indexação.
-                            A API key e o modelo são enviados via <code>Embeddings:@(_embForm.Provider == "voyage" ? "Voyage" : "Cohere")</code>.
+                            @L["Set_Asym1"]<code>input_type</code>@L["Set_Asym2"]
+                            <code>query</code>/<code>search_query</code>@L["Set_Asym3"]
+                            <code>document</code>/<code>search_document</code>@L["Set_Asym4"]
+                            <code>Embeddings:@(_embForm.Provider == "voyage" ? "Voyage" : "Cohere")</code>.
                         </div>
                     }
 
@@ -235,7 +222,7 @@ else
                                    @bind="_embForm.Dimensions" />
                             @if (_embeddings.StoreDimensions is { } sd)
                             {
-                                <small class="text-muted">índice: @sd</small>
+                                <small class="text-muted">@L["Set_IndexPrefix", sd]</small>
                             }
                         </div>
                         @if (_embForm.Provider == "onnx")
@@ -251,7 +238,7 @@ else
                             <label class="form-label">API key</label>
                             <input type="password" class="form-control font-monospace"
                                    @bind="_embForm.ApiKey"
-                                   placeholder="@(_embeddings.HasApiKey ? "em branco mantém a atual" : "sk-…")"
+                                   placeholder="@(_embeddings.HasApiKey ? L["Set_KeepKeyPh"].Value : "sk-…")"
                                    autocomplete="off" />
                         </div>
                     </div>
@@ -273,14 +260,14 @@ else
                     @if (_embeddings.HasApiKey)
                     {
                         <div class="mb-2">
-                            <small class="text-muted">Key ativa (@_embeddings.ApiKeySource):</small>
+                            <small class="text-muted">@L["Set_ActiveKey", _embeddings.ApiKeySource]</small>
                             <code class="ms-1">@_embeddings.ApiKeyHint</code>
                         </div>
                     }
                     @if (_embeddings.StampedModelId is { } stamped)
                     {
                         <div class="mb-2 small text-muted">
-                            Provider efetivo: <code>@stamped</code> — em vigor imediatamente.
+                            @L["Set_EffProvider1"]<code>@stamped</code>@L["Set_EffProvider2"]
                         </div>
                     }
                     @* SPEC-20260926-embeddings-runtime-coherence RF-001: dims
@@ -289,28 +276,28 @@ else
                     @if (_embeddings.DimsMismatch)
                     {
                         <div class="alert alert-warning small mb-2 py-2">
-                            Dimensions @_embeddings.Dimensions ≠ índice @_embeddings.StoreDimensions —
-                            o schema do vector store é fixo no startup. Ajuste
-                            <code>Embeddings:Dimensions</code> no ambiente, reinicie e rode reindex.
+                            Dimensions @_embeddings.Dimensions ≠ @L["Set_IndexPrefix", _embeddings.StoreDimensions ?? 0] —
+                            @L["Set_DimsMismatch1"]
+                            <code>Embeddings:Dimensions</code>@L["Set_DimsMismatch2"]
                         </div>
                     }
 
                     <div class="d-flex gap-2 flex-wrap kh-icon-btns">
-                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="@L["Common_Save"]"
                                 IsAsync="true" IsDisabled="_embForm.Saving"
                                 OnClick="SaveEmbeddingsAsync" />
                         @if (_embeddings.ApiKeySource == "store")
                         {
                             <PopConfirmButton Color="Color.Danger" Icon="fa-solid fa-trash"
-                                              Text="Remover key" Title="Remover key"
-                                              Content="A key salva será removida; a env var (se houver) volta a valer."
+                                              Text="@L["Set_RemoveKey"]" Title="@L["Set_RemoveKey"]"
+                                              Content="@L["Set_RemoveKeyContent"]"
                                               OnConfirm="RemoveEmbeddingsKeyAsync" />
                         }
                         @if (_embeddings.Source == "store")
                         {
                             <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
-                                              Text="Restaurar ambiente" Title="Restaurar ambiente"
-                                              Content="A configuração salva será removida; as variáveis de ambiente voltam a valer."
+                                              Text="@L["Set_RestoreEnv"]" Title="@L["Set_RestoreEnv"]"
+                                              Content="@L["Set_ClearContent"]"
                                               OnConfirm="ClearEmbeddingsAsync" />
                         }
                     </div>
@@ -320,22 +307,16 @@ else
     </div>
 }
     </TabItem>
-    <TabItem Text="Assistente (A2A)" Icon="fa-solid fa-robot">
+    <TabItem Text="@L["Set_TabAssistant"]" Icon="fa-solid fa-robot">
 @* SPEC-20260929-a2a-assistant-delegation RF-001: modelo assistente de baixo custo
    (ou agente A2A remoto) que executa sub-tarefas baratas — rewrite, grading,
    expansão de query e sumarização — reservando o modelo principal para síntese. *@
 
-<p class="text-muted">
-    Provider secundário de baixo custo usado nas sub-tarefas do pipeline
-    (rewrite de query, grading de chunks, expansão/HyDE, sumarização de thread).
-    Segue o endpoint do provider de chat por padrão (a key do chat vale quando
-    o endpoint é o mesmo) — <code>Assistant:*</code> no ambiente sobrepõe.
-    Falhas/timeout caem para o modelo principal.
-</p>
+<p class="text-muted">@L["Set_AsstIntro"]</p>
 
 @if (_assistant is null)
 {
-    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando configuração do assistente…</div>
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingAsst"]</div>
 }
 else
 {
@@ -344,14 +325,14 @@ else
             <Card>
                 <HeaderTemplate>
                     <div class="d-flex justify-content-between gap-2 align-items-center">
-                        <span>Assistente de baixo custo</span>
+                        <span>@L["Set_AsstCard"]</span>
                         @if (_assistant.Enabled)
                         {
-                            <Badge Color="Color.Success">ativo</Badge>
+                            <Badge Color="Color.Success">@L["Set_EnabledBadge"]</Badge>
                         }
                         else
                         {
-                            <Badge Color="Color.Secondary">desabilitado</Badge>
+                            <Badge Color="Color.Secondary">@L["Set_OffBadge"]</Badge>
                         }
                     </div>
                 </HeaderTemplate>
@@ -359,14 +340,14 @@ else
                     <div class="row g-2 mb-2">
                         <div class="col-6 col-md-3">
                             <Switch @bind-Value="_asForm.Enabled"
-                                    DisplayText="Habilitado" ShowLabel="true" />
+                                    DisplayText="@L["Common_Enabled"]" ShowLabel="true" />
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label">Model</label>
                             <div class="input-group">
                                 <input type="text" class="form-control font-monospace" list="kh-asst-models"
                                        @bind="_asForm.Model" placeholder="gpt-4o-mini" autocomplete="off" />
-                                <button type="button" class="btn btn-outline-secondary" title="Listar modelos do endpoint"
+                                <button type="button" class="btn btn-outline-secondary" title="@L["Set_ListModels"]"
                                         @onclick="LoadAssistantModelsAsync" disabled="@_asModelsLoading">
                                     <i class="fa-solid @(_asModelsLoading ? "fa-spinner fa-spin" : "fa-rotate")"></i>
                                 </button>
@@ -379,14 +360,14 @@ else
                             </datalist>
                             @if (_asModelsDetail is { } amd)
                             {
-                                <small class="text-muted">lista indisponível (@amd) — digite o nome manualmente</small>
+                                <small class="text-muted">@L["Set_ModelListFail", amd]</small>
                             }
                         </div>
                     </div>
 
                     <div class="row g-2 mb-2">
                         <div class="col-12 col-md-8">
-                            <label class="form-label">Sub-tarefas roteadas</label>
+                            <label class="form-label">@L["Set_RoutedTasks"]</label>
                             <div class="d-flex gap-3 flex-wrap">
                                 @foreach (var st in AssistantFormState.AllSubtasks)
                                 {
@@ -409,38 +390,38 @@ else
                     @if (_assistant.HasApiKey)
                     {
                         <div class="mb-2">
-                            <small class="text-muted">Key ativa (@_assistant.ApiKeySource):</small>
+                            <small class="text-muted">@L["Set_ActiveKey", _assistant.ApiKeySource]</small>
                             <code class="ms-1">@_assistant.ApiKeyHint</code>
                         </div>
                     }
 
                     <label class="form-label">
-                        @(_assistant.HasApiKey ? "Substituir API key" : "API key")
+                        @(_assistant.HasApiKey ? L["Keys_ReplaceKey"].Value : "API key")
                     </label>
                     <input type="password" class="form-control font-monospace mb-2"
                            @bind="_asForm.ApiKey"
-                           placeholder="@(_assistant.HasApiKey ? "deixe em branco para manter" : "sk-…")"
+                           placeholder="@(_assistant.HasApiKey ? L["Set_KeepPh"].Value : "sk-…")"
                            autocomplete="off" />
 
                     <div class="d-flex gap-2 flex-wrap kh-icon-btns">
-                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="@L["Common_Save"]"
                                 IsAsync="true" IsDisabled="_asForm.Saving"
                                 OnClick="SaveAssistantAsync" />
-                        <Button Color="Color.Secondary" Icon="fa-solid fa-plug" Text="Testar conexão"
+                        <Button Color="Color.Secondary" Icon="fa-solid fa-plug" Text="@L["Set_TestConn"]"
                                 IsAsync="true" IsDisabled="_asForm.Testing"
                                 OnClick="TestAssistantAsync" />
                         @if (_assistant.ApiKeySource == "store")
                         {
                             <PopConfirmButton Color="Color.Danger" Icon="fa-solid fa-trash"
-                                              Text="Remover key" Title="Remover key"
-                                              Content="A key salva será removida; a env var (se houver) volta a valer."
+                                              Text="@L["Set_RemoveKey"]" Title="@L["Set_RemoveKey"]"
+                                              Content="@L["Set_RemoveKeyContent"]"
                                               OnConfirm="RemoveAssistantKeyAsync" />
                         }
                         @if (_assistant.Source == "store")
                         {
                             <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
-                                              Text="Restaurar ambiente" Title="Restaurar ambiente"
-                                              Content="A configuração salva será removida; as variáveis de ambiente voltam a valer."
+                                              Text="@L["Set_RestoreEnv"]" Title="@L["Set_RestoreEnv"]"
+                                              Content="@L["Set_ClearContent"]"
                                               OnConfirm="ClearAssistantAsync" />
                         }
                     </div>
@@ -450,11 +431,11 @@ else
                         <div class="mt-2">
                             @if (atest.Ok)
                             {
-                                <Badge Color="Color.Success">conexão OK — @(atest.LatencyMs.ToString("F0")) ms</Badge>
+                                <Badge Color="Color.Success">@L["Set_AsstConnOk", atest.LatencyMs.ToString("F0")]</Badge>
                             }
                             else
                             {
-                                <Badge Color="Color.Danger">falha — @(atest.Detail ?? "sem detalhe")</Badge>
+                                <Badge Color="Color.Danger">@L["Set_AsstFail", atest.Detail ?? L["Set_NoDetail"].Value]</Badge>
                             }
                         </div>
                     }
@@ -466,16 +447,11 @@ else
     </TabItem>
     <TabItem Text="GraphRAG" Icon="fa-solid fa-diagram-project">
 
-<p class="text-muted">
-    Extrai entidades e relações dos chunks indexados e expõe as tools
-    <code>find_dependencies</code>, <code>find_dependents</code>, <code>find_path</code>
-    e <code>analyze_impact</code> no catálogo MCP. A extração também exige
-    <code>"graph": true</code> na configuração de cada source.
-</p>
+<p class="text-muted">@L["Set_GraphIntro"]</p>
 
 @if (_graph is null)
 {
-    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando configuração do grafo…</div>
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingGraph"]</div>
 }
 else
 {
@@ -484,14 +460,14 @@ else
             <Card>
                 <HeaderTemplate>
                     <div class="d-flex justify-content-between gap-2 align-items-center">
-                        <span>Extração e travessia do grafo</span>
+                        <span>@L["Set_GraphCard"]</span>
                         @if (_graph.Source == "store")
                         {
-                            <Badge Color="Color.Success">configurada</Badge>
+                            <Badge Color="Color.Success">@L["Set_Configured"]</Badge>
                         }
                         else
                         {
-                            <Badge Color="Color.Info">ambiente</Badge>
+                            <Badge Color="Color.Info">@L["Set_Env"]</Badge>
                         }
                     </div>
                 </HeaderTemplate>
@@ -499,43 +475,41 @@ else
                     <div class="row g-2 mb-3 align-items-center">
                         <div class="col-12 col-md-6">
                             <Switch @bind-Value="_graphForm.Enabled"
-                                    DisplayText="Ativar GraphRAG" ShowLabel="true" />
-                            <small class="text-muted d-block mt-1">
-                                Expõe as tools no catálogo MCP e roda a extração na ingestão.
-                            </small>
+                                    DisplayText="@L["Set_GraphEnable"]" ShowLabel="true" />
+                            <small class="text-muted d-block mt-1">@L["Set_GraphEnableHint"]</small>
                         </div>
                     </div>
 
                     <div class="row g-2 mb-3">
                         <div class="col-12 col-md-4">
-                            <label class="form-label">Max chunks por sync</label>
+                            <label class="form-label">@L["Set_GraphMaxChunks"]</label>
                             <input type="number" class="form-control font-monospace" min="1" max="10000"
                                    @bind="_graphForm.MaxChunksPerSync" />
-                            <small class="text-muted">Budget de extração LLM por sync (1–10000)</small>
+                            <small class="text-muted">@L["Set_GraphMaxChunksHint"]</small>
                         </div>
                         <div class="col-12 col-md-4">
-                            <label class="form-label">Max chars por chunk</label>
+                            <label class="form-label">@L["Set_GraphMaxChars"]</label>
                             <input type="number" class="form-control font-monospace" min="200" max="50000"
                                    @bind="_graphForm.MaxChunkChars" />
-                            <small class="text-muted">Truncamento no prompt de extração (200–50000)</small>
+                            <small class="text-muted">@L["Set_GraphMaxCharsHint"]</small>
                         </div>
                         <div class="col-12 col-md-4">
-                            <label class="form-label">Max resultados</label>
+                            <label class="form-label">@L["Set_GraphMaxResults"]</label>
                             <input type="number" class="form-control font-monospace" min="10" max="10000"
                                    @bind="_graphForm.MaxResults" />
-                            <small class="text-muted">Teto de arestas por travessia (10–10000)</small>
+                            <small class="text-muted">@L["Set_GraphMaxResultsHint"]</small>
                         </div>
                     </div>
 
                     <div class="d-flex gap-2 flex-wrap kh-icon-btns">
-                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                        <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="@L["Common_Save"]"
                                 IsAsync="true" IsDisabled="_graphForm.Saving"
                                 OnClick="SaveGraphAsync" />
                         @if (_graph.Source == "store")
                         {
                             <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
-                                              Text="Restaurar ambiente" Title="Restaurar ambiente"
-                                              Content="A configuração salva será removida; as variáveis de ambiente voltam a valer."
+                                              Text="@L["Set_RestoreEnv"]" Title="@L["Set_RestoreEnv"]"
+                                              Content="@L["Set_ClearContent"]"
                                               OnConfirm="ClearGraphAsync" />
                         }
                     </div>
@@ -545,20 +519,13 @@ else
     </div>
 }
     </TabItem>
-    <TabItem Text="Resiliência" Icon="fa-solid fa-shield-halved">
+    <TabItem Text="@L["Set_TabResilience"]" Icon="fa-solid fa-shield-halved">
 
-<p class="text-muted">
-    Política de fallback para providers de chat e tools MCP
-    (<code>Resilience:Fallback</code>). Em falhas transitórias (429/5xx/timeout),
-    uma chamada pode ser atendida por um candidato equivalente da mesma
-    capacidade — nunca cruza permissão ou escopo do caller.
-    <code>observe</code> classifica e loga sem trocar; <code>enforce</code> executa
-    a troca dentro do budget.
-</p>
+<p class="text-muted">@L["Set_ResIntro"]</p>
 
 @if (_resilience is null)
 {
-    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando política de fallback…</div>
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingRes"]</div>
 }
 else
 {
@@ -566,30 +533,30 @@ else
         <div class="d-flex justify-content-between gap-2 align-items-center mb-3">
             <strong>Fallback policy</strong>
             <Badge Color="@(_resilience.Source == "store" ? Color.Success : Color.Info)">
-                @(_resilience.Source == "store" ? "configurada" : "ambiente")
+                @(_resilience.Source == "store" ? L["Set_Configured"].Value : L["Set_Env"].Value)
             </Badge>
         </div>
 
         <div class="row g-2 mb-3">
             <div class="col-12 col-md-4">
-                <label class="form-label">Modo</label>
+                <label class="form-label">@L["Set_Mode"]</label>
                 <Select @bind-Value="_resForm.Mode">
                     <Options>
-                        <SelectOption Text="disabled — propaga a falha" Value="disabled" />
-                        <SelectOption Text="observe — só classifica e loga" Value="observe" />
-                        <SelectOption Text="enforce — executa o fallback" Value="enforce" />
+                        <SelectOption Text="@L["Set_ModeDisabled"]" Value="disabled" />
+                        <SelectOption Text="@L["Set_ModeObserve"]" Value="observe" />
+                        <SelectOption Text="@L["Set_ModeEnforce"]" Value="enforce" />
                     </Options>
                 </Select>
             </div>
             <div class="col-12 col-md-4">
-                <label class="form-label">Max alternates por request</label>
+                <label class="form-label">@L["Set_MaxAlts"]</label>
                 <input type="number" class="form-control font-monospace" min="1" max="5"
                        @bind="_resForm.MaxFallbackAttempts" />
-                <small class="text-muted">Budget de tentativas após o primário (1–5)</small>
+                <small class="text-muted">@L["Set_MaxAltsHint"]</small>
             </div>
         </div>
 
-        <h6 class="mt-2">Alternates de chat (ordem importa)</h6>
+        <h6 class="mt-2">@L["Set_ChatFallbacks"]</h6>
         @foreach (var (fb, i) in _resForm.ChatFallbacks.Select((f, i) => (f, i)))
         {
             <div class="row g-2 mb-2 align-items-center">
@@ -603,7 +570,7 @@ else
                 </div>
                 <div class="col-12 col-md-4">
                     <input type="password" class="form-control form-control-sm font-monospace"
-                           placeholder="apiKey (vazio mantém o salvo)" @bind="fb.ApiKey" />
+                           placeholder="@L["Set_ApiKeyKeepPh"]" @bind="fb.ApiKey" />
                 </div>
                 <div class="col-12 col-md-1">
                     <Button Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash"
@@ -612,27 +579,23 @@ else
             </div>
         }
         <Button Size="Size.Small" Color="Color.Secondary" Icon="fa-solid fa-plus"
-                Text="Adicionar alternate" OnClick="AddFallback" />
+                Text="@L["Set_AddAlternate"]" OnClick="AddFallback" />
 
-        <h6 class="mt-3">Capacidades de tools (cadeia de provedores)</h6>
-        <small class="text-muted d-block mb-2">
-            Uma linha por capacidade. Em falha transitória de <code>prov1_*</code>, a tool
-            equivalente do próximo provedor responde. Desmarcar uma capacidade a remove da
-            política ao salvar.
-        </small>
+        <h6 class="mt-3">@L["Set_Capabilities"]</h6>
+        <small class="text-muted d-block mb-2">@L["Set_CapHint"]</small>
         @foreach (var (cap, i) in _resForm.CapabilityRows.Select((c, i) => (c, i)))
         {
             <div class="row g-2 mb-2 align-items-center">
                 <div class="col-12 col-md-1">
                     <Switch @bind-Value="cap.Enabled" ShowLabel="false"
-                            title="@(cap.Enabled ? "Capacidade ativa" : "Capacidade desativada — removida ao salvar")" />
+                            title="@(cap.Enabled ? L["Set_CapOn"].Value : L["Set_CapOff"].Value)" />
                 </div>
                 <div class="col-12 col-md-4">
-                    <input class="form-control form-control-sm font-monospace" placeholder="capacidade (ex.: WebSearch)"
+                    <input class="form-control form-control-sm font-monospace" placeholder="@L["Set_CapPh"]"
                            @bind="cap.Name" disabled="@(!cap.Enabled)" />
                 </div>
                 <div class="col-12 col-md-6">
-                    <input class="form-control form-control-sm font-monospace" placeholder="prov1,prov2,… (ordem importa)"
+                    <input class="form-control form-control-sm font-monospace" placeholder="@L["Set_ProvPh"]"
                            @bind="cap.Providers" disabled="@(!cap.Enabled)" />
                 </div>
                 <div class="col-12 col-md-1">
@@ -642,7 +605,7 @@ else
             </div>
         }
         <Button Size="Size.Small" Color="Color.Secondary" Icon="fa-solid fa-plus"
-                Text="Adicionar capacidade" OnClick="AddCapability" />
+                Text="@L["Set_AddCap"]" OnClick="AddCapability" />
 
         <div class="d-flex gap-2 flex-wrap kh-icon-btns mt-3">
             <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
@@ -651,25 +614,21 @@ else
             @if (_resilience.Source == "store")
             {
                 <PopConfirmButton Color="Color.Warning" Icon="fa-solid fa-rotate-left"
-                                  Text="Restaurar ambiente" Title="Restaurar ambiente"
-                                  Content="A configuração salva será removida; Resilience:Fallback volta a valer."
+                                  Text="@L["Set_RestoreEnv"]" Title="@L["Set_RestoreEnv"]"
+                                  Content="@L["Set_ClearResContent"]"
                                   OnConfirm="ClearResilienceAsync" />
             }
         </div>
     </section>
 }
     </TabItem>
-    <TabItem Text="Integrações" Icon="fa-solid fa-plug">
+    <TabItem Text="@L["Keys_Integrations"]" Icon="fa-solid fa-plug">
 
-<p class="text-muted">
-    API keys de serviços upstream consumidos pelo MCP interno. As chaves são
-    criptografadas em repouso e nunca retornam à interface — só os 4 últimos
-    caracteres são exibidos.
-</p>
+<p class="text-muted">@L["Set_IntIntro"]</p>
 
 @if (_integrations is null)
 {
-    <div class="text-muted kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando integrações…</div>
+    <div class="text-muted kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingInt"]</div>
 }
 else
 {
@@ -684,18 +643,18 @@ else
                             <span>@item.DisplayName</span>
                             <div class="d-flex align-items-center gap-2">
                                 <Switch Value="item.Enabled" OnValueChanged="v => ToggleAsync(item, v)"
-                                        ShowLabel="false" title="@(item.Enabled ? "Desativar integração" : "Ativar integração")" />
+                                        ShowLabel="false" title="@(item.Enabled ? L["Set_DeactivateInt"].Value : L["Set_ActivateInt"].Value)" />
                                 @if (!item.Enabled)
                                 {
-                                    <Badge Color="Color.Warning">desativada</Badge>
+                                    <Badge Color="Color.Warning">@L["Set_Disabled"]</Badge>
                                 }
                                 else if (item.HasKey)
                                 {
-                                    <Badge Color="Color.Success">configurada</Badge>
+                                    <Badge Color="Color.Success">@L["Set_Configured"]</Badge>
                                 }
                                 else
                                 {
-                                    <Badge Color="Color.Secondary">sem key</Badge>
+                                    <Badge Color="Color.Secondary">@L["Set_NoKey"]</Badge>
                                 }
                             </div>
                         </div>
@@ -709,43 +668,37 @@ else
                         @if (item.HasKey)
                         {
                             <div class="mb-2">
-                                <small class="text-muted">Key ativa (@item.Source):</small>
+                                <small class="text-muted">@L["Set_ActiveKey", item.Source]</small>
                                 <code class="ms-1">@item.KeyHint</code>
                             </div>
                         }
 
                         <label class="form-label">
-                            @(item.HasKey ? "Substituir API key" : "API key")
+                            @(item.HasKey ? L["Keys_ReplaceKey"].Value : "API key")
                         </label>
                         <div class="input-group kh-icon-btns">
                             <input type="password" class="form-control font-monospace"
                                    @bind="state.Input"
                                    placeholder="@ProviderPlaceholder(item.Provider)"
                                    autocomplete="off" />
-                            <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar"
+                            <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="@L["Common_Save"]"
                                     IsAsync="true" IsDisabled="state.Saving"
                                     OnClick="() => SaveAsync(item)" />
                             @if (item.Source == "store")
                             {
                                 <PopConfirmButton Color="Color.Danger" Icon="fa-solid fa-trash"
-                                                  Text="Remover" Title="Remover key"
-                                                  Content="A key salva será removida; a env var (se houver) volta a valer."
+                                                  Text="@L["Keys_Remove"]" Title="@L["Set_RemoveKey"]"
+                                                  Content="@L["Set_RemoveKeyContent"]"
                                                   OnConfirm="() => RemoveAsync(item)" />
                             }
                         </div>
                         @if (item.Provider == "deepwiki")
                         {
-                            <small class="text-muted d-block mt-2">
-                                Sem key o DeepWiki usa o endpoint público (<code>mcp.deepwiki.com/mcp</code>);
-                                com key passa a usar o privado (<code>mcp.devin.ai/mcp</code>).
-                            </small>
+                            <small class="text-muted d-block mt-2">@L["Set_DeepwikiHint"]</small>
                         }
                         @if (item.Provider == "firecrawl" && !item.HasKey)
                         {
-                            <small class="text-muted d-block mt-2">
-                                Sem key, as tools <code>firecrawl_*</code> aparecem no catálogo mas
-                                retornam erro orientando a configuração aqui.
-                            </small>
+                            <small class="text-muted d-block mt-2">@L["Set_FirecrawlHint"]</small>
                         }
                     </BodyTemplate>
                 </Card>
@@ -757,15 +710,11 @@ else
     <TabItem Text="Cache" Icon="fa-solid fa-bolt">
 
 @* SPEC-20260924-redis-cache-and-tool-caching RF-004: cache inspection + clear. *@
-<p class="text-muted">
-    Cache distribuído de busca, embeddings e respostas de tools.
-    Em modo <code>memory</code> os contadores vivem no processo; em <code>redis</code>
-    refletem o estado compartilhado do servidor.
-</p>
+<p class="text-muted">@L["Set_CacheIntro"]</p>
 
 @if (_cache is null)
 {
-    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando cache…</div>
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingCache"]</div>
 }
 else
 {
@@ -777,25 +726,25 @@ else
                         <span>Provider: <code>@_cache.Provider</code></span>
                         @if (_cache.IsConnected)
                         {
-                            <Badge Color="Color.Success">conectado</Badge>
+                            <Badge Color="Color.Success">@L["Set_Connected"]</Badge>
                         }
                         else
                         {
-                            <Badge Color="Color.Danger">desconectado</Badge>
+                            <Badge Color="Color.Danger">@L["Set_Disconnected"]</Badge>
                         }
                         @* SPEC-20260926-redis-stats-admin-and-connflag RF-003:
                            stats degradation is a separate badge — connectivity
                            follows IsConnected (PING) only. *@
                         @if (!string.IsNullOrEmpty(_cache.StatsError))
                         {
-                            <Badge Color="Color.Warning" title="@_cache.StatsError">stats parciais</Badge>
+                            <Badge Color="Color.Warning" title="@_cache.StatsError">@L["Set_PartialStats"]</Badge>
                         }
                     </div>
                 </HeaderTemplate>
                 <BodyTemplate>
                     <div class="row small">
                         <div class="col-6 col-md-3"><strong>Keys</strong><br />@_cache.TotalKeys</div>
-                        <div class="col-6 col-md-3"><strong>Tamanho</strong><br />@FormatBytes(_cache.TotalSizeBytes)</div>
+                        <div class="col-6 col-md-3"><strong>@L["Set_Size"]</strong><br />@FormatBytes(_cache.TotalSizeBytes)</div>
                         <div class="col-6 col-md-3"><strong>Hits</strong><br />@_cache.Hits</div>
                         <div class="col-6 col-md-3"><strong>Misses</strong><br />@_cache.Misses</div>
                     </div>
@@ -805,14 +754,14 @@ else
                     {
                         <div class="row small mt-2 border-top pt-2">
                             <div class="col-6 col-md-3">
-                                <strong>Keys (servidor)</strong><br />
+                                <strong>@L["Set_KeysServer"]</strong><br />
                                 @_cache.ServerKeys@(_cache.Partial ? "+" : "")
                             </div>
                             <div class="col-6 col-md-3">
-                                <strong>Memória (servidor)</strong><br />@FormatBytes(_cache.ServerUsedMemoryBytes ?? 0)
+                                <strong>@L["Set_MemServer"]</strong><br />@FormatBytes(_cache.ServerUsedMemoryBytes ?? 0)
                             </div>
                             <div class="col-6 col-md-3">
-                                <strong>Clientes</strong><br />@(_cache.ServerConnectedClients?.ToString() ?? "—")
+                                <strong>@L["Set_Clients"]</strong><br />@(_cache.ServerConnectedClients?.ToString() ?? "—")
                             </div>
                         </div>
                     }
@@ -827,15 +776,15 @@ else
         </div>
         <div class="col-12 col-md-4">
             <Card>
-                <HeaderTemplate><span>Ações</span></HeaderTemplate>
+                <HeaderTemplate><span>@L["Common_Actions"]</span></HeaderTemplate>
                 <BodyTemplate>
                     <div class="d-flex gap-2 flex-wrap kh-icon-btns">
-                        <Button Color="Color.Secondary" Icon="fa-solid fa-rotate" Text="Atualizar"
+                        <Button Color="Color.Secondary" Icon="fa-solid fa-rotate" Text="@L["Common_Refresh"]"
                                 IsAsync="true" OnClick="ReloadCacheAsync" />
                         <PopConfirmButton Color="Color.Danger" Icon="fa-solid fa-trash"
-                                          Text="Limpar todo o cache"
-                                          Title="Limpar cache"
-                                          Content="Todas as keys de busca, embeddings e tools serão removidas. Continuar?"
+                                          Text="@L["Set_ClearCache"]"
+                                          Title="@L["Set_ClearCacheTitle"]"
+                                          Content="@L["Set_ClearCacheContent"]"
                                           OnConfirm="ClearCacheAsync" />
                     </div>
                 </BodyTemplate>
@@ -844,16 +793,15 @@ else
             @* SPEC-20260925-runtime-log-level RF-004: temporary level raise with
                auto-reset — no redeploy to debug production. *@
             <Card class="mt-3">
-                <HeaderTemplate><span>Nível de log</span></HeaderTemplate>
+                <HeaderTemplate><span>@L["Set_LogLevel"]</span></HeaderTemplate>
                 <BodyTemplate>
                     @if (_logLevel is not null)
                     {
                         <div class="small mb-2">
-                            Atual: <Badge Color="@(_logLevel.Level == "Information" ? Color.Info : Color.Warning)">@_logLevel.Level</Badge>
+                            @L["Set_LogCurrent"]<Badge Color="@(_logLevel.Level == "Information" ? Color.Info : Color.Warning)">@_logLevel.Level</Badge>
                             @if (_logLevel.AutoResetAt is { } resetAt)
                             {
-                                <span class="text-muted"> — volta a @_logLevel.ConfiguredDefault em
-                                    @(((resetAt - DateTimeOffset.UtcNow).TotalMinutes).ToString("F0"))min</span>
+                                <span class="text-muted">@L["Set_LogReset", _logLevel.ConfiguredDefault ?? "", ((resetAt - DateTimeOffset.UtcNow).TotalMinutes).ToString("F0")]</span>
                             }
                         </div>
                         <div class="d-flex gap-2 align-items-center flex-wrap">
@@ -870,14 +818,14 @@ else
                                 <option value="60">1 h</option>
                                 <option value="120">2 h</option>
                             </select>
-                            <Button Size="Size.Small" Color="Color.Primary" Icon="fa-solid fa-check" Text="Aplicar"
-                                    TooltipText="Aplicar" IsAsync="true" OnClick="SetLogLevelAsync" />
+                            <Button Size="Size.Small" Color="Color.Primary" Icon="fa-solid fa-check" Text="@L["Set_Apply"]"
+                                    TooltipText="@L["Set_Apply"]" IsAsync="true" OnClick="SetLogLevelAsync" />
                         </div>
-                        <div class="small text-muted mt-2">Debug volta sozinho — não fica aberto para sempre.</div>
+                        <div class="small text-muted mt-2">@L["Set_LogHint"]</div>
                     }
                     else
                     {
-                        <span class="text-muted small">Não foi possível ler o nível atual.</span>
+                        <span class="text-muted small">@L["Set_LogReadFail"]</span>
                     }
                 </BodyTemplate>
             </Card>
@@ -888,12 +836,12 @@ else
         {
             <div class="col-12">
                 <Card>
-                    <HeaderTemplate><span>Keys salvas (@_cache.Keys.Count)</span></HeaderTemplate>
+                    <HeaderTemplate><span>@L["Set_KeysSaved", _cache.Keys.Count]</span></HeaderTemplate>
                     <BodyTemplate>
                         <div style="max-height:320px;overflow-y:auto">
                             <table class="table table-sm small mb-0">
                                 <thead>
-                                    <tr><th>Key</th><th class="text-end">Tamanho</th><th class="text-end">TTL</th><th class="text-end" style="width:48px"></th></tr>
+                                    <tr><th>Key</th><th class="text-end">@L["Set_Size"]</th><th class="text-end">TTL</th><th class="text-end" style="width:48px"></th></tr>
                                 </thead>
                                 <tbody>
                                     @foreach (var k in _cache.Keys)
@@ -905,8 +853,8 @@ else
                                             <td class="text-end">
                                                 <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger"
                                                                   Icon="fa-solid fa-trash" Text=""
-                                                                  Title="Limpar key"
-                                                                  Content="@($"Remover a entrada '{k.Key}' do cache?")"
+                                                                  Title="@L["Set_ClearKey"]"
+                                                                  Content="@L["Set_RemoveEntry", k.Key]"
                                                                   OnConfirm="() => DeleteCacheKeyAsync(k.Key)" />
                                             </td>
                                         </tr>
@@ -921,18 +869,15 @@ else
     </div>
 }
     </TabItem>
-    <TabItem Text="Banco de Dados" Icon="fa-solid fa-database">
+    <TabItem Text="@L["Set_TabDb"]" Icon="fa-solid fa-database">
 
 @* SPEC-20260926-settings-tabs-database-metrics RF-003: storage snapshot —
    provider, file sizes, PRAGMAs, per-entity counts, migrations, vector store. *@
-<p class="text-muted">
-    Estado do armazenamento — provider EF, tamanho do arquivo/WAL, contagens por
-    entidade e diagnóstico do vector store.
-</p>
+<p class="text-muted">@L["Set_DbIntro"]</p>
 
 @if (_dbStats is null)
 {
-    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando métricas do banco…</div>
+    <div class="text-muted mb-4 kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Set_LoadingDb"]</div>
 }
 else
 {
@@ -943,24 +888,24 @@ else
                     <div class="d-flex justify-content-between gap-2 align-items-center">
                         <span>Provider: <code>@ShortProvider(_dbStats.Provider)</code></span>
                         <Button Size="Size.Small" Color="Color.Secondary" Icon="fa-solid fa-rotate"
-                                Text="Atualizar" IsAsync="true" OnClick="ReloadDatabaseAsync" />
+                                Text="@L["Common_Refresh"]" IsAsync="true" OnClick="ReloadDatabaseAsync" />
                     </div>
                 </HeaderTemplate>
                 <BodyTemplate>
                     <div class="row small">
-                        <div class="col-6 col-md-4"><strong>Banco</strong><br />@FormatBytes(_dbStats.FileSizeBytes ?? 0)</div>
+                        <div class="col-6 col-md-4"><strong>@L["Set_Database"]</strong><br />@FormatBytes(_dbStats.FileSizeBytes ?? 0)</div>
                         <div class="col-6 col-md-4"><strong>WAL</strong><br />@FormatBytes(_dbStats.WalSizeBytes ?? 0)</div>
-                        <div class="col-6 col-md-4"><strong>Páginas livres</strong><br />@FreelistPct(_dbStats)</div>
-                        <div class="col-6 col-md-4"><strong>Páginas</strong><br />@(_dbStats.PageCount?.ToString("N0") ?? "—")</div>
+                        <div class="col-6 col-md-4"><strong>@L["Set_FreePages"]</strong><br />@FreelistPct(_dbStats)</div>
+                        <div class="col-6 col-md-4"><strong>@L["Set_Pages"]</strong><br />@(_dbStats.PageCount?.ToString("N0") ?? "—")</div>
                         <div class="col-6 col-md-4"><strong>Page size</strong><br />@FormatBytes(_dbStats.PageSizeBytes ?? 0)</div>
-                        <div class="col-6 col-md-4"><strong>Cache (páginas)</strong><br />@(_dbStats.CacheSizePages?.ToString("N0") ?? "—")</div>
+                        <div class="col-6 col-md-4"><strong>@L["Set_CachePages"]</strong><br />@(_dbStats.CacheSizePages?.ToString("N0") ?? "—")</div>
                     </div>
                     <div class="small text-muted mt-2 font-monospace text-break">@(_dbStats.DataSource ?? "—")</div>
                     <div class="small text-muted mt-1">
-                        Migrations: @_dbStats.MigrationsApplied aplicadas
+                        Migrations: @_dbStats.MigrationsApplied@L["Set_Applied"]
                         @if (_dbStats.LastMigration is { } mig)
                         {
-                            <span>— última: <code>@mig</code></span>
+                            <span>@L["Set_LastMig"]<code>@mig</code></span>
                         }
                     </div>
                 </BodyTemplate>
@@ -970,21 +915,16 @@ else
             <Card>
                 <HeaderTemplate><span>Vector store</span></HeaderTemplate>
                 <BodyTemplate>
-                    <p class="small text-muted mb-2">
-                        Guarda os <em>embeddings</em> — vetores numéricos que representam o significado de
-                        cada chunk indexado. Na busca, a pergunta é vetorizada e comparada por similaridade
-                        (cosseno): encontra conteúdo relacionado mesmo sem palavras-chave exatas. É o que
-                        alimenta o RAG; o índice HNSW torna essa busca rápida em bases grandes.
-                    </p>
+                    <p class="small text-muted mb-2">@L["Set_VectorExplain"]</p>
                     @if (_dbStats.VectorStore is System.Text.Json.JsonElement vs && vs.ValueKind == System.Text.Json.JsonValueKind.Object)
                     {
                         <div class="row small">
                             <div class="col-6 col-md-4"><strong>Provider</strong><br />@JsonStr(vs, "provider")</div>
                             <div class="col-6 col-md-4"><strong>Host</strong><br />@JsonStr(vs, "host")</div>
-                            <div class="col-6 col-md-4"><strong>Banco</strong><br />@JsonStr(vs, "database")</div>
+                            <div class="col-6 col-md-4"><strong>@L["Set_Database"]</strong><br />@JsonStr(vs, "database")</div>
                             <div class="col-6 col-md-4"><strong>Chunks</strong><br />@JsonStr(vs, "rows")</div>
-                            <div class="col-6 col-md-4"><strong>Dimensões</strong><br />@JsonStr(vs, "dimensions")</div>
-                            <div class="col-6 col-md-4"><strong>Índice</strong><br />@JsonStr(vs, "indexType")</div>
+                            <div class="col-6 col-md-4"><strong>@L["Set_Dimensions"]</strong><br />@JsonStr(vs, "dimensions")</div>
+                            <div class="col-6 col-md-4"><strong>@L["Set_Index"]</strong><br />@JsonStr(vs, "indexType")</div>
                             <div class="col-6 col-md-4"><strong>HNSW</strong><br />@JsonStr(vs, "hnswIndex")</div>
                             <div class="col-6 col-md-4"><strong>Storage</strong><br />@JsonStr(vs, "storageType")</div>
                             <div class="col-6 col-md-4"><strong>pgvector</strong><br />@JsonStr(vs, "pgvectorVersion")</div>
@@ -992,14 +932,14 @@ else
                     }
                     else
                     {
-                        <span class="text-muted small">Diagnóstico do vector store indisponível.</span>
+                        <span class="text-muted small">@L["Set_VectorDown"]</span>
                     }
                 </BodyTemplate>
             </Card>
         </div>
         <div class="col-12">
             <Card>
-                <HeaderTemplate><span>Entidades (@_dbStats.Tables.Count)</span></HeaderTemplate>
+                <HeaderTemplate><span>@L["Set_Entities", _dbStats.Tables.Count]</span></HeaderTemplate>
                 <BodyTemplate>
                     @* SPEC-20260926-review-docs-and-misc RF-005: clickable
                        column sort — default Linhas desc. *@
@@ -1007,18 +947,18 @@ else
                         <thead>
                             <tr>
                                 <th role="button" tabindex="0" style="cursor:pointer"
-                                    aria-label="Ordenar por tabela"
+                                    aria-label="@L["Set_SortTable"]"
                                     @onclick="() => ToggleEntitySort(0)"
                                     @onkeydown="e => OnEntitySortKeyDown(e, 0)"
                                     @onkeydown:preventDefault>
-                                    Tabela @SortGlyph(0)
+                                    @L["Set_Table"] @SortGlyph(0)
                                 </th>
                                 <th class="text-end" role="button" tabindex="0" style="cursor:pointer"
-                                    aria-label="Ordenar por linhas"
+                                    aria-label="@L["Set_SortRows"]"
                                     @onclick="() => ToggleEntitySort(1)"
                                     @onkeydown="e => OnEntitySortKeyDown(e, 1)"
                                     @onkeydown:preventDefault>
-                                    Linhas @SortGlyph(1)
+                                    @L["Set_Rows"] @SortGlyph(1)
                                 </th>
                             </tr>
                         </thead>
@@ -1178,7 +1118,7 @@ else
         catch (Exception ex)
         {
             _embeddings = null;
-            await Toast.Error("Erro", $"Falha ao carregar embeddings: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_EmbLoadFail", ex.Message]);
         }
     }
 
@@ -1188,7 +1128,7 @@ else
     {
         if (_embForm.OverlapTokens >= _embForm.MaxTokens)
         {
-            await Toast.Error("Validação", "Overlap tokens deve ser menor que max tokens.");
+            await Toast.Error(L["Set_Validation"], L["Set_OverlapMsg"]);
             return;
         }
         _embForm.Saving = true;
@@ -1207,12 +1147,11 @@ else
             });
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao salvar embeddings");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_EmbSaveFail"].Value);
                 return;
             }
             _embForm.ApiKey = "";
-            await Toast.Success("Salva",
-                "Configuração de embeddings aplicada — se mudou model/dimensions, rode reindex das fontes.");
+            await Toast.Success(L["Set_SavedT"], L["Set_EmbSaved"]);
             await ReloadEmbeddingsAsync();
         }
         finally
@@ -1226,10 +1165,10 @@ else
         var result = await Api.RemoveEmbeddingsKeyAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao remover a key");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RemoveKeyFail"].Value);
             return;
         }
-        await Toast.Success("Removida", "Key de embeddings removida.");
+        await Toast.Success(L["Set_RemovedT"], L["Set_EmbKeyRemoved"]);
         await ReloadEmbeddingsAsync();
     }
 
@@ -1238,10 +1177,10 @@ else
         var result = await Api.ClearEmbeddingsAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao restaurar o ambiente");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RestoreFail"].Value);
             return;
         }
-        await Toast.Success("Restaurada", "Embeddings voltou às variáveis de ambiente.");
+        await Toast.Success(L["Set_Restored"], L["Set_EmbRestored"]);
         await ReloadEmbeddingsAsync();
     }
 
@@ -1254,7 +1193,7 @@ else
         }
         catch (Exception ex)
         {
-            await Toast.Error("Erro", $"Falha ao carregar métricas do banco: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_DbLoadFail", ex.Message]);
         }
     }
 
@@ -1323,7 +1262,7 @@ else
         catch (Exception ex)
         {
             _cache = new CacheStatsDto { IsConnected = false };
-            await Toast.Error("Erro", $"Falha ao carregar cache: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_CacheLoadFail", ex.Message]);
         }
     }
 
@@ -1339,11 +1278,11 @@ else
         var result = await Api.SetLogLevelAsync(_logLevelChoice, _logLevelMinutes);
         if (!result.IsSuccess || result.Value is null)
         {
-            await Toast.Error("Erro", result.Error ?? "falha ao mudar nível");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_LogFail"].Value);
             return;
         }
         _logLevel = result.Value;
-        await Toast.Success("Log", $"Nível agora: {_logLevel.Level}.");
+        await Toast.Success(L["Set_LogTitle"], L["Set_LogNow", _logLevel.Level]);
     }
 
     /// <summary>SPEC-20260926-settings-ux-embeddings RF-003: per-key eviction.</summary>
@@ -1352,10 +1291,10 @@ else
         var result = await Api.DeleteCacheKeyAsync(key);
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? $"Falha ao remover '{key}'");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_KeyOut", key].Value);
             return;
         }
-        await Toast.Success("Key removida", $"'{key}' saiu do cache.");
+        await Toast.Success(L["Set_KeyRemovedTitle"], L["Set_KeyOut", key]);
         await ReloadCacheAsync();
     }
 
@@ -1364,11 +1303,11 @@ else
         var result = await Api.ClearCacheAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao limpar cache");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_CacheClearFail"].Value);
             return;
         }
-        await Toast.Success("Cache limpo",
-            result.Value is { } r ? $"{r.ClearedKeys} key(s) removida(s)." : "");
+        await Toast.Success(L["Set_CacheCleared"],
+            result.Value is { } r ? L["Set_CacheClearedN", r.ClearedKeys].Value : "");
         await ReloadCacheAsync();
     }
 
@@ -1391,7 +1330,7 @@ else
         catch (Exception ex)
         {
             _integrations = [];
-            await Toast.Error("Erro", $"Falha ao carregar integrações: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_IntLoadFail", ex.Message]);
         }
     }
 
@@ -1408,7 +1347,7 @@ else
         catch (Exception ex)
         {
             _chat = null;
-            await Toast.Error("Erro", $"Falha ao carregar configuração de chat: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_ChatLoadFail", ex.Message]);
         }
     }
 
@@ -1417,7 +1356,7 @@ else
     {
         if (string.IsNullOrWhiteSpace(_chatForm.Endpoint) || string.IsNullOrWhiteSpace(_chatForm.Model))
         {
-            await Toast.Error("Campos obrigatórios", "Informe endpoint e model antes de salvar.");
+            await Toast.Error(L["Pg_Required"], L["Set_ChatRequired"]);
             return;
         }
 
@@ -1429,11 +1368,11 @@ else
                 string.IsNullOrWhiteSpace(_chatForm.ApiKey) ? null : _chatForm.ApiKey.Trim());
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao salvar a configuração");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_SaveFail"].Value);
                 return;
             }
             _chatForm.ApiKey = "";
-            await Toast.Success("Salva", "Configuração de chat aplicada — já está em vigor.");
+            await Toast.Success(L["Set_SavedT"], L["Set_ChatSaved"]);
             await ReloadChatAsync();
         }
         finally
@@ -1457,12 +1396,12 @@ else
             });
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao testar a conexão");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_TestFail"].Value);
                 return;
             }
             _chatForm.TestResult = result.Value;
             if (result.Value?.Ok == true)
-                await Toast.Success("Conexão OK", $"Provider respondeu em {result.Value.LatencyMs:F0} ms.");
+                await Toast.Success(L["Set_ConnOkTitle"], L["Set_ConnOkToast", $"{result.Value.LatencyMs:F0}"]);
         }
         finally
         {
@@ -1481,7 +1420,7 @@ else
         {
             var res = await Api.GetChatModelsAsync(_chatForm.Endpoint);
             _chatModels = res?.Models ?? [];
-            _chatModelsDetail = res?.Ok == true ? null : res?.Detail ?? "falha ao listar";
+            _chatModelsDetail = res?.Ok == true ? null : res?.Detail ?? L["Set_ModelsFail"].Value;
         }
         finally
         {
@@ -1510,7 +1449,7 @@ else
         catch (Exception ex)
         {
             _assistant = null;
-            await Toast.Error("Erro", $"Falha ao carregar configuração do assistente: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_AsstLoadFail", ex.Message]);
         }
     }
 
@@ -1532,7 +1471,7 @@ else
         {
             var res = await Api.GetAssistantModelsAsync(_asForm.Endpoint);
             _assistantModels = res?.Models ?? [];
-            _asModelsDetail = res?.Ok == true ? null : res?.Detail ?? "falha ao listar";
+            _asModelsDetail = res?.Ok == true ? null : res?.Detail ?? L["Set_ModelsFail"].Value;
         }
         finally
         {
@@ -1549,7 +1488,7 @@ else
 
         if (_asForm.Enabled && string.IsNullOrWhiteSpace(_asForm.Endpoint))
         {
-            await Toast.Error("Campos obrigatórios", "Configure o provider de chat (aba Chat) — o assistente usa o mesmo endpoint.");
+            await Toast.Error(L["Pg_Required"], L["Set_AsstRequired"]);
             return;
         }
 
@@ -1568,11 +1507,11 @@ else
             });
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao salvar a configuração");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_SaveFail"].Value);
                 return;
             }
             _asForm.ApiKey = "";
-            await Toast.Success("Salva", "Assistente aplicado — já está em vigor.");
+            await Toast.Success(L["Set_SavedT"], L["Set_AsstSaved"]);
             await ReloadAssistantAsync();
         }
         finally
@@ -1596,12 +1535,12 @@ else
             });
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao testar a conexão");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_TestFail"].Value);
                 return;
             }
             _asForm.TestResult = result.Value;
             if (result.Value?.Ok == true)
-                await Toast.Success("Conexão OK", $"Assistente respondeu em {result.Value.LatencyMs:F0} ms.");
+                await Toast.Success(L["Set_ConnOkTitle"], L["Set_AsstConnOkToast", $"{result.Value.LatencyMs:F0}"]);
         }
         finally
         {
@@ -1614,10 +1553,10 @@ else
         var result = await Api.RemoveAssistantKeyAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao remover a key");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RemoveKeyFail"].Value);
             return;
         }
-        await Toast.Success("Removida", "Key do assistente removida do store.");
+        await Toast.Success(L["Set_RemovedT"], L["Set_AsstKeyRemoved"]);
         await ReloadAssistantAsync();
     }
 
@@ -1626,10 +1565,10 @@ else
         var result = await Api.ClearAssistantAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao restaurar o ambiente");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RestoreFail"].Value);
             return;
         }
-        await Toast.Success("Restaurado", "Configuração do assistente voltou ao ambiente.");
+        await Toast.Success(L["Set_Restored"], L["Set_AsstRestored"]);
         await ReloadAssistantAsync();
     }
 
@@ -1647,7 +1586,7 @@ else
         catch (Exception ex)
         {
             _graph = null;
-            await Toast.Error("Erro", $"Falha ao carregar configuração do grafo: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_GraphLoadFail", ex.Message]);
         }
     }
 
@@ -1666,10 +1605,10 @@ else
             });
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao salvar a configuração");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_SaveFail"].Value);
                 return;
             }
-            await Toast.Success("Salva", "Configuração do grafo aplicada — já está em vigor.");
+            await Toast.Success(L["Set_SavedT"], L["Set_GraphSaved"]);
             await ReloadGraphAsync();
         }
         finally
@@ -1684,10 +1623,10 @@ else
         var result = await Api.ClearGraphAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao restaurar o ambiente");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RestoreFail"].Value);
             return;
         }
-        await Toast.Success("Restaurada", "Configuração do grafo voltou às variáveis de ambiente.");
+        await Toast.Success(L["Set_Restored"], L["Set_GraphRestored"]);
         await ReloadGraphAsync();
     }
 
@@ -1719,7 +1658,7 @@ else
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _resilience = null;
-            await Toast.Error("Erro", $"Falha ao carregar a política de fallback: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Set_ResLoadFail", ex.Message]);
         }
     }
 
@@ -1735,7 +1674,7 @@ else
                 .ToList();
             if (name.Length == 0 || providers.Count == 0)
             {
-                await Toast.Error("Erro", $"Capacidade '{row.Name}' precisa de nome e ao menos um provedor");
+                await Toast.Error(L["Common_Error"], L["Set_CapErr", row.Name]);
                 return;
             }
             caps[name] = providers;
@@ -1758,10 +1697,10 @@ else
             });
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao salvar a política");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_ResSaveFail"].Value);
                 return;
             }
-            await Toast.Success("Salva", "Política de fallback aplicada — já está em vigor.");
+            await Toast.Success(L["Set_SavedT"], L["Set_ResSaved"]);
             await ReloadResilienceAsync();
         }
         finally
@@ -1776,10 +1715,10 @@ else
         var result = await Api.ClearResilienceAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao restaurar o ambiente");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RestoreFail"].Value);
             return;
         }
-        await Toast.Success("Restaurada", "Política de fallback voltou às variáveis de ambiente.");
+        await Toast.Success(L["Set_Restored"], L["Set_ResRestored"]);
         await ReloadResilienceAsync();
     }
 
@@ -1803,10 +1742,10 @@ else
         var result = await Api.RemoveChatKeyAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao remover a key");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RemoveKeyFail"].Value);
             return;
         }
-        await Toast.Success("Removida", "Key do chat removida.");
+        await Toast.Success(L["Set_RemovedT"], L["Set_ChatKeyRemoved"]);
         await ReloadChatAsync();
     }
 
@@ -1816,11 +1755,11 @@ else
         var result = await Api.ClearChatAsync();
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao restaurar o ambiente");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RestoreFail"].Value);
             return;
         }
         _chatForm.ApiKey = "";
-        await Toast.Success("Restaurada", "Configuração de chat voltou às variáveis de ambiente.");
+        await Toast.Success(L["Set_Restored"], L["Set_ChatRestored"]);
         await ReloadChatAsync();
     }
 
@@ -1830,7 +1769,7 @@ else
         var state = _forms[item.Provider];
         if (string.IsNullOrWhiteSpace(state.Input))
         {
-            await Toast.Error("Key vazia", "Informe a API key antes de salvar.");
+            await Toast.Error(L["Set_KeyEmptyT"], L["Set_KeyEmptyMsg"]);
             return;
         }
 
@@ -1840,11 +1779,11 @@ else
             var result = await Api.SetKeyAsync(item.Provider, state.Input.Trim());
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao salvar a key");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Set_KeySaveFail"].Value);
                 return;
             }
             state.Input = "";
-            await Toast.Success("Salva", $"Key do {item.DisplayName} configurada.");
+            await Toast.Success(L["Set_SavedT"], L["Set_KeyConfigured", item.DisplayName]);
             await ReloadAsync();
         }
         finally
@@ -1859,14 +1798,12 @@ else
         var result = await Api.SetEnabledAsync(item.Provider, enabled);
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao alternar a integração");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_ToggleFail"].Value);
             return;
         }
         await Toast.Success(
-            enabled ? "Ativada" : "Desativada",
-            enabled
-                ? $"Tools do {item.DisplayName} de volta ao catálogo MCP."
-                : $"Tools do {item.DisplayName} removidas do catálogo MCP.");
+            enabled ? L["Set_EnabledT"] : L["Set_DisabledT"],
+            enabled ? L["Set_ToolsBack", item.DisplayName] : L["Set_ToolsOut", item.DisplayName]);
         await ReloadAsync();
     }
 
@@ -1876,10 +1813,10 @@ else
         var result = await Api.RemoveKeyAsync(item.Provider);
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao remover a key");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Set_RemoveKeyFail"].Value);
             return;
         }
-        await Toast.Success("Removida", $"Key do {item.DisplayName} removida.");
+        await Toast.Success(L["Set_RemovedT"], L["Set_KeyRemovedInt", item.DisplayName]);
         await ReloadAsync();
     }
 }

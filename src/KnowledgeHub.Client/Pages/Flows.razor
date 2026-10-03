@@ -6,45 +6,45 @@
 @using KnowledgeHub.Shared.Contracts
 @inject FlowsApiClient Api
 @inject ToastService Toast
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>Agent Flows — Knowledge</PageTitle>
+<PageTitle>@L["Flows_PageTitle"]</PageTitle>
 
 <div class="d-flex justify-content-between gap-2 align-items-center mb-3">
     <h1 class="h3 mb-0">Agent Flows</h1>
     <div class="d-flex gap-2">
-        <Button Size="Size.Small" Icon="fa-solid fa-plus" Text="Novo flow" TooltipText="Novo flow"
+        <Button Size="Size.Small" Icon="fa-solid fa-plus" Text="@L["Flows_New"]" TooltipText="@L["Flows_New"]"
                 OnClick="NewFlow" />
-        <Button Size="Size.Small" Icon="fa-solid fa-rotate" Text="Atualizar" TooltipText="Atualizar"
+        <Button Size="Size.Small" Icon="fa-solid fa-rotate" Text="@L["Common_Refresh"]" TooltipText="@L["Common_Refresh"]"
                 IsAsync="true" OnClick="LoadAsync" IsDisabled="_loading" />
     </div>
 </div>
 
 <p class="text-muted small">
-    Flows publicados viram tools <code>flow_&lt;slug&gt;</code> no catálogo MCP — o agente (chat, SDKs, A2A)
-    os invoca como qualquer outra tool.
+    @L["Flows_Intro1"]<code>flow_&lt;slug&gt;</code>@L["Flows_Intro2"]
 </p>
 
 @if (_flows is null)
 {
-    <div class="text-muted kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando…</div>
+    <div class="text-muted kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Common_Loading"]</div>
 }
 else if (_flows.Count == 0 && _edit is null)
 {
-    <div class="text-muted">Nenhum flow criado ainda.</div>
+    <div class="text-muted">@L["Flows_Empty"]</div>
 }
 else
 {
     <div class="table-responsive">
         <table class="table table-sm table-hover align-middle">
-            <caption class="visually-hidden">Lista de agent flows</caption>
+            <caption class="visually-hidden">@L["Flows_Caption"]</caption>
             <thead>
                 <tr>
-                    <th>Nome</th>
+                    <th>@L["Common_Name"]</th>
                     <th>Tool MCP</th>
-                    <th>Habilitado</th>
-                    <th>Versão</th>
-                    <th>Atualizado</th>
-                    <th>Ações</th>
+                    <th>@L["Flows_EnabledCol"]</th>
+                    <th>@L["Flows_Version"]</th>
+                    <th>@L["Flows_Updated"]</th>
+                    <th>@L["Common_Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -56,27 +56,27 @@ else
                         <td>
                             @if (f.Enabled)
                             {
-                                <Badge Color="Color.Success">sim</Badge>
+                                <Badge Color="Color.Success">@L["Flows_Yes"]</Badge>
                             }
                             else
                             {
-                                <Badge Color="Color.Secondary">não</Badge>
+                                <Badge Color="Color.Secondary">@L["Flows_No"]</Badge>
                             }
                         </td>
                         <td>v@(f.Version)</td>
                         <td><small class="text-muted">@f.UpdatedAt.LocalDateTime.ToString("g")</small></td>
                         <td>
                             <div class="d-flex gap-1 flex-wrap">
-                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-pen" Text="Editar" TooltipText="Editar"
+                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-pen" Text="@L["Common_Edit"]" TooltipText="@L["Common_Edit"]"
                                         OnClick="() => EditFlowAsync(f)" />
-                                <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-play" Text="Executar"
-                                        TooltipText="Executar" IsAsync="true" OnClick="() => OpenRun(f)" />
+                                <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-play" Text="@L["Flows_Run"]"
+                                        TooltipText="@L["Flows_Run"]" IsAsync="true" OnClick="() => OpenRun(f)" />
                                 <Button Size="Size.ExtraSmall" Color="Color.Info" Icon="fa-solid fa-clock-rotate-left"
-                                        Text="Runs" TooltipText="Histórico de runs" IsAsync="true"
+                                        Text="@L["Flows_Runs"]" TooltipText="@L["Flows_RunsTooltip"]" IsAsync="true"
                                         OnClick="() => ShowRunsAsync(f)" />
                                 <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
-                                                  Text="Excluir" TooltipText="Excluir"
-                                                  Content="@($"Excluir este flow? A tool flow_{f.Slug} sai do catálogo.")"
+                                                  Text="@L["Common_Delete"]" TooltipText="@L["Common_Delete"]"
+                                                  Content="@L["Flows_DeleteConfirm", f.Slug]"
                                                   OnConfirm="() => DeleteFlowAsync(f)" />
                             </div>
                         </td>
@@ -91,30 +91,30 @@ else
 {
     <div class="card mt-3" id="flow-editor">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>@(_edit.Id is null ? "Novo flow" : $"Editar — {_edit.Name}")</strong>
-            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="Fechar" TooltipText="Fechar"
+            <strong>@(_edit.Id is null ? L["Flows_New"] : L["Flows_Edit", _edit.Name])</strong>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="@L["Common_Close"]" TooltipText="@L["Common_Close"]"
                     OnClick="() => _edit = null" />
         </div>
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-12 col-md-4">
-                    <BootstrapInput @bind-Value="_edit.Name" DisplayText="Nome *" ShowLabel="true" />
+                    <BootstrapInput @bind-Value="_edit.Name" DisplayText="@L["Flows_NameLabel"]" ShowLabel="true" />
                 </div>
                 <div class="col-12 col-md-6">
-                    <BootstrapInput @bind-Value="_edit.Description" DisplayText="Descrição (o LLM usa para decidir quando chamar)" ShowLabel="true" />
+                    <BootstrapInput @bind-Value="_edit.Description" DisplayText="@L["Flows_DescLabel"]" ShowLabel="true" />
                 </div>
                 <div class="col-12 col-md-2">
-                    <Switch @bind-Value="_edit.Enabled" DisplayText="Habilitado" ShowLabel="true" />
+                    <Switch @bind-Value="_edit.Enabled" DisplayText="@L["Common_Enabled"]" ShowLabel="true" />
                 </div>
             </div>
 
             @if (_edit.View != FlowEditorView.Json)
             {
-            <h2 class="h6 mt-4">Inputs (bloco start)</h2>
+            <h2 class="h6 mt-4">@L["Flows_InputsTitle"]</h2>
             <div class="table-responsive">
                 <table class="table table-sm align-middle">
-                    <caption class="visually-hidden">Inputs declarados do flow</caption>
-                    <thead><tr><th>Nome</th><th>Tipo</th><th>Obrigatório</th><th>Padrão</th><th>Descrição</th><th></th></tr></thead>
+                    <caption class="visually-hidden">@L["Flows_InputsCaption"]</caption>
+                    <thead><tr><th>@L["Common_Name"]</th><th>@L["Common_Type"]</th><th>@L["Flows_RequiredCol"]</th><th>@L["Flows_DefaultCol"]</th><th>@L["Common_Description"]</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var input in _edit.Inputs)
                         {
@@ -128,23 +128,23 @@ else
                                 <td><BootstrapInput @bind-Value="input.Description" /></td>
                                 <td>
                                     <Button Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
-                                            TooltipText="Remover input" OnClick="() => _edit.Inputs.Remove(input)" />
+                                            TooltipText="@L["Flows_RemoveInput"]" OnClick="() => _edit.Inputs.Remove(input)" />
                                 </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
-            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="Adicionar input"
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="@L["Flows_AddInput"]"
                     OnClick="AddInput" />
             }
 
             <div class="d-flex align-items-center gap-2 mt-4 mb-2">
-                <h2 class="h6 mb-0">Steps</h2>
-                <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Modo do editor">
+                <h2 class="h6 mb-0">@L["Flows_Steps"]</h2>
+                <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="@L["Flows_EditorMode"]">
                     <button type="button" class="btn @(_edit.View == FlowEditorView.List ? "btn-primary" : "btn-outline-secondary")"
                             @onclick="() => _edit.View = FlowEditorView.List">
-                        <i class="fa-solid fa-list" aria-hidden="true"></i> Lista
+                        <i class="fa-solid fa-list" aria-hidden="true"></i> @L["Flows_List"]
                     </button>
                     <button type="button" class="btn @(_edit.View == FlowEditorView.Canvas ? "btn-primary" : "btn-outline-secondary")"
                             @onclick="() => _edit.View = FlowEditorView.Canvas">
@@ -164,13 +164,13 @@ else
             else if (_edit.View == FlowEditorView.Json)
             {
                 <Textarea @bind-Value="_edit.DefinitionJson" rows="12" class="font-monospace"
-                          DisplayText="Definição completa (inputs + steps)" ShowLabel="true" />
+                          DisplayText="@L["Flows_JsonLabel"]" ShowLabel="true" />
             }
             else
             {
                 @if (_edit.Steps.Count == 0)
                 {
-                    <div class="text-muted small">Sem steps — adicione o primeiro.</div>
+                    <div class="text-muted small">@L["Flows_NoSteps"]</div>
                 }
                 @for (var i = 0; i < _edit.Steps.Count; i++)
                 {
@@ -180,27 +180,27 @@ else
                         <div class="d-flex gap-2 flex-wrap align-items-center">
                             <span class="badge bg-secondary">#@(idx + 1)</span>
                             <BootstrapInput @bind-Value="s.Id" placeholder="id (ex.: fetch)" style="width:10rem" />
-                            <Select @bind-Value="s.Type" Items="FlowEditModel.StepTypes" style="width:9rem" />
-                            <BootstrapInput @bind-Value="s.Name" placeholder="rótulo" style="width:12rem" />
+                            <Select @bind-Value="s.Type" Items="FlowEditModel.StepTypeItems(L)" style="width:9rem" />
+                            <BootstrapInput @bind-Value="s.Name" placeholder="@L["Flows_LabelPh"]" style="width:12rem" />
                             <div class="ms-auto d-flex gap-1">
-                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-up" TooltipText="Mover para cima"
+                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-up" TooltipText="@L["Flows_MoveUp"]"
                                         IsDisabled="idx == 0" OnClick="() => MoveStep(idx, -1)" />
-                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-down" TooltipText="Mover para baixo"
+                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-down" TooltipText="@L["Flows_MoveDown"]"
                                         IsDisabled="idx == _edit.Steps.Count - 1" OnClick="() => MoveStep(idx, 1)" />
                                 <Button Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
-                                        TooltipText="Remover step" OnClick="() => _edit.Steps.RemoveAt(idx)" />
+                                        TooltipText="@L["Flows_RemoveStep"]" OnClick="() => _edit.Steps.RemoveAt(idx)" />
                             </div>
                         </div>
-                        <Textarea @bind-Value="s.ConfigJson" placeholder='Config JSON — ex.: {"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}'
+                        <Textarea @bind-Value="s.ConfigJson" placeholder="@L["Flows_ConfigPh"]"
                                   rows="3" class="font-monospace mt-2" />
                         @if (s.Type is "condition" or "foreach")
                         {
                             <Textarea @bind-Value="s.StepsJson" rows="2" class="font-monospace mt-1"
-                                      placeholder='Nested steps JSON — foreach usa a lista acima; condition usa config.branches[].steps' />
+                                      placeholder="@L["Flows_NestedPh"]" />
                         }
                     </div>
                 }
-                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="Adicionar step" OnClick="AddStep" />
+                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="@L["Flows_AddStep"]" OnClick="AddStep" />
             }
 
             @if (!string.IsNullOrEmpty(_editError))
@@ -209,9 +209,9 @@ else
             }
 
             <div class="d-flex gap-2 mt-3">
-                <Button Color="Color.Secondary" Icon="fa-solid fa-check-double" Text="Validar" IsAsync="true"
+                <Button Color="Color.Secondary" Icon="fa-solid fa-check-double" Text="@L["Flows_Validate"]" IsAsync="true"
                         OnClick="ValidateAsync" />
-                <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="Salvar" IsAsync="true"
+                <Button Color="Color.Primary" Icon="fa-solid fa-floppy-disk" Text="@L["Common_Save"]" IsAsync="true"
                         OnClick="SaveAsync" />
             </div>
         </div>
@@ -222,14 +222,14 @@ else
 {
     <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>Executar — flow_@_runTarget.Slug</strong>
-            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="Fechar" TooltipText="Fechar"
+            <strong>@L["Flows_RunTitle", _runTarget.Slug]</strong>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="@L["Common_Close"]" TooltipText="@L["Common_Close"]"
                     OnClick="() => { _runTarget = null; _runResult = null; }" />
         </div>
         <div class="card-body">
-            <Textarea @bind-Value="_runInputsJson" DisplayText="Inputs (JSON)"
+            <Textarea @bind-Value="_runInputsJson" DisplayText="@L["Flows_RunInputs"]"
                       ShowLabel="true" rows="4" class="font-monospace" placeholder="{}" />
-            <Button Color="Color.Primary" Icon="fa-solid fa-play" Text="Rodar" IsAsync="true"
+            <Button Color="Color.Primary" Icon="fa-solid fa-play" Text="@L["Flows_RunGo"]" IsAsync="true"
                     OnClick="RunFlowAsync" class="mt-2" />
 
             @if (_runResult is not null)
@@ -245,8 +245,8 @@ else
                     }
                     <div class="table-responsive mt-2">
                         <table class="table table-sm">
-                            <caption class="visually-hidden">Trace de steps do run</caption>
-                            <thead><tr><th>Step</th><th>Tipo</th><th>Status</th><th>ms</th><th>Saída/Erro</th></tr></thead>
+                            <caption class="visually-hidden">@L["Flows_TraceCaption"]</caption>
+                            <thead><tr><th>Step</th><th>@L["Common_Type"]</th><th>@L["Common_Status"]</th><th>ms</th><th>@L["Flows_OutputError"]</th></tr></thead>
                             <tbody>
                                 @foreach (var s in _runResult.Steps)
                                 {
@@ -263,7 +263,7 @@ else
                     </div>
                     @if (_runResult.Output is not null)
                     {
-                        <pre class="bg-light border rounded p-2 mt-2 small" aria-label="Output do flow"><code>@_runResult.Output.ToJsonString()</code></pre>
+                        <pre class="bg-light border rounded p-2 mt-2 small" aria-label="@L["Flows_OutputAria"]"><code>@_runResult.Output.ToJsonString()</code></pre>
                     }
                 </div>
             }
@@ -275,25 +275,25 @@ else
 {
     <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <strong>Runs — flow_@_runsTarget.Slug</strong>
-            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="Fechar" TooltipText="Fechar"
+            <strong>@L["Flows_RunsTitle", _runsTarget.Slug]</strong>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="@L["Common_Close"]" TooltipText="@L["Common_Close"]"
                     OnClick="() => _runsTarget = null" />
         </div>
         <div class="card-body">
             @if (_runs is null)
             {
-                <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> Carregando…</div>
+                <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> @L["Common_Loading"]</div>
             }
             else if (_runs.Count == 0)
             {
-                <div class="text-muted">Nenhum run registrado.</div>
+                <div class="text-muted">@L["Flows_NoRuns"]</div>
             }
             else
             {
                 <div class="table-responsive">
                     <table class="table table-sm">
-                        <caption class="visually-hidden">Histórico de runs</caption>
-                        <thead><tr><th>Quando</th><th>Status</th><th>v</th><th>ms</th><th>Erro</th></tr></thead>
+                        <caption class="visually-hidden">@L["Flows_RunsCaption"]</caption>
+                        <thead><tr><th>@L["Flows_When"]</th><th>@L["Common_Status"]</th><th>v</th><th>ms</th><th>@L["Common_Error"]</th></tr></thead>
                         <tbody>
                             @foreach (var r in _runs)
                             {
@@ -340,7 +340,7 @@ else
         var detail = await Api.GetAsync(f.Id);
         if (detail is null)
         {
-            await Toast.Error("Erro", "Flow não encontrado");
+            await Toast.Error(L["Common_Error"], L["Flows_NotFound"]);
             return;
         }
         _edit = FlowEditModel.From(detail);
@@ -351,10 +351,10 @@ else
         var (ok, error) = await Api.DeleteAsync(f.Id);
         if (ok)
         {
-            await Toast.Success("Flow excluído", "");
+            await Toast.Success(L["Flows_Deleted"], "");
             await LoadAsync();
         }
-        else await Toast.Error("Erro", error ?? "falha ao excluir");
+        else await Toast.Error(L["Common_Error"], error ?? L["Flows_DeleteFail"].Value);
     }
 
     private void AddInput() => _edit?.Inputs.Add(new FlowInputModel());
@@ -370,28 +370,28 @@ else
 
     private (FlowDefinitionDto? Def, string? Error) BuildDefinition()
     {
-        if (_edit is null) return (null, "editor vazio");
+        if (_edit is null) return (null, L["Flows_EditorEmpty"].Value);
         // Raw JSON view wins over the structured editors
         if (_edit.View == FlowEditorView.Json && !string.IsNullOrWhiteSpace(_edit.DefinitionJson))
         {
             try
             {
                 var def = JsonSerializer.Deserialize<FlowDefinitionDto>(_edit.DefinitionJson, SharedJson.Options);
-                return def is null ? (null, "definição JSON inválida") : (def, null);
+                return def is null ? (null, L["Flows_InvalidDef"].Value) : (def, null);
             }
-            catch (JsonException ex) { return (null, $"JSON inválido: {ex.Message}"); }
+            catch (JsonException ex) { return (null, L["Flows_InvalidJson", ex.Message].Value); }
         }
 
         var inputs = new List<FlowInputDto>();
         foreach (var i in _edit.Inputs)
         {
             if (string.IsNullOrWhiteSpace(i.Name))
-                return (null, "todo input precisa de nome");
+                return (null, L["Flows_InputNeedsName"].Value);
             JsonNode? def = null;
             if (!string.IsNullOrWhiteSpace(i.DefaultJson))
             {
                 try { def = JsonNode.Parse(i.DefaultJson); }
-                catch (JsonException ex) { return (null, $"default de '{i.Name}' inválido: {ex.Message}"); }
+                catch (JsonException ex) { return (null, L["Flows_InvalidDefault", i.Name, ex.Message].Value); }
             }
             inputs.Add(new FlowInputDto(i.Name.Trim(), i.Type, i.Required, i.Description, def));
         }
@@ -400,20 +400,20 @@ else
         foreach (var s in _edit.Steps)
         {
             if (string.IsNullOrWhiteSpace(s.Id))
-                return (null, "todo step precisa de id");
+                return (null, L["Flows_StepNeedsId"].Value);
             JsonObject? config = null;
             if (!string.IsNullOrWhiteSpace(s.ConfigJson))
             {
                 try { config = JsonNode.Parse(s.ConfigJson) as JsonObject; }
-                catch (JsonException ex) { return (null, $"config de '{s.Id}' inválida: {ex.Message}"); }
+                catch (JsonException ex) { return (null, L["Flows_InvalidConfig", s.Id, ex.Message].Value); }
                 if (config is null)
-                    return (null, $"config de '{s.Id}' deve ser um objeto JSON");
+                    return (null, L["Flows_ConfigNotObject", s.Id].Value);
             }
             List<FlowStepDto>? nested = null;
             if (!string.IsNullOrWhiteSpace(s.StepsJson))
             {
                 try { nested = JsonSerializer.Deserialize<List<FlowStepDto>>(s.StepsJson, SharedJson.Options); }
-                catch (JsonException ex) { return (null, $"steps aninhados de '{s.Id}' inválidos: {ex.Message}"); }
+                catch (JsonException ex) { return (null, L["Flows_InvalidNested", s.Id, ex.Message].Value); }
             }
             steps.Add(new FlowStepDto(s.Id.Trim(), s.Type, s.Name, config, nested));
         }
@@ -426,7 +426,7 @@ else
         if (def is null) { _editError = error; return; }
         var (valid, err) = await Api.ValidateAsync(def);
         _editError = valid ? null : err;
-        if (valid) await Toast.Success("Definição válida", "");
+        if (valid) await Toast.Success(L["Flows_Valid"], "");
     }
 
     private async Task SaveAsync()
@@ -437,7 +437,7 @@ else
 
         if (string.IsNullOrWhiteSpace(_edit.Name))
         {
-            _editError = "nome é obrigatório";
+            _editError = L["Flows_NameRequired"];
             return;
         }
 
@@ -453,7 +453,7 @@ else
         }
         _editError = null;
         _edit = null;
-        await Toast.Success("Flow salvo", $"flow_{detail.Flow.Slug}");
+        await Toast.Success(L["Flows_Saved"], $"flow_{detail.Flow.Slug}");
         await LoadAsync();
     }
 
@@ -471,12 +471,12 @@ else
         try { inputs = JsonNode.Parse(_runInputsJson) as JsonObject; }
         catch (JsonException ex)
         {
-            await Toast.Error("Erro", $"inputs JSON inválidos: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Flows_InvalidInputs", ex.Message]);
             return;
         }
         var (result, error) = await Api.RunAsync(_runTarget.Id, inputs);
         if (result is not null) _runResult = result;
-        else await Toast.Error("Erro", error ?? "falha ao executar");
+        else await Toast.Error(L["Common_Error"], error ?? L["Flows_RunFail"].Value);
     }
 
     private async Task ShowRunsAsync(FlowDto f)

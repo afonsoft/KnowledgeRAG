@@ -1,0 +1,25 @@
+@using System.Globalization
+@inject IJSRuntime JS
+@inject IStringLocalizer<SharedStrings> L
+
+@* Culture switcher — persists to localStorage and forces a full reload so the
+   WASM host re-enters Program.cs and restores the culture before first render. *@
+<div class="culture-selector" title="@L["Nav_Language"]" aria-label="@L["Nav_Language"]">
+    <i class="fa-solid fa-language" aria-hidden="true"></i>
+    <select class="form-select form-select-sm" value="@CultureInfo.CurrentUICulture.Name"
+            @onchange="OnCultureChanged" aria-label="@L["Nav_Language"]">
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="pt-BR">Português</option>
+    </select>
+</div>
+
+@code {
+    private async Task OnCultureChanged(ChangeEventArgs e)
+    {
+        var culture = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(culture)) return;
+        await JS.InvokeVoidAsync("localStorage.setItem", "kh:culture", culture);
+        await JS.InvokeVoidAsync("eval", "location.reload()");
+    }
+}

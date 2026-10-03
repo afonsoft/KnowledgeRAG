@@ -57,17 +57,19 @@ public sealed class FlowEditModel
         new("object", "object"), new("array", "array"),
     ];
 
-    public static readonly List<SelectedItem> StepTypes =
+    /// <summary>Step-type picker items — localized via the shared resources,
+    /// so callers pass the page's localizer.</summary>
+    public static List<SelectedItem> StepTypeItems(Microsoft.Extensions.Localization.IStringLocalizer l) =>
     [
-        new("tool", "tool — catálogo MCP"),
-        new("knowledge", "knowledge — search/ask"),
-        new("llm", "llm — prompt"),
-        new("http", "http — chamada externa"),
-        new("condition", "condition — branches"),
-        new("foreach", "foreach — loop"),
-        new("transform", "transform — reshape"),
-        new("output", "output — resultado"),
-        new("fail", "fail — abortar"),
+        new("tool", l["StepType_tool"].Value),
+        new("knowledge", l["StepType_knowledge"].Value),
+        new("llm", l["StepType_llm"].Value),
+        new("http", l["StepType_http"].Value),
+        new("condition", l["StepType_condition"].Value),
+        new("foreach", l["StepType_foreach"].Value),
+        new("transform", l["StepType_transform"].Value),
+        new("output", l["StepType_output"].Value),
+        new("fail", l["StepType_fail"].Value),
     ];
 
     public static FlowEditModel Empty() => new()
@@ -113,6 +115,17 @@ public sealed class FlowEditModel
         }
         return model;
     }
+}
+
+/// <summary>Culture-aware strings for the static FlowVisuals helpers (no DI in
+/// static paths) — reads the same resx via ResourceManager on CurrentUICulture.</summary>
+internal static class FlowStrings
+{
+    private static readonly System.Resources.ResourceManager Rm =
+        new("KnowledgeHub.Client.Resources.SharedStrings", typeof(FlowStrings).Assembly);
+
+    public static string Always => Rm.GetString("Flow_Always", System.Globalization.CultureInfo.CurrentUICulture) ?? "sempre";
+    public static string EachPrefix => Rm.GetString("Flow_EachPrefix", System.Globalization.CultureInfo.CurrentUICulture) ?? "em";
 }
 
 /// <summary>Display helpers shared by the canvas nodes and nested-step chips —
@@ -184,7 +197,7 @@ public static class FlowVisuals
             {
                 if (branch is not JsonObject b)
                     continue;
-                var label = b["when"] is JsonObject when ? WhenText(when) : "sempre";
+                var label = b["when"] is JsonObject when ? WhenText(when) : FlowStrings.Always;
                 lanes.Add(new FlowLane(label, ParseStepsNode(b["steps"])));
             }
         }
@@ -237,7 +250,7 @@ public static class FlowVisuals
             "transform" => "reshape",
             "output" => config["value"]?.ToJsonString() is { } v ? (v.Length > 60 ? v[..60] + "…" : v) : null,
             "fail" => NodeText(config["message"]),
-            "foreach" => $"em {config["each"]?.ToJsonString() ?? "?"}",
+            "foreach" => $"{FlowStrings.EachPrefix} {config["each"]?.ToJsonString() ?? "?"}",
             _ => null,
         };
     }

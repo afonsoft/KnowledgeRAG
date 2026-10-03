@@ -29,13 +29,31 @@
     </div>
 
     <div id="blazor-error-ui">
-        Ocorreu um erro inesperado.
+        <span class="msg">Ocorreu um erro inesperado.</span>
         <a href="." class="reload">Recarregar</a>
         <span class="dismiss">🗙</span>
     </div>
     <script src="_content/BootstrapBlazor/js/bootstrap.blazor.bundle.min.js"></script>
     <script src="_framework/blazor.webassembly.js" autostart="false"></script>
     <script src="js/boot.js"></script>
+    <script>
+        // i18n: restore persisted culture onto <html lang> + the error shell
+        // before Blazor boots (Program.cs re-reads kh:culture into CultureInfo).
+        (function () {
+            var c = localStorage.getItem('kh:culture') || 'pt-BR';
+            document.documentElement.lang = c;
+            var m = {
+                'pt-BR': ['Ocorreu um erro inesperado.', 'Recarregar'],
+                'en': ['An unexpected error occurred.', 'Reload'],
+                'es': ['Se produjo un error inesperado.', 'Recargar']
+            }[c] || [];
+            if (m.length) {
+                var e = document.getElementById('blazor-error-ui');
+                e.querySelector('.msg').textContent = m[0];
+                e.querySelector('.reload').textContent = m[1];
+            }
+        })();
+    </script>
     <script>
         // PWA (SPEC-20260918-ui-layout-polish): dev worker is a no-op;
         // the published worker precaches the app shell.

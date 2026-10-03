@@ -4,59 +4,60 @@
 @inject SettingsApiClient SettingsApi
 @inject ToastService Toast
 @inject IJSRuntime JS
+@inject IStringLocalizer<SharedStrings> L
 
-<PageTitle>API Keys — Knowledge</PageTitle>
+<PageTitle>@L["Keys_PageTitle"]</PageTitle>
 
-<h1 class="h3 mb-3">API Keys</h1>
+<h1 class="h3 mb-3">@L["Nav_API_Keys"]</h1>
 <p class="text-muted">
-    Chaves <code>aft_*</code> autenticam clients não-browser (Cursor, Claude Desktop, scripts)
-    em <code>/mcp</code>, <code>/api/*</code> e <code>/hubs/mcp</code> via
+    @L["Keys_Intro1"]<code>aft_*</code>@L["Keys_Intro2"]
+    <code>/mcp</code>, <code>/api/*</code> @L["Common_Or"] <code>/hubs/mcp</code> @L["Keys_Intro3"]
     <code>Authorization: Bearer aft_…</code>.
 </p>
 
 <div class="table-responsive-wrapper">
     <Table TItem="ApiKeyDto" Items="_keys" ShowLoading="true" ShowLoadingInFirstRender="true"
            IsStriped="true" ShowToolbar="true" ShowDefaultButtons="false" ShowEmpty="true"
-           EmptyText="Nenhuma chave criada." CreateItemCallback="CreatePlaceholder">
+           EmptyText="@L["Keys_Empty"]" CreateItemCallback="CreatePlaceholder">
     <TableToolbarTemplate>
-        <TableToolbarButton TItem="ApiKeyDto" Text="Nova chave" Icon="fa-solid fa-plus"
-                            Title="Nova chave" Color="Color.Primary" OnClick="ShowCreate" />
+        <TableToolbarButton TItem="ApiKeyDto" Text="@L["Keys_New"]" Icon="fa-solid fa-plus"
+                            Title="@L["Keys_New"]" Color="Color.Primary" OnClick="ShowCreate" />
     </TableToolbarTemplate>
     <TableColumns>
-        <TableColumn Field="@context.Name" FieldExpression="@(() => context.Name)" Text="Nome" />
-        <TableColumn Field="@context.Prefix" FieldExpression="@(() => context.Prefix)" Text="Prefixo">
+        <TableColumn Field="@context.Name" FieldExpression="@(() => context.Name)" Text="@L["Common_Name"]" />
+        <TableColumn Field="@context.Prefix" FieldExpression="@(() => context.Prefix)" Text="@L["Keys_Prefix"]">
             <Template Context="v"><code>@v.Value…</code></Template>
         </TableColumn>
-        <TableColumn Field="@context.CreatedAt" FieldExpression="@(() => context.CreatedAt)" Text="Criada">
+        <TableColumn Field="@context.CreatedAt" FieldExpression="@(() => context.CreatedAt)" Text="@L["Keys_Created"]">
             <Template Context="v">@v.Value.LocalDateTime.ToString("g")</Template>
         </TableColumn>
-        <TableColumn Field="@context.LastUsedAt" FieldExpression="@(() => context.LastUsedAt)" Text="Último uso">
+        <TableColumn Field="@context.LastUsedAt" FieldExpression="@(() => context.LastUsedAt)" Text="@L["Keys_LastUsed"]">
             <Template Context="v">@(v.Value?.LocalDateTime.ToString("g") ?? "—")</Template>
         </TableColumn>
-        <TableColumn Field="@context.RevokedAt" FieldExpression="@(() => context.RevokedAt)" Text="Status">
+        <TableColumn Field="@context.RevokedAt" FieldExpression="@(() => context.RevokedAt)" Text="@L["Common_Status"]">
             <Template Context="v">
                 @if (v.Value is not null)
                 {
-                    <Badge Color="Color.Danger">revogada</Badge>
+                    <Badge Color="Color.Danger">@L["Keys_Revoked"]</Badge>
                 }
                 else
                 {
-                    <Badge Color="Color.Success">ativa</Badge>
+                    <Badge Color="Color.Success">@L["Src_ActiveBadge"]</Badge>
                 }
             </Template>
         </TableColumn>
-        <TableColumn Field="@context.Id" FieldExpression="@(() => context.Id)" Text="Ações" Width="120">
+        <TableColumn Field="@context.Id" FieldExpression="@(() => context.Id)" Text="@L["Common_Actions"]" Width="120">
             <Template Context="v">
                 <div class="kh-actions">
                     <Button Size="Size.ExtraSmall" Color="Color.Info" Icon="fa-solid fa-chart-line"
-                            TooltipText="Uso" TooltipPlacement="Placement.Top" OnClick="() => ShowUsage(v.Row)" />
+                            TooltipText="@L["Keys_Usage"]" TooltipPlacement="Placement.Top" OnClick="() => ShowUsage(v.Row)" />
                     <Button Size="Size.ExtraSmall" Color="Color.Secondary" Icon="fa-solid fa-gear"
-                            TooltipText="Config" TooltipPlacement="Placement.Top" OnClick="() => ShowSettings(v.Row)" />
+                            TooltipText="@L["Keys_Config"]" TooltipPlacement="Placement.Top" OnClick="() => ShowSettings(v.Row)" />
                     @if (v.Row.RevokedAt is null)
                     {
                         <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-ban"
-                                          TooltipText="Revogar" Title="Confirmar revogação"
-                                          Content="Clients usando esta chave perdem acesso imediatamente."
+                                          TooltipText="@L["Keys_Revoke"]" Title="@L["Keys_RevokeTitle"]"
+                                          Content="@L["Keys_RevokeContent"]"
                                           OnConfirm="() => Revoke(v.Row)" />
                     }
                 </div>
@@ -67,12 +68,12 @@
 </div>
 
 <Modal @ref="_createModal">
-    <ModalDialog Title="Nova API key" ShowSaveButton="true" SaveButtonText="Criar"
-                 SaveButtonIcon="fa-solid fa-plus" CloseButtonText="Cancelar"
+    <ModalDialog Title="@L["Keys_NewTitle"]" ShowSaveButton="true" SaveButtonText="@L["Common_Create"]"
+                 SaveButtonIcon="fa-solid fa-plus" CloseButtonText="@L["Common_Cancel"]"
                  CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="CreateAsync">
         <BodyTemplate>
-            <label class="form-label">Nome do client</label>
-            <input class="form-control" @bind="_newName" placeholder="ex.: cursor-laptop" />
+            <label class="form-label">@L["Keys_ClientName"]</label>
+            <input class="form-control" @bind="_newName" placeholder="@L["Keys_NamePh"]" />
             @if (_createError is not null)
             {
                 <div class="alert alert-danger py-2 mt-2 mb-0">@_createError</div>
@@ -82,14 +83,14 @@
 </Modal>
 
 <Modal @ref="_revealModal">
-    <ModalDialog Title="Chave criada" ShowCloseButton="false" ShowFooter="false">
+    <ModalDialog Title="@L["Keys_CreatedTitle"]" ShowCloseButton="false" ShowFooter="false">
         <BodyTemplate>
             <div class="alert alert-warning">
-                Copie a chave agora — ela <strong>não será exibida de novo</strong>.
+                @L["Keys_CopyNow1"]<strong>@L["Keys_CopyNow2"]</strong>.
             </div>
             <div class="input-group">
                 <input class="form-control font-monospace" readonly value="@_createdKey" />
-                <Button Color="Color.Secondary" Icon="fa-solid fa-copy" TooltipText="Copiar"
+                <Button Color="Color.Secondary" Icon="fa-solid fa-copy" TooltipText="@L["Common_Copy"]"
                         TooltipPlacement="Placement.Top" OnClick="CopyKey" />
             </div>
         </BodyTemplate>
@@ -97,8 +98,8 @@
 </Modal>
 
 <Modal @ref="_usageModal">
-    <ModalDialog Title="Detalhes e uso da chave" Size="Size.Large" ShowSaveButton="false"
-                 CloseButtonText="Fechar" CloseButtonIcon="fa-solid fa-xmark">
+    <ModalDialog Title="@L["Keys_UsageTitle"]" Size="Size.Large" ShowSaveButton="false"
+                 CloseButtonText="@L["Common_Close"]" CloseButtonIcon="fa-solid fa-xmark">
         <BodyTemplate>
             @if (_usageKey is not null)
             {
@@ -110,14 +111,14 @@
                         </div>
                     </div>
                     <div class="text-muted small mb-2">
-                        criada @_usageKey.CreatedAt.LocalDateTime.ToString("g") ·
-                        último uso @(_usageKey.LastUsedAt?.LocalDateTime.ToString("g") ?? "—")
+                        @L["Keys_CreatedAt", _usageKey.CreatedAt.LocalDateTime.ToString("g")] ·
+                        @L["Keys_LastUsed"].Value.ToLowerInvariant() @(_usageKey.LastUsedAt?.LocalDateTime.ToString("g") ?? "—")
                     </div>
 
                     @* SPEC-20260924-api-key-reveal-and-copy RF-003: Secret reveal & copy *@
                     @if (_usageKeySecretLoading)
                     {
-                        <div class="text-muted small"><i class="fa-solid fa-spinner fa-spin"></i> Carregando chave…</div>
+                        <div class="text-muted small"><i class="fa-solid fa-spinner fa-spin"></i> @L["Keys_LoadingKey"]</div>
                     }
                     else if (_usageKeySecret is { IsAvailable: true, Secret: not null })
                     {
@@ -127,18 +128,18 @@
                                    readonly value="@_usageKeySecret.Secret" />
                             <Button Size="Size.Small" Color="Color.Secondary"
                                     Icon="@(_revealSecret ? "fa-solid fa-eye-slash" : "fa-solid fa-eye")"
-                                    Title="@(_revealSecret ? "Ocultar segredo" : "Revelar segredo")"
+                                    Title="@(_revealSecret ? L["Keys_HideSecret"] : L["Keys_RevealSecret"])"
                                     OnClick="() => _revealSecret = !_revealSecret" />
                             <Button Size="Size.Small" Color="Color.Primary" Icon="fa-solid fa-copy"
-                                    TooltipText="Copiar chave completa" TooltipPlacement="Placement.Top"
-                                    Title="Copiar chave completa" OnClick="CopySecretAsync" />
+                                    TooltipText="@L["Keys_CopyFull"]" TooltipPlacement="Placement.Top"
+                                    Title="@L["Keys_CopyFull"]" OnClick="CopySecretAsync" />
                         </div>
                     }
                     else
                     {
                         <div class="alert alert-warning py-1 px-2 mb-1 d-flex align-items-center gap-2" style="max-width: 520px;">
                             <i class="fa-solid fa-triangle-exclamation"></i>
-                            <small>Chave legada (<code>@_usageKey.Prefix…</code>): o segredo completo não está disponível para chaves criadas antes do armazenamento protegido.</small>
+                            <small>@L["Keys_LegacyKey", $"{_usageKey.Prefix}…"]</small>
                         </div>
                     }
                 </div>
@@ -146,7 +147,7 @@
                 @* SPEC-20260923-per-key-rate-limits RF-004: per-key override —
                    blank fields inherit the global RateLimiting:* values. *@
                 <div class="mb-3">
-                    <h6 class="text-muted mb-2">Rate limit (override por chave)</h6>
+                    <h6 class="text-muted mb-2">@L["Keys_RateLimit"]</h6>
                     <div class="row g-2 mb-2">
                         <div class="col-6 col-md-3">
                             <label class="form-label"><small>LLM permits</small></label>
@@ -154,7 +155,7 @@
                                    @bind="_rl.LlmPermits" placeholder="global" />
                         </div>
                         <div class="col-6 col-md-3">
-                            <label class="form-label"><small>LLM janela (s)</small></label>
+                            <label class="form-label"><small>@L["Keys_LlmWindow"]</small></label>
                             <input type="number" class="form-control form-control-sm" min="1" max="86400"
                                    @bind="_rl.LlmWindowSeconds" placeholder="global" />
                         </div>
@@ -164,21 +165,21 @@
                                    @bind="_rl.SyncPermits" placeholder="global" />
                         </div>
                         <div class="col-6 col-md-3">
-                            <label class="form-label"><small>Sync janela (s)</small></label>
+                            <label class="form-label"><small>@L["Keys_SyncWindow"]</small></label>
                             <input type="number" class="form-control form-control-sm" min="1" max="86400"
                                    @bind="_rl.SyncWindowSeconds" placeholder="global" />
                         </div>
                     </div>
                     <div class="d-flex gap-2 kh-icon-btns">
                         <Button Size="Size.ExtraSmall" Color="Color.Primary" Icon="fa-solid fa-floppy-disk"
-                                Text="Salvar limites" IsAsync="true" IsDisabled="_rl.Saving"
+                                Text="@L["Keys_SaveLimits"]" IsAsync="true" IsDisabled="_rl.Saving"
                                 OnClick="SaveRateLimitAsync" />
                         @if (_usageKey.LlmRateLimitPermits is not null || _usageKey.LlmRateLimitWindowSeconds is not null
                             || _usageKey.SyncRateLimitPermits is not null || _usageKey.SyncRateLimitWindowSeconds is not null)
                         {
                             <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Warning" Icon="fa-solid fa-rotate-left"
-                                              Text="Limpar override" Title="Limpar override"
-                                              Content="A chave volta aos limites globais."
+                                              Text="@L["Keys_ClearOverride"]" Title="@L["Keys_ClearOverride"]"
+                                              Content="@L["Keys_ClearContent"]"
                                               OnConfirm="ClearRateLimitAsync" />
                         }
                     </div>
@@ -186,22 +187,22 @@
             }
             @if (_usageLoading)
             {
-                <div class="text-muted kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> Carregando métricas…</div>
+                <div class="text-muted kh-action-loading"><i class="fa-solid fa-spinner fa-spin"></i> @L["Keys_LoadingMetrics"]</div>
             }
             else if (_usage is not null)
             {
                 <div class="row g-2 mb-3 text-center">
-                    <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@_usage.TotalCalls</div><small class="text-muted">total</small></BodyTemplate></Card></div>
+                    <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@_usage.TotalCalls</div><small class="text-muted">@L["Keys_Total"]</small></BodyTemplate></Card></div>
                     <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@_usage.CallsLast24h</div><small class="text-muted">24h</small></BodyTemplate></Card></div>
                     <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@_usage.CallsLast7d</div><small class="text-muted">7d</small></BodyTemplate></Card></div>
-                    <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@_usage.AvgDurationMs.ToString("F0") ms</div><small class="text-muted">média</small></BodyTemplate></Card></div>
-                    <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@((_usage.ErrorRate * 100).ToString("F1"))%</div><small class="text-muted">erros</small></BodyTemplate></Card></div>
+                    <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@_usage.AvgDurationMs.ToString("F0") ms</div><small class="text-muted">@L["Keys_Avg"]</small></BodyTemplate></Card></div>
+                    <div class="col"><Card><BodyTemplate><div class="fs-5 fw-bold">@((_usage.ErrorRate * 100).ToString("F1"))%</div><small class="text-muted">@L["Keys_Errors"]</small></BodyTemplate></Card></div>
                 </div>
                 <div style="max-height: 320px; overflow-y: auto;">
                     <div class="table-responsive-wrapper">
                         <table class="table table-sm table-striped mb-0">
                         <thead>
-                            <tr><th>Hora</th><th>Método</th><th>Path</th><th>Status</th><th>ms</th><th>Client</th></tr>
+                            <tr><th>@L["Mon_Time"]</th><th>@L["Mon_Method"]</th><th>Path</th><th>@L["Common_Status"]</th><th>ms</th><th>Client</th></tr>
                         </thead>
                         <tbody>
                             @foreach (var e in _usage.RecentEvents)
@@ -229,7 +230,7 @@
                     </div>
                     @if (_usage.RecentEvents.Count == 0)
                     {
-                        <div class="text-muted p-2">Nenhuma chamada registrada para esta chave.</div>
+                        <div class="text-muted p-2">@L["Keys_NoCalls"]</div>
                     }
                 </div>
             }
@@ -238,41 +239,41 @@
 </Modal>
 
 <Modal @ref="_settingsModal">
-    <ModalDialog Title="@(_settingsKey is not null ? $"Configurações — {_settingsKey.Name}" : "Configurações da chave")"
-                 Size="Size.Large" ShowSaveButton="true" SaveButtonText="Salvar"
+    <ModalDialog Title="@(_settingsKey is not null ? L["Keys_SettingsTitle", _settingsKey.Name] : L["Keys_SettingsTitleFallback"])"
+                 Size="Size.Large" ShowSaveButton="true" SaveButtonText="@L["Common_Save"]"
                  SaveButtonIcon="fa-solid fa-floppy-disk"
-                 CloseButtonText="Cancelar" CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="SaveSettingsAsync">
+                 CloseButtonText="@L["Common_Cancel"]" CloseButtonIcon="fa-solid fa-xmark" OnSaveAsync="SaveSettingsAsync">
         <BodyTemplate>
             @if (_settings is null)
             {
-                <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> Carregando…</div>
+                <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> @L["Common_Loading"]</div>
             }
             else
             {
-                <h6 class="text-muted mb-2"><i class="fa-solid fa-shield-halved me-1"></i>Permissões</h6>
+                <h6 class="text-muted mb-2"><i class="fa-solid fa-shield-halved me-1"></i>@L["Keys_Permissions"]</h6>
                 <div class="d-flex align-items-center gap-2 mb-3">
                     <Switch Value="_keyAllowWrite" OnValueChanged="SetWriteAccessAsync" ShowLabel="false" />
                     <div class="small">
-                        <span class="fw-semibold">Tools de escrita (write)</span><br />
-                        <small class="text-muted">Desligado a chave fica somente-leitura — tools que alteram dados respondem "sem permissão".</small>
+                        <span class="fw-semibold">@L["Keys_WriteTools"]</span><br />
+                        <small class="text-muted">@L["Keys_WriteHint"]</small>
                     </div>
                 </div>
 
-                <h6 class="text-muted mb-2"><i class="fa-solid fa-comments me-1"></i>Chat (LLM)</h6>
+                <h6 class="text-muted mb-2"><i class="fa-solid fa-comments me-1"></i>@L["Keys_Chat"]</h6>
                 <div class="form-check mb-3">
                     <input class="form-check-input" type="checkbox" id="useGlobal"
                            @bind="_useGlobal" @bind:after="OnUseGlobalChanged" />
                     <label class="form-check-label" for="useGlobal">
-                        Usar configuração global
+                        @L["Keys_UseGlobal"]
                     </label>
                 </div>
 
                 @if (_useGlobal)
                 {
                     <div class="alert alert-info">
-                        <div><i class="fa-solid fa-link me-1"></i><strong>Endpoint (global):</strong> <code>@_settings.Endpoint</code></div>
-                        <div><i class="fa-solid fa-microchip me-1"></i><strong>Model (global):</strong> <code>@_settings.Model</code></div>
-                        <div><i class="fa-solid fa-key me-1"></i><strong>Key:</strong> @(_settings.HasApiKey ? _settings.ApiKeyHint : "não configurada")</div>
+                        <div><i class="fa-solid fa-link me-1"></i><strong>@L["Keys_EndpointGlobal"]</strong> <code>@_settings.Endpoint</code></div>
+                        <div><i class="fa-solid fa-microchip me-1"></i><strong>@L["Keys_ModelGlobal"]</strong> <code>@_settings.Model</code></div>
+                        <div><i class="fa-solid fa-key me-1"></i><strong>@L["Keys_Key"]</strong> @(_settings.HasApiKey ? _settings.ApiKeyHint : L["Keys_KeyNotSet"].Value)</div>
                     </div>
                 }
                 else
@@ -282,40 +283,38 @@
                             <label class="form-label"><i class="fa-solid fa-link me-1"></i>Endpoint</label>
                             <input type="text" class="form-control font-monospace"
                                    @bind="_settingsForm.Endpoint"
-                                   placeholder="https://api.exemplo.com" autocomplete="off" />
+                                   placeholder="@L["Keys_ExamplePh"]" autocomplete="off" />
                         </div>
                         <div class="col-12 col-md-5">
                             <label class="form-label"><i class="fa-solid fa-microchip me-1"></i>Model</label>
                             <input type="text" class="form-control font-monospace"
                                    @bind="_settingsForm.Model"
-                                   placeholder="nome do modelo" autocomplete="off" />
+                                   placeholder="@L["Keys_ModelPh"]" autocomplete="off" />
                         </div>
                     </div>
 
                     @if (_settings.HasOverride && _settings.OverrideFields.Contains("apiKey"))
                     {
                         <div class="mb-2">
-                            <small class="text-muted">Key sobreposta:</small>
+                            <small class="text-muted">@L["Keys_KeyOverridden"]</small>
                             <code class="ms-1">@_settings.ApiKeyHint</code>
                         </div>
                     }
 
                     <label class="form-label">
-                        <i class="fa-solid fa-key me-1"></i>@(_settings.HasOverride && _settings.OverrideFields.Contains("apiKey") ? "Substituir API key" : "API key")
+                        <i class="fa-solid fa-key me-1"></i>@(_settings.HasOverride && _settings.OverrideFields.Contains("apiKey") ? L["Keys_ReplaceKey"].Value : "API key")
                     </label>
                     <input type="password" class="form-control font-monospace mb-2"
                            @bind="_settingsForm.ApiKey"
-                           placeholder="deixe em branco para manter" autocomplete="off" />
+                           placeholder="@L["Keys_KeyKeepPh"]" autocomplete="off" />
                 }
 
                 @* Per-key integration key overrides — only integrations enabled
                    in Settings are listed (disabled ones leave the MCP catalog). *@
                 @if (_keyIntegrations.Count > 0)
                 {
-                    <h6 class="text-muted mb-1 mt-3"><i class="fa-solid fa-plug me-1"></i>Integrações</h6>
-                    <p class="small text-muted mb-2">
-                        Key própria por integração — em branco a chave usa a key global de Settings.
-                    </p>
+                    <h6 class="text-muted mb-1 mt-3"><i class="fa-solid fa-plug me-1"></i>@L["Keys_Integrations"]</h6>
+                    <p class="small text-muted mb-2">@L["Keys_IntHint"]</p>
                     @foreach (var item in _keyIntegrations)
                     {
                         var st = _intForms[item.Provider];
@@ -325,27 +324,27 @@
                                 <span class="small fw-semibold">@item.DisplayName</span>
                                 @if (pk?.HasKey == true)
                                 {
-                                    <span class="small"><Badge Color="Color.Success">key própria</Badge> <code>@pk.Hint</code></span>
+                                    <span class="small"><Badge Color="Color.Success">@L["Keys_OwnKey"]</Badge> <code>@pk.Hint</code></span>
                                 }
                                 else
                                 {
-                                    <small class="text-muted">usa a key global</small>
+                                    <small class="text-muted">@L["Keys_UsesGlobal"]</small>
                                 }
                             </div>
                             <div class="input-group input-group-sm kh-icon-btns">
                                 <span class="input-group-text"><i class="fa-solid fa-key"></i></span>
                                 <input type="password" class="form-control font-monospace"
                                        @bind="st.Input"
-                                       placeholder="@(pk?.HasKey == true ? "substituir key própria" : "deixe em branco para usar a global")"
+                                       placeholder="@(pk?.HasKey == true ? L["Keys_ReplaceOwnPh"].Value : L["Keys_UseGlobalPh"].Value)"
                                        autocomplete="off" />
                                 <Button Size="Size.Small" Color="Color.Primary" Icon="fa-solid fa-floppy-disk"
-                                        Text="Salvar" IsAsync="true" IsDisabled="st.Saving"
+                                        Text="@L["Common_Save"]" IsAsync="true" IsDisabled="st.Saving"
                                         OnClick="() => SaveIntegrationKeyAsync(item)" />
                                 @if (pk?.HasKey == true)
                                 {
                                     <PopConfirmButton Size="Size.Small" Color="Color.Danger" Icon="fa-solid fa-trash"
-                                                      Text="Remover" Title="Remover key da chave"
-                                                      Content="A key própria será removida; a integração volta a usar a key global."
+                                                      Text="@L["Keys_Remove"]" Title="@L["Keys_RemoveKeyTitle"]"
+                                                      Content="@L["Keys_RemoveContent"]"
                                                       OnConfirm="() => RemoveIntegrationKeyAsync(item)" />
                                 }
                             </div>
@@ -362,7 +361,7 @@
         <FooterTemplate>
             @if (_settings is not null && _settings.HasOverride)
             {
-                <Button Color="Color.Warning" Text="Remover override" Icon="fa-solid fa-trash"
+                <Button Color="Color.Warning" Text="@L["Keys_RemoveOverride"]" Icon="fa-solid fa-trash"
                         OnClick="RemoveSettingsAsync" />
             }
         </FooterTemplate>
@@ -435,7 +434,7 @@
         catch (Exception ex)
         {
             _keys = [];
-            await Toast.Error("Erro", $"Falha ao carregar chaves: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Keys_LoadError", ex.Message]);
         }
     }
 
@@ -450,14 +449,14 @@
     {
         if (string.IsNullOrWhiteSpace(_newName))
         {
-            _createError = "Informe um nome.";
+            _createError = L["Keys_NameRequired"];
             return false;
         }
 
         var result = await Api.CreateKeyAsync(_newName.Trim());
         if (!result.IsSuccess || result.Value is null)
         {
-            _createError = result.Error ?? "Falha ao criar a chave";
+            _createError = result.Error ?? L["Keys_CreateFail"].Value;
             return false;
         }
 
@@ -498,7 +497,7 @@
         }
         catch (Exception ex)
         {
-            await Toast.Error("Erro", $"Falha ao carregar detalhes: {ex.Message}");
+            await Toast.Error(L["Common_Error"], L["Keys_DetailError", ex.Message]);
         }
         finally
         {
@@ -516,11 +515,11 @@
             try
             {
                 await JS.InvokeVoidAsync("navigator.clipboard.writeText", secret);
-                await Toast.Success("Copiado", "Chave completa copiada para a área de transferência.");
+                await Toast.Success(L["Keys_Copied"], L["Keys_CopiedBody"]);
             }
             catch
             {
-                await Toast.Warning("Aviso", "Não foi possível acessar a área de transferência.");
+                await Toast.Warning(L["Common_Notice"], L["Keys_ClipboardWarn"]);
             }
         }
     }
@@ -537,10 +536,10 @@
                 new SetApiKeyRateLimitRequest(_rl.LlmPermits, _rl.LlmWindowSeconds, _rl.SyncPermits, _rl.SyncWindowSeconds));
             if (!result.IsSuccess)
             {
-                await Toast.Error("Erro", result.Error ?? "Falha ao salvar os limites");
+                await Toast.Error(L["Common_Error"], result.Error ?? L["Keys_LimitsSaveFail"].Value);
                 return;
             }
-            await Toast.Success("Salvo", "Rate limit da chave atualizado.");
+            await Toast.Success(L["Keys_Saved"], L["Keys_LimitSaved"]);
             await ReloadAsync();
             _usageKey = _keys?.FirstOrDefault(k => k.Id == _usageKey.Id);
         }
@@ -557,11 +556,11 @@
         var result = await Api.ClearKeyRateLimitAsync(_usageKey.Id);
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error ?? "Falha ao limpar o override");
+            await Toast.Error(L["Common_Error"], result.Error ?? L["Keys_ClearFail"].Value);
             return;
         }
         _rl.LlmPermits = _rl.LlmWindowSeconds = _rl.SyncPermits = _rl.SyncWindowSeconds = null;
-        await Toast.Success("Limpo", "A chave voltou aos limites globais.");
+        await Toast.Success(L["Keys_Cleared"], L["Keys_LimitsCleared"]);
         await ReloadAsync();
         _usageKey = _keys?.FirstOrDefault(k => k.Id == _usageKey.Id);
     }
@@ -577,10 +576,10 @@
         var result = await Api.RevokeKeyAsync(key.Id);
         if (!result.IsSuccess)
         {
-            await Toast.Error("Erro", result.Error!);
+            await Toast.Error(L["Common_Error"], result.Error!);
             return;
         }
-        await Toast.Success("Revogada", $"Chave '{key.Name}' revogada.");
+        await Toast.Success(L["Keys_RevokedToast"], L["Keys_RevokedBody", key.Name]);
         await ReloadAsync();
     }
 
@@ -613,7 +612,7 @@
         }
         catch (Exception ex)
         {
-            _settingsError = $"Falha ao carregar configuração: {ex.Message}";
+            _settingsError = L["Keys_SettingsLoadFail", ex.Message];
         }
 
         // Integrations list fails soft — the chat section stays usable.
@@ -663,12 +662,12 @@
                 return false;
             }
 
-            await Toast.Success("Salvo", "Configuração de chat atualizada.");
+            await Toast.Success(L["Keys_Saved"], L["Keys_ChatSaved"]);
             return true;
         }
         catch (Exception ex)
         {
-            _settingsError = $"Falha ao salvar: {ex.Message}";
+            _settingsError = L["Keys_SaveFail", ex.Message];
             return false;
         }
     }
@@ -682,15 +681,15 @@
         var result = await Api.SetKeyWriteAccessAsync(_settingsKey.Id, allowWrite);
         if (!result.IsSuccess)
         {
-            _settingsError = result.Error ?? "Falha ao atualizar a permissão";
+            _settingsError = result.Error ?? L["Keys_PermFail"].Value;
             return;
         }
 
         _keyAllowWrite = allowWrite;
-        await Toast.Success("Permissões",
+        await Toast.Success(L["Keys_Permissions"],
             allowWrite
-                ? "Tools de escrita habilitadas para esta chave."
-                : "Chave agora é somente-leitura — write retorna 'sem permissão'.");
+                ? L["Keys_WriteEnabled"]
+                : L["Keys_ReadOnly"]);
         await ReloadAsync();
         _settingsKey = _keys?.FirstOrDefault(k => k.Id == _settingsKey.Id) ?? _settingsKey;
     }
@@ -704,7 +703,7 @@
             return;
         if (string.IsNullOrWhiteSpace(st.Input))
         {
-            await Toast.Warning("Key vazia", $"Informe a key de {item.DisplayName} antes de salvar.");
+            await Toast.Warning(L["Keys_EmptyKey"], L["Keys_EnterKey", item.DisplayName]);
             return;
         }
 
@@ -715,17 +714,17 @@
             var result = await SettingsApi.SetApiKeyIntegrationKeyAsync(_settingsKey.Id, item.Provider, st.Input);
             if (!result.IsSuccess)
             {
-                _settingsError = result.Error ?? "Falha ao salvar a key";
+                _settingsError = result.Error ?? L["Keys_KeySaveFail"].Value;
                 return;
             }
 
             st.Input = "";
-            await Toast.Success("Salvo", $"Key de {item.DisplayName} gravada para esta chave.");
+            await Toast.Success(L["Keys_Saved"], L["Keys_KeySaved", item.DisplayName]);
             _settings = await SettingsApi.GetApiKeyChatAsync(_settingsKey.Id);
         }
         catch (Exception ex)
         {
-            _settingsError = $"Falha ao salvar: {ex.Message}";
+            _settingsError = L["Keys_SaveFail", ex.Message];
         }
         finally
         {
@@ -743,16 +742,16 @@
             var result = await SettingsApi.RemoveApiKeyIntegrationKeyAsync(_settingsKey.Id, item.Provider);
             if (!result.IsSuccess)
             {
-                _settingsError = result.Error ?? "Falha ao remover a key";
+                _settingsError = result.Error ?? L["Keys_KeyRemoveFail"].Value;
                 return;
             }
 
-            await Toast.Success("Removido", $"{item.DisplayName} voltou a usar a key global.");
+            await Toast.Success(L["Keys_Removed"], L["Keys_BackToGlobal", item.DisplayName]);
             _settings = await SettingsApi.GetApiKeyChatAsync(_settingsKey.Id);
         }
         catch (Exception ex)
         {
-            _settingsError = $"Falha ao remover: {ex.Message}";
+            _settingsError = L["Keys_RemoveFail2", ex.Message];
         }
     }
 
@@ -770,7 +769,7 @@
                 return;
             }
 
-            await Toast.Success("Removido", "Override removido — configuração global volta a valer.");
+            await Toast.Success(L["Keys_Removed"], L["Keys_OverrideRemoved"]);
             _settings = await SettingsApi.GetApiKeyChatAsync(_settingsKey.Id);
             _useGlobal = true;
             _settingsForm.Endpoint = null;
@@ -780,7 +779,7 @@
         }
         catch (Exception ex)
         {
-            _settingsError = $"Falha ao remover: {ex.Message}";
+            _settingsError = L["Keys_RemoveFail2", ex.Message];
         }
     }
 }
