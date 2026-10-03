@@ -13,6 +13,47 @@
 
 Plataforma de conhecimento standalone tudo-em-um: UI administrativa Blazor WebAssembly, API REST, servidor MCP nativo (Streamable HTTP + SSE legado), persistência SQLite, embeddings e vector stores plugáveis, retrieval híbrido (FTS5 + RRF vetorial + loop corretivo), extração de entidades/relações GraphRAG, chat agêntico com aprovações HITL, defesa contra prompt-injection, rate limiting particionado, fila de ingestão assíncrona, conectores de cloud storage e observabilidade OpenTelemetry — tudo em um único processo Kestrel hospedado .NET 10.
 
+## Telas
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/home.png) | ![Fontes de conhecimento](docs/screenshots/sources.png) |
+| ![Chat](docs/screenshots/chat.png) | ![Monitor MCP](docs/screenshots/monitor.png) |
+| ![Playground](docs/screenshots/playground.png) | ![Grafo de conhecimento](docs/screenshots/graph.png) |
+| ![Eval](docs/screenshots/eval.png) | ![Qualidade RAG](docs/screenshots/rag-quality.png) |
+| ![Aprovações](docs/screenshots/approvals.png) | ![Settings](docs/screenshots/settings.png) |
+
+## Como funciona
+
+Tudo roda em **um único processo Kestrel**: a SPA administrativa Blazor WebAssembly, a API REST de gestão, o servidor MCP nativo e a pipeline de ingestão compartilham o mesmo banco EF Core.
+
+```mermaid
+flowchart LR
+    subgraph Ingestão
+        A[Conectores<br/>Obsidian · Web · Docs · APIs · SQL · S3/Azure/OCI · RSS/YouTube/Git] --> B[Chunking<br/>semântico · enriquecimento contextual]
+        B --> C[Embeddings<br/>Ollama · OpenAI · Voyage · Cohere · ONNX · determinístico]
+        C --> D[(Vector store<br/>sqlite-vec · pgvector<br/>+ FTS5)]
+    end
+    subgraph Retrieval
+        Q[Query] --> R[Busca híbrida<br/>vetor + lexical + grafo<br/>RRF · MMR · autocut]
+        R --> S[Loop corretivo<br/>grading → retry → abstenção]
+        S --> T[Síntese<br/>IChatClient · citações]
+    end
+    subgraph Agente
+        T --> L[Loop de agente<br/>tool-calling · Chain AST<br/>aprovações HITL · stream SSE]
+    end
+    D --> R
+    L --> M[MCP /mcp · A2A /a2a · REST /api · SPA]
+```
+
+- **Ingestão** — fontes são registradas na UI e sincronizadas de forma assíncrona (`202 + jobId`). Cada conector extrai documentos, gera chunks (com breakpoints semânticos e enriquecimento contextual opcionais) e embute no vector store configurado. O sync incremental usa fingerprint por documento (ETag, `last_edited_time`, SHA do commit); o `chunker-version` marca linhas para reindex seletivo.
+- **Retrieval** — toda query dispara em paralelo KNN vetorial, FTS5 e o grafo de conhecimento, fundidos por reciprocal-rank fusion, depois diversificados com MMR e quota por documento. Um estágio corretivo avalia os resultados e tenta de novo ou se abstém em vez de responder com contexto fraco. O rewrite da query é history-aware; expansão multi-query, HyDE e relaxação hierárquica de filtros são opt-in.
+- **Síntese** — providers compatíveis com `IChatClient` (endpoint OpenAI-compatible ou Ollama) geram a resposta fundamentada com citações; `ask_knowledge` entrega a mesma síntese para clients MCP. A tríade RAG (context relevance, groundedness, answer relevance) é avaliada em `RagEvaluations` e aparece em `/rag-quality`.
+- **Loop de agente** — `agent_chat`/`/api/agent` executam o loop de tool-calling (busca, grafo, proxies upstream, ações live). Tool calls órfãs são reparadas via chain AST, o histórico é compactado/sumarizado dentro de um orçamento de mensagens e tools de escrita pausam para aprovação HITL (retomada automática após aprovar). Streaming token a token via SSE.
+- **MCP** — `/mcp` fala Streamable HTTP com sessões híbridas (stateful para clients com handshake `initialize`, stateless para `2026-07-28`); `/mcp/sse` é o transporte legado. O catálogo de tools é dinâmico (tools nativas + sources `McpProxy` + proxies upstream firecrawl/tavily/deepwiki/context7), com tools longas elegíveis a tasks, elicitation para aprovações, settings por chave e annotations.
+- **A2A** — `/.well-known/agent-card.json` anuncia o agente; `/a2a` executa `ask_knowledge`/`search_knowledge`/`agent_chat`/`read_document` sob o escopo da chave `aft_*` do chamador, com streaming, push notifications e tasks duráveis.
+- **Autenticação** — login por cookie na SPA (troca de senha obrigatória no primeiro boot), chaves `aft_*` para acesso programático com escopos por chave (fontes/tools permitidas), rate limits e auditoria de uso.
+
 ## Endpoints
 
 | Rota | Propósito |

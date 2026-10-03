@@ -171,7 +171,7 @@
             {
                 await foreach (var msg in Streaming.StreamAsync(
                                    "api/agent/stream",
-                                   new { prompt = content, threadId }))
+                                   new AgentRequest { Prompt = content, ThreadId = threadId }))
                 {
                     received = true;
                     HandleStreamEvent(msg);

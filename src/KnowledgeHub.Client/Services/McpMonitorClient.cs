@@ -1,18 +1,10 @@
+using KnowledgeHub.Shared;
 using KnowledgeHub.Shared.Contracts;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 
 namespace KnowledgeHub.Client.Services;
-
-/// <summary>Hub event DTOs mirrored from SPEC-05 §5.</summary>
-public sealed record SessionOpenedEvent(string SessionId, DateTimeOffset ConnectedAt, string? Caller);
-public sealed record SessionClosedEvent(string SessionId, string? Caller);
-
-/// <summary>SPEC-20260925-job-progress-feed: ingestion job tick/terminal event.</summary>
-public sealed record IngestionProgressEventDto(
-    Guid JobId, Guid SourceId, string Status,
-    int Processed, int Skipped, int Failed, int ChunksCreated);
 
 /// <summary>
 /// Wraps the SignalR connection to /hubs/mcp (SPEC-05 RF-003).
@@ -26,6 +18,9 @@ public sealed class McpMonitorClient(NavigationManager nav) : IAsyncDisposable
     private readonly HubConnection _connection = new HubConnectionBuilder()
         .WithUrl(nav.ToAbsoluteUri("/hubs/mcp"),
             HttpTransportType.WebSockets | HttpTransportType.LongPolling)
+        // SharedJson.Options: hub payload DTOs resolve via source-gen metadata —
+        // reflection-based deserialization is off in trimmed WASM builds.
+        .AddJsonProtocol(o => o.PayloadSerializerOptions = SharedJson.Options)
         .WithAutomaticReconnect()
         .Build();
 

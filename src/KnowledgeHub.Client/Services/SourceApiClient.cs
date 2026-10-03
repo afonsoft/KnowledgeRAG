@@ -84,7 +84,7 @@ public sealed class SourceApiClient(HttpClient http)
             var body = await response.Content.ReadAsStringAsync(ct);
             if (!string.IsNullOrWhiteSpace(body))
                 detail += $"\n{body}";
-            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(body);
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(body, SharedJson.Options);
             var error = dict is not null &&
                 (dict.TryGetValue("error", out var e) || dict.TryGetValue("detail", out e))
                     ? e : null;
@@ -100,26 +100,4 @@ public sealed class SourceApiClient(HttpClient http)
 public sealed record ApiResult<T>(T? Value, string? Error, string? Detail = null)
 {
     public bool IsSuccess => Error is null;
-}
-
-/// <summary>202 response from POST /api/sources/{id}/sync (queued mode).</summary>
-public sealed record SyncJobEnqueueDto(Guid JobId, string Status, bool Existing);
-
-/// <summary>GET /api/ingestion/jobs/{id} response.</summary>
-public sealed record IngestionJobDto
-{
-    public Guid Id { get; init; }
-    public Guid SourceId { get; init; }
-    public string Kind { get; init; } = "";
-    public string Status { get; init; } = "";
-    public int DocsProcessed { get; init; }
-    public int DocsSkipped { get; init; }
-    public int DocsFailed { get; init; }
-    public int ChunksCreated { get; init; }
-    public string? Error { get; init; }
-    /// <summary>SPEC-20260926-job-error-details RF-002: per-document warnings/failures.</summary>
-    public List<string>? Warnings { get; init; }
-    public DateTimeOffset CreatedAt { get; init; }
-    public DateTimeOffset? StartedAt { get; init; }
-    public DateTimeOffset? FinishedAt { get; init; }
 }

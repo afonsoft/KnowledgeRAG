@@ -574,7 +574,7 @@
         if (!_selected.ReadOnly && !_awaitingWriteConfirm)
         {
             _pendingArgsJson = JsonSerializer.Serialize(
-                args, new JsonSerializerOptions { WriteIndented = true });
+                args, new JsonSerializerOptions(SharedJson.Options) { WriteIndented = true });
             _awaitingWriteConfirm = true;
             return;
         }
@@ -592,7 +592,7 @@
 
         try
         {
-            var result = await Tools.CallAsync(_selected.Name, JsonSerializer.Serialize(args));
+            var result = await Tools.CallAsync(_selected.Name, JsonSerializer.Serialize(args, SharedJson.Options));
             ApplyResult(result, sw);
         }
         catch (Exception ex)
@@ -643,7 +643,7 @@
     private async Task<bool> TryStreamAsync(Dictionary<string, JsonElement> args, System.Diagnostics.Stopwatch sw)
     {
         var path = _selected!.Name == "agent_chat" ? "api/agent/stream" : "api/ask/stream";
-        _result = JsonSerializer.SerializeToElement(new { });
+        _result = JsonDocument.Parse("{}").RootElement;
         _agentAnswerSb.Clear();
         _structuredAnswer = "";
         _citations = [];

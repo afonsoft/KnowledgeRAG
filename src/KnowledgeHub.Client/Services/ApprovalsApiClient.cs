@@ -15,8 +15,8 @@ public sealed class ApprovalsApiClient(HttpClient http)
 
     public async Task<ApprovalDto?> ApproveAsync(Guid id, string? approvedArgsJson = null, CancellationToken ct = default)
     {
-        object? body = approvedArgsJson is { Length: > 0 } json
-            ? new { approvedArgs = JsonDocument.Parse(json).RootElement }
+        ApproveApprovalRequest? body = approvedArgsJson is { Length: > 0 } json
+            ? new ApproveApprovalRequest { ApprovedArgs = JsonDocument.Parse(json).RootElement }
             : null;
         var response = await http.PostAsJsonAsync($"api/approvals/{id}/approve", body, SharedJson.Options, ct);
         response.EnsureSuccessStatusCode();

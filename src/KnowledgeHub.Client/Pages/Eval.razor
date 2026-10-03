@@ -154,7 +154,7 @@
             </div>
             <div class="mt-2">
                 <Textarea @bind-Value="_gateJson" DisplayText="Gate rules (JSON, opcional)" ShowLabel="true" rows="3"
-                          PlaceHolder="[{""metric"":""recall_at_k"",""direction"":""gte"",""threshold"":0.8}]" />
+                          PlaceHolder='[{"metric":"recall_at_k","direction":"gte","threshold":0.8}]' />
             </div>
             <Button Color="Color.Primary" Text="@(_running ? "Executando…" : "Executar eval")"
                     Icon="fa-solid fa-flask" TooltipText="Executar eval" IsDisabled="_running" OnClick="RunEvalAsync" class="mt-2" />

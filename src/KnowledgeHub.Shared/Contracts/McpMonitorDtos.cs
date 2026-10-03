@@ -44,3 +44,17 @@ public static class McpMonitorEventKind
     public const string ApprovalRequested = "ApprovalRequested";
     public const string ApprovalResolved = "ApprovalResolved";
 }
+
+/// <summary>SignalR <c>SessionOpened</c> payload from /hubs/mcp.</summary>
+public sealed record SessionOpenedEvent(string SessionId, DateTimeOffset ConnectedAt, string? Caller);
+
+/// <summary>SignalR <c>SessionClosed</c> payload from /hubs/mcp.</summary>
+public sealed record SessionClosedEvent(string SessionId, string? Caller);
+
+/// <summary>
+/// SignalR <c>IngestionProgress</c> payload (SPEC-20260925-job-progress-feed) —
+/// per-job counters only, never doc content.
+/// </summary>
+public sealed record IngestionProgressEventDto(
+    Guid JobId, Guid SourceId, string Status,
+    int Processed, int Skipped, int Failed, int ChunksCreated);
