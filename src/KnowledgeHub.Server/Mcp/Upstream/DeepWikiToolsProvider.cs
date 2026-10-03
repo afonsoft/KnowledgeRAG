@@ -32,11 +32,9 @@ public sealed partial class DeepWikiToolsProvider(
         "DeepWiki API key not configured — open Settings (/settings) or set DeepWiki__ApiKey.";
 
     private readonly DeepWikiOptions _options = options.Value;
-    private readonly SemaphoreSlim _cacheGate = new(1, 1);
-    // Perf pass (2026-10-03): tools list + expiry travel in ONE reference so
-    // reads/invalidation are a single atomic swap — no lock on either path.
-    private ToolsCacheSnapshot? _toolsCache;
-    private sealed record ToolsCacheSnapshot(IReadOnlyList<CatalogTool> Tools, DateTimeOffset ExpiresAt);
+    private UpstreamToolsCache? _toolsCache;
+    private UpstreamToolsCache ToolsCache =>
+        _toolsCache ??= new(FetchDynamicToolsAsync, TimeSpan.FromSeconds(options.Value.ToolsCacheSeconds));
 
     /// <summary>Test seam — supplies upstream protocol tools without a live
     /// <see cref="McpClient"/> session.</summary>
@@ -92,47 +90,20 @@ public sealed partial class DeepWikiToolsProvider(
 
     /// <summary>Drops the cached upstream tools/list — called when the
     /// integration secret changes via Settings.</summary>
-    public void InvalidateToolsCache()
+    public void InvalidateToolsCache() => _toolsCache?.Invalidate();
+
+    private Task<IReadOnlyList<CatalogTool>> GetDynamicToolsAsync(CancellationToken cancellationToken) =>
+        ToolsCache.GetAsync(
+            ex => logger.LogWarning(ex, "deepwiki tools/list failed — serving cached/static set"),
+            cancellationToken);
+
+    private async Task<IReadOnlyList<CatalogTool>> FetchDynamicToolsAsync(CancellationToken cancellationToken)
     {
-        // Lock-free: the next reader sees a null snapshot and re-fetches —
-        // no semaphore Wait() blocking a thread-pool thread on the settings path.
-        Interlocked.Exchange(ref _toolsCache, null);
-    }
-
-    private async Task<IReadOnlyList<CatalogTool>> GetDynamicToolsAsync(CancellationToken cancellationToken)
-    {
-        var snapshot = Volatile.Read(ref _toolsCache);
-        if (snapshot is not null && DateTimeOffset.UtcNow < snapshot.ExpiresAt)
-            return snapshot.Tools;
-
-        await _cacheGate.WaitAsync(cancellationToken);
-        try
-        {
-            snapshot = _toolsCache;
-            if (snapshot is not null && DateTimeOffset.UtcNow < snapshot.ExpiresAt)
-                return snapshot.Tools;
-
-            try
-            {
-                var protocolTools = DynamicToolsSource is { } source
-                    ? await source(cancellationToken)
-                    : (await upstream.ListToolsAsync(cancellationToken))
-                        .Select(t => t.ProtocolTool).ToList();
-                _toolsCache = new ToolsCacheSnapshot(
-                    protocolTools.Select(MapTool).ToList(),
-                    DateTimeOffset.UtcNow.AddSeconds(_options.ToolsCacheSeconds));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-            {
-                // last-known-good wins; empty when nothing was ever fetched.
-                logger.LogWarning(ex, "deepwiki tools/list failed — serving cached/static set");
-            }
-            return _toolsCache?.Tools ?? [];
-        }
-        finally
-        {
-            _cacheGate.Release();
-        }
+        var protocolTools = DynamicToolsSource is { } source
+            ? await source(cancellationToken)
+            : (await upstream.ListToolsAsync(cancellationToken))
+                .Select(t => t.ProtocolTool).ToList();
+        return protocolTools.Select(MapTool).ToList();
     }
 
     private CatalogTool MapTool(Tool proto)
