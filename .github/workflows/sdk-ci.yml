@@ -1,6 +1,10 @@
 name: 🧩 SDK CI
 
 # Continuous build+test for the client SDK libraries under sdks/.
+concurrency:
+  group: sdk-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 on:
   push:
     branches: [main]
@@ -113,3 +117,86 @@ jobs:
           go vet ./...
           go build ./...
           go test ./...
+
+  # Real MCP E2E: boots the hub (SQLite defaults, no LLM provider needed —
+  # the live tests accept the clean provider-missing error paths) and runs
+  # each SDK's env-gated live tests against it. Covers tools/list +
+  # tools/call + typed facades + SSE error paths end to end.
+  live-e2e:
+    name: 🔌 Live E2E vs real hub (Java + Go)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: 🗄️ Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: ☕ Setup JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: 🐹 Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16   # v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: sdks/go/go.sum
+
+      - name: 🚀 Boot the hub
+        run: |
+          dotnet build src/KnowledgeHub.Server -c Release
+          # launchSettings (port 5009) only applies to `dotnet run` — pin the URL.
+          # The csproj bakes a RID into build output, so the host binary lives
+          # under the linux-x64 folder, not directly in net10.0/.
+          ASPNETCORE_URLS=http://localhost:5009 nohup ./src/KnowledgeHub.Server/bin/Release/net10.0/linux-x64/KnowledgeHub > /tmp/hub.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5009/health/live > /dev/null; then
+              echo "hub up after ~$((i*2))s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::hub did not become healthy"; tail -50 /tmp/hub.log; exit 1
+
+      # Fresh DB seeds admin with the documented first-boot password `123qwe`
+      # and MustChangePassword gates every other endpoint — so the sequence is
+      # login → change-password → mint key. `-c -b` on every call persists the
+      # re-issued cookie (change-password rotates it).
+      - name: 🔑 Mint test API key
+        run: |
+          curl -sf -c /tmp/jar -X POST http://localhost:5009/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"123qwe"}' > /dev/null
+          curl -sf -b /tmp/jar -c /tmp/jar -X POST http://localhost:5009/api/auth/change-password \
+            -H 'Content-Type: application/json' \
+            -d '{"currentPassword":"123qwe","newPassword":"CiTest1234!"}' -o /dev/null
+          KEY=$(curl -sf -b /tmp/jar -c /tmp/jar -X POST http://localhost:5009/api/apikeys \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"sdk-ci-e2e"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["key"])')
+          echo "::add-mask::$KEY"
+          echo "KNOWLEDGEHUB_KEY=$KEY" >> $GITHUB_ENV
+          echo "KNOWLEDGEHUB_URL=http://localhost:5009" >> $GITHUB_ENV
+
+      - name: ☕ Java live E2E
+        working-directory: sdks/java
+        run: mvn -B test -Dtest=KnowledgeHubLiveTest
+
+      - name: 🐹 Go live E2E
+        working-directory: sdks/go
+        run: go test -v -run 'TestLive_' ./...
+
+      - name: 🛑 Stop the hub
+        if: always()
+        run: pkill -f 'linux-x64/KnowledgeHub' || true

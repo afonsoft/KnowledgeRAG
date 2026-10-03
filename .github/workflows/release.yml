@@ -47,6 +47,14 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Cache NuGet Packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: 🔧 Restore & Build
         run: |
           dotnet restore KnowledgeHub.slnx
@@ -102,6 +110,9 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e   # v4.3.0
+
       - name: 🔐 Log in to GitHub Container Registry
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567   # v3
         with:
@@ -119,6 +130,8 @@ jobs:
           tags: |
             ghcr.io/afonsoft/knowledgerag:${{ needs.validate-tag.outputs.version }}
             ghcr.io/afonsoft/knowledgerag:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true
 
       # Docker Hub publica afonsoft/knowledgerag quando os secrets DOCKERHUB_*
       # existirem no repo — sem eles os steps abaixo são pulados.
