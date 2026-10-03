@@ -407,3 +407,13 @@ img, table, pre, code, .table-responsive {
 .badge {
     margin-left: 0.35rem;
 }
+
+/* Status badges rendered as real <button> (a11y): strip chrome so the badge
+   looks identical to the old span — the button brings keyboard support. */
+.kh-badge-btn {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    line-height: 1;
+    cursor: pointer;
+}
