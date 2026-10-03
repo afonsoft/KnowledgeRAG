@@ -63,7 +63,7 @@ else
                                 <Badge Color="Color.Secondary">não</Badge>
                             }
                         </td>
-                        <td>v@f.Version</td>
+                        <td>v@(f.Version)</td>
                         <td><small class="text-muted">@f.UpdatedAt.LocalDateTime.ToString("g")</small></td>
                         <td>
                             <div class="d-flex gap-1 flex-wrap">
@@ -108,6 +108,8 @@ else
                 </div>
             </div>
 
+            @if (_edit.View != FlowEditorView.Json)
+            {
             <h2 class="h6 mt-4">Inputs (bloco start)</h2>
             <div class="table-responsive">
                 <table class="table table-sm align-middle">
@@ -119,7 +121,7 @@ else
                             <tr>
                                 <td><BootstrapInput @bind-Value="input.Name" placeholder="customer_id" /></td>
                                 <td>
-                                    <Select @bind-Value="input.Type" Items="InputTypes" />
+                                    <Select @bind-Value="input.Type" Items="FlowEditModel.InputTypes" />
                                 </td>
                                 <td><Switch @bind-Value="input.Required" /></td>
                                 <td><BootstrapInput @bind-Value="input.DefaultJson" placeholder="JSON" /></td>
@@ -135,48 +137,70 @@ else
             </div>
             <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="Adicionar input"
                     OnClick="AddInput" />
-
-            <h2 class="h6 mt-4">Steps</h2>
-            @if (_edit.Steps.Count == 0)
-            {
-                <div class="text-muted small">Sem steps — adicione o primeiro.</div>
             }
-            @for (var i = 0; i < _edit.Steps.Count; i++)
-            {
-                var idx = i;
-                var s = _edit.Steps[idx];
-                <div class="border rounded p-2 mb-2">
-                    <div class="d-flex gap-2 flex-wrap align-items-center">
-                        <span class="badge bg-secondary">#@(idx + 1)</span>
-                        <BootstrapInput @bind-Value="s.Id" placeholder="id (ex.: fetch)" style="width:10rem" />
-                        <Select @bind-Value="s.Type" Items="StepTypes" style="width:9rem" />
-                        <BootstrapInput @bind-Value="s.Name" placeholder="rótulo" style="width:12rem" />
-                        <div class="ms-auto d-flex gap-1">
-                            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-up" TooltipText="Mover para cima"
-                                    IsDisabled="idx == 0" OnClick="() => MoveStep(idx, -1)" />
-                            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-down" TooltipText="Mover para baixo"
-                                    IsDisabled="idx == _edit.Steps.Count - 1" OnClick="() => MoveStep(idx, 1)" />
-                            <Button Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
-                                    TooltipText="Remover step" OnClick="() => _edit.Steps.RemoveAt(idx)" />
-                        </div>
-                    </div>
-                    <Textarea @bind-Value="s.ConfigJson" placeholder='Config JSON — ex.: {"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}'
-                              rows="3" class="font-monospace mt-2" />
-                    @if (s.Type is "condition" or "foreach")
-                    {
-                        <Textarea @bind-Value="s.StepsJson" rows="2" class="font-monospace mt-1"
-                                  placeholder='Nested steps JSON — foreach usa a lista acima; condition usa config.branches[].steps' />
-                    }
+
+            <div class="d-flex align-items-center gap-2 mt-4 mb-2">
+                <h2 class="h6 mb-0">Steps</h2>
+                <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Modo do editor">
+                    <button type="button" class="btn @(_edit.View == FlowEditorView.List ? "btn-primary" : "btn-outline-secondary")"
+                            @onclick="() => _edit.View = FlowEditorView.List">
+                        <i class="fa-solid fa-list" aria-hidden="true"></i> Lista
+                    </button>
+                    <button type="button" class="btn @(_edit.View == FlowEditorView.Canvas ? "btn-primary" : "btn-outline-secondary")"
+                            @onclick="() => _edit.View = FlowEditorView.Canvas">
+                        <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Canvas
+                    </button>
+                    <button type="button" class="btn @(_edit.View == FlowEditorView.Json ? "btn-primary" : "btn-outline-secondary")"
+                            @onclick="() => { SyncDefinitionJson(); _edit.View = FlowEditorView.Json; }">
+                        <i class="fa-solid fa-code" aria-hidden="true"></i> JSON
+                    </button>
                 </div>
-            }
-            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="Adicionar step" OnClick="AddStep" />
-
-            <div class="mt-3">
-                <Switch @bind-Value="_edit.RawMode" DisplayText="Editar JSON diretamente (modo avançado)" ShowLabel="true" />
             </div>
-            @if (_edit.RawMode)
+
+            @if (_edit.View == FlowEditorView.Canvas)
             {
-                <Textarea @bind-Value="_edit.DefinitionJson" rows="10" class="font-monospace mt-2" />
+                <FlowCanvas Steps="_edit.Steps" Inputs="_edit.Inputs" OnChanged="StateHasChanged" />
+            }
+            else if (_edit.View == FlowEditorView.Json)
+            {
+                <Textarea @bind-Value="_edit.DefinitionJson" rows="12" class="font-monospace"
+                          DisplayText="Definição completa (inputs + steps)" ShowLabel="true" />
+            }
+            else
+            {
+                @if (_edit.Steps.Count == 0)
+                {
+                    <div class="text-muted small">Sem steps — adicione o primeiro.</div>
+                }
+                @for (var i = 0; i < _edit.Steps.Count; i++)
+                {
+                    var idx = i;
+                    var s = _edit.Steps[idx];
+                    <div class="border rounded p-2 mb-2">
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
+                            <span class="badge bg-secondary">#@(idx + 1)</span>
+                            <BootstrapInput @bind-Value="s.Id" placeholder="id (ex.: fetch)" style="width:10rem" />
+                            <Select @bind-Value="s.Type" Items="FlowEditModel.StepTypes" style="width:9rem" />
+                            <BootstrapInput @bind-Value="s.Name" placeholder="rótulo" style="width:12rem" />
+                            <div class="ms-auto d-flex gap-1">
+                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-up" TooltipText="Mover para cima"
+                                        IsDisabled="idx == 0" OnClick="() => MoveStep(idx, -1)" />
+                                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-arrow-down" TooltipText="Mover para baixo"
+                                        IsDisabled="idx == _edit.Steps.Count - 1" OnClick="() => MoveStep(idx, 1)" />
+                                <Button Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
+                                        TooltipText="Remover step" OnClick="() => _edit.Steps.RemoveAt(idx)" />
+                            </div>
+                        </div>
+                        <Textarea @bind-Value="s.ConfigJson" placeholder='Config JSON — ex.: {"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}'
+                                  rows="3" class="font-monospace mt-2" />
+                        @if (s.Type is "condition" or "foreach")
+                        {
+                            <Textarea @bind-Value="s.StepsJson" rows="2" class="font-monospace mt-1"
+                                      placeholder='Nested steps JSON — foreach usa a lista acima; condition usa config.branches[].steps' />
+                        }
+                    </div>
+                }
+                <Button Size="Size.ExtraSmall" Icon="fa-solid fa-plus" Text="Adicionar step" OnClick="AddStep" />
             }
 
             @if (!string.IsNullOrEmpty(_editError))
@@ -276,7 +300,7 @@ else
                                 <tr>
                                     <td><small>@r.CreatedAt.LocalDateTime.ToString("g")</small></td>
                                     <td>@r.Status</td>
-                                    <td>v@r.FlowVersion</td>
+                                    <td>v@(r.FlowVersion)</td>
                                     <td>@r.DurationMs</td>
                                     <td><small class="text-break">@r.Error</small></td>
                                 </tr>
@@ -299,25 +323,6 @@ else
     private FlowRunResultDto? _runResult;
     private FlowDto? _runsTarget;
     private IReadOnlyList<FlowRunDto>? _runs;
-
-    private static readonly List<SelectedItem> InputTypes =
-    [
-        new("string", "string"), new("number", "number"), new("boolean", "boolean"),
-        new("object", "object"), new("array", "array"),
-    ];
-
-    private static readonly List<SelectedItem> StepTypes =
-    [
-        new("tool", "tool — catálogo MCP"),
-        new("knowledge", "knowledge — search/ask"),
-        new("llm", "llm — prompt"),
-        new("http", "http — chamada externa"),
-        new("condition", "condition — branches"),
-        new("foreach", "foreach — loop"),
-        new("transform", "transform — reshape"),
-        new("output", "output — resultado"),
-        new("fail", "fail — abortar"),
-    ];
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -366,8 +371,8 @@ else
     private (FlowDefinitionDto? Def, string? Error) BuildDefinition()
     {
         if (_edit is null) return (null, "editor vazio");
-        // Raw JSON mode wins over the structured editors
-        if (_edit.RawMode && !string.IsNullOrWhiteSpace(_edit.DefinitionJson))
+        // Raw JSON view wins over the structured editors
+        if (_edit.View == FlowEditorView.Json && !string.IsNullOrWhiteSpace(_edit.DefinitionJson))
         {
             try
             {
@@ -481,79 +486,17 @@ else
         _runs = await Api.RunsAsync(f.Id);
     }
 
-    private sealed class FlowInputModel
+    /// <summary>Serialize the structured model back into DefinitionJson so the
+    /// JSON view starts from the current list/canvas state (JSON edits then win
+    /// while that view is active).</summary>
+    private void SyncDefinitionJson()
     {
-        public string Name { get; set; } = "";
-        public string Type { get; set; } = "string";
-        public bool Required { get; set; }
-        public string? DefaultJson { get; set; }
-        public string? Description { get; set; }
-    }
-
-    private sealed class FlowStepModel
-    {
-        public string Id { get; set; } = "";
-        public string Type { get; set; } = "tool";
-        public string? Name { get; set; }
-        public string ConfigJson { get; set; } = "{}";
-        public string StepsJson { get; set; } = "";
-    }
-
-    private sealed class FlowEditModel
-    {
-        public Guid? Id;
-        public string Name { get; set; } = "";
-        public string? Description { get; set; }
-        public bool Enabled = true;
-        public List<FlowInputModel> Inputs { get; } = new();
-        public List<FlowStepModel> Steps { get; } = new();
-        public string DefinitionJson { get; set; } = "{}";
-        /// <summary>When true, DefinitionJson is authoritative over the
-        /// structured inputs/steps editors.</summary>
-        public bool RawMode;
-
-        public static FlowEditModel Empty() => new()
-        {
-            DefinitionJson = """
-                {"inputs":[],"steps":[{"id":"step1","type":"tool","config":{"tool":"search_knowledge","args":{"query":"{{vars.q}}"}}}]}
-                """,
-        };
-
-        public static FlowEditModel From(FlowDetailDto detail)
-        {
-            var model = new FlowEditModel
-            {
-                Id = detail.Flow.Id,
-                Name = detail.Flow.Name,
-                Description = detail.Flow.Description,
-                Enabled = detail.Flow.Enabled,
-                DefinitionJson = JsonSerializer.Serialize(detail.Definition, SharedJson.Options),
-            };
-            foreach (var i in detail.Definition.Inputs)
-            {
-                model.Inputs.Add(new FlowInputModel
-                {
-                    Name = i.Name,
-                    Type = i.Type,
-                    Required = i.Required,
-                    Description = i.Description,
-                    DefaultJson = i.Default?.ToJsonString(),
-                });
-            }
-            foreach (var s in detail.Definition.Steps)
-            {
-                model.Steps.Add(new FlowStepModel
-                {
-                    Id = s.Id,
-                    Type = s.Type,
-                    Name = s.Name,
-                    ConfigJson = s.Config?.ToJsonString() ?? "{}",
-                    StepsJson = s.Steps is { Count: > 0 }
-                        ? JsonSerializer.Serialize(s.Steps, SharedJson.Options)
-                        : "",
-                });
-            }
-            return model;
-        }
+        if (_edit is null) return;
+        var view = _edit.View;
+        _edit.View = FlowEditorView.List; // force structured build
+        var (def, _) = BuildDefinition();
+        _edit.View = view;
+        if (def is not null)
+            _edit.DefinitionJson = JsonSerializer.Serialize(def, SharedJson.Options);
     }
 }
