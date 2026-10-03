@@ -86,6 +86,10 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
         // real key).
         ["resolve-library-id"] = """{"type":"object","additionalProperties":true,"properties":{"query":{"type":"string","description":"What to look up in the library's documentation — used to rank results by relevance","examples":["app router routing"]},"libraryName":{"type":"string","description":"Official library name (e.g. 'Next.js', 'MongoDB', 'Three.js')","examples":["Next.js"]}},"required":["query","libraryName"],"examples":[{"libraryName":"Next.js","query":"app router routing"},{"libraryName":"MongoDB","query":"connection pooling"}]}""",
         ["query-docs"] = """{"type":"object","additionalProperties":true,"properties":{"libraryId":{"type":"string","description":"Exact Context7 library ID (/org/project[/version]) — from resolve-library-id or the user query","examples":["/vercel/next.js"]},"query":{"type":"string","description":"Single-concept question to look up in the library docs","examples":["middleware authentication"]}},"required":["libraryId","query"],"examples":[{"libraryId":"/vercel/next.js","query":"middleware authentication"},{"libraryId":"/mongodb/docs","query":"connection string format"}]}""",
+        // Agent flows (UI-defined): the two generic catalog tools; per-flow
+        // flow_<slug> tools appear only when the fixture DB has enabled flows.
+        ["list_flows"] = """{"type":"object","properties":{},"additionalProperties":false,"examples":[{}]}""",
+        ["run_flow"] = """{"type":"object","properties":{"flow":{"type":"string","description":"Flow slug (flow_<slug>) or GUID","examples":["weekly-digest"]},"inputs":{"type":"object","description":"Input values matching the flow's declared inputs"}},"required":["flow"],"additionalProperties":false,"examples":[{"flow":"weekly-digest","inputs":{"since":"2026-09-20"}}]}""",
         // query_{slug} tools share this schema (SourceQueryToolsProvider).
         ["__query_source__"] = """{"type":"object","properties":{"query":{"type":"string","description":"Text or question to search within this source","examples":["search term"]},"topK":{"type":"integer","description":"Max results (default 5, max 50)"}},"required":["query"],"examples":[{"query":"search term","topK":5}]}""",
     };
@@ -101,7 +105,7 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
     ];
 
     private static readonly HashSet<string> WriteTools =
-        ["write_knowledge", "write_note", "firecrawl_crawl", "tavily_crawl", "tavily_research", "set_api_key_settings", "set_chat_settings"];
+        ["write_knowledge", "write_note", "firecrawl_crawl", "tavily_crawl", "tavily_research", "set_api_key_settings", "set_chat_settings", "run_flow"];
 
     [Fact]
     public async Task ToolCatalog_NamesSchemasAndHints_MatchPinnedContract()

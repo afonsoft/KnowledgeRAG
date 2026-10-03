@@ -48,6 +48,9 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     // receipt log — no UPDATE/DELETE contract.
     public DbSet<EvidenceReceipt> EvidenceReceipts => Set<EvidenceReceipt>();
 
+    public DbSet<AgentFlow> AgentFlows => Set<AgentFlow>();
+    public DbSet<FlowRun> FlowRuns => Set<FlowRun>();
+
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -365,6 +368,28 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.HasIndex(r => r.SessionId);
             e.HasIndex(r => r.Timestamp);
             e.HasIndex(r => r.ReceiptDigest);
+        });
+
+        modelBuilder.Entity<AgentFlow>(e =>
+        {
+            e.HasKey(f => f.Id);
+            e.Property(f => f.Name).IsRequired().HasMaxLength(200);
+            e.Property(f => f.Slug).IsRequired().HasMaxLength(120);
+            e.HasIndex(f => f.Slug).IsUnique();
+            e.Property(f => f.Description).HasMaxLength(2000);
+            e.HasIndex(f => f.Enabled);
+        });
+
+        modelBuilder.Entity<FlowRun>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Status).IsRequired().HasMaxLength(16);
+            e.HasIndex(r => r.FlowId);
+            e.HasIndex(r => r.CreatedAt);
+            e.HasOne<AgentFlow>()
+                .WithMany()
+                .HasForeignKey(r => r.FlowId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

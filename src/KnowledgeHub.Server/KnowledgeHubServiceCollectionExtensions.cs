@@ -501,8 +501,23 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.KnowledgeToolsProvider>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.SourceQueryToolsProvider>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.ObsidianToolsProvider>();
+        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.FlowsToolsProvider>();
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
+
+        // Agent flows (UI-defined): engine + step handlers + CRUD/run service.
+        services.AddSingleton<Flows.FlowEngine>();
+        services.AddSingleton<Flows.IFlowEngine>(sp => sp.GetRequiredService<Flows.FlowEngine>());
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.ToolStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.KnowledgeStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.LlmStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.HttpStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.ConditionStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.ForEachStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.TransformStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.OutputStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.FailStepHandler>();
+        services.AddScoped<Flows.FlowService>();
     }
 
     private static void AddSecrets(IServiceCollection services, IConfiguration configuration)
