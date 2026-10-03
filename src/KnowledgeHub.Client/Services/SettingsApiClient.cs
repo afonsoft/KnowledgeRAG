@@ -236,7 +236,7 @@ public sealed class SettingsApiClient(HttpClient http)
     public async Task<ApiResult<LogLevelState>> SetLogLevelAsync(string level, int minutes, CancellationToken ct = default)
     {
         var response = await http.PutAsJsonAsync("api/settings/log-level",
-            new { level, minutes }, SharedJson.Options, ct);
+            new SetLogLevelRequest(level, minutes), SharedJson.Options, ct);
         return await ReadAsync<LogLevelState>(response, ct);
     }
 
@@ -306,12 +306,4 @@ public sealed class SettingsApiClient(HttpClient http)
 
         return new ApiResult<T>(default, error ?? $"HTTP {(int)response.StatusCode}");
     }
-}
-
-/// <summary>GET/PUT /api/settings/log-level payload (SPEC-20260925-runtime-log-level).</summary>
-public sealed class LogLevelState
-{
-    public string Level { get; set; } = "Information";
-    public string? ConfiguredDefault { get; set; }
-    public DateTimeOffset? AutoResetAt { get; set; }
 }

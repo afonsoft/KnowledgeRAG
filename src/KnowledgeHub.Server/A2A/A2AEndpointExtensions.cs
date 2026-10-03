@@ -64,69 +64,7 @@ public static class A2AEndpointExtensions
                     }
                 }
             ],
-            Skills =
-            [
-                new AgentSkill
-                {
-                    Id = "ask_knowledge",
-                    Name = "Ask knowledge",
-                    Description = "Grounded Q&A over the indexed knowledge base — returns a synthesized answer with [n] citations.",
-                    Tags = ["rag", "qa", "knowledge"],
-                    Examples = ["What changed in the last release?"],
-                    InputModes = [MimeText, MimeJson],
-                    OutputModes = [MimeText, MimeJson]
-                },
-                new AgentSkill
-                {
-                    Id = "search_knowledge",
-                    Name = "Search knowledge",
-                    Description = "Hybrid semantic + lexical search across all active sources — ranked passages with provenance.",
-                    Tags = ["search", "retrieval"],
-                    Examples = ["rate limiting policy"],
-                    InputModes = [MimeText, MimeJson],
-                    OutputModes = [MimeText, MimeJson]
-                },
-                new AgentSkill
-                {
-                    Id = "agent_chat",
-                    Name = "Agent chat",
-                    Description = "Multi-turn agentic loop with tool-calling over the live catalog.",
-                    Tags = ["agent", "chat", "tools"],
-                    Examples = ["Summarize today's ingestion run"],
-                    InputModes = [MimeText],
-                    OutputModes = [MimeText, MimeJson]
-                },
-                new AgentSkill
-                {
-                    Id = "read_document",
-                    Name = "Read document",
-                    Description = "Reads a full markdown document from a connected vault by path — input is a JSON object with a `path` field.",
-                    Tags = ["docs", "read"],
-                    Examples = ["roadmap/2026.md"],
-                    InputModes = [MimeJson],
-                    OutputModes = [MimeText]
-                },
-                new AgentSkill
-                {
-                    Id = "write_knowledge",
-                    Name = "Write knowledge",
-                    Description = "Creates a document in the connected vault — input is a JSON object with `title` and `content` (optional `source`, `tags`). Requires a write-capable credential.",
-                    Tags = ["docs", "write", "knowledge"],
-                    Examples = ["{\"title\": \"Runbook\", \"content\": \"Restart steps…\"}"],
-                    InputModes = [MimeJson],
-                    OutputModes = [MimeText]
-                },
-                new AgentSkill
-                {
-                    Id = "write_note",
-                    Name = "Write note",
-                    Description = "Writes a markdown note into the Obsidian vault — input is a JSON object with `title` and `content` (optional `path`, `tags`). Requires a write-capable credential.",
-                    Tags = ["docs", "write", "obsidian"],
-                    Examples = ["{\"title\": \"Daily log\", \"content\": \"…\"}"],
-                    InputModes = [MimeJson],
-                    OutputModes = [MimeText]
-                }
-            ]
+            Skills = [.. A2aSkillCatalog.Skills]
         };
     }
 

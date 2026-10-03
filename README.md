@@ -13,6 +13,47 @@
 
 All-in-one standalone knowledge platform: Blazor WebAssembly admin UI, REST API, native MCP server (Streamable HTTP + legacy SSE), SQLite persistence, pluggable embeddings and vector stores, hybrid retrieval (FTS5 + vector RRF + corrective loop), GraphRAG entity/relation extraction, agentic chat with HITL approvals, prompt-injection defense, partitioned rate limiting, async ingestion queue, cloud-storage connectors, and OpenTelemetry observability — all in a single Kestrel-hosted .NET 10 process.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/home.png) | ![Knowledge sources](docs/screenshots/sources.png) |
+| ![Chat](docs/screenshots/chat.png) | ![MCP Monitor](docs/screenshots/monitor.png) |
+| ![Playground](docs/screenshots/playground.png) | ![Knowledge graph](docs/screenshots/graph.png) |
+| ![Eval](docs/screenshots/eval.png) | ![RAG quality](docs/screenshots/rag-quality.png) |
+| ![Approvals](docs/screenshots/approvals.png) | ![Settings](docs/screenshots/settings.png) |
+
+## How it works
+
+Everything runs in **one Kestrel process**: the Blazor WebAssembly admin SPA, the REST management API, the native MCP server and the ingestion pipeline share the same EF Core database.
+
+```mermaid
+flowchart LR
+    subgraph Ingestion
+        A[Connectors<br/>Obsidian · Web · Docs · APIs · SQL · S3/Azure/OCI · RSS/YouTube/Git] --> B[Chunking<br/>semantic · contextual enrichment]
+        B --> C[Embeddings<br/>Ollama · OpenAI · Voyage · Cohere · ONNX · deterministic]
+        C --> D[(Vector store<br/>sqlite-vec · pgvector<br/>+ FTS5)]
+    end
+    subgraph Retrieval
+        Q[Query] --> R[Hybrid search<br/>vector + lexical + graph<br/>RRF · MMR · autocut]
+        R --> S[Corrective loop<br/>grading → retry → abstain]
+        S --> T[Synthesis<br/>IChatClient · citations]
+    end
+    subgraph Agent
+        T --> L[Agent loop<br/>tool-calling · Chain AST<br/>HITL approvals · SSE stream]
+    end
+    D --> R
+    L --> M[MCP /mcp · A2A /a2a · REST /api · SPA]
+```
+
+- **Ingestion** — sources are registered in the UI and synced asynchronously (`202 + jobId`). Each connector extracts documents, chunks them (optional semantic breakpoints and contextual enrichment per chunk) and embeds into the configured vector store. Incremental sync uses per-doc fingerprints (ETag, `last_edited_time`, commit SHA); `chunker-version` marks rows for selective reindex.
+- **Retrieval** — every query fans out across vector KNN, FTS5 and the knowledge graph, fused with reciprocal-rank fusion, then diversified with MMR and quota-per-document. A corrective stage grades the results and retries or abstains instead of answering on weak context. Query rewrite is history-aware; multi-query expansion, HyDE and hierarchical filter relaxation are opt-in.
+- **Synthesis** — `IChatClient`-compatible providers (OpenAI-compatible endpoint or Ollama) produce the grounded answer with citations; `ask_knowledge` returns the same synthesis to MCP clients. The RAG triad (context relevance, groundedness, answer relevance) is scored into `RagEvaluations` and surfaced on `/rag-quality`.
+- **Agent loop** — `agent_chat`/`/api/agent` run a tool-calling loop (search, graph, upstream proxies, live actions). Orphaned tool calls are repaired via a chain AST, history is compacted/summarized within a message budget, and write-capable tools pause for HITL approval (auto-resume after approve). Streams over SSE token-by-token.
+- **MCP** — `/mcp` speaks Streamable HTTP with hybrid sessions (stateful for `initialize`-handshake clients, stateless for `2026-07-28`); `/mcp/sse` is the legacy transport. The tool catalog is dynamic (built-in tools + `McpProxy` sources + upstream firecrawl/tavily/deepwiki/context7 proxies), supports task-eligible long tools, elicitation for approvals, per-key settings and tool annotations.
+- **A2A** — `/.well-known/agent-card.json` advertises the agent; `/a2a` executes `ask_knowledge`/`search_knowledge`/`agent_chat`/`read_document` under the caller's `aft_*` key scope, with streaming, push notifications and durable tasks.
+- **Auth** — cookie login for the SPA (forced password change on first boot), `aft_*` API keys for programmatic access with per-key scopes (allowed sources/tools), rate limits and usage auditing.
+
 ## Endpoints
 
 | Route | Purpose |

@@ -97,10 +97,14 @@ HashSet<string> taskEligibleTools = new(StringComparer.Ordinal)
     "firecrawl_crawl", "firecrawl_agent", "firecrawl_interact", "firecrawl_map",
     "tavily_crawl", "tavily_research", "tavily_map", "tavily_extract"
 };
+// Audit 2026-10-03: share one store instance — WithTasks needs it before the
+// provider exists, and the maintenance service purges expired rows via DI.
+EfMcpTaskStore mcpTaskStore = new(
+    CatalogDatabase.Resolve(builder.Configuration), builder.Configuration);
+builder.Services.AddSingleton(mcpTaskStore);
 builder.Services.AddKnowledgeHubMcp(builder.Configuration)
     .WithTasks(
-        new EfMcpTaskStore(
-            CatalogDatabase.Resolve(builder.Configuration), builder.Configuration),
+        mcpTaskStore,
         o => o.ExecutionModeSelector = ctx =>
             ctx.Params?.Name is { } toolName && taskEligibleTools.Contains(toolName)
                 && MrtrApproval.ClientDeclaredExtension(ctx, TasksProtocol.ExtensionId)

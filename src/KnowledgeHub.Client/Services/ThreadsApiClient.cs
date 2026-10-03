@@ -12,7 +12,7 @@ public sealed class ThreadsApiClient(HttpClient http)
 
     public async Task<ThreadDto?> CreateAsync(string? title = null, CancellationToken ct = default)
     {
-        var r = await http.PostAsJsonAsync("api/threads", new { title }, SharedJson.Options, ct);
+        var r = await http.PostAsJsonAsync("api/threads", new CreateThreadRequest { Title = title }, SharedJson.Options, ct);
         r.EnsureSuccessStatusCode();
         return await r.Content.ReadFromJsonAsync<ThreadDto>(SharedJson.Options, ct);
     }
@@ -22,7 +22,7 @@ public sealed class ThreadsApiClient(HttpClient http)
 
     public async Task RenameAsync(Guid id, string title, CancellationToken ct = default)
     {
-        var r = await http.PutAsJsonAsync($"api/threads/{id}", new { title }, SharedJson.Options, ct);
+        var r = await http.PutAsJsonAsync($"api/threads/{id}", new RenameThreadRequest { Title = title }, SharedJson.Options, ct);
         r.EnsureSuccessStatusCode();
     }
 
@@ -34,7 +34,7 @@ public sealed class ThreadsApiClient(HttpClient http)
 
     public async Task<AgentResponse?> SendAsync(Guid id, string content, CancellationToken ct = default)
     {
-        var r = await http.PostAsJsonAsync($"api/threads/{id}/messages", new { content }, SharedJson.Options, ct);
+        var r = await http.PostAsJsonAsync($"api/threads/{id}/messages", new PostThreadMessageRequest { Content = content }, SharedJson.Options, ct);
         r.EnsureSuccessStatusCode();
         return await r.Content.ReadFromJsonAsync<AgentResponse>(SharedJson.Options, ct);
     }

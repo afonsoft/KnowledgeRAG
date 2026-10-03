@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using KnowledgeHub.Shared;
 
 namespace KnowledgeHub.Client.Services;
 
@@ -17,7 +18,9 @@ public sealed class StreamingApiClient(HttpClient http)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
-            Content = JsonContent.Create(payload)
+            // SharedJson.Options: source-gen metadata for registered contract
+            // types — reflection isn't available in trimmed WASM builds.
+            Content = JsonContent.Create(payload, options: SharedJson.Options)
         };
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();

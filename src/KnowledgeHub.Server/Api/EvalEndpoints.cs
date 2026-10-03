@@ -2,6 +2,7 @@ using System.Text.Json;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Server.Eval;
+using KnowledgeHub.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace KnowledgeHub.Server.Api;
@@ -28,14 +29,6 @@ public static class EvalEndpoints
         public string? Baseline { get; init; }
         /// <summary>Gate rules evaluated against the run's metrics.</summary>
         public List<EvalGateRule>? Gate { get; init; }
-    }
-
-    public sealed record BaselineRequest
-    {
-        /// <summary>Baseline name (unique).</summary>
-        public required string Name { get; init; }
-        /// <summary>Run to promote.</summary>
-        public required Guid RunId { get; init; }
     }
 
     public static RouteGroupBuilder MapEvalApi(this IEndpointRouteBuilder app)

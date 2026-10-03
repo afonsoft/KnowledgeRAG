@@ -27,6 +27,7 @@ public sealed class MaintenanceBackgroundService(
             {
                 await PurgeOrphanedStagingAsync(stoppingToken);
                 await PurgeA2aTasksAsync(stoppingToken);
+                await PurgeMcpTasksAsync(stoppingToken);
                 await VacuumVectorStoreAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -71,6 +72,26 @@ public sealed class MaintenanceBackgroundService(
         if (removed > 0)
             logger.LogInformation(
                 "Maintenance purged {Count} A2A task(s) past {Hours}h retention",
+                removed, retention.TotalHours);
+    }
+
+    /// <summary>Audit 2026-10-03: MCP tasks expire reads at TTL (1h) but rows
+    /// were never deleted — same purge as A2A tasks, gated by
+    /// <c>Mcp:TaskRetentionHours</c> (default 72h, well past the TTL so clients
+    /// can still poll terminal results).</summary>
+    private async Task PurgeMcpTasksAsync(CancellationToken ct)
+    {
+        var retention = TimeSpan.FromHours(
+            Math.Max(1, configuration.GetValue("Mcp:TaskRetentionHours", 72)));
+        var cutoff = DateTimeOffset.UtcNow - retention;
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var removed = await scope.ServiceProvider
+            .GetRequiredService<Mcp.EfMcpTaskStore>()
+            .PurgeOlderThanAsync(cutoff, ct);
+        if (removed > 0)
+            logger.LogInformation(
+                "Maintenance purged {Count} MCP task(s) past {Hours}h retention",
                 removed, retention.TotalHours);
     }
 

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using KnowledgeHub.Shared;
 
 namespace KnowledgeHub.Client.Services;
@@ -13,8 +14,6 @@ namespace KnowledgeHub.Client.Services;
 /// </summary>
 public sealed class A2aApiClient(HttpClient http)
 {
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
-
     /// <summary>Fetches the Agent Card — anonymous endpoint, safe to call pre-login.</summary>
     public async Task<JsonElement> GetAgentCardAsync(CancellationToken ct = default)
         => await http.GetFromJsonAsync<JsonElement>(".well-known/agent-card.json", SharedJson.Options, ct);
@@ -23,15 +22,17 @@ public sealed class A2aApiClient(HttpClient http)
     public async Task<JsonElement> SendMessageAsync(
         string skill, string text, string? contextId = null, CancellationToken ct = default)
     {
-        var result = await RpcAsync("SendMessage", new
+        // JsonObject instead of anonymous types: trimmed WASM has no reflection-based
+        // serializer, and JsonNode is handled natively by STJ.
+        var result = await RpcAsync("SendMessage", new JsonObject
         {
-            message = new
+            ["message"] = new JsonObject
             {
-                role = "ROLE_USER",
-                messageId = Guid.NewGuid().ToString("N"),
-                contextId,
-                parts = new[] { new { text } },
-                metadata = new { skill }
+                ["role"] = "ROLE_USER",
+                ["messageId"] = Guid.NewGuid().ToString("N"),
+                ["contextId"] = contextId,
+                ["parts"] = new JsonArray(new JsonObject { ["text"] = text }),
+                ["metadata"] = new JsonObject { ["skill"] = skill }
             }
         }, ct);
         // Send* returns the union {task: {...}} — normalize to the task itself.
@@ -40,11 +41,11 @@ public sealed class A2aApiClient(HttpClient http)
 
     /// <summary>Reads a task by id (durable — survives hub restarts).</summary>
     public Task<JsonElement> GetTaskAsync(string taskId, CancellationToken ct = default)
-        => RpcAsync("GetTask", new { id = taskId }, ct);
+        => RpcAsync("GetTask", new JsonObject { ["id"] = taskId }, ct);
 
     /// <summary>Cancels a task by id; returns the updated Task JSON.</summary>
     public Task<JsonElement> CancelTaskAsync(string taskId, CancellationToken ct = default)
-        => RpcAsync("CancelTask", new { id = taskId }, ct);
+        => RpcAsync("CancelTask", new JsonObject { ["id"] = taskId }, ct);
 
     /// <summary>Extracts the task's current state string (TASK_STATE_*), or null.</summary>
     public static string? TaskState(JsonElement task) =>
@@ -59,15 +60,15 @@ public sealed class A2aApiClient(HttpClient http)
 
     private int _nextId;
 
-    private async Task<JsonElement> RpcAsync(string method, object @params, CancellationToken ct)
+    private async Task<JsonElement> RpcAsync(string method, JsonObject @params, CancellationToken ct)
     {
-        var response = await http.PostAsJsonAsync("a2a", new
+        var response = await http.PostAsJsonAsync("a2a", new JsonObject
         {
-            jsonrpc = "2.0",
-            id = Interlocked.Increment(ref _nextId),
-            method,
-            @params
-        }, JsonOpts, ct);
+            ["jsonrpc"] = "2.0",
+            ["id"] = Interlocked.Increment(ref _nextId),
+            ["method"] = method,
+            ["params"] = @params
+        }, SharedJson.Options, ct);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<JsonElement>(SharedJson.Options, ct);
         if (body.TryGetProperty("error", out var error))

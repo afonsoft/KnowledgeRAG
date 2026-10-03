@@ -32,7 +32,7 @@ public sealed class EvalApiClient(HttpClient http)
             payload["faithfulness"] = faithfulness;
         if (!string.IsNullOrWhiteSpace(baseline)) payload["baseline"] = baseline;
         if (!string.IsNullOrWhiteSpace(gateJson))
-            payload["gate"] = JsonSerializer.Deserialize<JsonElement>(gateJson);
+            payload["gate"] = JsonSerializer.Deserialize<JsonElement>(gateJson, SharedJson.Options);
 
         var response = await http.PostAsJsonAsync("api/eval/run", payload, SharedJson.Options, ct);
         return await ReadResultAsync<EvalReportDto>(response, ct);
@@ -42,7 +42,8 @@ public sealed class EvalApiClient(HttpClient http)
     public async Task<ApiResult<object>> PromoteBaselineAsync(
         string name, Guid runId, CancellationToken ct = default)
     {
-        var response = await http.PostAsJsonAsync("api/eval/baselines", new { name, runId }, SharedJson.Options, ct);
+        var response = await http.PostAsJsonAsync("api/eval/baselines",
+            new BaselineRequest { Name = name, RunId = runId }, SharedJson.Options, ct);
         return await ReadResultAsync<object>(response, ct);
     }
 
@@ -64,89 +65,4 @@ public sealed class EvalApiClient(HttpClient http)
         }
         catch { return null; }
     }
-}
-
-public sealed record EvalRunSummaryDto
-{
-    public Guid Id { get; init; }
-    public DateTimeOffset StartedAt { get; init; }
-    public long DurationMs { get; init; }
-    public string DatasetHash { get; init; } = "";
-    public EvalMetricsDto? Metrics { get; init; }
-    public EvalGateDto? Gate { get; init; }
-    public string? BaselineName { get; init; }
-}
-
-public sealed record EvalReportDto
-{
-    public Guid RunId { get; init; }
-    public DateTimeOffset StartedAt { get; init; }
-    public long DurationMs { get; init; }
-    public string DatasetHash { get; init; } = "";
-    public int Cases { get; init; }
-    public EvalMetricsDto? Metrics { get; init; }
-    public List<EvalCaseDto> Results { get; init; } = [];
-    public EvalDeltaDto? Delta { get; init; }
-    public EvalLatencyDto? Latency { get; init; }
-    public EvalGateDto? Gate { get; init; }
-    public string? BaselineName { get; init; }
-}
-
-public sealed record EvalMetricsDto
-{
-    public double RecallAtK { get; init; }
-    public double PrecisionAtK { get; init; }
-    public double Mrr { get; init; }
-    public double HitRate { get; init; }
-    public double NdcgAtK { get; init; }
-    public double? Faithfulness { get; init; }
-    public string? FaithfulnessSkippedReason { get; init; }
-}
-
-public sealed record EvalLatencyDto
-{
-    public double P50 { get; init; }
-    public double P95 { get; init; }
-    public double P99 { get; init; }
-    public double Mean { get; init; }
-}
-
-public sealed record EvalCaseDto
-{
-    public string CaseId { get; init; } = "";
-    public double Recall { get; init; }
-    public double Precision { get; init; }
-    public double ReciprocalRank { get; init; }
-    public double Ndcg { get; init; }
-    public bool Hit { get; init; }
-    public bool Inconsistent { get; init; }
-    public double? Faithfulness { get; init; }
-    public string? Error { get; init; }
-    public double? LatencyMs { get; init; }
-}
-
-public sealed record EvalDeltaDto
-{
-    public Guid CompareRunId { get; init; }
-    public double RecallAtKDelta { get; init; }
-    public double PrecisionAtKDelta { get; init; }
-    public double MrrDelta { get; init; }
-    public double HitRateDelta { get; init; }
-    public double NdcgDelta { get; init; }
-    public List<string> Regressions { get; init; } = [];
-}
-
-public sealed record EvalGateDto
-{
-    public string Status { get; init; } = "";
-    public List<string> Violations { get; init; } = [];
-    public string? BaselineName { get; init; }
-}
-
-public sealed record EvalBaselineDto
-{
-    public string Name { get; init; } = "";
-    public Guid EvalRunId { get; init; }
-    public string DatasetHash { get; init; } = "";
-    public DateTimeOffset CreatedAt { get; init; }
 }

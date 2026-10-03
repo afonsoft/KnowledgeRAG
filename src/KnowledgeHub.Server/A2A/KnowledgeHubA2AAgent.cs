@@ -24,12 +24,10 @@ namespace KnowledgeHub.Server.A2A;
 /// </summary>
 public sealed class KnowledgeHubA2AAgent(IHttpContextAccessor http) : IAgentHandler
 {
-    /// <summary>Skills this agent advertises and accepts (SPEC RF-001).</summary>
-    internal static readonly HashSet<string> DelegableSkills = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "ask_knowledge", "search_knowledge", "agent_chat", "read_document",
-        "write_knowledge", "write_note"
-    };
+    /// <summary>Skills this agent advertises and accepts (SPEC RF-001) —
+    /// single-sourced in <see cref="A2aSkillCatalog"/> so the Agent Card can't
+    /// drift from what the dispatcher accepts.</summary>
+    internal static readonly IReadOnlySet<string> DelegableSkills = A2aSkillCatalog.DelegableIds;
 
     private const string DefaultSkill = "ask_knowledge";
     private const string OutcomeTag = "outcome";

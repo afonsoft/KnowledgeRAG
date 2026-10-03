@@ -87,7 +87,7 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
         string taskId, IDictionary<string, InputRequest> inputRequests, CancellationToken cancellationToken = default) =>
         await MutateAsync(taskId, cancellationToken, row =>
         {
-            row.Status = "input_required";
+            row.Status = "input_required"; // parsed back leniently in Map
             row.InputRequestsJson = JsonSerializer.Serialize(
                 inputRequests, McpTasksJsonContext.Default.IDictionaryStringInputRequest);
         });
@@ -108,6 +108,25 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
                 new InputResponseReceivedEventArgs { TaskId = taskId, RequestId = requestId, Response = response });
     }
 
+    /// <summary>Audit 2026-10-03: TTL stops reads, but rows still accumulated
+    /// forever — A2A tasks already have a retention purge, MCP tasks were
+    /// missing theirs. Purges rows created before the cutoff (terminal or
+    /// stale-running alike). Called by the maintenance loop.</summary>
+    public async Task<int> PurgeOlderThanAsync(DateTimeOffset createdBefore, CancellationToken ct = default)
+    {
+        await using var db = Open();
+        // Client-side timestamp compare — SQLite can't translate it; ids
+        // project small before the batch delete (same pattern as EfA2aTaskStore).
+        var staleIds = (await db.McpTasks
+                .Select(t => new { t.TaskId, t.CreatedAt })
+                .ToListAsync(ct))
+            .Where(t => t.CreatedAt < createdBefore)
+            .Select(t => t.TaskId).ToList();
+        return staleIds.Count == 0 ? 0
+            : await db.McpTasks.Where(t => staleIds.Contains(t.TaskId))
+                .ExecuteDeleteAsync(ct);
+    }
+
     private async Task MutateAsync(string taskId, CancellationToken ct, Action<McpTask> mutate)
     {
         await using var db = Open();
@@ -122,9 +141,14 @@ public sealed class EfMcpTaskStore(CatalogDatabase catalog, IConfiguration confi
     private static bool Expired(McpTask row) =>
         row.TtlMs is { } ttl && row.CreatedAt + TimeSpan.FromMilliseconds(ttl) < DateTimeOffset.UtcNow;
 
+    // Stored as snake_case ("input_required"); ignoreCase alone can't bridge
+    // the underscore — strip it before parsing.
+    private static McpTaskStatus ParseStatus(string status) =>
+        Enum.Parse<McpTaskStatus>(status.Replace("_", string.Empty), ignoreCase: true);
+
     private static McpTaskInfo Map(McpTask row) => new(
         TaskId: row.TaskId,
-        Status: Enum.Parse<McpTaskStatus>(row.Status, ignoreCase: true),
+        Status: ParseStatus(row.Status),
         CreatedAt: row.CreatedAt,
         LastUpdatedAt: row.LastUpdatedAt,
         TimeToLive: row.TtlMs is { } ttl ? TimeSpan.FromMilliseconds(ttl) : null,
