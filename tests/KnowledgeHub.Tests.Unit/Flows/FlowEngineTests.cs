@@ -19,7 +19,8 @@ public sealed class FlowEngineTests
         {
             new ToolStepHandler(), new KnowledgeStepHandler(), new LlmStepHandler(),
             new HttpStepHandler(), new ConditionStepHandler(), new ForEachStepHandler(),
-            new TransformStepHandler(), new OutputStepHandler(), new FailStepHandler(),
+            new TransformStepHandler(), new OutputStepHandler(), new ApprovalStepHandler(),
+            new FailStepHandler(),
         },
         config ?? new ConfigurationBuilder().AddInMemoryCollection().Build());
 
@@ -43,7 +44,7 @@ public sealed class FlowEngineTests
             [new FlowInputDto("q", "string", Required: true, null, null)],
             [Step("s1", "output", new { value = "never" })]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("failed", result.Status);
         Assert.Contains("q", result.Error);
@@ -58,7 +59,7 @@ public sealed class FlowEngineTests
             [new FlowInputDto("who", "string", false, null, JsonValue.Create("world")!)],
             [Step("s1", "output", new { value = "hello {{vars.who}}" })]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("done", result.Status);
         Assert.Equal("hello world", result.Output!.GetValue<string>());
@@ -76,7 +77,7 @@ public sealed class FlowEngineTests
                 Step("out", "output", new { value = "{{steps.t2.output}}" }),
             ]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("done", result.Status);
         Assert.Equal("first second", result.Output!.GetValue<string>());
@@ -103,11 +104,11 @@ public sealed class FlowEngineTests
             ]);
 
         var high = await engine.ExecuteAsync(def,
-            new JsonObject { ["score"] = 90 }, Services(), null, CancellationToken.None);
+            new JsonObject { ["score"] = 90 }, Services(), null, null, CancellationToken.None);
         Assert.Contains(high.Steps, s => s.StepId == "hit" && s.Output?.GetValue<string>() == "high");
 
         var low = await engine.ExecuteAsync(def,
-            new JsonObject { ["score"] = 10 }, Services(), null, CancellationToken.None);
+            new JsonObject { ["score"] = 10 }, Services(), null, null, CancellationToken.None);
         Assert.Contains(low.Steps, s => s.StepId == "low");
     }
 
@@ -126,7 +127,7 @@ public sealed class FlowEngineTests
                 Step("out", "output", new { value = "{{steps.fe.output}}" }),
             ]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("done", result.Status);
         var items = Assert.IsType<JsonArray>(result.Output);
@@ -147,7 +148,7 @@ public sealed class FlowEngineTests
                 Step("s3", "transform", new { template = "never" }),
             ]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("failed", result.Status);
         Assert.Contains("planned failure", result.Error);
@@ -160,7 +161,7 @@ public sealed class FlowEngineTests
         var engine = NewEngine();
         var def = new FlowDefinitionDto([], [Step("s1", "nonsense")]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("failed", result.Status);
         Assert.Contains("nonsense", result.Error);
@@ -176,7 +177,7 @@ public sealed class FlowEngineTests
             .Select(i => Step($"s{i}", "transform", new { template = $"t{i}" })).ToList();
         var def = new FlowDefinitionDto([], steps);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("failed", result.Status);
         Assert.True(result.Steps.Count <= 3);
@@ -194,7 +195,7 @@ public sealed class FlowEngineTests
                 Step("after", "transform", new { template = "reached" }),
             ]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
 
         Assert.Equal("done", result.Status);
         Assert.Equal("failed", result.Steps[0].Status);
@@ -229,7 +230,7 @@ public sealed class FlowEngineTests
             ]);
 
         var result = await engine.ExecuteAsync(def,
-            new JsonObject { ["q"] = "what is rrf" }, sp, null, CancellationToken.None);
+            new JsonObject { ["q"] = "what is rrf" }, sp, null, null, CancellationToken.None);
 
         Assert.Equal("done", result.Status);
         Assert.Equal("what is rrf", seenQuery);
@@ -243,7 +244,7 @@ public sealed class FlowEngineTests
         var engine = NewEngine();
         var def = new FlowDefinitionDto([], [Step("k", "tool", new { tool = "ghost_tool" })]);
 
-        var result = await engine.ExecuteAsync(def, new JsonObject(), sp, null, CancellationToken.None);
+        var result = await engine.ExecuteAsync(def, new JsonObject(), sp, null, null, CancellationToken.None);
 
         Assert.Equal("failed", result.Status);
         Assert.Contains("ghost_tool", result.Error);
@@ -257,12 +258,158 @@ public sealed class FlowEngineTests
         var def = new FlowDefinitionDto([], [Step("s1", "transform", new { template = "x" })]);
 
         await engine.ExecuteAsync(def, new JsonObject(), Services(),
-            (ev, _) => { events.Add(ev.Type); return ValueTask.CompletedTask; }, CancellationToken.None);
+            (ev, _) => { events.Add(ev.Type); return ValueTask.CompletedTask; }, null, CancellationToken.None);
 
         // Done/Error are emitted by the transport layer (FlowEndpoints), not the engine.
         Assert.Equal(
             new[] { FlowStreamEvent.StepStart, FlowStreamEvent.StepEnd },
             events);
+    }
+
+    [Fact]
+    public async Task Retry_repeats_failed_step_until_success()
+    {
+        var calls = 0;
+        var fake = new FakeCatalog(new CatalogTool
+        {
+            Name = "flaky_tool",
+            Description = "fake",
+            InputSchema = new JsonObject(),
+            Handler = (_, _) =>
+            {
+                calls++;
+                if (calls == 1)
+                    throw new InvalidOperationException("boom");
+                return ValueTask.FromResult(new CallToolResult
+                {
+                    Content = [new TextContentBlock { Text = "ok" }],
+                });
+            },
+        });
+        var sp = Services(s => s.AddSingleton<IDynamicToolCatalog>(fake));
+        var engine = NewEngine();
+        var def = new FlowDefinitionDto([],
+            [Step("t", "tool", new { tool = "flaky_tool", retry = new { attempts = 3, backoffMs = 0 } })]);
+
+        var result = await engine.ExecuteAsync(def, new JsonObject(), sp, null, null, CancellationToken.None);
+
+        Assert.Equal("done", result.Status);
+        Assert.Equal(2, calls);
+        Assert.Equal(2, result.Steps[0].Attempts);
+    }
+
+    [Fact]
+    public async Task Retry_exhausted_fails_with_attempt_count()
+    {
+        var calls = 0;
+        var fake = new FakeCatalog(new CatalogTool
+        {
+            Name = "always_broken",
+            Description = "fake",
+            InputSchema = new JsonObject(),
+            Handler = (_, _) => { calls++; throw new InvalidOperationException("still broken"); },
+        });
+        var sp = Services(s => s.AddSingleton<IDynamicToolCatalog>(fake));
+        var engine = NewEngine();
+        var def = new FlowDefinitionDto([],
+            [Step("t", "tool", new { tool = "always_broken", retry = new { attempts = 3, backoffMs = 0 } })]);
+
+        var result = await engine.ExecuteAsync(def, new JsonObject(), sp, null, null, CancellationToken.None);
+
+        Assert.Equal("failed", result.Status);
+        Assert.Equal(3, calls);
+        Assert.Equal(3, result.Steps[0].Attempts);
+    }
+
+    [Fact]
+    public async Task Approval_step_suspends_run_with_resume_state()
+    {
+        var engine = NewEngine();
+        var def = new FlowDefinitionDto([], [
+            Step("before", "transform", new { template = "half-done" }),
+            Step("gate", "approval", new { message = "ship it?" }),
+            Step("after", "output", new { value = "shipped" }),
+        ]);
+
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(), null, null, CancellationToken.None);
+
+        Assert.Equal("waiting_approval", result.Status);
+        Assert.NotNull(result.Pending);
+        Assert.Equal("gate", result.Pending!.StepId);
+        Assert.Equal("ship it?", result.Pending!.Message);
+        Assert.NotNull(result.ResumeState);
+        // 'after' never ran; 'before' + 'gate' are in the trace.
+        Assert.Equal(2, result.Steps.Count);
+        Assert.Equal("waiting", result.Steps[1].Status);
+        Assert.DoesNotContain(result.Steps, s => s.StepId == "after");
+    }
+
+    [Fact]
+    public async Task Resume_skips_executed_steps_and_continues()
+    {
+        var engine = NewEngine();
+        var ran = new List<string>();
+        var fake = new FakeCatalog(new CatalogTool
+        {
+            Name = "side_effect",
+            Description = "fake",
+            InputSchema = new JsonObject(),
+            Handler = (_, _) =>
+            {
+                ran.Add("call");
+                return ValueTask.FromResult(new CallToolResult
+                {
+                    Content = [new TextContentBlock { Text = "did-it" }],
+                });
+            },
+        });
+        var sp = Services(s => s.AddSingleton<IDynamicToolCatalog>(fake));
+        var def = new FlowDefinitionDto([], [
+            Step("work", "tool", new { tool = "side_effect" }),
+            Step("gate", "approval", new { message = "ok?" }),
+            Step("out", "output", new { value = "{{steps.gate.output.resolution}}" }),
+        ]);
+
+        var first = await engine.ExecuteAsync(def, new JsonObject(), sp, null, null, CancellationToken.None);
+        Assert.Equal("waiting_approval", first.Status);
+        Assert.Single(ran); // side-effect ran once
+
+        // Simulate FlowService: seed the gate's resolution and resume.
+        var resume = first.ResumeState!;
+        Assert.NotNull(resume.StepOutputs);
+        resume.StepOutputs["gate"] = JsonNode.Parse("{\"resolution\":\"approved\"}");
+        resume.PendingStepId = null;
+
+        var second = await engine.ExecuteAsync(def, new JsonObject(), sp, null, resume, CancellationToken.None);
+
+        Assert.Equal("done", second.Status);
+        Assert.Single(ran); // no double side effects — 'work' was skipped
+        Assert.Equal("approved", second.Output!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Resumed_run_emits_skip_events_for_restored_steps()
+    {
+        var engine = NewEngine();
+        var events = new List<string>();
+        var resume = new FlowResumeState
+        {
+            Vars = new JsonObject(),
+            StepOutputs = new Dictionary<string, JsonNode?> { ["s1"] = "cached" },
+            ExecutedCount = 1,
+        };
+        var def = new FlowDefinitionDto([], [
+            Step("s1", "transform", new { template = "would-rerun" }),
+            Step("s2", "output", new { value = "{{steps.s1.output}}" }),
+        ]);
+
+        var result = await engine.ExecuteAsync(def, new JsonObject(), Services(),
+            (ev, _) => { events.Add(ev.Type); return ValueTask.CompletedTask; },
+            resume, CancellationToken.None);
+
+        Assert.Equal("done", result.Status);
+        Assert.Equal("cached", result.Output!.GetValue<string>());
+        Assert.Contains(FlowStreamEvent.StepSkip, events);
     }
 
     private sealed class FakeCatalog(params CatalogTool[] tools) : IDynamicToolCatalog

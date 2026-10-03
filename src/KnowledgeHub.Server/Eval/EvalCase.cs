@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace KnowledgeHub.Server.Eval;
 
@@ -16,6 +17,13 @@ public sealed record EvalCase
     public string? Mode { get; init; }
     public int? TopK { get; init; }
     public bool ExpectNoAnswer { get; init; }
+    /// <summary>Flow subject: when set, the case runs the flow (slug) instead
+    /// of a knowledge search — the flow output is scored against the
+    /// expected markers/URIs.</summary>
+    public string? FlowSlug { get; init; }
+    /// <summary>Input values for the flow run ({name: value}). Free text
+    /// callers can use {"input": "..."}.</summary>
+    public JsonObject? FlowInputs { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = [];
 }
 
@@ -61,7 +69,7 @@ public static class EvalDataset
             errors.Add($"case[{i}]: question obrigatória");
         if (!c.ExpectNoAnswer && c.ExpectedUris.Count == 0 && c.ExpectedTextMarkers.Count == 0)
             errors.Add($"case[{i}]: expectedUris ou expectedTextMarkers obrigatórios (ou expectNoAnswer)");
-        if (c.Mode is not null && c.Mode is not ("hybrid" or "semantic" or "lexical"))
+        if (c.Mode is not null && c.Mode is not ("hybrid" or "semantic" or "lexical") && c.FlowSlug is null)
             errors.Add($"case[{i}]: mode inválido '{c.Mode}'");
         if (c.TopK is <= 0)
             errors.Add($"case[{i}]: topK deve ser positivo");

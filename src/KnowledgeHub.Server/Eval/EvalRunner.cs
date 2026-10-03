@@ -236,6 +236,11 @@ public sealed class EvalRunner(
     private async Task<EvalCaseResult> RunCaseAsync(
         EvalCase evalCase, SearchMode defaultMode, int defaultK, string faith, CancellationToken ct)
     {
+        // Flow subject: run the UI-defined pipeline and score its output
+        // against the case expectations instead of searching.
+        if (evalCase.FlowSlug is { } slug)
+            return await RunFlowCaseAsync(evalCase, slug, ct);
+
         var mode = ParseMode(evalCase.Mode) ?? defaultMode;
         var k = evalCase.TopK is > 0 ? evalCase.TopK.Value : defaultK;
         // RF (SPEC-20260926-ops-and-ui-polish): latency percentiles measure the
@@ -281,6 +286,49 @@ public sealed class EvalRunner(
             Faithfulness = faithfulness,
             LatencyMs = searchMs,
             Tags = evalCase.Tags
+        };
+    }
+
+    /// <summary>Flow case: run the pipeline via <see cref="Flows.FlowService"/>
+    /// and score its output — a hit means the run succeeded and its output
+    /// text carries every expected marker (or names an expected URI).
+    /// ExpectNoAnswer inverts it: a failing/empty run is the hit.</summary>
+    private async Task<EvalCaseResult> RunFlowCaseAsync(
+        EvalCase evalCase, string slug, CancellationToken ct)
+    {
+        var flows = services.GetService<Flows.FlowService>()
+            ?? throw new InvalidOperationException("flow service unavailable in this scope");
+        var flow = await db.AgentFlows.FirstOrDefaultAsync(f => f.Slug == slug && f.Enabled, ct)
+            ?? throw new InvalidOperationException($"flow '{slug}' not found or disabled");
+
+        var sw = Stopwatch.StartNew();
+        var result = await flows.RunAsync(flow, evalCase.FlowInputs, services, apiKeyId: null, sink: null, ct);
+        var ms = sw.Elapsed.TotalMilliseconds;
+
+        var outputText = result.Output?.ToJsonString() ?? result.Error ?? "";
+        var markersOk = evalCase.ExpectedTextMarkers.Count == 0
+            || evalCase.ExpectedTextMarkers.All(m => outputText.Contains(m, StringComparison.OrdinalIgnoreCase));
+        var urisOk = evalCase.ExpectedUris.Count == 0
+            || evalCase.ExpectedUris.Any(u => outputText.Contains(u, StringComparison.OrdinalIgnoreCase));
+        var succeeded = result.Status == "done" && markersOk && urisOk;
+        var hit = evalCase.ExpectNoAnswer
+            ? result.Status != "done"
+            : succeeded;
+        var score = hit ? 1.0 : 0.0;
+
+        return new EvalCaseResult
+        {
+            CaseId = evalCase.Id,
+            Recall = score,
+            Precision = score,
+            ReciprocalRank = score,
+            Ndcg = score,
+            Hit = hit,
+            Inconsistent = evalCase.ExpectNoAnswer && result.Status == "done",
+            Faithfulness = null,
+            LatencyMs = ms,
+            Tags = evalCase.Tags,
+            Error = result.Status == "done" ? null : result.Error,
         };
     }
 

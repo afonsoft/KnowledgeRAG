@@ -128,6 +128,10 @@ namespace KnowledgeHub.Shared;
 [JsonSerializable(typeof(FlowRunResultDto))]
 [JsonSerializable(typeof(FlowRunDto))]
 [JsonSerializable(typeof(List<FlowRunDto>))]
+[JsonSerializable(typeof(FlowTriggerDto))]
+[JsonSerializable(typeof(List<FlowTriggerDto>))]
+[JsonSerializable(typeof(CreateFlowTriggerRequest))]
+[JsonSerializable(typeof(UpdateFlowTriggerRequest))]
 // Ingestion jobs + SignalR monitor feed (deserialized on trimmed WASM).
 [JsonSerializable(typeof(SyncJobEnqueueDto))]
 [JsonSerializable(typeof(IngestionJobDto))]

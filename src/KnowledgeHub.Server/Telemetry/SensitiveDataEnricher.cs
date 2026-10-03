@@ -11,7 +11,7 @@ namespace KnowledgeHub.Server.Telemetry;
 /// <item>Property-name match — any scalar property whose name contains
 /// key/token/secret/password/connectionstring/authorization → value replaced.</item>
 /// <item>Token-pattern match — scalar values containing known token prefixes
-/// (aft_, ctx7sk-, sk-, Bearer, key=..., password=...) are masked in place.</item>
+/// (aft_, ctx7sk-, sk-, fwt_, Bearer, key=..., password=...) are masked in place.</item>
 /// </list>
 /// Operates on top-level properties; destructured subtrees are covered because
 /// their string representations land on the same ScalarValue pass. Never throws.
@@ -53,7 +53,7 @@ public sealed partial class SensitiveDataEnricher : ILogEventEnricher
     }
 
     /// <summary>Masks token-shaped substrings inside a scalar value —
-    /// <c>aft_…</c>, <c>ctx7sk-…</c>, <c>sk-…</c>, <c>Bearer xyz</c>,
+    /// <c>aft_…</c>, <c>ctx7sk-…</c>, <c>sk-…</c>, <c>fwt_…</c>, <c>Bearer xyz</c>,
     /// <c>Password=…</c>, <c>key=…</c> inside connection strings.</summary>
     private static string ScrubValue(string s)
     {
@@ -63,7 +63,7 @@ public sealed partial class SensitiveDataEnricher : ILogEventEnricher
     }
 
     // Known app/third-party token shapes followed by their body.
-    [GeneratedRegex(@"(aft_[A-Za-z0-9]+|ctx7sk-[A-Za-z0-9\-]+|sk-[A-Za-z0-9\-]{8,}|Bearer\s+\S+)",
+    [GeneratedRegex(@"(aft_[A-Za-z0-9]+|ctx7sk-[A-Za-z0-9\-]+|sk-[A-Za-z0-9\-]{8,}|fwt_[A-Za-z0-9]+|Bearer\s+\S+)",
         RegexOptions.IgnoreCase)]
     private static partial Regex TokenPrefixRegex();
 

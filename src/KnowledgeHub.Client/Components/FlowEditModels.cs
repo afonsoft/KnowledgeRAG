@@ -70,6 +70,7 @@ public sealed class FlowEditModel
         new("transform", l["StepType_transform"].Value),
         new("output", l["StepType_output"].Value),
         new("fail", l["StepType_fail"].Value),
+        new("approval", l["StepType_approval"].Value),
     ];
 
     public static FlowEditModel Empty() => new()
@@ -147,6 +148,7 @@ public static class FlowVisuals
         "transform" => "fa-wand-magic-sparkles",
         "output" => "fa-flag-checkered",
         "fail" => "fa-circle-xmark",
+        "approval" => "fa-user-check",
         _ => "fa-puzzle-piece",
     };
 
@@ -250,6 +252,7 @@ public static class FlowVisuals
             "transform" => "reshape",
             "output" => config["value"]?.ToJsonString() is { } v ? (v.Length > 60 ? v[..60] + "…" : v) : null,
             "fail" => NodeText(config["message"]),
+            "approval" => NodeText(config["message"]),
             "foreach" => $"{FlowStrings.EachPrefix} {config["each"]?.ToJsonString() ?? "?"}",
             _ => null,
         };

@@ -22,12 +22,15 @@ public interface IFlowStepHandler
 public interface IFlowEngine
 {
     /// <summary>Validate + bind inputs, then execute the step list. Never throws
-    /// for step failures — they land in the returned trace.</summary>
+    /// for step failures — they land in the returned trace. A
+    /// <paramref name="resume"/> state rebuilds the context of a suspended run:
+    /// steps whose ids are already in StepOutputs are skipped.</summary>
     Task<FlowRunResult> ExecuteAsync(
         FlowDefinitionDto definition,
         JsonObject? inputs,
         IServiceProvider services,
         Func<FlowStreamEvent, CancellationToken, ValueTask>? sink,
+        FlowResumeState? resume,
         CancellationToken ct);
 }
 
@@ -50,21 +53,29 @@ public sealed class FlowEngine(
         JsonObject? inputs,
         IServiceProvider services,
         Func<FlowStreamEvent, CancellationToken, ValueTask>? sink,
+        FlowResumeState? resume,
         CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
         var ctx = new FlowExecContext { Services = services, Limits = _limits, Sink = sink };
 
-        var inputError = BindInputs(definition, inputs, ctx);
-        if (inputError is not null)
+        if (resume is not null)
         {
-            return new FlowRunResult
+            Restore(ctx, resume);
+        }
+        else
+        {
+            var inputError = BindInputs(definition, inputs, ctx);
+            if (inputError is not null)
             {
-                Status = "failed",
-                Error = inputError,
-                Steps = ctx.Trace,
-                DurationMs = sw.ElapsedMilliseconds,
-            };
+                return new FlowRunResult
+                {
+                    Status = "failed",
+                    Error = inputError,
+                    Steps = ctx.Trace,
+                    DurationMs = sw.ElapsedMilliseconds,
+                };
+            }
         }
 
         JsonNode? output = null;
@@ -74,6 +85,22 @@ public sealed class FlowEngine(
             await ExecuteStepsAsync(definition.Steps, ctx, ct);
             // Last <output> step wins; otherwise last executed step output.
             output = ctx.Vars["__flow_output"] ?? LastOutput(ctx.Trace);
+        }
+        catch (FlowSuspendException ex)
+        {
+            await EmitAsync(ctx, FlowStreamEvent.Waiting, new JsonObject
+            {
+                ["stepId"] = ex.Pending.StepId,
+                ["message"] = ex.Pending.Message,
+            }, CancellationToken.None);
+            return new FlowRunResult
+            {
+                Status = "waiting_approval",
+                Steps = ctx.Trace,
+                DurationMs = sw.ElapsedMilliseconds,
+                Pending = ex.Pending,
+                ResumeState = Snapshot(ctx, ex.Pending),
+            };
         }
         catch (FlowAbortException ex)
         {
@@ -98,6 +125,52 @@ public sealed class FlowEngine(
         };
     }
 
+    /// <summary>Freeze the live context into a serialisable resume state.</summary>
+    private static FlowResumeState Snapshot(FlowExecContext ctx, PendingApproval pending) => new()
+    {
+        Vars = ctx.Vars,
+        StepOutputs = new Dictionary<string, JsonNode?>(ctx.StepOutputs, StringComparer.Ordinal),
+        StepErrors = new Dictionary<string, string?>(ctx.StepErrors, StringComparer.Ordinal),
+        ExecutedCount = ctx.ExecutedCount,
+        IterationsCount = ctx.IterationsCount,
+        Trace = ctx.Trace.Select(r => new FlowStepResultDto(
+            r.StepId, r.StepType, r.Name, r.Status, r.Output, r.Error, r.DurationMs)
+        { Attempts = r.Attempts }).ToList(),
+        PendingStepId = pending.StepId,
+    };
+
+    /// <summary>Rebuild a context from a persisted resume state.</summary>
+    private static void Restore(FlowExecContext ctx, FlowResumeState state)
+    {
+        if (state.Vars is not null)
+            foreach (var (k, v) in state.Vars)
+                ctx.Vars[k] = v?.DeepClone();
+        if (state.StepOutputs is not null)
+        {
+            foreach (var (k, v) in state.StepOutputs)
+                ctx.StepOutputs[k] = v?.DeepClone();
+            ctx.RestoredStepIds = new HashSet<string>(state.StepOutputs.Keys, StringComparer.Ordinal);
+        }
+        if (state.StepErrors is not null)
+            foreach (var (k, v) in state.StepErrors)
+                ctx.StepErrors[k] = v;
+        ctx.ExecutedCount = state.ExecutedCount;
+        ctx.IterationsCount = state.IterationsCount;
+        if (state.Trace is not null)
+            foreach (var r in state.Trace)
+                ctx.Trace.Add(new FlowStepResult
+                {
+                    StepId = r.StepId,
+                    StepType = r.StepType,
+                    Name = r.Name,
+                    Status = r.Status,
+                    Output = r.Output,
+                    Error = r.Error,
+                    DurationMs = r.DurationMs,
+                    Attempts = r.Attempts,
+                });
+    }
+
     /// <summary>Execute a (possibly nested) step list into the shared ctx trace.</summary>
     internal async Task ExecuteStepsAsync(
         IReadOnlyList<FlowStepDto> stepList,
@@ -107,6 +180,20 @@ public sealed class FlowEngine(
         foreach (var step in stepList)
         {
             ct.ThrowIfCancellationRequested();
+            // Resumed run: a step id restored from the suspended run already
+            // completed before the suspension — skip instead of re-executing
+            // (re-running would double side effects like tool calls). Each
+            // restored id is consumed once so steps that legitimately repeat
+            // inside a foreach later in THIS run are not skipped.
+            if (ctx.RestoredStepIds?.Remove(step.Id) == true)
+            {
+                await EmitAsync(ctx, FlowStreamEvent.StepSkip, new JsonObject
+                {
+                    ["stepId"] = step.Id,
+                    ["stepType"] = step.Type,
+                }, ct);
+                continue;
+            }
             if (ctx.ExecutedCount >= ctx.Limits.MaxSteps)
                 throw new FlowAbortException($"step budget exceeded (Flow:MaxSteps={ctx.Limits.MaxSteps})");
             ctx.ExecutedCount++;
@@ -127,20 +214,46 @@ public sealed class FlowEngine(
             }, ct);
 
             var sw = Stopwatch.StartNew();
+            var attempt = 1;
             try
             {
                 if (!_handlers.TryGetValue(step.Type, out var handler))
                     throw new FlowStepException($"unknown step type '{step.Type}'");
 
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeoutCts.CancelAfter(TimeSpan.FromSeconds(ctx.Limits.StepTimeoutSeconds));
-                var stepOutput = await handler.ExecuteAsync(step, ctx, this, timeoutCts.Token);
+                // F3: per-step retry — config.retry {attempts (≤5), backoffMs}.
+                // Retries apply to ordinary step failures and timeouts; a
+                // suspension request (approval step) is never retried.
+                var (attempts, backoffMs) = RetryOf(step);
+                JsonNode? stepOutput = null;
+                for (; ; attempt++)
+                {
+                    try
+                    {
+                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                        timeoutCts.CancelAfter(TimeSpan.FromSeconds(ctx.Limits.StepTimeoutSeconds));
+                        stepOutput = await handler.ExecuteAsync(step, ctx, this, timeoutCts.Token);
+                        break;
+                    }
+                    catch (FlowSuspendException) { throw; }
+                    catch (Exception) when (attempt < attempts && !ct.IsCancellationRequested)
+                    {
+                        if (backoffMs > 0)
+                            await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), ct);
+                    }
+                }
+                result.Attempts = attempt;
 
                 if (step.Type == "output")
                     ctx.Vars["__flow_output"] = stepOutput;
 
                 ctx.StepOutputs[step.Id] = stepOutput;
                 result.Output = CapOutput(stepOutput, ctx.Limits);
+
+                // HITL: an approval step records its request, then the run
+                // suspends here — FlowService turns this into a ToolApproval
+                // plus a persisted resume state.
+                if (ctx.PendingApproval is { } pending)
+                    throw new FlowSuspendException(pending);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
@@ -150,10 +263,16 @@ public sealed class FlowEngine(
                 if (!ContinueOnError(step))
                     throw new FlowAbortException($"step '{step.Id}' failed: {result.Error}");
             }
+            catch (FlowSuspendException)
+            {
+                result.Status = "waiting";
+                throw;
+            }
             catch (Exception ex)
             {
                 result.Status = "failed";
                 result.Error = ex.Message;
+                result.Attempts = attempt;
                 ctx.StepErrors[step.Id] = ex.Message;
                 if (!ContinueOnError(step))
                     throw new FlowAbortException($"step '{step.Id}' failed: {ex.Message}");
@@ -176,6 +295,22 @@ public sealed class FlowEngine(
     private static bool ContinueOnError(FlowStepDto step) =>
         step.Config?.TryGetPropertyValue("continueOnError", out var v) == true
         && v is JsonValue jv && jv.TryGetValue<bool>(out var b) && b;
+
+    /// <summary>Per-step retry policy: config.retry {attempts, backoffMs} —
+    /// attempts counts total tries (default 1), capped at 5 like Dify's
+    /// bounded failure strategy.</summary>
+    private static (int Attempts, int BackoffMs) RetryOf(FlowStepDto step)
+    {
+        var (attempts, backoff) = (1, 0);
+        if (step.Config?.TryGetPropertyValue("retry", out var r) == true && r is JsonObject ro)
+        {
+            if (ro["attempts"] is JsonValue av && av.TryGetValue<int>(out var a) && a > 0)
+                attempts = Math.Min(a, 5);
+            if (ro["backoffMs"] is JsonValue bv && bv.TryGetValue<int>(out var b) && b > 0)
+                backoff = b;
+        }
+        return (attempts, backoff);
+    }
 
     private static async Task EmitAsync(
         FlowExecContext ctx, string type, JsonNode? data, CancellationToken ct)
@@ -216,6 +351,12 @@ public sealed class FlowEngine(
             if (value is not null)
                 ctx.Vars[input.Name] = value.DeepClone();
         }
+        // Undeclared extras (e.g. trigger metadata, webhook event payload)
+        // are still exposed under vars.* so steps can reference them.
+        if (inputs is not null)
+            foreach (var (k, v) in inputs)
+                if (!ctx.Vars.ContainsKey(k))
+                    ctx.Vars[k] = v?.DeepClone();
         return null;
     }
 }

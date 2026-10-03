@@ -691,6 +691,12 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.Property<string>("OutputJson")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("PendingApprovalId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResumeStateJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -699,13 +705,61 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.Property<string>("StepResultsJson")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("TriggerId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("FlowId");
 
+                    b.HasIndex("PendingApprovalId");
+
                     b.ToTable("FlowRuns");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.FlowTrigger", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfigJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("FlowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("IntervalSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("LastFiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Secret")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FlowId");
+
+                    b.HasIndex("Secret")
+                        .IsUnique();
+
+                    b.ToTable("FlowTriggers");
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.GraphSettings", b =>
@@ -1408,6 +1462,15 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.FlowRun", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.AgentFlow", null)
+                        .WithMany()
+                        .HasForeignKey("FlowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.FlowTrigger", b =>
                 {
                     b.HasOne("KnowledgeHub.Server.Domain.Entities.AgentFlow", null)
                         .WithMany()

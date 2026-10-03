@@ -517,7 +517,9 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Flows.IFlowStepHandler, Flows.TransformStepHandler>();
         services.AddSingleton<Flows.IFlowStepHandler, Flows.OutputStepHandler>();
         services.AddSingleton<Flows.IFlowStepHandler, Flows.FailStepHandler>();
+        services.AddSingleton<Flows.IFlowStepHandler, Flows.ApprovalStepHandler>();
         services.AddScoped<Flows.FlowService>();
+        services.AddHostedService<Flows.FlowSchedulerWorker>();
     }
 
     private static void AddSecrets(IServiceCollection services, IConfiguration configuration)

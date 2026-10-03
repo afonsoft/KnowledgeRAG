@@ -74,6 +74,9 @@ else
                                 <Button Size="Size.ExtraSmall" Color="Color.Info" Icon="fa-solid fa-clock-rotate-left"
                                         Text="@L["Flows_Runs"]" TooltipText="@L["Flows_RunsTooltip"]" IsAsync="true"
                                         OnClick="() => ShowRunsAsync(f)" />
+                                <Button Size="Size.ExtraSmall" Color="Color.Warning" Icon="fa-solid fa-bolt"
+                                        Text="@L["Flows_Triggers"]" TooltipText="@L["Flows_TriggersTooltip"]" IsAsync="true"
+                                        OnClick="() => ShowTriggersAsync(f)" />
                                 <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
                                                   Text="@L["Common_Delete"]" TooltipText="@L["Common_Delete"]"
                                                   Content="@L["Flows_DeleteConfirm", f.Slug]"
@@ -235,10 +238,18 @@ else
             @if (_runResult is not null)
             {
                 <div class="mt-3">
-                    <Badge Color="@(_runResult.Status == "done" ? Color.Success : Color.Danger)">
+                    <Badge Color="@(_runResult.Status switch { "done" => Color.Success, "waiting_approval" => Color.Warning, _ => Color.Danger })">
                         @_runResult.Status
                     </Badge>
                     <small class="text-muted ms-2">@_runResult.DurationMs ms</small>
+                    @if (_runResult.ApprovalId is { } approvalId)
+                    {
+                        <div class="alert alert-warning mt-2 mb-0" role="alert">
+                            <i class="fa-solid fa-user-check"></i> @L["Flows_WaitingApproval"]
+                            <a href="/approvals" class="alert-link">@L["Flows_OpenApprovals"]</a>
+                            <small class="d-block text-muted mt-1"><code>@approvalId</code></small>
+                        </div>
+                    }
                     @if (!string.IsNullOrEmpty(_runResult.Error))
                     {
                         <div class="alert alert-danger mt-2" role="alert">@_runResult.Error</div>
@@ -253,7 +264,7 @@ else
                                     <tr>
                                         <td><code>@s.StepId</code></td>
                                         <td>@s.StepType</td>
-                                        <td>@s.Status</td>
+                                        <td>@s.Status@(s.Attempts > 1 ? $" ×{s.Attempts}" : "")</td>
                                         <td>@s.DurationMs</td>
                                         <td><small class="text-break">@(s.Error ?? s.Output?.ToJsonString() ?? "")</small></td>
                                     </tr>
@@ -307,6 +318,95 @@ else
                             }
                         </tbody>
                     </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (_triggersTarget is not null)
+{
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>@L["Flows_TriggersTitle", _triggersTarget.Slug]</strong>
+            <Button Size="Size.ExtraSmall" Icon="fa-solid fa-xmark" Text="@L["Common_Close"]" TooltipText="@L["Common_Close"]"
+                    OnClick="() => _triggersTarget = null" />
+        </div>
+        <div class="card-body">
+            @if (_triggers is null)
+            {
+                <div class="text-muted"><i class="fa-solid fa-spinner fa-spin"></i> @L["Common_Loading"]</div>
+            }
+            else
+            {
+                @if (_triggers.Count == 0)
+                {
+                    <div class="text-muted mb-2">@L["Flows_NoTriggers"]</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <caption class="visually-hidden">@L["Flows_TriggersCaption"]</caption>
+                            <thead><tr><th>@L["Common_Type"]</th><th>@L["Flows_TriggerDetail"]</th><th>@L["Common_Enabled"]</th><th>@L["Flows_LastFired"]</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var t in _triggers)
+                                {
+                                    <tr>
+                                        <td><Badge Color="@(t.Kind == "webhook" ? Color.Primary : Color.Info)">@t.Kind</Badge></td>
+                                        <td>
+                                            @if (t.WebhookUrl is { } url)
+                                            {
+                                                <code class="small text-break user-select-all">@url</code>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">@L["Flows_EverySeconds", t.IntervalSeconds]</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <Switch Value="t.Enabled" ValueChanged="(bool v) => SetTriggerEnabledAsync(t, v)"
+                                                    DisplayText="" />
+                                        </td>
+                                        <td><small class="text-muted">@(t.LastFiredAt?.LocalDateTime.ToString("g") ?? "—")</small></td>
+                                        <td>
+                                            <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger" Icon="fa-solid fa-trash"
+                                                              TooltipText="@L["Common_Delete"]"
+                                                              Content="@L["Flows_TriggerDeleteConfirm"]"
+                                                              OnConfirm="() => DeleteTriggerAsync(t)" />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <div class="border-top pt-3 mt-2">
+                    <h2 class="h6">@L["Flows_NewTrigger"]</h2>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-6 col-md-3">
+                            <Select @bind-Value="_newTriggerKind" Items="_triggerKindItems" DisplayText="@L["Common_Type"]" ShowLabel="true" />
+                        </div>
+                        @if (_newTriggerKind == "schedule")
+                        {
+                            <div class="col-6 col-md-3">
+                                <BootstrapInput @bind-Value="_newTriggerInterval" DisplayText="@L["Flows_IntervalSeconds"]" ShowLabel="true" type="number" />
+                            </div>
+                        }
+                        <div class="col-12 col-md-4">
+                            <BootstrapInput @bind-Value="_newTriggerInputs" DisplayText="@L["Flows_StaticInputs"]" ShowLabel="true"
+                                            placeholder="{}" />
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <Button Color="Color.Primary" Icon="fa-solid fa-plus" Text="@L["Flows_AddTrigger"]" IsAsync="true"
+                                    OnClick="CreateTriggerAsync" />
+                        </div>
+                    </div>
+                    @if (_newTriggerKind == "webhook")
+                    {
+                        <small class="text-muted d-block mt-1">@L["Flows_WebhookHint"]</small>
+                    }
                 </div>
             }
         </div>
@@ -484,6 +584,78 @@ else
         _runsTarget = f;
         _runs = null;
         _runs = await Api.RunsAsync(f.Id);
+    }
+
+    // ── Triggers ──────────────────────────────────────────────────────
+
+    private FlowDto? _triggersTarget;
+    private IReadOnlyList<FlowTriggerDto>? _triggers;
+    private string _newTriggerKind = "webhook";
+    private int _newTriggerInterval = 300;
+    private string _newTriggerInputs = "{}";
+
+    private List<SelectedItem> _triggerKindItems =>
+    [
+        new("webhook", L["Flows_KindWebhook"].Value),
+        new("schedule", L["Flows_KindSchedule"].Value),
+    ];
+
+    private async Task ShowTriggersAsync(FlowDto f)
+    {
+        _triggersTarget = f;
+        _triggers = null;
+        _triggers = await Api.TriggersAsync(f.Id);
+    }
+
+    private async Task CreateTriggerAsync()
+    {
+        if (_triggersTarget is null) return;
+        JsonObject? inputs = null;
+        if (!string.IsNullOrWhiteSpace(_newTriggerInputs))
+        {
+            try { inputs = JsonNode.Parse(_newTriggerInputs) as JsonObject; }
+            catch (JsonException ex)
+            {
+                await Toast.Error(L["Common_Error"], L["Flows_InvalidInputs", ex.Message]);
+                return;
+            }
+        }
+        var (trigger, error) = await Api.CreateTriggerAsync(
+            _triggersTarget.Id,
+            new CreateFlowTriggerRequest(_newTriggerKind, _newTriggerInterval, inputs));
+        if (trigger is null)
+        {
+            await Toast.Error(L["Common_Error"], error ?? L["Flows_TriggerFail"].Value);
+            return;
+        }
+        await Toast.Success(L["Flows_TriggerCreated"],
+            trigger.WebhookUrl ?? L["Flows_KindSchedule"].Value);
+        _triggers = await Api.TriggersAsync(_triggersTarget.Id);
+    }
+
+    private async Task SetTriggerEnabledAsync(FlowTriggerDto t, bool enabled)
+    {
+        var (_, error) = await Api.UpdateTriggerAsync(
+            t.Id, new UpdateFlowTriggerRequest(enabled, null, null));
+        if (error is not null)
+        {
+            await Toast.Error(L["Common_Error"], error);
+            return;
+        }
+        if (_triggersTarget is not null)
+            _triggers = await Api.TriggersAsync(_triggersTarget.Id);
+    }
+
+    private async Task DeleteTriggerAsync(FlowTriggerDto t)
+    {
+        var (ok, error) = await Api.DeleteTriggerAsync(t.Id);
+        if (ok)
+        {
+            await Toast.Success(L["Flows_TriggerDeleted"], "");
+            if (_triggersTarget is not null)
+                _triggers = await Api.TriggersAsync(_triggersTarget.Id);
+        }
+        else await Toast.Error(L["Common_Error"], error ?? L["Flows_TriggerFail"].Value);
     }
 
     /// <summary>Serialize the structured model back into DefinitionJson so the

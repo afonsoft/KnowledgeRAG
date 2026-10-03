@@ -2477,4 +2477,73 @@ Esperando aprobación — ver /approvals.
   <data name="StepType_transform" xml:space="preserve">
     <value>transform — reshape</value>
   </data>
+  <data name="StepType_approval" xml:space="preserve">
+    <value>approval — aprobación humana</value>
+  </data>
+  <data name="FC_ApprovalExample" xml:space="preserve">
+    <value>revisar antes de continuar</value>
+  </data>
+  <data name="Flows_Triggers" xml:space="preserve">
+    <value>Disparadores</value>
+  </data>
+  <data name="Flows_TriggersTooltip" xml:space="preserve">
+    <value>Gestionar disparadores (webhook / programación)</value>
+  </data>
+  <data name="Flows_TriggersTitle" xml:space="preserve">
+    <value>Disparadores — {0}</value>
+  </data>
+  <data name="Flows_TriggersCaption" xml:space="preserve">
+    <value>Disparadores del flujo</value>
+  </data>
+  <data name="Flows_NoTriggers" xml:space="preserve">
+    <value>Sin disparadores — el flujo solo se ejecuta manualmente o vía MCP.</value>
+  </data>
+  <data name="Flows_TriggerDetail" xml:space="preserve">
+    <value>Detalle</value>
+  </data>
+  <data name="Flows_LastFired" xml:space="preserve">
+    <value>Último disparo</value>
+  </data>
+  <data name="Flows_EverySeconds" xml:space="preserve">
+    <value>cada {0}s</value>
+  </data>
+  <data name="Flows_TriggerDeleteConfirm" xml:space="preserve">
+    <value>¿Eliminar este disparador?</value>
+  </data>
+  <data name="Flows_NewTrigger" xml:space="preserve">
+    <value>Nuevo disparador</value>
+  </data>
+  <data name="Flows_KindWebhook" xml:space="preserve">
+    <value>Webhook</value>
+  </data>
+  <data name="Flows_KindSchedule" xml:space="preserve">
+    <value>Programación</value>
+  </data>
+  <data name="Flows_IntervalSeconds" xml:space="preserve">
+    <value>Intervalo (s)</value>
+  </data>
+  <data name="Flows_StaticInputs" xml:space="preserve">
+    <value>Entradas fijas (JSON)</value>
+  </data>
+  <data name="Flows_AddTrigger" xml:space="preserve">
+    <value>Añadir disparador</value>
+  </data>
+  <data name="Flows_WebhookHint" xml:space="preserve">
+    <value>Se genera una URL secreta — haz POST del JSON del evento para ejecutar el flujo (el payload queda en inputs.event).</value>
+  </data>
+  <data name="Flows_TriggerCreated" xml:space="preserve">
+    <value>Disparador creado</value>
+  </data>
+  <data name="Flows_TriggerDeleted" xml:space="preserve">
+    <value>Disparador eliminado</value>
+  </data>
+  <data name="Flows_TriggerFail" xml:space="preserve">
+    <value>La operación del disparador falló</value>
+  </data>
+  <data name="Flows_WaitingApproval" xml:space="preserve">
+    <value>Ejecución pausada en una aprobación.</value>
+  </data>
+  <data name="Flows_OpenApprovals" xml:space="preserve">
+    <value>Resuélvela en Aprobaciones</value>
+  </data>
 </root>

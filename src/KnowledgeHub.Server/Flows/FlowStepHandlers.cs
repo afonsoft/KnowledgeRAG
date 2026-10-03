@@ -452,6 +452,28 @@ public sealed class OutputStepHandler : IFlowStepHandler
     }
 }
 
+/// <summary><c>approval</c>: mid-flow HITL gate ({message}) — marks the
+/// run's pending gate; the engine suspends and FlowService persists a
+/// ToolApproval. On resume the step's output becomes the resolution.
+/// Rejected inside <c>foreach</c> bodies (loop state is not resumable).</summary>
+public sealed class ApprovalStepHandler : IFlowStepHandler
+{
+    public string Type => "approval";
+
+    public Task<JsonNode?> ExecuteAsync(
+        FlowStepDto step, FlowExecContext ctx, FlowEngine engine, CancellationToken ct)
+    {
+        var message = ToolStepHandler.ConfigString(step, "message")
+            ?? $"step '{step.Id}' requires approval";
+        ctx.PendingApproval = new PendingApproval
+        {
+            StepId = step.Id,
+            Message = VariableResolver.ResolveString(message, ctx),
+        };
+        return Task.FromResult<JsonNode?>(new JsonObject { ["pending"] = true });
+    }
+}
+
 /// <summary><c>fail</c>: explicit run abort ({message}).</summary>
 public sealed class FailStepHandler : IFlowStepHandler
 {

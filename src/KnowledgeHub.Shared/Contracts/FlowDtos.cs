@@ -70,7 +70,12 @@ public sealed record FlowStepResultDto(
     string Status,
     JsonNode? Output,
     string? Error,
-    long DurationMs);
+    long DurationMs)
+{
+    /// <summary>Attempts the step needed (config.retry), 1 when it first-try
+    /// succeeded or the step doesn't retry.</summary>
+    public int Attempts { get; init; } = 1;
+}
 
 /// <summary>Outcome of a flow run (REST + MCP share this shape).</summary>
 public sealed record FlowRunResultDto(
@@ -79,7 +84,12 @@ public sealed record FlowRunResultDto(
     JsonNode? Output,
     string? Error,
     List<FlowStepResultDto> Steps,
-    long DurationMs);
+    long DurationMs)
+{
+    /// <summary>Approval suspending the run (Status="waiting_approval") —
+    /// resolve it via /api/approvals; the flow then resumes.</summary>
+    public Guid? ApprovalId { get; init; }
+}
 
 /// <summary>Persisted run (audit listing).</summary>
 public sealed record FlowRunDto(
@@ -92,3 +102,29 @@ public sealed record FlowRunDto(
     string? Error,
     long? DurationMs,
     DateTimeOffset CreatedAt);
+
+/// <summary>Event source that starts a flow run (webhook or schedule).</summary>
+public sealed record FlowTriggerDto(
+    Guid Id,
+    Guid FlowId,
+    string Kind,
+    bool Enabled,
+    /// <summary>Full webhook URL (kind=webhook); null for schedules.</summary>
+    string? WebhookUrl,
+    int? IntervalSeconds,
+    DateTimeOffset? LastFiredAt,
+    DateTimeOffset CreatedAt);
+
+/// <summary>Create a flow trigger. Kind: "webhook" | "schedule".
+/// schedule requires IntervalSeconds ≥ 60; webhook generates the secret
+/// server-side (returned once in the DTO's WebhookUrl).</summary>
+public sealed record CreateFlowTriggerRequest(
+    string Kind,
+    int? IntervalSeconds,
+    JsonObject? Inputs);
+
+/// <summary>Update a trigger; null members keep their current values.</summary>
+public sealed record UpdateFlowTriggerRequest(
+    bool? Enabled,
+    int? IntervalSeconds,
+    JsonObject? Inputs);

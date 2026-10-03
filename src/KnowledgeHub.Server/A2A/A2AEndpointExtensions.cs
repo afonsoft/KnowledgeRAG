@@ -2,6 +2,7 @@ using System.Text.Json;
 using A2A;
 using A2A.AspNetCore;
 using KnowledgeHub.Server.Auth;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 
 namespace KnowledgeHub.Server.A2A;
@@ -21,9 +22,29 @@ public static class A2AEndpointExtensions
     /// <summary>Builds the card with absolute URLs for the given base.
     /// SPEC-20261001-a2a-task-durability RF-003/RF-005: <c>pushNotifications</c>
     /// is declared only when <c>A2a:PushNotifications:Enabled</c> is on, and
-    /// every skill advertises its input/output modes for richer discovery.</summary>
-    public static AgentCard BuildAgentCard(Uri baseUri, bool pushEnabled)
+    /// every skill advertises its input/output modes for richer discovery.
+    /// Enabled agent flows are appended as <c>flow_&lt;slug&gt;</c> skills —
+    /// the same ids the dispatcher accepts for delegation.</summary>
+    public static AgentCard BuildAgentCard(
+        Uri baseUri, bool pushEnabled,
+        IEnumerable<(string Slug, string? Description)>? flows = null)
     {
+        var skills = new List<AgentSkill>(A2aSkillCatalog.Skills);
+        if (flows is not null)
+        {
+            foreach (var (slug, description) in flows)
+            {
+                skills.Add(new AgentSkill
+                {
+                    Id = $"flow_{slug}",
+                    Name = $"Flow: {slug}",
+                    Description = description ?? $"User-defined agent flow '{slug}' — deterministic pipeline.",
+                    Tags = ["flow", "pipeline"],
+                    InputModes = [MimeJson],
+                    OutputModes = [MimeJson],
+                });
+            }
+        }
         var a2aUrl = new Uri(baseUri, "a2a").ToString();
         var baseUrl = baseUri.ToString().TrimEnd('/');
         return new AgentCard
@@ -64,7 +85,7 @@ public static class A2AEndpointExtensions
                     }
                 }
             ],
-            Skills = [.. A2aSkillCatalog.Skills]
+            Skills = [.. skills]
         };
     }
 
@@ -80,12 +101,23 @@ public static class A2AEndpointExtensions
             var baseUri = new Uri($"{http.Request.Scheme}://{http.Request.Host}/");
             var pushEnabled = http.RequestServices.GetRequiredService<IConfiguration>()
                 .GetValue(KnowledgeHubA2AServer.EnabledConfigKey, true);
-            // The card is derived data (scheme/host + a config flag) — L1 serves
-            // the live object, L2 (Redis) shares it across replicas; config
-            // changes ride the "a2a" region TTL.
+            // Card contents also change when the flow set changes — key the
+            // cache on the catalog version so a saved/disabled flow
+            // invalidates the card instead of waiting out the TTL.
+            var catalogVersion = http.RequestServices
+                .GetRequiredService<Mcp.IToolCatalogChangeNotifier>().Version;
             var card = await Caching.EndpointCache.GetJsonAsync(cache,
-                $"a2a:card:{baseUri}:{pushEnabled}",
-                c => Task.FromResult<AgentCard?>(BuildAgentCard(baseUri, pushEnabled)),
+                $"a2a:card:{baseUri}:{pushEnabled}:{catalogVersion}",
+                async c =>
+                {
+                    var db = http.RequestServices.GetRequiredService<Data.KnowledgeHubDbContext>();
+                    var flows = await db.AgentFlows
+                        .Where(f => f.Enabled)
+                        .Select(f => new { f.Slug, f.Description })
+                        .ToListAsync(c);
+                    return BuildAgentCard(baseUri, pushEnabled,
+                        flows.Select(f => (f.Slug, f.Description)));
+                },
                 lf, ct);
             return Results.Json(card, A2AJsonUtilities.DefaultOptions);
         }).AllowAnonymous();
