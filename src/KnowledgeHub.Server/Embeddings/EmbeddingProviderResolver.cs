@@ -53,10 +53,10 @@ public sealed class EmbeddingProviderResolver(
     /// string.Join on every access. The settings service returns a shared
     /// immutable snapshot, so reference equality means unchanged.</summary>
     private SignatureEntry? _signatureEntry;
-    private sealed record SignatureEntry(EmbeddingOptions Options, string Signature)
+    private sealed record SignatureEntry(EmbeddingOptions Options, string Value)
     {
         public string SignatureDigest { get; } = Convert.ToHexString(
-            SHA256.HashData(Encoding.UTF8.GetBytes(Signature)))[..8].ToLowerInvariant();
+            SHA256.HashData(Encoding.UTF8.GetBytes(Value)))[..8].ToLowerInvariant();
     }
 
     private SignatureEntry EffectiveSignature()
@@ -133,7 +133,7 @@ public sealed class EmbeddingProviderResolver(
     {
         get
         {
-            var signature = EffectiveSignature().Signature;
+            var signature = EffectiveSignature().Value;
             if (_provider is not null && signature == _signature)
                 return _provider;
             lock (_gate)
