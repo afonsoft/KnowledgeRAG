@@ -11,6 +11,10 @@
 
 <div class="page">
     <div class="sidebar @(_mobileNavOpen ? "show" : "") @(_sidebarCollapsed ? "collapsed" : "")">
+        <button class="sidebar-close d-md-none" type="button"
+                aria-label="@L["Layout_ToggleNav"]" @onclick="CloseMobileNav">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
         <NavMenu Collapsed="_sidebarCollapsed"
                  OnToggleCollapse="ToggleSidebarAsync"
                  OnNavItemClicked="CloseMobileNav" />
@@ -68,6 +72,7 @@
     private bool _sidebarCollapsed;
     private string _pageTitle = "Knowledge";
     private IDisposable? _locationChanging;
+    private DotNetObjectReference<MainLayout>? _selfRef;
 
     /// <summary>Registra os hooks de navegação que acionam a barra de loading entre telas.</summary>
     protected override void OnInitialized()
@@ -77,10 +82,17 @@
         Nav.LocationChanged += OnLocationChanged;
     }
 
-    /// <summary>Restaura a preferência do rail recolhido (só faz efeito em desktop).</summary>
+    /// <summary>Restaura a preferência do rail recolhido (só faz efeito em desktop)
+    /// e registra o listener de Escape que fecha o drawer mobile.</summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
+        _selfRef = DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync("khNav.registerEscape", _selfRef);
+        }
+        catch { /* JS ainda indisponível — Escape simplesmente não fecha o drawer */ }
         try
         {
             var stored = await JS.InvokeAsync<string?>("localStorage.getItem", SidebarStateKey);
@@ -132,6 +144,15 @@
         _mobileNavOpen = false;
     }
 
+    /// <summary>Escape fecha o drawer — invocado pelo listener document-level em boot.js.</summary>
+    [JSInvokable]
+    public void OnEscapeKey()
+    {
+        if (!_mobileNavOpen) return;
+        _mobileNavOpen = false;
+        StateHasChanged();
+    }
+
     /// <summary>Alterna o rail só-ícone no desktop e persiste a preferência.</summary>
     private async Task ToggleSidebarAsync()
     {
@@ -148,5 +169,17 @@
     {
         _locationChanging?.Dispose();
         Nav.LocationChanged -= OnLocationChanged;
+        _selfRef?.Dispose();
+        _ = UnregisterEscapeAsync();
+    }
+
+    private async Task UnregisterEscapeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("khNav.unregisterEscape");
+        }
+        catch (JSDisconnectedException) { /* circuit já encerrado */ }
+        catch (TaskCanceledException) { }
     }
 }

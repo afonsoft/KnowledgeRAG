@@ -16,7 +16,7 @@
 </p>
 
 <div class="table-responsive-wrapper">
-    <Table TItem="ApiKeyDto" Items="_keys" ShowLoading="true" ShowLoadingInFirstRender="true"
+    <Table @ref="_table" TItem="ApiKeyDto" Items="_keys" ShowLoading="true" ShowLoadingInFirstRender="true"
            IsStriped="true" ShowToolbar="true" ShowDefaultButtons="false" ShowEmpty="true"
            EmptyText="@L["Keys_Empty"]" CreateItemCallback="CreatePlaceholder">
     <TableToolbarTemplate>
@@ -148,7 +148,7 @@
                    blank fields inherit the global RateLimiting:* values. *@
                 <div class="mb-3">
                     <h6 class="text-muted mb-2">@L["Keys_RateLimit"]</h6>
-                    <div class="row g-2 mb-2">
+                    <div class="row g-2 mb-2" @key="_rlVersion">
                         <div class="col-6 col-md-3">
                             <label class="form-label"><small>LLM permits</small></label>
                             <input type="number" class="form-control form-control-sm" min="1" max="100000"
@@ -370,6 +370,11 @@
 
 @code {
     private List<ApiKeyDto>? _keys;
+    private Table<ApiKeyDto>? _table;
+    // Bumpa a cada abertura/limpeza — recria os inputs de rate limit e evita
+    // valor stale quando a bound vai para null (quirk do binding em input
+    // type=number já renderizado no modal).
+    private int _rlVersion;
     private Modal? _createModal;
     private Modal? _revealModal;
     private Modal? _usageModal;
@@ -436,6 +441,14 @@
             _keys = [];
             await Toast.Error(L["Common_Error"], L["Keys_LoadError", ex.Message]);
         }
+
+        // Força o repaint da Table — na transição empty→non-empty o BB Table
+        // não re-renderiza mesmo com nova referência de Items.
+        if (_table is not null)
+        {
+            await InvokeAsync(StateHasChanged);
+            await _table.QueryAsync();
+        }
     }
 
     private Task ShowCreate()
@@ -486,6 +499,7 @@
         _rl.LlmWindowSeconds = key.LlmRateLimitWindowSeconds;
         _rl.SyncPermits = key.SyncRateLimitPermits;
         _rl.SyncWindowSeconds = key.SyncRateLimitWindowSeconds;
+        _rlVersion++;
         await _usageModal!.Toggle();
         try
         {
@@ -560,6 +574,7 @@
             return;
         }
         _rl.LlmPermits = _rl.LlmWindowSeconds = _rl.SyncPermits = _rl.SyncWindowSeconds = null;
+        _rlVersion++;
         await Toast.Success(L["Keys_Cleared"], L["Keys_LimitsCleared"]);
         await ReloadAsync();
         _usageKey = _keys?.FirstOrDefault(k => k.Id == _usageKey.Id);

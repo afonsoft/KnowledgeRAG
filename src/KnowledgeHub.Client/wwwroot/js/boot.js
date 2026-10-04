@@ -113,6 +113,30 @@
             '<p><a href=".">Recarregar</a></p></div>';
     }
 
+    // Drawer mobile: Escape fecha o menu. Listener document-level porque o
+    // foco pode estar em qualquer elemento; o MainLayout registra um
+    // DotNetObjectReference no first render.
+    var khNavHandler = null;
+    window.khNav = {
+        registerEscape: function (dotNetRef) {
+            if (khNavHandler) {
+                document.removeEventListener("keydown", khNavHandler);
+            }
+            khNavHandler = function (e) {
+                if (e.key === "Escape") {
+                    dotNetRef.invokeMethodAsync("OnEscapeKey");
+                }
+            };
+            document.addEventListener("keydown", khNavHandler);
+        },
+        unregisterEscape: function () {
+            if (khNavHandler) {
+                document.removeEventListener("keydown", khNavHandler);
+                khNavHandler = null;
+            }
+        }
+    };
+
     try {
         Blazor.start({
             loadBootResource: function (type, name, defaultUri, integrity) {

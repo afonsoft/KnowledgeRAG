@@ -221,6 +221,28 @@ img, table, pre, code, .table-responsive {
             transform: translateX(0);
         }
 
+    /* Botão fechar dentro do drawer — o hamburger do top-row fica coberto pela
+       sidebar (z-index acima do backdrop), então o drawer precisa do próprio X. */
+    .sidebar-close {
+        display: none;
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        z-index: 10;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 0.5rem;
+        background: transparent;
+        color: inherit;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .sidebar.show .sidebar-close {
+            display: inline-flex;
+        }
+
     .sidebar-backdrop {
         position: fixed;
         top: 0;
