@@ -419,7 +419,15 @@ img, table, pre, code, .table-responsive {
 }
 /* Flow canvas — vertical chain auto-layout. Pure CSS connectors (no SVG
    coordinate bookkeeping): each connector is a thin centered line whose
-   arrowhead is a rotated square. */
+   arrowhead is a rotated square. The workspace pairs the canvas with a side
+   panel (step palette / property inspector), like Node-RED / n8n. */
+
+.fc-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    gap: 0.75rem;
+    align-items: start;
+}
 
 .fc-wrap {
     overflow: auto;
@@ -429,7 +437,9 @@ img, table, pre, code, .table-responsive {
         radial-gradient(circle, var(--bs-border-color-translucent, rgba(0,0,0,.08)) 1px, transparent 1px);
     background-size: 20px 20px;
     background-color: var(--bs-tertiary-bg, #f8f9fa);
-    max-height: 70vh;
+    height: 72vh;
+    min-height: 30rem;
+    min-width: 0;
 }
 
 .fc-canvas {
@@ -516,6 +526,18 @@ button.fc-node {
     font-weight: 500;
 }
 
+.fc-idx {
+    font-size: 0.6875rem;
+    font-family: var(--bs-font-monospace);
+    color: var(--bs-secondary-color);
+    flex: 0 0 auto;
+}
+
+.fc-warn {
+    color: var(--bs-warning);
+    flex: 0 0 auto;
+}
+
 .fc-io {
     display: flex;
     flex-wrap: wrap;
@@ -548,6 +570,27 @@ button.fc-node {
 .fc-node--start .fc-node-head,
 .fc-node--end   .fc-node-head { justify-content: center; }
 .fc-node--start .fc-io { justify-content: center; }
+
+/* empty-flow call-to-action where the first step will land */
+.fc-node--ghost {
+    border-style: dashed;
+    border-left-width: 1px;
+    color: var(--bs-secondary-color);
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: transparent;
+}
+
+.fc-node--ghost:hover,
+.fc-node--drop {
+    border-color: var(--bs-primary);
+    color: var(--bs-primary);
+    outline: 2px dashed var(--bs-primary);
+    outline-offset: 3px;
+}
 
 /* ---------- connectors (line + arrow + insert button) ---------- */
 
@@ -711,19 +754,59 @@ button.fc-node {
     color: var(--bs-secondary-color);
 }
 
-/* ---------- drawer ---------- */
+/* ---------- side panel: step palette + property inspector ---------- */
 
-.fc-drawer {
+.fc-panel {
     position: sticky;
-    bottom: 0;
-    margin-top: 0.5rem;
+    top: 0.5rem;
+    max-height: calc(72vh + 2.5rem);
+    overflow: auto;
+    border-color: var(--bs-primary-border-subtle, var(--bs-border-color));
+}
+
+.fc-pal {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.fc-pal-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--bs-border-color);
+    border-left-width: 3px;
+    border-radius: 0.375rem;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    padding: 0.375rem 0.625rem;
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: grab;
+    min-width: 0;
+}
+
+.fc-pal-item:hover,
+.fc-pal-item:focus-visible {
+    background: var(--bs-secondary-bg);
     border-color: var(--bs-primary);
-    z-index: 5;
+}
+
+.fc-pal-label {
+    min-width: 0;
 }
 
 /* ---------- responsive ---------- */
 
+@media (max-width: 991.98px) {
+    .fc-workspace { grid-template-columns: 1fr; }
+    .fc-panel { position: static; max-height: none; }
+}
+
 @media (max-width: 576px) {
+    .fc-wrap { min-height: 22rem; height: 55vh; }
     .fc-canvas { min-width: 24rem; padding: 1rem 0.5rem; }
     .fc-node { width: 16rem; }
     .fc-node--start, .fc-node--end { width: 11rem; }

@@ -49,7 +49,7 @@ public sealed class FlowEditModel
     public string DefinitionJson { get; set; } = "{}";
     /// <summary>Active editor surface. When <see cref="FlowEditorView.Json"/>,
     /// <see cref="DefinitionJson"/> is authoritative over Inputs/Steps.</summary>
-    public FlowEditorView View { get; set; } = FlowEditorView.List;
+    public FlowEditorView View { get; set; } = FlowEditorView.Canvas;
 
     public static readonly List<SelectedItem> InputTypes =
     [
@@ -261,4 +261,26 @@ public static class FlowVisuals
 
     private static string? Truncate(string? text) =>
         text is { Length: > 60 } ? text[..60] + "…" : text;
+
+    /// <summary>True when <see cref="FlowStepModel.ConfigJson"/> or
+    /// <see cref="FlowStepModel.StepsJson"/> hold malformed JSON (same rule the
+    /// page applies on save) — the canvas badges the node so the problem is
+    /// visible without opening the inspector.</summary>
+    public static bool ConfigHasError(FlowStepModel step)
+    {
+        if (!string.IsNullOrWhiteSpace(step.ConfigJson))
+        {
+            JsonNode? node;
+            try { node = JsonNode.Parse(step.ConfigJson); }
+            catch (JsonException) { return true; }
+            if (node is not JsonObject)
+                return true;
+        }
+        if (!string.IsNullOrWhiteSpace(step.StepsJson))
+        {
+            try { _ = JsonSerializer.Deserialize<List<FlowStepDto>>(step.StepsJson, SharedJson.Options); }
+            catch (JsonException) { return true; }
+        }
+        return false;
+    }
 }

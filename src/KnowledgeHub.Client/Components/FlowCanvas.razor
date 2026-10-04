@@ -2,16 +2,19 @@
 @using KnowledgeHub.Shared.Contracts
 @inject IStringLocalizer<SharedStrings> L
 
-@* Visual canvas for a flow definition: vertical chain auto-layout (START →
-   steps → END), drag nodes to reorder via connector drop zones, "+" on a
-   connector inserts a step, click a node to edit it in the property drawer. *@
+@* Visual workspace for a flow definition: vertical chain auto-layout (START →
+   steps → END) on a large canvas, with a Node-RED/n8n-style side panel —
+   step-type palette when nothing is selected (drag onto connectors or click to
+   append) and a property inspector for the selected node. Drag nodes to
+   reorder via connector drop zones; "+" on a connector inserts a step. *@
 
 <div class="fc-toolbar d-flex align-items-center gap-2 mb-2">
     <small class="text-muted">
         <i class="fa-solid fa-hand-pointer" aria-hidden="true"></i>
         @L["Canvas_Hint"]
     </small>
-    <div class="ms-auto btn-group btn-group-sm" role="group" aria-label="@L["Canvas_ZoomGroup"]">
+    <span class="badge text-bg-secondary ms-auto">@L["Canvas_StepCount", Steps.Count]</span>
+    <div class="btn-group btn-group-sm" role="group" aria-label="@L["Canvas_ZoomGroup"]">
         <button type="button" class="btn btn-outline-secondary" @onclick="ZoomOut"
                 aria-label="@L["Canvas_ZoomOut"]" disabled="@(_zoom <= 50)">
             <i class="fa-solid fa-magnifying-glass-minus" aria-hidden="true"></i>
@@ -25,153 +28,195 @@
     </div>
 </div>
 
-<div class="fc-wrap">
-    <div class="fc-canvas" style="transform:scale(@((_zoom / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture)))"
-         @onclick="() => _insertAt = null">
-        <div class="fc-node fc-node--start" role="img" aria-label="@L["Canvas_StartLabel"]">
-            <div class="fc-node-head">
-                <i class="fa-solid fa-play" aria-hidden="true"></i>
-                <strong>START</strong>
-            </div>
-            @if (Inputs.Count > 0)
-            {
-                <div class="fc-io">
-                    @foreach (var i in Inputs)
-                    {
-                        <span class="fc-chip" title="@i.Description">
-                            @i.Name<small class="text-muted">: @i.Type@(i.Required ? "*" : "")</small>
-                        </span>
-                    }
+<div class="fc-workspace">
+    <div class="fc-wrap">
+        <div class="fc-canvas" style="transform:scale(@((_zoom / 100.0).ToString(System.Globalization.CultureInfo.InvariantCulture)))"
+             @onclick="() => _insertAt = null">
+            <div class="fc-node fc-node--start" role="img" aria-label="@L["Canvas_StartLabel"]">
+                <div class="fc-node-head">
+                    <i class="fa-solid fa-play" aria-hidden="true"></i>
+                    <strong>START</strong>
                 </div>
-            }
-            else
-            {
-                <div class="text-muted small">@L["Canvas_NoInputs"]</div>
-            }
-        </div>
-
-        @for (var i = 0; i <= Steps.Count; i++)
-        {
-            var insertIdx = i;
-            <div class="fc-connector @(_dropIndex == insertIdx ? "fc-connector--drop" : "")"
-                 @ondragover="e => _dropIndex = insertIdx"
-                 @ondragover:preventDefault
-                 @ondragleave="() => { if (_dropIndex == insertIdx) _dropIndex = null; }"
-                 @ondrop="() => DropAt(insertIdx)"
-                 @ondrop:preventDefault>
-                <button type="button" class="fc-add" @onclick="() => ToggleInsert(insertIdx)"
-                        @onclick:stopPropagation
-                        aria-label="@L["Canvas_InsertHere"]" title="@L["Canvas_InsertHere"]">
-                    <i class="fa-solid fa-plus" aria-hidden="true"></i>
-                </button>
-                @if (_insertAt == insertIdx)
+                @if (Inputs.Count > 0)
                 {
-                    <div class="fc-picker @(insertIdx * 2 > Steps.Count ? "fc-picker--up" : "")" role="menu" aria-label="@L["Canvas_PickerLabel"]"
-                         @onclick:stopPropagation>
-                        @foreach (var t in FlowEditModel.StepTypeItems(L))
+                    <div class="fc-io">
+                        @foreach (var i in Inputs)
                         {
-                            <button type="button" class="fc-picker-item" role="menuitem"
-                                    @onclick="() => InsertAt(insertIdx, t.Value)">
-                                <i class="fa-solid @FlowVisuals.TypeIcon(t.Value)" aria-hidden="true"></i>
-                                @t.Text
-                            </button>
+                            <span class="fc-chip" title="@i.Description">
+                                @i.Name<small class="text-muted">: @i.Type@(i.Required ? "*" : "")</small>
+                            </span>
                         }
                     </div>
                 }
+                else
+                {
+                    <div class="text-muted small">@L["Canvas_NoInputs"]</div>
+                }
             </div>
 
-            @if (i < Steps.Count)
+            @for (var i = 0; i <= Steps.Count; i++)
             {
-                var idx = i;
-                var s = Steps[idx];
-                var lanes = FlowVisuals.DisplayLanes(s);
-                var summary = FlowVisuals.Summary(s);
-                <button type="button"
-                        class="fc-node fc-node--@s.Type @(_selected == idx ? "fc-node--sel" : "") @(_dragIndex == idx ? "fc-node--drag" : "")"
-                        draggable="true"
-                        @ondragstart="() => _dragIndex = idx"
-                        @ondragend="() => { _dragIndex = null; _dropIndex = null; }"
-                        @onclick="() => Select(idx)"
-                        aria-label="@L["Canvas_NodeAria", idx + 1, s.Type, s.Id]">
-                    <div class="fc-node-head">
-                        <i class="fa-solid fa-grip-vertical fc-grip" aria-hidden="true"></i>
-                        <i class="fa-solid @FlowVisuals.TypeIcon(s.Type)" aria-hidden="true"></i>
-                        <strong class="fc-node-id">@(string.IsNullOrWhiteSpace(s.Id) ? L["Canvas_NoId"].Value : s.Id)</strong>
-                        <span class="badge fc-badge">@s.Type</span>
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(s.Name))
+                var insertIdx = i;
+                <div class="fc-connector @(_dropIndex == insertIdx ? "fc-connector--drop" : "")"
+                     @ondragover="e => { if (_dragIndex.HasValue || _dragType is not null) _dropIndex = insertIdx; }"
+                     @ondragover:preventDefault
+                     @ondragleave="() => { if (_dropIndex == insertIdx) _dropIndex = null; }"
+                     @ondrop="() => DropAt(insertIdx)"
+                     @ondrop:preventDefault>
+                    <button type="button" class="fc-add" @onclick="() => ToggleInsert(insertIdx)"
+                            @onclick:stopPropagation
+                            aria-label="@L["Canvas_InsertHere"]" title="@L["Canvas_InsertHere"]">
+                        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                    </button>
+                    @if (_insertAt == insertIdx)
                     {
-                        <div class="fc-node-name">@s.Name</div>
-                    }
-                    @if (summary is not null)
-                    {
-                        <div class="fc-node-summary text-break">@summary</div>
-                    }
-                    @if (lanes.Count > 0)
-                    {
-                        <div class="fc-lanes">
-                            <FlowStepChipList Lanes="lanes" Depth="1" />
+                        <div class="fc-picker @(insertIdx * 2 > Steps.Count ? "fc-picker--up" : "")" role="menu" aria-label="@L["Canvas_PickerLabel"]"
+                             @onclick:stopPropagation>
+                            @foreach (var t in FlowEditModel.StepTypeItems(L))
+                            {
+                                <button type="button" class="fc-picker-item" role="menuitem"
+                                        @onclick="() => InsertAt(insertIdx, t.Value)">
+                                    <i class="fa-solid @FlowVisuals.TypeIcon(t.Value)" aria-hidden="true"></i>
+                                    @t.Text
+                                </button>
+                            }
                         </div>
                     }
-                </button>
+                </div>
+
+                @if (i < Steps.Count)
+                {
+                    var idx = i;
+                    var s = Steps[idx];
+                    var lanes = FlowVisuals.DisplayLanes(s);
+                    var summary = FlowVisuals.Summary(s);
+                    <button type="button"
+                            class="fc-node fc-node--@s.Type @(_selected == idx ? "fc-node--sel" : "") @(_dragIndex == idx ? "fc-node--drag" : "")"
+                            draggable="true"
+                            @ondragstart="() => { _dragIndex = idx; _dragType = null; }"
+                            @ondragend="() => { _dragIndex = null; _dropIndex = null; }"
+                            @onclick="() => Select(idx)"
+                            aria-label="@L["Canvas_NodeAria", idx + 1, s.Type, s.Id]">
+                        <div class="fc-node-head">
+                            <i class="fa-solid fa-grip-vertical fc-grip" aria-hidden="true"></i>
+                            <i class="fa-solid @FlowVisuals.TypeIcon(s.Type)" aria-hidden="true"></i>
+                            <span class="fc-idx">#@(idx + 1)</span>
+                            <strong class="fc-node-id">@(string.IsNullOrWhiteSpace(s.Id) ? L["Canvas_NoId"].Value : s.Id)</strong>
+                            @if (FlowVisuals.ConfigHasError(s))
+                            {
+                                <i class="fa-solid fa-triangle-exclamation fc-warn" aria-hidden="true"
+                                   title="@L["Canvas_InvalidConfig"]"></i>
+                            }
+                            <span class="badge fc-badge">@s.Type</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(s.Name))
+                        {
+                            <div class="fc-node-name">@s.Name</div>
+                        }
+                        @if (summary is not null)
+                        {
+                            <div class="fc-node-summary text-break">@summary</div>
+                        }
+                        @if (lanes.Count > 0)
+                        {
+                            <div class="fc-lanes">
+                                <FlowStepChipList Lanes="lanes" Depth="1" />
+                            </div>
+                        }
+                    </button>
+                }
+                else if (Steps.Count == 0)
+                {
+                    <button type="button" class="fc-node fc-node--ghost @(_dropIndex == 0 ? "fc-node--drop" : "")"
+                            @onclick="() => ToggleInsert(0)" @onclick:stopPropagation
+                            @ondragover="() => _dropIndex = 0" @ondragover:preventDefault
+                            @ondrop="() => DropAt(0)" @ondrop:preventDefault>
+                        <i class="fa-solid fa-circle-plus" aria-hidden="true"></i>
+                        @L["Canvas_EmptyFlow"]
+                    </button>
+                }
             }
+
+            <div class="fc-node fc-node--end" role="img" aria-label="@L["Canvas_EndLabel"]">
+                <div class="fc-node-head">
+                    <i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>
+                    <strong>END</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <aside class="fc-panel card">
+        @if (_selected is { } sel && sel < Steps.Count)
+        {
+            var s = Steps[sel];
+            <div class="card-header d-flex justify-content-between align-items-center py-2">
+                <strong class="text-truncate">
+                    <i class="fa-solid @FlowVisuals.TypeIcon(s.Type)" aria-hidden="true"></i>
+                    @L["Canvas_DrawerTitle", $"#{sel + 1} {s.Id}"]
+                </strong>
+                <button type="button" class="btn btn-sm btn-link" @onclick="() => _selected = null"
+                        aria-label="@L["Canvas_CloseDrawer"]"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </div>
+            <div class="card-body py-2">
+                <BootstrapInput @bind-Value="s.Id" DisplayText="Id *" ShowLabel="true" />
+                <Select @bind-Value="s.Type" Items="FlowEditModel.StepTypeItems(L)" DisplayText="@L["Common_Type"]"
+                        ShowLabel="true" class="mt-2" />
+                <BootstrapInput @bind-Value="s.Name" DisplayText="@L["Canvas_Label"]" ShowLabel="true" class="mt-2" />
+                <Textarea @bind-Value="s.ConfigJson" DisplayText="@L["Canvas_Config"]" ShowLabel="true"
+                          rows="5" class="font-monospace mt-2" />
+                @if (s.Type is "condition" or "foreach")
+                {
+                    <Textarea @bind-Value="s.StepsJson" rows="4" class="font-monospace mt-2"
+                              DisplayText="@L["Canvas_Nested"]"
+                              ShowLabel="true" />
+                }
+                <div class="d-flex gap-1 mt-2 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            disabled="@(sel == 0)" @onclick="() => Move(sel, -1)">
+                        <i class="fa-solid fa-arrow-up" aria-hidden="true"></i> @L["Canvas_MoveUp"]
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            disabled="@(sel == Steps.Count - 1)" @onclick="() => Move(sel, 1)">
+                        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i> @L["Canvas_MoveDown"]
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            @onclick="() => Duplicate(sel)">
+                        <i class="fa-solid fa-clone" aria-hidden="true"></i> @L["Canvas_Duplicate"]
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-auto"
+                            @onclick="() => Remove(sel)">
+                        <i class="fa-solid fa-trash" aria-hidden="true"></i> @L["Canvas_Remove"]
+                    </button>
+                </div>
+            </div>
         }
-
-        <div class="fc-node fc-node--end" role="img" aria-label="@L["Canvas_EndLabel"]">
-            <div class="fc-node-head">
-                <i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>
-                <strong>END</strong>
+        else
+        {
+            <div class="card-header py-2">
+                <strong><i class="fa-solid fa-puzzle-piece" aria-hidden="true"></i> @L["Canvas_PaletteTitle"]</strong>
             </div>
-        </div>
-    </div>
+            <div class="card-body py-2">
+                <small class="text-muted d-block mb-2">@L["Canvas_PaletteHint"]</small>
+                <div class="fc-pal" role="list" aria-label="@L["Canvas_PaletteTitle"]">
+                    @foreach (var t in FlowEditModel.StepTypeItems(L))
+                    {
+                        <button type="button" role="listitem"
+                                class="fc-pal-item fc-node--@t.Value"
+                                draggable="true"
+                                @ondragstart="() => { _dragType = t.Value; _dragIndex = null; }"
+                                @ondragend="() => { _dragType = null; _dropIndex = null; }"
+                                @onclick="() => InsertAt(Steps.Count, t.Value)">
+                            <i class="fa-solid @FlowVisuals.TypeIcon(t.Value)" aria-hidden="true"></i>
+                            <span class="fc-pal-label text-truncate">@t.Text</span>
+                            <i class="fa-solid fa-grip-vertical fc-grip ms-auto" aria-hidden="true"></i>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </aside>
 </div>
-
-@if (_selected is { } sel && sel < Steps.Count)
-{
-    var s = Steps[sel];
-    <div class="fc-drawer card" role="dialog" aria-label="@L["Canvas_DrawerTitle", s.Id]">
-        <div class="card-header d-flex justify-content-between align-items-center py-1">
-            <strong><i class="fa-solid @FlowVisuals.TypeIcon(s.Type)" aria-hidden="true"></i> @s.Type — <code>@s.Id</code></strong>
-            <button type="button" class="btn btn-sm btn-link" @onclick="() => _selected = null"
-                    aria-label="@L["Canvas_CloseDrawer"]"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-        </div>
-        <div class="card-body py-2">
-            <div class="row g-2">
-                <div class="col-12 col-md-4">
-                    <BootstrapInput @bind-Value="s.Id" DisplayText="Id *" ShowLabel="true" />
-                </div>
-                <div class="col-12 col-md-4">
-                    <Select @bind-Value="s.Type" Items="FlowEditModel.StepTypeItems(L)" DisplayText="@L["Common_Type"]" ShowLabel="true" />
-                </div>
-                <div class="col-12 col-md-4">
-                    <BootstrapInput @bind-Value="s.Name" DisplayText="@L["Canvas_Label"]" ShowLabel="true" />
-                </div>
-            </div>
-            <Textarea @bind-Value="s.ConfigJson" DisplayText="@L["Canvas_Config"]" ShowLabel="true"
-                      rows="4" class="font-monospace mt-2" />
-            @if (s.Type is "condition" or "foreach")
-            {
-                <Textarea @bind-Value="s.StepsJson" rows="3" class="font-monospace mt-2"
-                          DisplayText="@L["Canvas_Nested"]"
-                          ShowLabel="true" />
-            }
-            <div class="d-flex gap-2 mt-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                        disabled="@(sel == 0)" @onclick="() => Move(sel, -1)">
-                    <i class="fa-solid fa-arrow-up" aria-hidden="true"></i> @L["Canvas_MoveUp"]
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                        disabled="@(sel == Steps.Count - 1)" @onclick="() => Move(sel, 1)">
-                    <i class="fa-solid fa-arrow-down" aria-hidden="true"></i> @L["Canvas_MoveDown"]
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-danger ms-auto"
-                        @onclick="() => Remove(sel)">
-                    <i class="fa-solid fa-trash" aria-hidden="true"></i> @L["Canvas_Remove"]
-                </button>
-            </div>
-        </div>
-    </div>
-}
 
 @code {
     /// <summary>Top-level steps (shared list with the parent edit model —
@@ -191,6 +236,7 @@
     private int? _selected;
     private int? _insertAt;
     private int? _dragIndex;
+    private string? _dragType;
     private int? _dropIndex;
 
     private void ZoomIn() => _zoom = Math.Min(150, _zoom + 25);
@@ -219,19 +265,26 @@
 
     private async Task DropAt(int idx)
     {
-        if (_dragIndex is not { } from || from < 0 || from >= Steps.Count)
+        if (_dragIndex is { } from && from >= 0 && from < Steps.Count)
         {
+            var item = Steps[from];
+            Steps.RemoveAt(from);
+            var target = idx > from ? idx - 1 : idx;
+            Steps.Insert(Math.Clamp(target, 0, Steps.Count), item);
+            _dragIndex = null;
             _dropIndex = null;
+            _selected = Math.Clamp(target, 0, Steps.Count - 1);
+            await OnChanged.InvokeAsync();
             return;
         }
-        var item = Steps[from];
-        Steps.RemoveAt(from);
-        var target = idx > from ? idx - 1 : idx;
-        Steps.Insert(Math.Clamp(target, 0, Steps.Count), item);
-        _dragIndex = null;
+        if (_dragType is { } type)
+        {
+            _dragType = null;
+            _dropIndex = null;
+            await InsertAt(idx, type);
+            return;
+        }
         _dropIndex = null;
-        _selected = Math.Clamp(target, 0, Steps.Count - 1);
-        await OnChanged.InvokeAsync();
     }
 
     private async Task Move(int idx, int delta)
@@ -241,6 +294,21 @@
             return;
         (Steps[idx], Steps[j]) = (Steps[j], Steps[idx]);
         _selected = j;
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task Duplicate(int idx)
+    {
+        var s = Steps[idx];
+        Steps.Insert(idx + 1, new FlowStepModel
+        {
+            Id = NextId(),
+            Type = s.Type,
+            Name = s.Name,
+            ConfigJson = s.ConfigJson,
+            StepsJson = s.StepsJson,
+        });
+        _selected = idx + 1;
         await OnChanged.InvokeAsync();
     }
 

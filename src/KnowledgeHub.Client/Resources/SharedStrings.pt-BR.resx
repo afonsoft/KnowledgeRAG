@@ -112,6 +112,12 @@
   <data name="Canvas_DrawerTitle" xml:space="preserve">
     <value>Propriedades do step {0}</value>
   </data>
+  <data name="Canvas_Duplicate" xml:space="preserve">
+    <value>Duplicar</value>
+  </data>
+  <data name="Canvas_EmptyFlow" xml:space="preserve">
+    <value>Nenhum step ainda — arraste um tipo do painel ou clique aqui</value>
+  </data>
   <data name="Canvas_EndLabel" xml:space="preserve">
     <value>Fim do flow</value>
   </data>
@@ -120,6 +126,9 @@
   </data>
   <data name="Canvas_InsertHere" xml:space="preserve">
     <value>Inserir step aqui</value>
+  </data>
+  <data name="Canvas_InvalidConfig" xml:space="preserve">
+    <value>JSON inválido</value>
   </data>
   <data name="Canvas_Label" xml:space="preserve">
     <value>Rótulo</value>
@@ -142,6 +151,12 @@
   <data name="Canvas_NodeAria" xml:space="preserve">
     <value>Step {0}: {1} {2}</value>
   </data>
+  <data name="Canvas_PaletteHint" xml:space="preserve">
+    <value>arraste até um conector ou clique para adicionar no final</value>
+  </data>
+  <data name="Canvas_PaletteTitle" xml:space="preserve">
+    <value>Paleta de steps</value>
+  </data>
   <data name="Canvas_PickerLabel" xml:space="preserve">
     <value>Tipo do novo step</value>
   </data>
@@ -150,6 +165,9 @@
   </data>
   <data name="Canvas_StartLabel" xml:space="preserve">
     <value>Início do flow — inputs declarados</value>
+  </data>
+  <data name="Canvas_StepCount" xml:space="preserve">
+    <value>{0} steps</value>
   </data>
   <data name="Canvas_ZoomGroup" xml:space="preserve">
     <value>Zoom do canvas</value>
