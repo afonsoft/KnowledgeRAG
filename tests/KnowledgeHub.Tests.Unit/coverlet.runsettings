@@ -6,8 +6,13 @@
         <Configuration>
           <!-- Audit 2026-10-03: source-generated code (STJ SharedJsonContext etc.)
                inflates the instrumented line count without any testable logic —
-               exclude *.g.cs so the ratchet measures hand-written code. -->
-          <ExcludeByFile>**/*.g.cs</ExcludeByFile>
+               exclude *.g.cs so the ratchet measures hand-written code.
+               2026-10-04: EF migration files (Designer + ModelSnapshot, ~50k
+               lines at 0%) and build output under obj/ are generated too.
+               NOTE: this file only applies when passed via the settings flag
+               or wired through RunSettingsFilePath in the test csproj —
+               coverlet.collector does NOT auto-load it. -->
+          <ExcludeByFile>**/*.g.cs,**/obj/**,**/Migrations/**</ExcludeByFile>
         </Configuration>
       </DataCollector>
     </DataCollectors>

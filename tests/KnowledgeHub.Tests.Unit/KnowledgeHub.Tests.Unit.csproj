@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- coverlet.collector does NOT auto-load coverlet.runsettings — wire it so
+         the file-exclusion rules apply to every `dotnet test` (CI included). -->
+    <RunSettingsFilePath>$(MSBuildProjectDirectory)/coverlet.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 
   <ItemGroup>
