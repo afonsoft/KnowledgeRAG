@@ -22,6 +22,9 @@ All-in-one standalone knowledge platform: Blazor WebAssembly admin UI, REST API,
 | ![Playground](docs/screenshots/playground.png) | ![Knowledge graph](docs/screenshots/graph.png) |
 | ![Eval](docs/screenshots/eval.png) | ![RAG quality](docs/screenshots/rag-quality.png) |
 | ![Approvals](docs/screenshots/approvals.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Flows](docs/screenshots/flows.png) | ![API keys](docs/screenshots/api-keys.png) |
+
+Per-screen docs with "how it works": [docs/en/screens/](docs/en/screens/) • [docs/pt/screens/](docs/pt/screens/)
 
 ## How it works
 
