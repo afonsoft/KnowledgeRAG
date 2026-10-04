@@ -838,7 +838,7 @@ else
                 <Card>
                     <HeaderTemplate><span>@L["Set_KeysSaved", _cache.Keys.Count]</span></HeaderTemplate>
                     <BodyTemplate>
-                        <div style="max-height:320px;overflow-y:auto">
+                        <div class="table-responsive" style="max-height:320px;overflow-y:auto">
                             <table class="table table-sm small mb-0">
                                 <thead>
                                     <tr><th>Key</th><th class="text-end">@L["Set_Size"]</th><th class="text-end">TTL</th><th class="text-end" style="width:48px"></th></tr>
@@ -943,6 +943,7 @@ else
                 <BodyTemplate>
                     @* SPEC-20260926-review-docs-and-misc RF-005: clickable
                        column sort — default Linhas desc. *@
+                    <div class="table-responsive">
                     <table class="table table-sm small mb-0">
                         <thead>
                             <tr>
@@ -969,6 +970,7 @@ else
                             }
                         </tbody>
                     </table>
+                    </div>
                 </BodyTemplate>
             </Card>
         </div>
