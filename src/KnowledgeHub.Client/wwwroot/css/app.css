@@ -184,6 +184,14 @@ img, table, pre, code, .table-responsive {
     -webkit-overflow-scrolling: touch;
 }
 
+/* Empty-state fallback for the BB Table card mode (<768px): .table-card renders
+   a blank area when there are no rows — the page renders this div only below md. */
+.kh-table-card-empty {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    color: var(--bs-secondary-color);
+}
+
 /* RF-006: Touch target sizing (minimum 44px) */
 .btn, .nav-link, .form-control, .form-select, .form-check-input,
 .page-item .page-link, .dropdown-item, .navbar-toggler {

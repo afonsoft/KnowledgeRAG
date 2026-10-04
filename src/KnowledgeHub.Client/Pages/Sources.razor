@@ -102,6 +102,14 @@
         </TableColumn>
     </TableColumns>
     </Table>
+    @* Card mode do BB Table (<768px) renderiza .table-card em branco quando vazio —
+       o EmptyText só aparece no modo <table>; fallback localizado abaixo de md. *@
+    @if (_sources is { Count: 0 })
+    {
+        <div class="kh-table-card-empty d-md-none">
+            <i class="fa-solid fa-inbox" aria-hidden="true"></i> @L["Src_Empty"]
+        </div>
+    }
 </div>
 
 <Modal @ref="_modal">
