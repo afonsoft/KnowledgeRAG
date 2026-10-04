@@ -32,6 +32,31 @@ main {
         text-overflow: ellipsis;
     }
 
+/* Culture selector pinned to the top-right of the top row (light surface —
+   the old sidebar styles lived in NavMenu.razor.css). */
+.top-row-culture ::deep .culture-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--kh-text, #1e293b);
+}
+
+    .top-row-culture ::deep .culture-selector select {
+        width: auto;
+        min-width: 0;
+        padding-right: 1.6rem;
+        border-color: var(--kh-border, #e2e8f0);
+        color: var(--kh-text, #1e293b);
+        background-color: var(--kh-surface, #f8fafc);
+    }
+
+@media (max-width: 575.98px) {
+    /* Tight space next to the hamburger + title — icon only context cue */
+    .top-row-culture ::deep .culture-selector > i {
+        display: none;
+    }
+}
+
 /* Mobile menu toggler — 44px touch target, visible border/icon
    (substitui .navbar-toggler, que só herda cores dentro de .navbar). */
 .kh-nav-toggler {
