@@ -99,52 +99,60 @@ public static class FlowEndpoints
             .RequireAuthorization(AuthPolicies.CookieSession);
 
         // Resume a run suspended on an approval step (admin).
-        app.MapPost("/api/flowruns/{runId:guid}/resume", async (Guid runId, HttpContext http, FlowService svc, CancellationToken ct) =>
-        {
-            try
-            {
-                var db = http.RequestServices.GetRequiredService<Data.KnowledgeHubDbContext>();
-                var run = await db.FlowRuns.FindAsync([runId], ct);
-                if (run?.PendingApprovalId is not { } approvalId)
-                    return Results.NotFound(new { error = "run not found or not waiting" });
-                var result = await svc.ResumeByApprovalAsync(approvalId, http.RequestServices, ct);
-                return Results.Ok(result);
-            }
-            catch (ConflictException ex)
-            {
-                return Results.Conflict(new { error = ex.Message });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return Results.NotFound(new { error = ex.Message });
-            }
-        }).RequireAuthorization(AuthPolicies.CookieSession);
+        app.MapPost("/api/flowruns/{runId:guid}/resume", ResumeRunAsync)
+            .RequireAuthorization(AuthPolicies.CookieSession);
 
         // Inbound webhook: unauthenticated — the fwt_ path token IS the
         // credential (rate-limited like the operational run surface).
-        app.MapPost("/api/flowtriggers/{token}", async (string token, HttpContext http, FlowService svc, CancellationToken ct) =>
+        app.MapPost("/api/flowtriggers/{token}", InvokeWebhookAsync)
+            .AllowAnonymous().RequireRateLimiting("llm");
+    }
+
+    private static async Task<IResult> ResumeRunAsync(
+        Guid runId, HttpContext http, FlowService svc, CancellationToken ct)
+    {
+        try
         {
-            try
-            {
-                var body = await JsonSerializer.DeserializeAsync<JsonObject>(http.Request.Body, cancellationToken: ct);
-                var result = await svc.InvokeWebhookAsync(token, body, http.RequestServices, ct);
-                if (result is null)
-                    return Results.NotFound(new { error = "trigger not found or disabled" });
-                if (result.Status == "waiting_approval")
-                    return Results.Accepted($"/api/flowruns/{result.RunId}", result);
-                return result.Status == "done"
-                    ? Results.Ok(result)
-                    : Results.UnprocessableEntity(result);
-            }
-            catch (FlowStepException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-            catch (FlowAbortException ex)
-            {
-                return Results.BadRequest(new { error = ex.Message });
-            }
-        }).AllowAnonymous().RequireRateLimiting("llm");
+            var db = http.RequestServices.GetRequiredService<Data.KnowledgeHubDbContext>();
+            var run = await db.FlowRuns.FindAsync([runId], ct);
+            if (run?.PendingApprovalId is not { } approvalId)
+                return Results.NotFound(new { error = "run not found or not waiting" });
+            var result = await svc.ResumeByApprovalAsync(approvalId, http.RequestServices, ct);
+            return Results.Ok(result);
+        }
+        catch (ConflictException ex)
+        {
+            return Results.Conflict(new { error = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Results.NotFound(new { error = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> InvokeWebhookAsync(
+        string token, HttpContext http, FlowService svc, CancellationToken ct)
+    {
+        try
+        {
+            var body = await JsonSerializer.DeserializeAsync<JsonObject>(http.Request.Body, cancellationToken: ct);
+            var result = await svc.InvokeWebhookAsync(token, body, http.RequestServices, ct);
+            if (result is null)
+                return Results.NotFound(new { error = "trigger not found or disabled" });
+            if (result.Status == "waiting_approval")
+                return Results.Accepted($"/api/flowruns/{result.RunId}", result);
+            return result.Status == "done"
+                ? Results.Ok(result)
+                : Results.UnprocessableEntity(result);
+        }
+        catch (FlowStepException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
+        catch (FlowAbortException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>Trigger CRUD under /api/flows (CookieSession admin).</summary>

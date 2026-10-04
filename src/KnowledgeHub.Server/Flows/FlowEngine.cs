@@ -227,7 +227,6 @@ public sealed class FlowEngine(
         CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
-        var attempt = 1;
         try
         {
             if (!_handlers.TryGetValue(step.Type, out var handler))
@@ -236,25 +235,8 @@ public sealed class FlowEngine(
             // F3: per-step retry — config.retry {attempts (≤5), backoffMs}.
             // Retries apply to ordinary step failures and timeouts; a
             // suspension request (approval step) is never retried.
-            var (attempts, backoffMs) = RetryOf(step);
-            JsonNode? stepOutput = null;
-            for (; attempt <= attempts; attempt++)
-            {
-                try
-                {
-                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    timeoutCts.CancelAfter(TimeSpan.FromSeconds(ctx.Limits.StepTimeoutSeconds));
-                    stepOutput = await handler.ExecuteAsync(step, ctx, this, timeoutCts.Token);
-                    break;
-                }
-                catch (FlowSuspendException) { throw; }
-                catch (Exception) when (attempt < attempts && !ct.IsCancellationRequested)
-                {
-                    if (backoffMs > 0)
-                        await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), ct);
-                }
-            }
-            result.Attempts = attempt;
+            var stepOutput = await ExecuteWithRetryAsync(
+                handler, step, ctx, result, ct);
 
             if (step.Type == "output")
                 ctx.Vars["__flow_output"] = stepOutput;
@@ -285,7 +267,6 @@ public sealed class FlowEngine(
         {
             result.Status = StatusFailed;
             result.Error = ex.Message;
-            result.Attempts = attempt;
             ctx.StepErrors[step.Id] = ex.Message;
             if (!ContinueOnError(step))
                 throw new FlowAbortException($"step '{step.Id}' failed: {ex.Message}");
@@ -301,6 +282,37 @@ public sealed class FlowEngine(
                 ["error"] = result.Error,
                 ["durationMs"] = result.DurationMs,
             }, CancellationToken.None);
+        }
+    }
+
+    /// <summary>Runs the handler under the per-step timeout with the
+    /// config.retry policy — retries ordinary failures only; FlowSuspend
+    /// and caller cancellation pass straight through. Writes the attempt
+    /// count onto <paramref name="result"/>.</summary>
+    private async Task<JsonNode?> ExecuteWithRetryAsync(
+        IFlowStepHandler handler, FlowStepDto step, FlowExecContext ctx,
+        FlowStepResult result, CancellationToken ct)
+    {
+        var (attempts, backoffMs) = RetryOf(step);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(TimeSpan.FromSeconds(ctx.Limits.StepTimeoutSeconds));
+                var output = await handler.ExecuteAsync(step, ctx, this, timeoutCts.Token);
+                result.Attempts = attempt;
+                return output;
+            }
+            catch (FlowSuspendException) { throw; }
+            catch (Exception)
+            {
+                result.Attempts = attempt;
+                if (attempt >= attempts || ct.IsCancellationRequested)
+                    throw;
+                if (backoffMs > 0)
+                    await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), ct);
+            }
         }
     }
 
