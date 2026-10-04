@@ -22,6 +22,9 @@ Plataforma de conhecimento standalone tudo-em-um: UI administrativa Blazor WebAs
 | ![Playground](docs/screenshots/playground.png) | ![Grafo de conhecimento](docs/screenshots/graph.png) |
 | ![Eval](docs/screenshots/eval.png) | ![Qualidade RAG](docs/screenshots/rag-quality.png) |
 | ![Aprovações](docs/screenshots/approvals.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Flows](docs/screenshots/flows.png) | ![API keys](docs/screenshots/api-keys.png) |
+
+Docs por tela com "como funciona": [docs/pt/screens/](docs/pt/screens/) • [docs/en/screens/](docs/en/screens/)
 
 ## Como funciona
 
