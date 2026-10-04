@@ -145,13 +145,13 @@ else
             <div class="d-flex align-items-center gap-2 mt-4 mb-2">
                 <h2 class="h6 mb-0">@L["Flows_Steps"]</h2>
                 <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="@L["Flows_EditorMode"]">
-                    <button type="button" class="btn @(_edit.View == FlowEditorView.List ? "btn-primary" : "btn-outline-secondary")"
-                            @onclick="() => _edit.View = FlowEditorView.List">
-                        <i class="fa-solid fa-list" aria-hidden="true"></i> @L["Flows_List"]
-                    </button>
                     <button type="button" class="btn @(_edit.View == FlowEditorView.Canvas ? "btn-primary" : "btn-outline-secondary")"
                             @onclick="() => _edit.View = FlowEditorView.Canvas">
                         <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Canvas
+                    </button>
+                    <button type="button" class="btn @(_edit.View == FlowEditorView.List ? "btn-primary" : "btn-outline-secondary")"
+                            @onclick="() => _edit.View = FlowEditorView.List">
+                        <i class="fa-solid fa-list" aria-hidden="true"></i> @L["Flows_List"]
                     </button>
                     <button type="button" class="btn @(_edit.View == FlowEditorView.Json ? "btn-primary" : "btn-outline-secondary")"
                             @onclick="() => { SyncDefinitionJson(); _edit.View = FlowEditorView.Json; }">

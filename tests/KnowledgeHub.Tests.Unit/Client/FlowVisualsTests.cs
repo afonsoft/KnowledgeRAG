@@ -164,6 +164,31 @@ public class FlowVisualsTests
         Assert.Equal("n1", lane.Steps[0].Id);
     }
 
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("""{"tool":"search_knowledge"}""")]
+    public void ConfigHasError_ValidOrBlankConfig_ReturnsFalse(string config) =>
+        Assert.False(FlowVisuals.ConfigHasError(Step("tool", config)));
+
+    [Theory]
+    [InlineData("{bad")]
+    [InlineData("not json")]
+    [InlineData("[1,2]")] // parses but is not an object — same rule as save
+    [InlineData("\"text\"")]
+    public void ConfigHasError_MalformedOrNonObjectConfig_ReturnsTrue(string config) =>
+        Assert.True(FlowVisuals.ConfigHasError(Step("tool", config)));
+
+    [Fact]
+    public void ConfigHasError_MalformedStepsJson_ReturnsTrue() =>
+        Assert.True(FlowVisuals.ConfigHasError(Step("foreach", "{}", "{bad")));
+
+    [Fact]
+    public void ConfigHasError_ValidStepsJson_ReturnsFalse() =>
+        Assert.False(FlowVisuals.ConfigHasError(
+            Step("foreach", "{}", """[{"id":"n1","type":"tool"}]""")));
+
     [Fact]
     public void DisplayLanes_ConditionDto_ReadsConfigBranches()
     {
@@ -192,6 +217,7 @@ public class FlowEditModelTests
         Assert.StartsWith("{", model.DefinitionJson);
         Assert.Contains("search_knowledge", model.DefinitionJson);
         Assert.True(model.Enabled);
+        Assert.Equal(FlowEditorView.Canvas, model.View); // canvas-first editor
     }
 
     [Fact]
