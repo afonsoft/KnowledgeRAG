@@ -221,4 +221,163 @@ public class ToolArgumentBuilderTests
         Assert.True(string.IsNullOrWhiteSpace(fields.Single(f => f.Name == "topK").TextValue));
         Assert.True(string.IsNullOrWhiteSpace(fields.Single(f => f.Name == "mode").TextValue));
     }
+
+    // --- RF-003 edge branches --------------------------------------------
+
+    [Fact]
+    public void TryBuild_String_Passthrough()
+    {
+        var f = Field(SearchSchema, "query");
+        Assert.True(ToolArgumentBuilder.TryBuildArgument(f, "  spaced value  ", out var v, out var err));
+        Assert.Null(err);
+        Assert.Equal("  spaced value  ", v.GetString());
+    }
+
+    [Fact]
+    public void TryBuild_Number_RejectsNonNumeric()
+    {
+        var f = Field(SearchSchema, "topK");
+        Assert.False(ToolArgumentBuilder.TryBuildArgument(f, "abc", out _, out var err));
+        Assert.Contains("integer", err);
+        Assert.True(ToolArgumentBuilder.TryBuildArgument(f, "3.5", out var v, out _));
+        Assert.Equal(3.5, v.GetDouble());
+    }
+
+    [Fact]
+    public void TryBuild_Boolean_AcceptsTrueFalse_RejectsOther()
+    {
+        var schema = JsonDocument.Parse("""
+            {"type":"object","properties":{"flag":{"type":"boolean"}}}
+            """).RootElement;
+        var f = Field(schema, "flag");
+        Assert.True(ToolArgumentBuilder.TryBuildArgument(f, " true ", out var v, out _));
+        Assert.True(v.GetBoolean());
+        Assert.False(ToolArgumentBuilder.TryBuildArgument(f, "yes", out _, out var err));
+        Assert.Contains("boolean", err);
+    }
+
+    [Fact]
+    public void TryBuild_EmptyListInput_Omits()
+    {
+        var f = Field(WriteSchema, "tags");
+        Assert.True(ToolArgumentBuilder.TryBuildArgument(f, " , ,", out var v, out var err));
+        Assert.Null(err);
+        Assert.Equal(JsonValueKind.Undefined, v.ValueKind);
+    }
+
+    [Fact]
+    public void TryBuild_UnknownKind_ReportsUnsupported()
+    {
+        var f = new ToolField
+        {
+            Name = "x",
+            Kind = (ToolFieldKind)99,
+            TypeLabel = "mystery"
+        };
+        Assert.False(ToolArgumentBuilder.TryBuildArgument(f, "anything", out _, out var err));
+        Assert.Contains("mystery", err);
+    }
+
+    // --- RF-001 edge branches --------------------------------------------
+
+    [Fact]
+    public void ParseFields_NonObjectOrMissingProperties_Empty()
+    {
+        Assert.Empty(ToolArgumentBuilder.ParseFields(JsonDocument.Parse("[]").RootElement));
+        Assert.Empty(ToolArgumentBuilder.ParseFields(JsonDocument.Parse("{}").RootElement));
+        Assert.Empty(ToolArgumentBuilder.ParseFields(
+            JsonDocument.Parse("""{"properties":"nope"}""").RootElement));
+    }
+
+    [Fact]
+    public void ParseFields_EmptyEnumArray_FallsThroughToKind()
+    {
+        var schema = JsonDocument.Parse("""
+            {"type":"object","properties":{"m":{"type":"string","enum":[]}}}
+            """).RootElement;
+        var f = Field(schema, "m");
+        Assert.Equal(ToolFieldKind.String, f.Kind); // empty enum is not a Choice
+    }
+
+    [Fact]
+    public void ParseFields_UnknownType_ResolvesJson()
+    {
+        var schema = JsonDocument.Parse("""
+            {"type":"object","properties":{"blob":{"type":"bytes"}}}
+            """).RootElement;
+        var f = Field(schema, "blob");
+        Assert.Equal(ToolFieldKind.Json, f.Kind);
+        Assert.False(f.Simple);
+    }
+
+    [Fact]
+    public void ParseFields_DefaultValue_BecomesPlaceholder()
+    {
+        var schema = JsonDocument.Parse("""
+            {"type":"object","properties":{"n":{"type":"integer","default":7}}}
+            """).RootElement;
+        Assert.Equal("7", Field(schema, "n").Placeholder);
+    }
+
+    [Fact]
+    public void ParseFields_UnionWithObjectMember_ResolvesJsonWithKindCheck()
+    {
+        var schema = JsonDocument.Parse("""
+            {"type":"object","properties":{
+              "cfg":{"anyOf":[{"type":"object"},{"type":"boolean"}]}
+            }}
+            """).RootElement;
+        var f = Field(schema, "cfg");
+        Assert.Equal(ToolFieldKind.Json, f.Kind);
+        Assert.False(ToolArgumentBuilder.TryBuildArgument(f, "\"str\"", out _, out _));
+        Assert.True(ToolArgumentBuilder.TryBuildArgument(f, "true", out var v, out _));
+        Assert.Equal(JsonValueKind.True, v.ValueKind);
+    }
+
+    // --- RF-006/RF-007 edge branches -------------------------------------
+
+    [Fact]
+    public void GetExamples_NonArrayOrAbsent_Empty()
+    {
+        Assert.Empty(ToolArgumentBuilder.GetExamples(
+            JsonDocument.Parse("""{"examples":"x"}""").RootElement));
+        Assert.Empty(ToolArgumentBuilder.GetExamples(
+            JsonDocument.Parse("""{"type":"object"}""").RootElement));
+    }
+
+    [Fact]
+    public void FillFromArguments_NonObjectArgs_IsNoOp()
+    {
+        var fields = ToolArgumentBuilder.ParseFields(WriteSchema);
+        ToolArgumentBuilder.FillFromArguments(
+            fields, JsonDocument.Parse("[1,2]").RootElement);
+        Assert.All(fields, f => Assert.Null(f.TextValue));
+    }
+
+    [Fact]
+    public void FillFromArguments_UnknownField_Ignored()
+    {
+        var fields = ToolArgumentBuilder.ParseFields(WriteSchema);
+        var args = JsonDocument.Parse("""{"ghost":"x","n":1}""").RootElement;
+        ToolArgumentBuilder.FillFromArguments(fields, args);
+        Assert.All(fields, f => Assert.Null(f.TextValue));
+    }
+
+    [Fact]
+    public void FillFromArguments_NumberField_RawText()
+    {
+        var fields = ToolArgumentBuilder.ParseFields(SearchSchema);
+        var args = JsonDocument.Parse("""{"query":"q","topK":9}""").RootElement;
+        ToolArgumentBuilder.FillFromArguments(fields, args);
+        Assert.Equal("9", fields.Single(f => f.Name == "topK").TextValue);
+    }
+
+    [Fact]
+    public void FillSkeleton_RespectsExistingTextValue()
+    {
+        var fields = ToolArgumentBuilder.ParseFields(SearchSchema);
+        fields.Single(f => f.Name == "query").TextValue = "preset";
+        ToolArgumentBuilder.FillSkeleton(fields);
+        Assert.Equal("preset", fields.Single(f => f.Name == "query").TextValue);
+    }
 }

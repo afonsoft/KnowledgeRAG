@@ -103,4 +103,38 @@ public class SqlQueryGuardTests
         var (ok, reason) = SqlQueryGuard.Validate(query);
         Assert.True(ok, reason);
     }
+
+    [Fact]
+    public void Keywords_ExposesFullWriteList()
+    {
+        Assert.Contains("DROP", SqlQueryGuard.Keywords);
+        Assert.Contains("MERGE", SqlQueryGuard.Keywords);
+        Assert.DoesNotContain("SELECT", SqlQueryGuard.Keywords);
+    }
+
+    [Fact]
+    public void EscapedQuoteInsideLiteral_StillBlanked()
+    {
+        // 'it''s' — the doubled quote must not un-blank DROP TABLE
+        var (ok, reason) = SqlQueryGuard.Validate(
+            "SELECT 'it''s a DROP TABLE trick' FROM t");
+        Assert.True(ok, reason);
+    }
+
+    [Fact]
+    public void UnterminatedLiterals_BlankTheRemainder()
+    {
+        var (ok, reason) = SqlQueryGuard.Validate("SELECT 'unterminated DROP TABLE x");
+        Assert.True(ok, reason);
+
+        var (ok2, reason2) = SqlQueryGuard.Validate("SELECT \"unterminated DELETE x");
+        Assert.True(ok2, reason2);
+    }
+
+    [Fact]
+    public void BlockCommentInsideTrailingContent_DoesNotLeakKeywords()
+    {
+        var (ok, reason) = SqlQueryGuard.Validate("SELECT 1 /* DROP TABLE y */");
+        Assert.True(ok, reason);
+    }
 }
