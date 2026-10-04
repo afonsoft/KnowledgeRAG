@@ -219,16 +219,16 @@ Esperando aprobación — ver /approvals.
     <value>La conversación y su historial serán eliminados.</value>
   </data>
   <data name="Chat_DeleteTitle" xml:space="preserve">
-    <value>Eliminar hilo</value>
+    <value>Eliminar conversación</value>
   </data>
   <data name="Chat_DeleteTooltip" xml:space="preserve">
-    <value>Eliminar hilo</value>
+    <value>Eliminar conversación</value>
   </data>
   <data name="Chat_Empty" xml:space="preserve">
-    <value>Selecciona un hilo o crea una nueva conversación.</value>
+    <value>Selecciona una conversación o crea una nueva.</value>
   </data>
   <data name="Chat_ListError" xml:space="preserve">
-    <value>Error al listar hilos</value>
+    <value>Error al listar conversaciones</value>
   </data>
   <data name="Chat_LogLabel" xml:space="preserve">
     <value>Mensajes de la conversación</value>
@@ -270,7 +270,7 @@ Esperando aprobación — ver /approvals.
     <value>contexto resumido</value>
   </data>
   <data name="Chat_Threads" xml:space="preserve">
-    <value>Hilos</value>
+    <value>Conversaciones</value>
   </data>
   <data name="Chat_Waiting" xml:space="preserve">
     <value>esperando la respuesta del agente…</value>
@@ -1275,7 +1275,7 @@ Esperando aprobación — ver /approvals.
     <value>Expandir menú</value>
   </data>
   <data name="Nav_Flows" xml:space="preserve">
-    <value>Flujos</value>
+    <value>Flows</value>
   </data>
   <data name="Nav_Fontes" xml:space="preserve">
     <value>Fuentes</value>
@@ -1467,7 +1467,7 @@ Esperando aprobación — ver /approvals.
     <value>falló — {0}</value>
   </data>
   <data name="Set_AsstIntro" xml:space="preserve">
-    <value>Provider secundario de bajo costo usado en las sub-tareas del pipeline (rewrite de query, grading de chunks, expansión/HyDE, sumarización de thread). Sigue el endpoint del provider de chat por defecto (la key del chat vale cuando el endpoint es el mismo) — 'Assistant:*' en el ambiente sobreescribe. Fallos/timeout caen al modelo principal.</value>
+    <value>Provider secundario de bajo costo usado en las sub-tareas del pipeline (rewrite de query, grading de chunks, expansión/HyDE, sumarización de conversación). Sigue el endpoint del provider de chat por defecto (la key del chat vale cuando el endpoint es el mismo) — 'Assistant:*' en el ambiente sobreescribe. Fallos/timeout caen al modelo principal.</value>
   </data>
   <data name="Set_AsstKeyRemoved" xml:space="preserve">
     <value>Key del asistente quitada del store.</value>
@@ -2511,10 +2511,10 @@ Esperando aprobación — ver /approvals.
     <value>Disparadores — {0}</value>
   </data>
   <data name="Flows_TriggersCaption" xml:space="preserve">
-    <value>Disparadores del flujo</value>
+    <value>Disparadores del flow</value>
   </data>
   <data name="Flows_NoTriggers" xml:space="preserve">
-    <value>Sin disparadores — el flujo solo se ejecuta manualmente o vía MCP.</value>
+    <value>Sin disparadores — el flow solo se ejecuta manualmente o vía MCP.</value>
   </data>
   <data name="Flows_TriggerDetail" xml:space="preserve">
     <value>Detalle</value>
@@ -2547,7 +2547,7 @@ Esperando aprobación — ver /approvals.
     <value>Añadir disparador</value>
   </data>
   <data name="Flows_WebhookHint" xml:space="preserve">
-    <value>Se genera una URL secreta — haz POST del JSON del evento para ejecutar el flujo (el payload queda en inputs.event).</value>
+    <value>Se genera una URL secreta — haz POST del JSON del evento para ejecutar el flow (el payload queda en inputs.event).</value>
   </data>
   <data name="Flows_TriggerCreated" xml:space="preserve">
     <value>Disparador creado</value>

@@ -219,16 +219,16 @@ Aguardando aprovação — veja /approvals.
     <value>A conversa e seu histórico serão removidos.</value>
   </data>
   <data name="Chat_DeleteTitle" xml:space="preserve">
-    <value>Excluir thread</value>
+    <value>Excluir conversa</value>
   </data>
   <data name="Chat_DeleteTooltip" xml:space="preserve">
-    <value>Excluir thread</value>
+    <value>Excluir conversa</value>
   </data>
   <data name="Chat_Empty" xml:space="preserve">
-    <value>Selecione uma thread ou crie uma nova conversa.</value>
+    <value>Selecione uma conversa ou crie uma nova.</value>
   </data>
   <data name="Chat_ListError" xml:space="preserve">
-    <value>Falha ao listar threads</value>
+    <value>Falha ao listar conversas</value>
   </data>
   <data name="Chat_LogLabel" xml:space="preserve">
     <value>Mensagens da conversa</value>
@@ -270,7 +270,7 @@ Aguardando aprovação — veja /approvals.
     <value>contexto resumido</value>
   </data>
   <data name="Chat_Threads" xml:space="preserve">
-    <value>Threads</value>
+    <value>Conversas</value>
   </data>
   <data name="Chat_Waiting" xml:space="preserve">
     <value>aguardando resposta do agente…</value>
@@ -585,7 +585,7 @@ Aguardando aprovação — veja /approvals.
     <value>nome é obrigatório</value>
   </data>
   <data name="Flows_NestedPh" xml:space="preserve">
-    <value>Nested steps JSON — foreach usa a lista acima; condition usa config.branches[].steps</value>
+    <value>Steps aninhados JSON — foreach usa a lista acima; condition usa config.branches[].steps</value>
   </data>
   <data name="Flows_New" xml:space="preserve">
     <value>Novo flow</value>
@@ -1467,7 +1467,7 @@ Aguardando aprovação — veja /approvals.
     <value>falha — {0}</value>
   </data>
   <data name="Set_AsstIntro" xml:space="preserve">
-    <value>Provider secundário de baixo custo usado nas sub-tarefas do pipeline (rewrite de query, grading de chunks, expansão/HyDE, sumarização de thread). Segue o endpoint do provider de chat por padrão (a key do chat vale quando o endpoint é o mesmo) — 'Assistant:*' no ambiente sobrepõe. Falhas/timeout caem para o modelo principal.</value>
+    <value>Provider secundário de baixo custo usado nas sub-tarefas do pipeline (rewrite de query, grading de chunks, expansão/HyDE, sumarização de conversa). Segue o endpoint do provider de chat por padrão (a key do chat vale quando o endpoint é o mesmo) — 'Assistant:*' no ambiente sobrepõe. Falhas/timeout caem para o modelo principal.</value>
   </data>
   <data name="Set_AsstKeyRemoved" xml:space="preserve">
     <value>Key do assistente removida do store.</value>
@@ -2510,11 +2510,11 @@ Aguardando aprovação — veja /approvals.
   <data name="Flows_TriggersTitle" xml:space="preserve">
     <value>Gatilhos — {0}</value>
   </data>
-  <data name="Flows_TriggersCaption" xml:space="preserve">
-    <value>Gatilhos do fluxo</value>
+  <data name="Flows_TriggersCaption"  xml:space="preserve">
+    <value>Gatilhos do flow</value>
   </data>
   <data name="Flows_NoTriggers" xml:space="preserve">
-    <value>Nenhum gatilho — o fluxo só roda manualmente ou via MCP.</value>
+    <value>Nenhum gatilho — o flow só roda manualmente ou via MCP.</value>
   </data>
   <data name="Flows_TriggerDetail" xml:space="preserve">
     <value>Detalhe</value>
@@ -2547,7 +2547,7 @@ Aguardando aprovação — veja /approvals.
     <value>Adicionar gatilho</value>
   </data>
   <data name="Flows_WebhookHint" xml:space="preserve">
-    <value>Uma URL secreta é gerada — faça POST do JSON do evento nela para rodar o fluxo (o payload fica em inputs.event).</value>
+    <value>Uma URL secreta é gerada — faça POST do JSON do evento nela para rodar o flow (o payload fica em inputs.event).</value>
   </data>
   <data name="Flows_TriggerCreated" xml:space="preserve">
     <value>Gatilho criado</value>
