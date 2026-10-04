@@ -10,7 +10,9 @@
 <h1 class="visually-hidden">Chat</h1>
 
 <div class="row g-3">
-    <div class="col-12 col-lg-3">
+    @* Mobile: a lista de conversas cede lugar à conversa aberta — volta pelo
+       botão ← no cabeçalho do card. Em ≥lg as duas colunas convivem. *@
+    <div class="col-12 col-lg-3 chat-thread-panel @(_current is not null ? "d-none d-lg-block" : "")">
         <Card>
             <HeaderTemplate>
                 <div class="d-flex justify-content-between gap-2 align-items-center">
@@ -53,8 +55,15 @@
             <Card>
                 <HeaderTemplate>
                     <div class="d-flex justify-content-between gap-2 align-items-center">
-                        <span>@_current.Thread.Title</span>
-                        <div>
+                        <div class="d-flex align-items-center gap-2" style="min-width: 0;">
+                            <button type="button" class="btn btn-outline-secondary btn-sm d-lg-none"
+                                    title="@L["Chat_BackToList"]" aria-label="@L["Chat_BackToList"]"
+                                    @onclick="BackToList">
+                                <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                            </button>
+                            <span class="text-truncate">@_current.Thread.Title</span>
+                        </div>
+                        <div class="flex-shrink-0">
                             @if (_current.Summary is not null)
                             {
                                 <Badge Color="Color.Info" class="me-2">@L["Chat_SummaryBadge"]</Badge>
@@ -72,7 +81,7 @@
                          style="max-height: 480px; overflow-y: auto;">
                         @foreach (var m in _current.Messages)
                         {
-                            <div class="mb-2 p-2 rounded @MessageBubbleClass(m.Role)">
+                            <div class="mb-2 p-2 rounded chat-message-bubble @MessageBubbleClass(m.Role)">
                                 <small class="text-muted">
                                     @(m.Role == "tool" ? $"tool {m.ToolName}" : m.Role) · @m.CreatedAt.LocalDateTime.ToString("T")
                                 </small>
@@ -81,21 +90,21 @@
                         }
                         @if (_pendingUser is not null)
                         {
-                            <div class="mb-2 p-2 rounded bg-primary bg-opacity-10">
+                            <div class="mb-2 p-2 rounded chat-message-bubble bg-primary bg-opacity-10 ms-auto">
                                 <small class="text-muted">user</small>
                                 <div style="white-space: pre-wrap;">@_pendingUser</div>
                             </div>
                         }
                         @if (!string.IsNullOrEmpty(_streamText))
                         {
-                            <div class="mb-2 p-2 rounded bg-light">
+                            <div class="mb-2 p-2 rounded chat-message-bubble bg-light">
                                 <small class="text-muted">assistant · streaming</small>
                                 <div style="white-space: pre-wrap;">@_streamText</div>
                             </div>
                         }
                         else if (_sending)
                         {
-                            <div class="mb-2 p-2 rounded bg-light kh-action-loading">
+                            <div class="mb-2 p-2 rounded chat-message-bubble bg-light kh-action-loading">
                                 <i class="fa-solid fa-spinner fa-spin"></i>
                                 <small class="text-muted">@L["Chat_Waiting"]</small>
                             </div>
@@ -142,6 +151,12 @@
     private async Task OpenThreadAsync(Guid id)
     {
         _current = await Threads.GetAsync(id);
+    }
+
+    /// <summary>Mobile: fecha a conversa e reexibe a lista de conversas.</summary>
+    private void BackToList()
+    {
+        _current = null;
     }
 
     private async Task DeleteThreadAsync()
@@ -229,7 +244,7 @@
 
     private static string MessageBubbleClass(string role) => role switch
     {
-        "user" => "bg-primary bg-opacity-10",
+        "user" => "bg-primary bg-opacity-10 ms-auto",
         "tool" => "bg-secondary bg-opacity-10",
         _ => "bg-light"
     };

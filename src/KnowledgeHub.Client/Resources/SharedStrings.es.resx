@@ -215,6 +215,9 @@ Esperando aprobación — ver /approvals.
 
 </value>
   </data>
+  <data name="Chat_BackToList" xml:space="preserve">
+    <value>Volver a la lista</value>
+  </data>
   <data name="Chat_DeleteContent" xml:space="preserve">
     <value>La conversación y su historial serán eliminados.</value>
   </data>
@@ -869,6 +872,9 @@ Esperando aprobación — ver /approvals.
   <data name="Keys_Errors" xml:space="preserve">
     <value>errores</value>
   </data>
+  <data name="Keys_ExamplePh" xml:space="preserve">
+    <value>https://api.openai.com</value>
+  </data>
   <data name="Keys_HideSecret" xml:space="preserve">
     <value>Ocultar secreto</value>
   </data>
@@ -913,6 +919,9 @@ Esperando aprobación — ver /approvals.
   </data>
   <data name="Keys_LegacyKey" xml:space="preserve">
     <value>Clave legada ({0}): el secreto completo no está disponible para claves creadas antes del almacenamiento protegido.</value>
+  </data>
+  <data name="Keys_LimitsCleared" xml:space="preserve">
+    <value>Rate limits de la clave eliminados.</value>
   </data>
   <data name="Keys_LimitSaved" xml:space="preserve">
     <value>Rate limit de la clave actualizado.</value>
@@ -1982,6 +1991,9 @@ Esperando aprobación — ver /approvals.
   <data name="Set_VectorExplain" xml:space="preserve">
     <value>Guarda los embeddings — vectores numéricos que representan el significado de cada chunk indexado. En la búsqueda, la pregunta se vectoriza y se compara por similitud (coseno): encuentra contenido relacionado incluso sin palabras clave exactas. Es lo que alimenta el RAG; el índice HNSW hace esa búsqueda rápida en bases grandes.</value>
   </data>
+  <data name="SrcEd_AccessKeyId" xml:space="preserve">
+    <value>Access key ID</value>
+  </data>
   <data name="SrcEd_AccountName" xml:space="preserve">
     <value>Account name (si no usas connection string)</value>
   </data>
@@ -2057,6 +2069,12 @@ Esperando aprobación — ver /approvals.
   <data name="SrcEd_DocsSummary" xml:space="preserve">
     <value>documento(s) · {1} chunks · última indexación: {2}</value>
   </data>
+  <data name="SrcEd_EndpointStar" xml:space="preserve">
+    <value>Endpoint *</value>
+  </data>
+  <data name="SrcEd_EndpointWhisper" xml:space="preserve">
+    <value>Endpoint de la API Whisper</value>
+  </data>
   <data name="SrcEd_Exclude" xml:space="preserve">
     <value>Exclude patterns (glob, uno por línea)</value>
   </data>
@@ -2107,6 +2125,9 @@ Esperando aprobación — ver /approvals.
   </data>
   <data name="SrcEd_IndexedDocs" xml:space="preserve">
     <value>Documentos indexados (mostrando {0} de {1})</value>
+  </data>
+  <data name="SrcEd_InstanceUrl" xml:space="preserve">
+    <value>URL de la instancia</value>
   </data>
   <data name="SrcEd_Interval" xml:space="preserve">
     <value>Intervalo (min)</value>
@@ -2233,6 +2254,9 @@ Esperando aprobación — ver /approvals.
   </data>
   <data name="SrcEd_SecretStoredM" xml:space="preserve">
     <value>Guardado cifrado; nunca devuelto por la API.</value>
+  </data>
+  <data name="SrcEd_ShareName" xml:space="preserve">
+    <value>Share name</value>
   </data>
   <data name="SrcEd_Stored" xml:space="preserve">
     <value>(guardada — en blanco la mantiene)</value>

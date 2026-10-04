@@ -278,10 +278,14 @@ img, table, pre, code, .table-responsive {
     .chat-thread-panel {
         margin-bottom: 1rem;
     }
+}
 
-    .chat-message-bubble {
-        max-width: 90% !important;
-    }
+/* Bolhas de mensagem dimensionadas ao conteúdo — .ms-auto alinha a do usuário
+   à direita (padrão de apps de chat). max-width evita bolha de tela inteira. */
+.chat-message-bubble {
+    width: fit-content;
+    max-width: 85%;
+    min-width: 0;
 }
 
 /* RF-005: Settings form mobile adjustments */
@@ -370,6 +374,20 @@ img, table, pre, code, .table-responsive {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Mobile usability: BootstrapBlazor esconde TableToolbarButtons dentro de um
+   dropdown "engrenagem" abaixo de sm — os itens saem só com ícone e sem texto,
+   pouco descobrível. Como a regra icon-only abaixo já compacta os botões em
+   <576px, mantemos a toolbar inline e dispensamos a engrenagem. */
+@media (max-width: 575.98px) {
+    .table-toolbar .table-toolbar-button > .btn-toolbar.d-none {
+        display: inline-flex !important;
+    }
+
+    .table-toolbar .btn-gear {
+        display: none !important;
+    }
 }
 
 /* SPEC-20260926-mobile-icon-only-buttons RF-001/RF-002:
