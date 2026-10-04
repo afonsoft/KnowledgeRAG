@@ -12,7 +12,7 @@
 <h1 class="h3 mb-3">@L["Src_Heading"]</h1>
 
 <div class="table-responsive-wrapper">
-    <Table TItem="KnowledgeSourceDto" Items="_sources" ShowLoading="true" ShowLoadingInFirstRender="true"
+    <Table @ref="_table" TItem="KnowledgeSourceDto" Items="_sources" ShowLoading="true" ShowLoadingInFirstRender="true"
            IsStriped="true" ShowToolbar="true" ShowDefaultButtons="false" ShowEmpty="true"
            EmptyText="@L["Src_Empty"]">
     <TableToolbarTemplate>
@@ -215,6 +215,7 @@
 
 @code {
     private List<KnowledgeSourceDto>? _sources;
+    private Table<KnowledgeSourceDto>? _table;
     private Modal? _modal;
     private SourceEditDialog? _edit;
     private SourceEditDialog.SourceEditModel _editModel = new();
@@ -244,6 +245,14 @@
         {
             _sources = [];
             await Toast.Error(L["Common_Error"], L["Src_LoadError", ex.Message]);
+        }
+
+        // Mesmo workaround do ApiKeys: na transição empty→non-empty o BB Table
+        // não repinta com a nova referência de Items — força via QueryAsync.
+        if (_table is not null)
+        {
+            await InvokeAsync(StateHasChanged);
+            await _table.QueryAsync();
         }
     }
 
