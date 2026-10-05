@@ -35,6 +35,15 @@ public sealed class CacheKeyItemDto
     public string Prefix { get; set; } = "";
     public long SizeBytes { get; set; }
     public long? ExpiresInSeconds { get; set; }
+
+    /// <summary><c>"tracked"</c> — written and recorded by this process;
+    /// <c>"server"</c> — discovered on the Redis server via SCAN (written by
+    /// another replica; no size/TTL metadata available).</summary>
+    public string Source { get; set; } = "tracked";
+
+    /// <summary>HybridCache tags recorded at write time (tag-scoped
+    /// invalidation), when the writer supplied any.</summary>
+    public IReadOnlyList<string>? Tags { get; set; }
 }
 
 public sealed class ClearCacheResultDto

@@ -9,8 +9,12 @@ public interface ICacheManagerService
 {
     Task<CacheStatsDto> GetStatsAsync(CancellationToken ct = default);
     Task<ClearCacheResultDto> ClearAllAsync(CancellationToken ct = default);
-    void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null);
+    void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null, IEnumerable<string>? tags = null);
     void RemoveKey(string key);
+
+    /// <summary>Drops every tracked entry carrying <paramref name="tag"/> —
+    /// the registry counterpart of <c>HybridCache.RemoveByTagAsync</c>.</summary>
+    void RemoveTag(string tag);
 
     /// <summary>SPEC-20260926-settings-ux-embeddings RF-003 +
     /// SPEC-20260926-cache-key-consistency RF-002: removes ONE cache entry —

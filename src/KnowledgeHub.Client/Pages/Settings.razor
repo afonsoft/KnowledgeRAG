@@ -847,15 +847,28 @@ else
                                     @foreach (var k in _cache.Keys)
                                     {
                                         <tr>
-                                            <td class="font-monospace text-break">@k.Key</td>
-                                            <td class="text-end">@FormatBytes(k.SizeBytes)</td>
+                                            <td class="font-monospace text-break">
+                                                @k.Key
+                                                @if (k.Source == "server")
+                                                {
+                                                    <span class="badge bg-secondary-subtle text-secondary ms-1">server</span>
+                                                }
+                                                @if (k.Tags is { Count: > 0 } kt)
+                                                {
+                                                    <span class="badge bg-info-subtle text-info ms-1">@string.Join(" ", kt)</span>
+                                                }
+                                            </td>
+                                            <td class="text-end">@(k.Source == "server" ? "—" : FormatBytes(k.SizeBytes))</td>
                                             <td class="text-end">@(k.ExpiresInSeconds is { } ttl ? $"{ttl}s" : "—")</td>
                                             <td class="text-end">
-                                                <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger"
-                                                                  Icon="fa-solid fa-trash" Text=""
-                                                                  Title="@L["Set_ClearKey"]"
-                                                                  Content="@L["Set_RemoveEntry", k.Key]"
-                                                                  OnConfirm="() => DeleteCacheKeyAsync(k.Key)" />
+                                                @if (k.Source != "server")
+                                                {
+                                                    <PopConfirmButton Size="Size.ExtraSmall" Color="Color.Danger"
+                                                                      Icon="fa-solid fa-trash" Text=""
+                                                                      Title="@L["Set_ClearKey"]"
+                                                                      Content="@L["Set_RemoveEntry", k.Key]"
+                                                                      OnConfirm="() => DeleteCacheKeyAsync(k.Key)" />
+                                                }
                                             </td>
                                         </tr>
                                     }
