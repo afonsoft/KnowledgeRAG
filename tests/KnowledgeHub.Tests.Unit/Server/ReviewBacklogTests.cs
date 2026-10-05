@@ -291,8 +291,9 @@ public sealed class ReviewBacklogTests
             Task.FromResult(new CacheStatsDto());
         public Task<ClearCacheResultDto> ClearAllAsync(CancellationToken ct = default) =>
             Task.FromResult(new ClearCacheResultDto());
-        public void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null) { }
+        public void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null, IEnumerable<string>? tags = null) { }
         public void RemoveKey(string key) { }
+        public void RemoveTag(string tag) { }
         public Task<CacheKeyRemovalResult> RemoveEntryAsync(string key, CancellationToken ct = default) =>
             Task.FromResult(new CacheKeyRemovalResult { Tracked = false, Removed = true });
         public Task ClearLocalTrackedAsync(CancellationToken ct = default)

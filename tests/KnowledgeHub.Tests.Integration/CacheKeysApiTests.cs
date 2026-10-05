@@ -75,4 +75,28 @@ public class CacheKeysApiTests : IClassFixture<CacheKeysApiTests.Fixture>
         // statsError is part of the contract (null when healthy).
         Assert.True(doc.RootElement.TryGetProperty("statsError", out _));
     }
+
+    // Choke-point tracking: writes that bypass SafeCache (direct L1L2Cache
+    // and the decorated HybridCache used by EndpointCache) must land in the
+    // stats key list.
+    [Fact]
+    public async Task Stats_Lists_L1L2_And_Hybrid_Writes()
+    {
+        var http = await TestAuth.LoginAsync(_factory);
+        var l1l2 = _factory.Services.GetRequiredService<L1L2Cache>();
+        var hybrid = _factory.Services.GetRequiredService<Microsoft.Extensions.Caching.Hybrid.HybridCache>();
+        Assert.IsType<TrackingHybridCache>(hybrid);
+
+        await l1l2.SetStringAsync("int:stats:l1l2", "v",
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
+        await hybrid.SetAsync("int:stats:hybrid", "v",
+            new Microsoft.Extensions.Caching.Hybrid.HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(5) },
+            ["int-tag"]);
+
+        using var doc = JsonDocument.Parse(await http.GetStringAsync("/api/settings/cache"));
+        var keys = doc.RootElement.GetProperty("keys").EnumerateArray().ToList();
+        Assert.Contains(keys, k => k.GetProperty("key").GetString() == "int:stats:l1l2");
+        var hybridItem = Assert.Single(keys, k => k.GetProperty("key").GetString() == "int:stats:hybrid");
+        Assert.Equal("int-tag", hybridItem.GetProperty("tags")[0].GetString());
+    }
 }

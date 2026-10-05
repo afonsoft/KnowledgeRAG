@@ -85,8 +85,9 @@ public sealed class CacheCoherenceTests
             Task.FromResult(new ClearCacheResultDto());
         public Task<CacheKeyRemovalResult> RemoveEntryAsync(string key, CancellationToken ct = default) =>
             Task.FromResult(new CacheKeyRemovalResult { Tracked = false, Removed = false });
-        public void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null) { }
+        public void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null, IEnumerable<string>? tags = null) { }
         public void RemoveKey(string key) { }
+        public void RemoveTag(string tag) { }
         public void RecordHit(bool hit) { }
         public Task ClearLocalTrackedAsync(CancellationToken ct = default)
         {

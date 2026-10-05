@@ -14,7 +14,7 @@ namespace KnowledgeHub.Server.Caching;
 /// </summary>
 public sealed class CacheManagerService : ICacheManagerService
 {
-    private sealed record CacheEntryMeta(string Key, string Prefix, long SizeBytes, DateTimeOffset? ExpiresAt);
+    private sealed record CacheEntryMeta(string Key, string Prefix, long SizeBytes, DateTimeOffset? ExpiresAt, IReadOnlyList<string>? Tags);
 
     private readonly ConcurrentDictionary<string, CacheEntryMeta> _trackedKeys = new(StringComparer.Ordinal);
     private readonly IDistributedCache _cache;
@@ -45,16 +45,26 @@ public sealed class CacheManagerService : ICacheManagerService
         Current = this;
     }
 
-    public void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null)
+    public void TrackKey(string key, long sizeBytes, TimeSpan? ttl = null, IEnumerable<string>? tags = null)
     {
         var prefix = ExtractPrefix(key);
         var expiresAt = ttl.HasValue ? DateTimeOffset.UtcNow + ttl.Value : (DateTimeOffset?)null;
-        _trackedKeys[key] = new CacheEntryMeta(key, prefix, sizeBytes, expiresAt);
+        var tagList = tags?.ToArray();
+        _trackedKeys[key] = new CacheEntryMeta(key, prefix, sizeBytes, expiresAt,
+            tagList is { Length: > 0 } ? tagList : null);
     }
 
     public void RemoveKey(string key)
     {
         _trackedKeys.TryRemove(key, out _);
+    }
+
+    /// <inheritdoc />
+    public void RemoveTag(string tag)
+    {
+        foreach (var kvp in _trackedKeys)
+            if (kvp.Value.Tags is { } tags && tags.Contains(tag, StringComparer.Ordinal))
+                _trackedKeys.TryRemove(kvp.Key, out _);
     }
 
     public void RecordHit(bool hit)
@@ -69,6 +79,23 @@ public sealed class CacheManagerService : ICacheManagerService
     private const int ScanPageSize = 200;
     private static readonly TimeSpan ScanDeadline = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RedisPingTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>Reuse window for the PING+SCAN+INFO enrichment — every
+    /// /api/settings/cache call would otherwise pay several Redis RTTs.
+    /// Seconds-scale staleness is invisible on an admin panel.</summary>
+    private static readonly TimeSpan EnrichMinInterval = TimeSpan.FromSeconds(5);
+    private ServerEnrichment? _lastEnrich;
+
+    private sealed record ServerEnrichment(
+        DateTimeOffset At,
+        IReadOnlyList<string>? Names,
+        bool Connected,
+        long? ServerKeys,
+        bool Partial,
+        long? UsedMemoryBytes,
+        int? ConnectedClients,
+        bool ServerReported,
+        string? StatsError);
 
     public async Task<CacheStatsDto> GetStatsAsync(CancellationToken ct = default)
     {
@@ -85,7 +112,9 @@ public sealed class CacheManagerService : ICacheManagerService
                 SizeBytes = k.SizeBytes,
                 ExpiresInSeconds = k.ExpiresAt.HasValue
                     ? Math.Max(0, (long)(k.ExpiresAt.Value - DateTimeOffset.UtcNow).TotalSeconds)
-                    : null
+                    : null,
+                Source = "tracked",
+                Tags = k.Tags
             })
             .ToList();
 
@@ -104,12 +133,64 @@ public sealed class CacheManagerService : ICacheManagerService
         // RF-002: with redis, overlay server-side stats — tracked keys reflect
         // only this process; SCAN/INFO report the shared cache truth.
         if (provider == "redis" && _redis is not null)
-            await EnrichFromRedisAsync(stats, ct);
+        {
+            var scanned = await EnrichServerCachedAsync(stats, ct);
+            if (scanned is { Count: > 0 })
+            {
+                // Merge server-discovered keys — the registry only sees writes
+                // made by THIS process since boot; SCAN sees every replica's.
+                var known = new HashSet<string>(keysList.Select(k => k.Key), StringComparer.Ordinal);
+                foreach (var name in scanned.OrderBy(n => n, StringComparer.Ordinal))
+                {
+                    if (!known.Add(name))
+                        continue;
+                    keysList.Add(new CacheKeyItemDto
+                    {
+                        Key = name,
+                        Prefix = ExtractPrefix(name),
+                        SizeBytes = 0,
+                        ExpiresInSeconds = null,
+                        Source = "server"
+                    });
+                }
+            }
+        }
 
         return stats;
     }
 
-    private async Task EnrichFromRedisAsync(CacheStatsDto stats, CancellationToken ct)
+    /// <summary>Runs <see cref="EnrichFromRedisAsync"/> at most once per
+    /// <see cref="EnrichMinInterval"/> — in between, the last snapshot is
+    /// replayed onto <paramref name="stats"/> and the last SCAN names reused.</summary>
+    private async Task<IReadOnlyList<string>?> EnrichServerCachedAsync(CacheStatsDto stats, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var last = _lastEnrich;
+        if (last is not null && now - last.At < EnrichMinInterval)
+        {
+            stats.IsConnected = last.Connected;
+            if (last.Connected)
+            {
+                stats.ServerKeys = last.ServerKeys;
+                stats.Partial = last.Partial;
+                stats.ServerUsedMemoryBytes = last.UsedMemoryBytes;
+                stats.ServerConnectedClients = last.ConnectedClients;
+                stats.ServerReported = last.ServerReported;
+                stats.StatsError = last.StatsError;
+            }
+            return last.Names;
+        }
+
+        var names = await EnrichFromRedisAsync(stats, ct);
+        _lastEnrich = new ServerEnrichment(now, names, stats.IsConnected,
+            stats.ServerKeys, stats.Partial, stats.ServerUsedMemoryBytes,
+            stats.ServerConnectedClients, stats.ServerReported, stats.StatsError);
+        return names;
+    }
+
+    /// <returns>Key names seen by SCAN, or null when the enrichment could not
+    /// run (disconnected, no server endpoint, or SCAN/INFO failure).</returns>
+    private async Task<IReadOnlyList<string>?> EnrichFromRedisAsync(CacheStatsDto stats, CancellationToken ct)
     {
         // SPEC-20260926-redis-stats-admin-and-connflag RF-002: connectivity is
         // judged by PING alone — SCAN/INFO failures degrade the stats section
@@ -127,11 +208,11 @@ public sealed class CacheManagerService : ICacheManagerService
         {
             stats.IsConnected = false;
             _logger.LogWarning(ex, "redis ping failed");
-            return;
+            return null;
         }
 
         if (!stats.IsConnected)
-            return;
+            return null;
 
         try
         {
@@ -141,24 +222,25 @@ public sealed class CacheManagerService : ICacheManagerService
             if (server is null)
             {
                 stats.StatsError = "no connected server endpoint";
-                return;
+                return null;
             }
 
             // Bounded SCAN (never KEYS *) — cap both page size and total count.
             // RF-006 (SPEC-20260926-cache-coherence-and-ttl): honor the caller's
             // cancellation — a stalled SCAN must not pin the settings endpoint.
-            var count = 0L;
+            var names = new List<string>();
             var truncated = false;
             // RF-304 (SPEC-20260926-review-backlog-remediation): ct is only
             // checked per delivered key — a stalled page ignores cancellation.
             // A wall-clock deadline bounds the wait independent of page yield.
             var deadline = Stopwatch.StartNew();
-            foreach (var _ in server.Keys(pattern: "*", pageSize: ScanPageSize))
+            foreach (var key in server.Keys(pattern: "*", pageSize: ScanPageSize))
             {
                 ct.ThrowIfCancellationRequested();
-                if (++count >= ScanMaxKeys || deadline.Elapsed >= ScanDeadline) { truncated = true; break; }
+                names.Add(key.ToString());
+                if (names.Count >= ScanMaxKeys || deadline.Elapsed >= ScanDeadline) { truncated = true; break; }
             }
-            stats.ServerKeys = count;
+            stats.ServerKeys = names.Count;
             stats.Partial = truncated;
 
             var info = await server.InfoAsync("memory");
@@ -169,12 +251,14 @@ public sealed class CacheManagerService : ICacheManagerService
             // "server-side stats available" — only true once INFO answered;
             // a failed INFO leaves it false with StatsError describing why.
             stats.ServerReported = true;
+            return names;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             stats.StatsError = TrimError(ex);
             _logger.LogWarning(ex, "redis stats enrichment failed — connectivity ok, stats degraded");
+            return null;
         }
     }
 

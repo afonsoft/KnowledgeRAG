@@ -698,6 +698,24 @@ public static class KnowledgeHubServiceCollectionExtensions
         // invalidation instead of hand-rolled version tokens.
         services.AddHybridCache();
 
+        // Wrap HybridCache with the tracking decorator so EndpointCache
+        // writes land in the tracked-key registry — without it only
+        // SafeCache-mediated keys showed up in the Cache panel.
+        var hybridDescriptor = services.LastOrDefault(d =>
+            d.ServiceType == typeof(Microsoft.Extensions.Caching.Hybrid.HybridCache));
+        if (hybridDescriptor is not null)
+        {
+            services.Remove(hybridDescriptor);
+            services.AddSingleton<Microsoft.Extensions.Caching.Hybrid.HybridCache>(sp =>
+            {
+                var inner = hybridDescriptor.ImplementationInstance as Microsoft.Extensions.Caching.Hybrid.HybridCache
+                    ?? (hybridDescriptor.ImplementationFactory?.Invoke(sp) as Microsoft.Extensions.Caching.Hybrid.HybridCache)
+                    ?? (Microsoft.Extensions.Caching.Hybrid.HybridCache)ActivatorUtilities.CreateInstance(
+                        sp, hybridDescriptor.ImplementationType!);
+                return new Caching.TrackingHybridCache(inner);
+            });
+        }
+
         services.AddSingleton<Caching.ICacheManagerService>(sp => new Caching.CacheManagerService(
             sp.GetRequiredService<Caching.L1L2Cache>(),
             sp.GetRequiredService<IOptions<Configuration.CacheOptions>>(),

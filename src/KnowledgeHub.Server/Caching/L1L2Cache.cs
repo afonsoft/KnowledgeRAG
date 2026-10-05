@@ -39,7 +39,18 @@ public sealed class L1L2Cache : IDistributedCache
     /// talk to this, not to L1.</summary>
     public IDistributedCache Inner => _l2;
 
-    public byte[]? Get(string key) => GetAsync(key).GetAwaiter().GetResult();
+    // Sync members use the sync IDistributedCache paths — no async state
+    // machine and no thread-pool blocking on the hot L1 hit.
+    public byte[]? Get(string key)
+    {
+        if (_l1.TryGetValue(key, out byte[]? hit))
+            return hit;
+
+        var value = _l2.Get(key);
+        if (value is not null)
+            _l1.Set(key, value, _l1MaxTtl);
+        return value;
+    }
 
     public async Task<byte[]?> GetAsync(string key, CancellationToken token = default)
     {
@@ -52,8 +63,22 @@ public sealed class L1L2Cache : IDistributedCache
         return value;
     }
 
-    public void Set(string key, byte[] value, DistributedCacheEntryOptions options) =>
-        SetAsync(key, value, options).GetAwaiter().GetResult();
+    public void Set(string key, byte[] value, DistributedCacheEntryOptions options)
+    {
+        try
+        {
+            _l2.Set(key, value, options);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "L2 write failed — entry cached in L1 only");
+        }
+        var l1Ttl = _l1MaxTtl;
+        if (options.AbsoluteExpirationRelativeToNow is { } ttl && ttl < l1Ttl)
+            l1Ttl = ttl;
+        _l1.Set(key, value, l1Ttl);
+        TrackWrite(key, value, options);
+    }
 
     public async Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options,
         CancellationToken token = default)
@@ -72,19 +97,37 @@ public sealed class L1L2Cache : IDistributedCache
         if (options.AbsoluteExpirationRelativeToNow is { } ttl && ttl < l1Ttl)
             l1Ttl = ttl;
         _l1.Set(key, value, l1Ttl);
+        TrackWrite(key, value, options);
     }
 
-    public void Refresh(string key) => RefreshAsync(key).GetAwaiter().GetResult();
+    private static void TrackWrite(string key, byte[] value, DistributedCacheEntryOptions options)
+    {
+        // Track at the choke point so every write lands in the registry —
+        // call sites that bypass SafeCache otherwise stay invisible in the
+        // Cache panel. SafeCache's own TrackKey re-records identical meta, so
+        // double-tracking is idempotent.
+        var trackedTtl = options.AbsoluteExpirationRelativeToNow
+            ?? (options.AbsoluteExpiration is { } abs ? abs - DateTimeOffset.UtcNow : null);
+        CacheManagerService.Current?.TrackKey(key, value.Length, trackedTtl);
+    }
+
+    public void Refresh(string key) => _l2.Refresh(key);
 
     public Task RefreshAsync(string key, CancellationToken token = default) =>
         _l2.RefreshAsync(key, token);
 
-    public void Remove(string key) => RemoveAsync(key).GetAwaiter().GetResult();
+    public void Remove(string key)
+    {
+        _l1.Remove(key);
+        _l2.Remove(key);
+        CacheManagerService.Current?.RemoveKey(key);
+    }
 
     public async Task RemoveAsync(string key, CancellationToken token = default)
     {
         _l1.Remove(key);
         await _l2.RemoveAsync(key, token);
+        CacheManagerService.Current?.RemoveKey(key);
     }
 
     /// <summary>RF-002: wait on the striped fill lock; used by

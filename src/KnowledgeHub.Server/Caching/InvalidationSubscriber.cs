@@ -86,6 +86,9 @@ public sealed class InvalidationSubscriber : BackgroundService
                 {
                     var key = topic[CacheKeyTopicPrefix.Length..];
                     l1.InvalidateLocal(key);
+                    // The publisher already deleted the shared entry — the key
+                    // is gone globally, so it leaves this replica's registry too.
+                    _manager?.RemoveKey(key);
                     _logger.LogDebug("remote cache-key eviction — L1 entry dropped");
                 }
                 break;
