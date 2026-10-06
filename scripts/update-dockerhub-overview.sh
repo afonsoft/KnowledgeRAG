@@ -55,14 +55,14 @@ print(json.dumps({
 PY
 
 echo "==> PATCH /v2/repositories/$DOCKERHUB_USERNAME/$DOCKERHUB_REPO"
-curl -fsS -X PATCH \
+response="$(curl -fsS -X PATCH \
   "https://hub.docker.com/v2/repositories/${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}/" \
   -H "Authorization: JWT $JWT" \
   -H 'Content-Type: application/json' \
-  --data @"$payload" \
-| python3 -c '
+  --data @"$payload")"
+python3 - "$response" <<'PY'
 import json, sys
-d = json.load(sys.stdin)
-print(f"updated {d[\"user\"]}/{d[\"name\"]} — description: {d[\"description\"]!r}, "
-      f"overview: {len(d.get(\"full_description\") or \"\")} chars")
-'
+d = json.loads(sys.argv[1])
+print(f"updated {d['user']}/{d['name']} — description: {d['description']!r}, "
+      f"overview: {len(d.get('full_description') or '')} chars")
+PY
