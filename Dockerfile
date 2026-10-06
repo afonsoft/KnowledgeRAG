@@ -57,7 +57,8 @@ RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/* \
- && mkdir -p /data && chown app:app /data
+ && mkdir -p /data /vaults/default \
+ && chown app:app /data /vaults/default
 
 WORKDIR /app
 COPY --from=build /app/publish ./

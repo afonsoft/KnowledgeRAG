@@ -12,6 +12,7 @@ docker pull afonsoft/knowledgerag
 docker run -d --name knowledgerag \
   -p 5000:8080 \
   -v knowledgerag-data:/data \
+  -v vault:/vaults/default -e Vault__Path=/vaults/default \
   afonsoft/knowledgerag
 ```
 
@@ -36,6 +37,7 @@ The same image is also on GHCR: `docker pull ghcr.io/afonsoft/knowledgerag`.
 |---|---|
 | HTTP port | `8080` (container) — map with `-p <host>:8080` |
 | Data volume | `/data` — SQLite catalog/vector DB + uploads |
+| Vault | `/vaults/default` — default Obsidian vault; seeded as a source when `Vault__Path` points there |
 | Logs | `/app/logs` — optional mount; Serilog file sink, daily rolling, 14-day retention |
 | User | non-root `app` (uid **1654**) — `chown` bind-mounted host dirs accordingly |
 
@@ -55,6 +57,8 @@ All ASP.NET Core settings accept `Section__Key` env vars. Frequently used:
 | `Cache__Provider` | `memory` | `memory` / `redis` (distributed L2 cache) |
 | `Mcp__SessionMode` | `StatefulForInitializeClients` | hybrid MCP sessions; `Stateless` for spec `2026-07-28`-only setups |
 | `Auth__AdminInitialPassword` | `123qwe` | seed for first-boot `admin` (forced change on login) |
+| `Vault__Path` | — | when set and no ObsidianVault source exists, seeds one at this path — pair with `-v vault:/vaults/default` |
+| `Vault__Name` | `Default Vault` | display name of the seeded vault source |
 
 Reaching services on the Docker host (Ollama, Postgres, Redis): add `--add-host=host.docker.internal:host-gateway` on `docker run`.
 
@@ -65,8 +69,9 @@ services:
   knowledgerag:
     image: afonsoft/knowledgerag:latest
     ports: ["5000:8080"]
-    volumes: ["./data:/data", "./logs:/app/logs"]
+    volumes: ["./data:/data", "./logs:/app/logs", "vault:/vaults/default"]
     environment:
+      Vault__Path: /vaults/default
       Chat__Provider: ollama
       Chat__Endpoint: http://host.docker.internal:11434
       Chat__Model: llama3.1
@@ -75,6 +80,9 @@ services:
       Embeddings__Model: nomic-embed-text
     extra_hosts: ["host.docker.internal:host-gateway"]
     restart: unless-stopped
+volumes:
+  vault:
+    name: vault
 ```
 
 > `./data` and `./logs` must be writable by uid **1654**: `mkdir -p data logs && chown -R 1654:1654 data logs`.

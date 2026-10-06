@@ -4,13 +4,18 @@ O KnowledgeHub roda de três formas: a partir do código-fonte (.NET SDK), como 
 
 ## Docker (recomendado)
 
+> Referência completa — volumes, todas as vars do `.env`, overrides, upgrades, troubleshooting: [DEPLOY-DOCKER.md](DEPLOY-DOCKER.md).
+
 ### Imagem pronta
 
 Publicada no [Docker Hub](https://hub.docker.com/r/afonsoft/knowledgerag) (tags `latest` / `X.Y.Z`) e no GHCR a cada release — não precisa de checkout:
 
 ```bash
 docker pull afonsoft/knowledgerag
-docker run -d --name knowledgerag -p 5000:8080 -v knowledgerag-data:/data afonsoft/knowledgerag
+docker run -d --name knowledgerag -p 5000:8080 \
+  -v knowledgerag-data:/data \
+  -v vault:/vaults/default -e Vault__Path=/vaults/default \
+  afonsoft/knowledgerag
 ```
 
 `ghcr.io/afonsoft/knowledgerag` serve as mesmas tags. Abra `http://localhost:5000` e faça login `admin` / `123qwe` (troca de senha obrigatória).

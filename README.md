@@ -508,8 +508,13 @@ Open http://localhost:5000 and sign in with `admin` / `123qwe`.
 
 ```bash
 docker pull afonsoft/knowledgerag
-docker run -d --name knowledgerag -p 5000:8080 -v knowledgerag-data:/data afonsoft/knowledgerag
+docker run -d --name knowledgerag -p 5000:8080 \
+  -v knowledgerag-data:/data \
+  -v vault:/vaults/default -e Vault__Path=/vaults/default \
+  afonsoft/knowledgerag
 ```
+
+(`vault` named volume + `Vault__Path` seed a ready Obsidian vault on first boot — drop both to skip it.) Full deploy guide — volumes, `.env` reference, the default `vault` named volume, overrides, upgrades and troubleshooting: [docs/en/DEPLOY-DOCKER.md](docs/en/DEPLOY-DOCKER.md) · [pt-BR](docs/pt/DEPLOY-DOCKER.md).
 
 **From source (compose)** — builds the image and wires env/volumes/healthcheck per `docker-compose.yml`:
 
