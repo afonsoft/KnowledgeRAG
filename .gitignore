@@ -38,6 +38,7 @@ ScaffoldingReadMe.txt
 
 # dotenv environment variables file
 .env
+.env.bak.*
 
 # Host-specific compose layer (SPEC-20260916-compose-vault-mount) —
 # commit docker-compose.override.yml.example as the reference instead.

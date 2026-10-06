@@ -376,6 +376,11 @@ public partial class Program
         await AuthSeeder.SeedAsync(
             db, scope.ServiceProvider.GetRequiredService<IOptions<AuthOptions>>(), app.Logger);
 
+        // Default vault source (Vault:Path) — compose mounts the `vault` named
+        // volume at /vaults/default so write_note/write_knowledge/read_document
+        // work out of the box. Only seeds while zero ObsidianVault sources exist.
+        await KnowledgeHub.Server.Ingestion.VaultSeeder.SeedAsync(db, app.Configuration, app.Logger);
+
         // SPEC-20260914-embedding-dimension-guard: loud startup warning when the
         // persisted embeddings no longer match the configured provider.
         var embeddingProvider = scope.ServiceProvider.GetRequiredService<IEmbeddingProvider>();

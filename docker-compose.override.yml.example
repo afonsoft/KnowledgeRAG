@@ -7,9 +7,10 @@
 #
 #   cp docker-compose.override.yml.example docker-compose.override.yml
 #
-# A clean checkout WITHOUT the override deploys fine — it just won't have any
-# vault mounted, so `obsidian_write`/`read_document` sources whose
-# configuration.path points at /vaults/* will report "mount unavailable".
+# A clean checkout WITHOUT the override deploys fine — the base compose mounts
+# the `vault` named volume at /vaults/default and the first-boot seeder
+# (Vault:Path) registers it as an ObsidianVault source. Use this override only
+# to mount ADDITIONAL vaults (host dirs, WebDAV mounts) under /vaults/*.
 services:
   knowledgerag:
     volumes:

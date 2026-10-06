@@ -4,17 +4,35 @@ KnowledgeHub runs three ways: from source (.NET SDK), as a Docker container, or 
 
 ## Docker (recommended)
 
+> Full reference — volumes, every `.env` var, overrides, upgrades, troubleshooting: [DEPLOY-DOCKER.md](DEPLOY-DOCKER.md).
+
+### Prebuilt image
+
+Published to [Docker Hub](https://hub.docker.com/r/afonsoft/knowledgerag) (tags `latest` / `X.Y.Z`) and GHCR on every release — no checkout needed:
+
+```bash
+docker pull afonsoft/knowledgerag
+docker run -d --name knowledgerag -p 5000:8080 \
+  -v knowledgerag-data:/data \
+  -v vault:/vaults/default -e Vault__Path=/vaults/default \
+  afonsoft/knowledgerag
+```
+
+`ghcr.io/afonsoft/knowledgerag` serves the same tags. Open `http://localhost:5000` and sign in `admin` / `123qwe` (forced password change).
+
+### Compose (from a checkout)
+
 ```bash
 cp .env.example .env   # edit values
 mkdir -p data logs && chown -R 1654:1654 data logs   # container runs as uid 1654 (app)
 docker compose up -d
 ```
 
-- Builds `knowledgehub:latest` and serves on the mapped port (`docker-compose.yml` — `5550:8080` by default).
+- Builds `ghcr.io/afonsoft/knowledgerag:latest` and serves on the mapped port (`docker-compose.yml` — `5000:8080` by default, via `KNOWLEDGEHUB_PORT`).
 - `./data` is bind-mounted and persists `knowledgehub.db` + uploads.
 - `./logs` is bind-mounted and persists the Serilog file sink — daily rolling files (`knowledgehub-YYYYMMDD.log`), 14-day retention, secrets redacted as `***REDACTED***`. **If `./logs` or `./data` don't exist Docker creates them as `root` and neither the file sink nor the SQLite migration can write** (the container runs as `app`, uid 1654) — pre-create it with the `chown` above or fix it once after the first `up`.
 - EF Core migrations apply automatically at startup.
-- Health probe: `GET /healthz`.
+- Health probes: `GET /health/live` (liveness) and `GET /health/ready` (readiness — used by the container healthcheck).
 
 ## From source
 

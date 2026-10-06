@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/icon.svg" alt="Knowledge MCP Hub" width="140">
+</p>
+
 # Knowledge MCP Hub
 
 **[English](README.md) · [Português (pt-BR)](README.pt-br.md)**
@@ -9,6 +13,7 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=afonsoft_LangGraph-UI&metric=coverage)](https://sonarcloud.io/summary/new_code?id=afonsoft_LangGraph-UI)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Blazor WASM](https://img.shields.io/badge/Blazor-WASM%20PWA-512BD4)](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor)
+[![Docker Pulls](https://img.shields.io/docker/pulls/afonsoft/knowledgerag?logo=docker)](https://hub.docker.com/r/afonsoft/knowledgerag)
 [![Licença: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Plataforma de conhecimento standalone tudo-em-um: UI administrativa Blazor WebAssembly, API REST, servidor MCP nativo (Streamable HTTP + SSE legado), persistência SQLite, embeddings e vector stores plugáveis, retrieval híbrido (FTS5 + RRF vetorial + loop corretivo), extração de entidades/relações GraphRAG, chat agêntico com aprovações HITL, defesa contra prompt-injection, rate limiting particionado, fila de ingestão assíncrona, conectores de cloud storage e observabilidade OpenTelemetry — tudo em um único processo Kestrel hospedado .NET 10.
@@ -498,6 +503,20 @@ dotnet run --project src/KnowledgeHub.Server
 Abra http://localhost:5000 e faça login com `admin` / `123qwe`.
 
 ### Executar (Docker)
+
+**Imagem pronta** — publicada no Docker Hub (`afonsoft/knowledgerag`, tags `latest` / `X.Y.Z`) e no GHCR (`ghcr.io/afonsoft/knowledgerag`) a cada release:
+
+```bash
+docker pull afonsoft/knowledgerag
+docker run -d --name knowledgerag -p 5000:8080 \
+  -v knowledgerag-data:/data \
+  -v vault:/vaults/default -e Vault__Path=/vaults/default \
+  afonsoft/knowledgerag
+```
+
+(o named volume `vault` + `Vault__Path` criam um vault Obsidian pronto no primeiro boot — remova ambos para pular.) Guia completo de deploy — volumes, referência do `.env`, o named volume `vault` padrão, overrides, upgrades e troubleshooting: [docs/pt/DEPLOY-DOCKER.md](docs/pt/DEPLOY-DOCKER.md) · [EN](docs/en/DEPLOY-DOCKER.md).
+
+**A partir do código-fonte (compose)** — gera a imagem e configura env/volumes/healthcheck conforme o `docker-compose.yml`:
 
 ```bash
 mkdir -p data logs && chown -R 1654:1654 data logs   # o container roda como uid 1654 (app) — ver nota

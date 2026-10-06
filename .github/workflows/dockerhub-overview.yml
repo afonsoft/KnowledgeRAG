@@ -1,0 +1,28 @@
+name: 🐳 Docker Hub Overview
+
+permissions: {}
+
+# Manual only — syncs the repo's canonical overview (docs/dockerhub/overview.md)
+# + short description to the Docker Hub repository page via
+# scripts/update-dockerhub-overview.sh. Requires DOCKERHUB_USERNAME /
+# DOCKERHUB_TOKEN secrets (PAT with Read/Write/Delete scope — Hub treats
+# repo-metadata edits as admin-level).
+on:
+  workflow_dispatch:
+
+jobs:
+  update-overview:
+    name: 📝 Sync overview to Docker Hub
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+
+      - name: 📝 Update Docker Hub description + overview
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: ./scripts/update-dockerhub-overview.sh

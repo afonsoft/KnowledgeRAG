@@ -19,6 +19,13 @@ services:
       - "${KNOWLEDGEHUB_PORT:-5000}:8080"
     volumes:
       - ./data:/data
+      # Default Obsidian vault — named volume initialized from the image's
+      # /vaults/default (uid 1654 already correct, unlike bind mounts). The
+      # first-boot seeder registers an ObsidianVault source at Vault__Path so
+      # write_note/write_knowledge/read_document work out of the box. Prefer a
+      # host path? Replace with a bind mount (and chown 1654:1654), or move it
+      # to docker-compose.override.yml.
+      - vault:/vaults/default
       # SPEC-20260925-log-sinks-and-redaction RF-001: Serilog file sink writes
       # /app/logs — persist it on the host so logs survive recreate/upgrade.
       # NOTE: if ./logs doesn't exist Docker creates it as root, but the
@@ -81,6 +88,12 @@ services:
       # Defaults to the documented seed password — an empty value would trip
       # ConfigurationValidator ("non-empty when set") and crash the container.
       Auth__AdminInitialPassword: ${AUTH_ADMIN_INITIAL_PASSWORD:-123qwe}
+      # Default vault seed: on first boot, while no ObsidianVault source exists,
+      # one is registered pointing at this path (the `vault` named volume).
+      # Opt out: set VAULT_PATH= (empty) in .env — note the `-` (no colon)
+      # interpolation: empty stays empty, only a missing var gets the default.
+      Vault__Path: ${VAULT_PATH-/vaults/default}
+      Vault__Name: ${VAULT_NAME:-Default Vault}
     # Lets the container reach services on the Docker host (e.g. local Ollama).
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -94,3 +107,10 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+
+# Host-global name keeps the vault stable regardless of the compose project
+# directory; rename (or drop `name:` for a per-project <project>_vault volume)
+# if you ever run a second KnowledgeHub stack on the same Docker host.
+volumes:
+  vault:
+    name: vault
