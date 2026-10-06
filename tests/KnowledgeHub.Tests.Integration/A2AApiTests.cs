@@ -86,6 +86,39 @@ public class A2AApiTests
     }
 
     [Fact]
+    public async Task AgentCard_HonorsForwardedProto()
+    {
+        await using var factory = new Fixture();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
+
+        var card = await client.GetFromJsonAsync<JsonElement>("/.well-known/agent-card.json");
+        var urls = card.GetProperty("supportedInterfaces").EnumerateArray()
+            .Select(i => i.GetProperty("url").GetString()).ToList();
+        Assert.All(urls, u => Assert.StartsWith("https://", u));
+        Assert.StartsWith("https://", card.GetProperty("provider").GetProperty("url").GetString());
+    }
+
+    [Fact]
+    public async Task AgentCard_BaseUrl_OverridesRequestHost()
+    {
+        await using var factory = new Fixture();
+        await using var derived = factory.WithWebHostBuilder(b =>
+            b.ConfigureAppConfiguration((_, config) =>
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["A2A:BaseUrl"] = "https://kb.example.com/"
+                })));
+        using var client = derived.CreateClient();
+
+        var card = await client.GetFromJsonAsync<JsonElement>("/.well-known/agent-card.json");
+        Assert.Equal("https://kb.example.com/a2a",
+            card.GetProperty("supportedInterfaces")[0].GetProperty("url").GetString());
+        Assert.Equal("https://kb.example.com",
+            card.GetProperty("provider").GetProperty("url").GetString());
+    }
+
+    [Fact]
     public async Task JsonRpc_WithoutKey_Rejected()
     {
         await using var factory = new Fixture();
