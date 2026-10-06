@@ -14,6 +14,10 @@ namespace KnowledgeHub.Server.Ingestion;
 /// Runs only while zero ObsidianVault sources exist, so sources created or
 /// deleted through the UI are never overwritten; set <c>Vault:Path</c> empty
 /// to disable permanently. Never logs secret material.
+/// Note: vault-scoped tools resolve their target as the first ACTIVE
+/// ObsidianVault source ordered by name (<c>ObsidianNoteWriter.ResolveVaultAsync</c>)
+/// — the seeded vault becomes the default write target when it sorts first;
+/// callers can always pin another vault via the <c>source</c> parameter.
 /// </summary>
 public static class VaultSeeder
 {
@@ -35,6 +39,14 @@ public static class VaultSeeder
 
         if (await db.Sources.AnyAsync(s => s.SourceType == SourceType.ObsidianVault, cancellationToken))
             return;
+
+        // Sources.Name has a unique index across ALL types — a pre-existing
+        // non-vault source with this name would make SaveChanges throw and
+        // abort startup. Pick the next free "Name (n)" instead.
+        var baseName = name;
+        var suffix = 1;
+        while (await db.Sources.AnyAsync(s => s.Name == name, cancellationToken))
+            name = $"{baseName} ({++suffix})";
 
         if (!Directory.Exists(path))
         {

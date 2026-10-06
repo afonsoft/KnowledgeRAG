@@ -40,7 +40,7 @@ public sealed class VaultSeederTests : IDisposable
             .Build();
 
     private static string MissingTempDir() =>
-        Path.Combine(Path.GetTempPath(), "vault-seed-" + Guid.NewGuid().ToString("N"));
+        Path.Join(Path.GetTempPath(), "vault-seed-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
     public async Task SeedAsync_NoPathConfigured_DoesNothing()
@@ -89,5 +89,24 @@ public sealed class VaultSeederTests : IDisposable
         await VaultSeeder.SeedAsync(_db, Config(("Vault:Path", MissingTempDir())), NullLogger.Instance);
 
         Assert.Single(_db.Sources);
+    }
+
+    [Fact]
+    public async Task SeedAsync_NameTakenByOtherType_PicksUniqueName()
+    {
+        _db.Sources.Add(new KnowledgeSource
+        {
+            Name = VaultSeeder.DefaultName,
+            SourceType = SourceType.WebPage,
+            ConfigurationJson = "{\"url\":\"https://example.com\"}"
+        });
+        await _db.SaveChangesAsync();
+        var path = MissingTempDir();
+
+        await VaultSeeder.SeedAsync(_db, Config(("Vault:Path", path)), NullLogger.Instance);
+
+        var vault = Assert.Single(_db.Sources, s => s.SourceType == SourceType.ObsidianVault);
+        Assert.Equal("Default Vault (2)", vault.Name);
+        Assert.Equal(2, _db.Sources.Count());
     }
 }

@@ -28,11 +28,11 @@ mkdir -p data logs && chown -R 1654:1654 data logs   # container runs as uid 165
 docker compose up -d
 ```
 
-- Builds `knowledgehub:latest` and serves on the mapped port (`docker-compose.yml` — `5550:8080` by default).
+- Builds `ghcr.io/afonsoft/knowledgerag:latest` and serves on the mapped port (`docker-compose.yml` — `5000:8080` by default, via `KNOWLEDGEHUB_PORT`).
 - `./data` is bind-mounted and persists `knowledgehub.db` + uploads.
 - `./logs` is bind-mounted and persists the Serilog file sink — daily rolling files (`knowledgehub-YYYYMMDD.log`), 14-day retention, secrets redacted as `***REDACTED***`. **If `./logs` or `./data` don't exist Docker creates them as `root` and neither the file sink nor the SQLite migration can write** (the container runs as `app`, uid 1654) — pre-create it with the `chown` above or fix it once after the first `up`.
 - EF Core migrations apply automatically at startup.
-- Health probe: `GET /healthz`.
+- Health probes: `GET /health/live` (liveness) and `GET /health/ready` (readiness — used by the container healthcheck).
 
 ## From source
 

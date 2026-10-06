@@ -90,8 +90,9 @@ services:
       Auth__AdminInitialPassword: ${AUTH_ADMIN_INITIAL_PASSWORD:-123qwe}
       # Default vault seed: on first boot, while no ObsidianVault source exists,
       # one is registered pointing at this path (the `vault` named volume).
-      # Opt out: set VAULT_PATH= (empty) in .env.
-      Vault__Path: ${VAULT_PATH:-/vaults/default}
+      # Opt out: set VAULT_PATH= (empty) in .env — note the `-` (no colon)
+      # interpolation: empty stays empty, only a missing var gets the default.
+      Vault__Path: ${VAULT_PATH-/vaults/default}
       Vault__Name: ${VAULT_NAME:-Default Vault}
     # Lets the container reach services on the Docker host (e.g. local Ollama).
     extra_hosts:
