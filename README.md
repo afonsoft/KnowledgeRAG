@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/icon.svg" alt="Knowledge MCP Hub" width="140">
+</p>
+
 # Knowledge MCP Hub
 
 **[English](README.md) · [Português (pt-BR)](README.pt-br.md)**
@@ -9,6 +13,7 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=afonsoft_LangGraph-UI&metric=coverage)](https://sonarcloud.io/summary/new_code?id=afonsoft_LangGraph-UI)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![Blazor WASM](https://img.shields.io/badge/Blazor-WASM%20PWA-512BD4)](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor)
+[![Docker Pulls](https://img.shields.io/docker/pulls/afonsoft/knowledgerag?logo=docker)](https://hub.docker.com/r/afonsoft/knowledgerag)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 All-in-one standalone knowledge platform: Blazor WebAssembly admin UI, REST API, native MCP server (Streamable HTTP + legacy SSE), SQLite persistence, pluggable embeddings and vector stores, hybrid retrieval (FTS5 + vector RRF + corrective loop), GraphRAG entity/relation extraction, agentic chat with HITL approvals, prompt-injection defense, partitioned rate limiting, async ingestion queue, cloud-storage connectors, and OpenTelemetry observability — all in a single Kestrel-hosted .NET 10 process.
@@ -498,6 +503,15 @@ dotnet run --project src/KnowledgeHub.Server
 Open http://localhost:5000 and sign in with `admin` / `123qwe`.
 
 ### Run (Docker)
+
+**Prebuilt image** — published to Docker Hub (`afonsoft/knowledgerag`, tags `latest` / `X.Y.Z`) and GHCR (`ghcr.io/afonsoft/knowledgerag`) on every release:
+
+```bash
+docker pull afonsoft/knowledgerag
+docker run -d --name knowledgerag -p 5000:8080 -v knowledgerag-data:/data afonsoft/knowledgerag
+```
+
+**From source (compose)** — builds the image and wires env/volumes/healthcheck per `docker-compose.yml`:
 
 ```bash
 mkdir -p data logs && chown -R 1654:1654 data logs   # container runs as uid 1654 (app) — see note

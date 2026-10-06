@@ -4,6 +4,19 @@ KnowledgeHub runs three ways: from source (.NET SDK), as a Docker container, or 
 
 ## Docker (recommended)
 
+### Prebuilt image
+
+Published to [Docker Hub](https://hub.docker.com/r/afonsoft/knowledgerag) (tags `latest` / `X.Y.Z`) and GHCR on every release — no checkout needed:
+
+```bash
+docker pull afonsoft/knowledgerag
+docker run -d --name knowledgerag -p 5000:8080 -v knowledgerag-data:/data afonsoft/knowledgerag
+```
+
+`ghcr.io/afonsoft/knowledgerag` serves the same tags. Open `http://localhost:5000` and sign in `admin` / `123qwe` (forced password change).
+
+### Compose (from a checkout)
+
 ```bash
 cp .env.example .env   # edit values
 mkdir -p data logs && chown -R 1654:1654 data logs   # container runs as uid 1654 (app)
