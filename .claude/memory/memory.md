@@ -68,3 +68,9 @@
 - **Padrões úteis:** casts `(string?)` p/ tuple-inference → `Select<T,(string,string?)>` com generics explícitos; `(IReadOnlyList<T>)[]` → `Array.Empty<T>()`; `Path.Combine(a, rel)` → `Path.Join` (não descarta prefixo se arg rooted); anon-type EF projection não atravessa fronteira de método → record `HydratedChunk` tipado; `foreach{continue}` → `.Where(...)` satisfaz cs/missed-where.
 - **SDK flutuante `10.0.x` injeta refs implícitas nos packages.lock.json** (HotReload.WebAssembly.Browser) — drift documentado na #504; locked-mode deferido.
 - Verificação: build 0/0, format gate limpo, 1246 unit + 322 integration verdes.
+
+## Session summary (2026-10-06 — A2A agent card 404 fix)
+
+- `/.well-known/agent-card.json` 404 era nginx (aaPanel `location /.well-known` servindo do disco, shadowing do proxy). Fix: exact-match location em `extension/rag.afonsoft.dev/a2a-agent-card.conf` → 200 público, ACME intacto.
+- Card emitia http:// (Request.Scheme atrás de TLS-terminating proxy; CF 301 quebraria POSTs A2A). Fix código em `feature/devin-20261006-a2a-card-scheme` (`485d33c`): `A2A:BaseUrl` > `X-Forwarded-Proto` > scheme. Shim `sub_filter` no nginx cobre até redeploy da imagem.
+- Detalhes em `.claude/memory/20261006-memory.md`.

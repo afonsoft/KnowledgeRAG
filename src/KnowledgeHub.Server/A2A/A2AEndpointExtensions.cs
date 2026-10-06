@@ -98,9 +98,9 @@ public static class A2AEndpointExtensions
         app.MapGet("/.well-known/agent-card.json", async (HttpContext http,
             HybridCache cache, ILoggerFactory lf, CancellationToken ct) =>
         {
-            var baseUri = new Uri($"{http.Request.Scheme}://{http.Request.Host}/");
-            var pushEnabled = http.RequestServices.GetRequiredService<IConfiguration>()
-                .GetValue(KnowledgeHubA2AServer.EnabledConfigKey, true);
+            var config = http.RequestServices.GetRequiredService<IConfiguration>();
+            var baseUri = ResolveCardBaseUri(http, config);
+            var pushEnabled = config.GetValue(KnowledgeHubA2AServer.EnabledConfigKey, true);
             // Card contents also change when the flow set changes — key the
             // cache on the catalog version so a saved/disabled flow
             // invalidates the card instead of waiting out the TTL.
@@ -131,5 +131,21 @@ public static class A2AEndpointExtensions
         app.MapHttpA2A(handler, card0, "/a2a")
             .RequireAuthorization(AuthPolicies.Operational)
             .RequireRateLimiting("llm");
+    }
+
+    /// <summary>Base for the per-request card URLs. An explicit
+    /// <c>A2A:BaseUrl</c> wins — the documented knob for TLS-terminating
+    /// proxies where the origin only ever sees http. Otherwise honor the
+    /// first <c>X-Forwarded-Proto</c> hop, then the connection scheme.</summary>
+    internal static Uri ResolveCardBaseUri(HttpContext http, IConfiguration config)
+    {
+        if (config["A2A:BaseUrl"] is { Length: > 0 } configured
+            && Uri.TryCreate(configured, UriKind.Absolute, out var configuredUri))
+            return configuredUri;
+        var proto = http.Request.Headers["X-Forwarded-Proto"].FirstOrDefault();
+        var scheme = string.IsNullOrWhiteSpace(proto)
+            ? http.Request.Scheme
+            : proto.Split(',')[0].Trim();
+        return new Uri($"{scheme}://{http.Request.Host}/");
     }
 }
