@@ -10,7 +10,7 @@
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/devin-20261007-knowledge-review` |
 | Ticket | [#567](https://github.com/afonsoft/KnowledgeRAG/issues/567) |
-| Status | `Approved` |
+| Status | `In implementation` |
 
 ## 1. User Story
 
@@ -31,7 +31,7 @@ Hoje o fluxo depende de revisão manual ou do Devin Review (SaaS pago) — cada 
 - Motor híbrido de decisão: gates determinísticos (checks verdes, sem CHANGES_REQUESTED humano, não-draft, sem label skip) + análise LLM do diff via `IChatClient` (OpenAI-compatible/Ollama) classificando findings Devin-style; `agent_chat` do hub como modo alternativo (`--reasoning=hub`).
 - Persistência de conhecimento via MCP do hub: `search_knowledge` antes do review (convenções/padrões) e `write_knowledge` após (`review/{repo}/pr-{N}` com veredito + findings) — API key `aft_*` por segredo de Actions.
 - Comentários estilo Devin Review: comentário-resumo no PR + review com inline comments por arquivo/linha categorizados (Bug severe/non-severe, Flag investigate/info, Security critical/warning com CWE) + commit status check `knowledge-review/verdict`.
-- Workflow `.github/workflows/knowledge-review.yml` (conteúdo entregue na SPEC/PR — ver Guardrails: dir protegido) com triggers `pull_request` + `workflow_dispatch`.
+- Workflow `.github/workflows/knowledge-review.yml` com triggers `pull_request` + `workflow_dispatch` (commit via PAT do owner — dir protegido).
 - Idioma configurável (`REVIEW_LANGUAGE`, default `pt-BR`), ingestão de `REVIEW.md`/`AGENTS.md`/`CLAUDE.md` como instruções de review (espelhando Devin), `--dry-run`/`REVIEW_DRY_RUN` desativando mutações.
 - Skip rules: draft PR, label `knowledge-review:skip`, autor externo sem permissão, diff acima de `REVIEW_MAX_DIFF_KB` (modo resumo somente).
 - Suporte a pr-agent (qodo-merge) como step opcional via flag `REVIEW_ENABLE_PR_AGENT`.
@@ -55,7 +55,7 @@ Novo projeto console na solution, consumindo `KnowledgeHub.Sdk` (MCP) e `Microso
 - `sdks/dotnet/KnowledgeHub.Sdk/Models.cs` (`HubToolResult`, `HubAgentResult`)
 - `src/KnowledgeHub.Server/Agent/` (padrão de loop agente + IChatClient do hub)
 - `.github/workflows/ci-build-test.yml`, `security-scan.yml` (nomes dos checks para gates)
-- `tests/KnowledgeHub.Tests.Unit/` (convenção xUnit + NSubstitute)
+- `tests/KnowledgeHub.Tests.Unit/` (convenção xUnit + fakes hand-rolled)
 
 **Files to create or modify:**
 ```text
@@ -91,7 +91,7 @@ docs/en/KNOWLEDGE-REVIEW.md + docs/pt/KNOWLEDGE-REVIEW.md
 
 ### RF-004: Análise LLM do diff (`review`)
 - **Description:** `IChatClient` (endpoint/modelo via `REVIEW_LLM_ENDPOINT|MODEL|API_KEY`, OpenAI-compatible/Ollama) analisa o diff por arquivo em chunks, guiado por prompt que carrega `REVIEW.md`/`AGENTS.md`/`CLAUDE.md` (instruções, escopo por diretório), convenções recuperadas via `search_knowledge` no hub, e a stack (.NET 10/C# 14) — avaliando SOLID, Clean Architecture, segurança (categorias CWE do Devin: injection, auth, secrets, SSRF/path traversal, deserialization, validação, cripto fraca, transport/cookie, misconfig), performance e testes.
-- **Rules:** findings classificados `{kind: bug|flag|security, severity: severe|non-severe|investigate|info|critical|warning, file, line, cwe?, rationale, suggestion}`; confiança mínima configurável (`REVIEW_MIN_CONFIDENCE`, default 0.6); `--reasoning=hub` delega a `agent_chat` do hub; chunking por `REVIEW_MAX_DIFF_KB` (default 256KB) com map-reduce.
+- **Rules:** findings classificados `{kind: bug|style|security|flag, severity: severe|non-severe|investigate|info|critical|warning, file, line, cwe?, confidence, rationale, suggestion}`; confiança mínima configurável (`REVIEW_MIN_CONFIDENCE`, default 0.6); consenso multi-pass `REVIEW_PASSES` (1–4, finding sobrevive em ≥⌈passes/2⌉ passadas); `--reasoning=hub` delega a `agent_chat` do hub; chunking por `REVIEW_MAX_DIFF_KB` (default 256KB) com map-reduce.
 - **Input → Output:** `signal.json + instruções + conhecimento` → `findings.json`.
 
 ### RF-005: Publicação estilo Devin Review
@@ -107,7 +107,7 @@ docs/en/KNOWLEDGE-REVIEW.md + docs/pt/KNOWLEDGE-REVIEW.md
 - **Rules:** hub via `KNOWLEDGE_HUB_URL` + `KNOWLEDGE_HUB_API_KEY` (`aft_*`); indisponibilidade do hub degrada para modo local sem falhar o gate (warning no comentário).
 
 ### RF-008: Agente externo opcional (pr-agent)
-- **Description:** Flag `REVIEW_ENABLE_PR_AGENT=true` no workflow executa `qodo-merge/pr-agent` como step anterior à coleta, cujos comentários entram na ingestão genérica de bots.
+- **Description:** Flag `REVIEW_ENABLE_PR_AGENT=true` no workflow executa `the-pr-agent/pr-agent` como step anterior à coleta, cujos comentários entram na ingestão genérica de bots.
 - **Rules:** opcional, off por padrão; falha do step não bloqueia a pipeline (continue-on-error).
 
 ### RF-009: Modo de espera de sinais
@@ -143,12 +143,12 @@ Não expõe API. Consome:
 
 ## 7. Task Plan
 
-- [ ] **T1 — Discovery:** ler arquivos da seção 3; mapear schema Octokit para check-runs/reviews/annotations; confirmar nomes dos required checks (`Build KnowledgeHub (.NET 10)`, `CodeQL`, `SonarCloud Code Analysis`).
-- [ ] **T2 — Projeto + coleta:** criar `src/KnowledgeHub.Review.Cli` no slnx; implementar `collect` (RF-001) + `StackedPrDetector` (RF-002) com testes de parser.
-- [ ] **T3 — Gates + análise:** `DeterministicGates` (RF-003), `DiffAnalyzer`+`FindingClassifier`+`InstructionFileLoader` (RF-004) com testes unitários (LLM mockado via `IChatClient` fake).
-- [ ] **T4 — Publicação + merge:** renderers/mappers de comentários (RF-005), `enablePullRequestAutoMerge` (RF-006) com mocks GraphQL.
-- [ ] **T5 — Conhecimento + pr-agent:** `HubKnowledgeBridge` (RF-007), flag pr-agent (RF-008), wait-loop (RF-009).
-- [ ] **T6 — Workflow + docs:** YAML `knowledge-review.yml` (commit pelo owner — seção 8), `docs/{en,pt}/KNOWLEDGE-REVIEW.md`, README do projeto.
+- [x] **T1 — Discovery:** ler arquivos da seção 3; mapear schema Octokit para check-runs/reviews/annotations; confirmar nomes dos required checks (`Build KnowledgeHub (.NET 10)`, `CodeQL`, `SonarCloud Code Analysis`).
+- [x] **T2 — Projeto + coleta:** criar `src/KnowledgeHub.Review.Cli` no slnx; implementar `collect` (RF-001) + `StackedPrDetector` (RF-002) com testes de parser.
+- [x] **T3 — Gates + análise:** `DeterministicGates` (RF-003), `DiffAnalyzer`+`FindingClassifier`+`InstructionFileLoader` (RF-004) com testes unitários (LLM mockado via `IChatClient` fake).
+- [x] **T4 — Publicação + merge:** renderers/mappers de comentários (RF-005), `enablePullRequestAutoMerge` (RF-006) com mocks GraphQL.
+- [x] **T5 — Conhecimento + pr-agent:** `HubKnowledgeBridge` (RF-007), flag pr-agent (RF-008), wait-loop (RF-009).
+- [x] **T6 — Workflow + docs:** YAML `knowledge-review.yml` (commit pelo owner — seção 8), `docs/{en,pt}/KNOWLEDGE-REVIEW.md`, README do projeto.
 - [ ] **T7 — Validação:** `dotnet build`, `dotnet test` (≥80% no projeto novo), `dotnet format --verify-no-changes`, dry-run real contra um PR aberto do repo.
 - [ ] **T8 — Done + PR:** DoD completo → `Status=Done` → PR `feature/devin-20261007-knowledge-review`.
 
@@ -157,7 +157,7 @@ Não expõe API. Consome:
 ## 8. Organization Guardrails
 
 - **Branches:** `feature/devin-20261007-knowledge-review`; nunca commitar em `main`/`develop`.
-- **Workflows:** `.github/workflows/` é protegido — o arquivo `knowledge-review.yml` deve ser commitado pelo owner do repo (enforce_admins=false) ou via ruleset; o PR entrega o YAML + doc e marca a etapa como pendente do owner.
+- **Workflows:** `.github/workflows/` é protegido — `knowledge-review.yml` foi commitado nesta branch via PAT do owner (scope `workflow`, enforce_admins=false); futuras alterações seguem a mesma via.
 - **Secrets:** `KNOWLEDGE_HUB_API_KEY` (`aft_*`), `REVIEW_LLM_API_KEY` e PAT de fallback só via GitHub Secrets; nunca em logs (redaction `***`) nem commit.
 - **Permissões do GITHUB_TOKEN:** mínimas — `contents:read`, `pull-requests:write`, `checks:read`, `statuses:write`, `issues:write`.
 - **Escopo:** sem auto-fix, sem UI, sem providers além de GitHub (v1).

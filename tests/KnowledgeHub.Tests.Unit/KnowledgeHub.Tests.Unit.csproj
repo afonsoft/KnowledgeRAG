@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\src\KnowledgeHub.Shared\KnowledgeHub.Shared.csproj" />
     <ProjectReference Include="..\..\src\KnowledgeHub.McpEngine\KnowledgeHub.McpEngine.csproj" />
     <ProjectReference Include="..\..\src\KnowledgeHub.Server\KnowledgeHub.Server.csproj" />
+    <ProjectReference Include="..\..\src\KnowledgeHub.Review.Cli\KnowledgeHub.Review.Cli.csproj" />
     <ProjectReference Include="..\..\sdks\dotnet\KnowledgeHub.Sdk\KnowledgeHub.Sdk.csproj" />
   </ItemGroup>
 

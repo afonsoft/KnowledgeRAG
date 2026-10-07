@@ -1,0 +1,129 @@
+name: 🔍 Knowledge Review
+
+# SPEC-20261007-knowledge-review — self-hosted AI code review.
+# Collects every review signal on the PR (bots, checks, annotations, human
+# reviews), analyzes the diff with an LLM against repo conventions and
+# publishes a Devin-Review-style verdict: summary comment, inline review,
+# commit status and auto-merge when clean.
+#
+# Required secrets: REVIEW_LLM_API_KEY (OpenAI-compatible), and optionally
+# KNOWLEDGE_HUB_API_KEY (aft_*) + KNOWLEDGE_HUB_URL to persist reviews as
+# knowledge. Optional vars (REVIEW_*) tune the run — see docs/en|pt.
+
+permissions: {}
+
+concurrency:
+  group: knowledge-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to review"
+        required: true
+        type: number
+      dry_run:
+        description: "Plan only — no comments/status/merge"
+        required: false
+        type: boolean
+        default: true
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+
+jobs:
+  review:
+    name: Knowledge Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      checks: read
+      statuses: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet Packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-review-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-review-
+            ${{ runner.os }}-nuget-
+
+      # RF-008 — optional external reviewer, off by default. Its comments enter
+      # the generic bot-signal ingestion; a failure never blocks the pipeline.
+      - name: PR Agent (optional)
+        if: vars.REVIEW_ENABLE_PR_AGENT == 'true'
+        continue-on-error: true
+        uses: the-pr-agent/pr-agent@main
+        env:
+          OPENAI_KEY: ${{ secrets.REVIEW_LLM_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Knowledge Review CLI
+        run: dotnet build src/KnowledgeHub.Review.Cli/KnowledgeHub.Review.Cli.csproj -c Release --nologo
+
+      # RF-009 — collect waits for required checks/bot signals to settle, then
+      # the pipeline replays the same signal.json (artifacts uploaded below).
+      - name: Collect PR signals
+        run: |
+          dotnet run --project src/KnowledgeHub.Review.Cli -c Release --no-build -- \
+            collect --repo "${{ github.repository }}" --pr "${{ env.PR_NUMBER }}" --wait-for-signals \
+            > signal.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_BOT_AUTHORS: ${{ vars.REVIEW_BOT_AUTHORS }}
+          REVIEW_SIGNAL_TIMEOUT_MIN: ${{ vars.REVIEW_SIGNAL_TIMEOUT_MIN }}
+          REVIEW_SKIP_LABEL: ${{ vars.REVIEW_SKIP_LABEL }}
+
+      - name: Run Knowledge Review
+        run: |
+          dotnet run --project src/KnowledgeHub.Review.Cli -c Release --no-build -- \
+            run --repo "${{ github.repository }}" --pr "${{ env.PR_NUMBER }}" --input signal.json \
+            | tee run.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_LLM_ENDPOINT: ${{ vars.REVIEW_LLM_ENDPOINT }}
+          REVIEW_LLM_MODEL: ${{ vars.REVIEW_LLM_MODEL }}
+          REVIEW_LLM_API_KEY: ${{ secrets.REVIEW_LLM_API_KEY }}
+          KNOWLEDGE_HUB_URL: ${{ vars.KNOWLEDGE_HUB_URL }}
+          KNOWLEDGE_HUB_API_KEY: ${{ secrets.KNOWLEDGE_HUB_API_KEY }}
+          REVIEW_REASONING: ${{ vars.REVIEW_REASONING }}
+          REVIEW_LANGUAGE: ${{ vars.REVIEW_LANGUAGE }}
+          REVIEW_PASSES: ${{ vars.REVIEW_PASSES }}
+          REVIEW_MIN_CONFIDENCE: ${{ vars.REVIEW_MIN_CONFIDENCE }}
+          REVIEW_MAX_DIFF_KB: ${{ vars.REVIEW_MAX_DIFF_KB }}
+          REVIEW_MERGE_METHOD: ${{ vars.REVIEW_MERGE_METHOD }}
+          REVIEW_BOT_AUTHORS: ${{ vars.REVIEW_BOT_AUTHORS }}
+          REVIEW_SIGNAL_TIMEOUT_MIN: ${{ vars.REVIEW_SIGNAL_TIMEOUT_MIN }}
+          REVIEW_DRY_RUN: ${{ inputs.dry_run || vars.REVIEW_DRY_RUN }}
+
+      - name: Upload review artifacts
+        if: always()
+        uses: actions/upload-artifact@bbbca2b854939ee54b9236adf327d6a54d094c24   # v7
+        with:
+          name: knowledge-review-pr${{ env.PR_NUMBER }}
+          path: |
+            signal.json
+            run.json
+          if-no-files-found: ignore
+          retention-days: 14
