@@ -10,6 +10,8 @@ namespace KnowledgeHub.Review.Review;
 /// </summary>
 public static class FindingClassifier
 {
+    private const string VerdictComment = "comment";
+
     private static readonly HashSet<string> Kinds = new(StringComparer.OrdinalIgnoreCase)
         { "bug", "style", "security", "flag" };
     private static readonly HashSet<string> Severities = new(StringComparer.OrdinalIgnoreCase)
@@ -33,13 +35,12 @@ public static class FindingClassifier
     public static AnalysisResult Merge(IReadOnlyList<AnalysisResult> results, int passes)
     {
         if (results.Count == 0)
-            return new AnalysisResult("comment", "", []);
+            return new AnalysisResult(VerdictComment, "", []);
 
         var grouped = results.SelectMany(r => r.Findings)
             .GroupBy(f => f.DedupeKey);
         var threshold = Math.Max(1, (int)Math.Ceiling(passes / 2.0));
         var findings = grouped
-            .Where(g => g.Select(f => f.DedupeKey).Distinct().Count() >= 1)
             .Where(g => g.Count() >= Math.Min(threshold, results.Count))
             .Select(g => g.OrderByDescending(f => f.Confidence).First())
             .ToList();
@@ -47,7 +48,7 @@ public static class FindingClassifier
         var summary = string.Join("\n\n", results.Select(r => r.Summary)
             .Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
         var verdict = findings.Any(f => f.BlocksMerge) ? "request_changes"
-            : findings.Count > 0 ? "comment" : "approved";
+            : findings.Count > 0 ? VerdictComment : "approved";
         return new AnalysisResult(verdict, summary, findings);
     }
 
@@ -58,39 +59,38 @@ public static class FindingClassifier
             var start = raw.IndexOf('{');
             var end = raw.LastIndexOf('}');
             if (start < 0 || end <= start)
-                return ("comment", "", []);
+                return (VerdictComment, "", []);
 
             var node = JsonNode.Parse(raw[start..(end + 1)]);
-            var verdict = node?["verdict"]?.GetValue<string>() ?? "comment";
+            var verdict = node?["verdict"]?.GetValue<string>() ?? VerdictComment;
             var summary = node?["summary"]?.GetValue<string>() ?? "";
-            var findings = new List<Finding>();
-
-            if (node?["findings"] is JsonArray arr)
-            {
-                foreach (var f in arr.OfType<JsonObject>())
-                {
-                    var kind = f["kind"]?.GetValue<string>()?.ToLowerInvariant() ?? "flag";
-                    var severity = f["severity"]?.GetValue<string>()?.ToLowerInvariant() ?? "info";
-                    if (!Kinds.Contains(kind)) kind = "flag";
-                    if (!Severities.Contains(severity)) severity = "info";
-                    var cwe = f["cwe"]?.GetValue<string>();
-                    if (!string.IsNullOrWhiteSpace(cwe) && !cwe.StartsWith("CWE-", StringComparison.OrdinalIgnoreCase))
-                        cwe = $"CWE-{cwe}";
-                    findings.Add(new Finding(
-                        kind, severity,
-                        f["file"]?.GetValue<string>(),
-                        f["line"] is JsonValue lv && lv.TryGetValue<int>(out var ln) ? ln : null,
-                        cwe,
-                        f["rationale"]?.GetValue<string>() ?? "",
-                        f["suggestion"]?.GetValue<string>(),
-                        f["confidence"] is JsonValue cv && cv.TryGetValue<double>(out var cd) ? cd : 1.0));
-                }
-            }
+            var findings = node?["findings"] is JsonArray arr
+                ? arr.OfType<JsonObject>().Select(ParseFinding).ToList()
+                : [];
             return (verdict, summary, findings);
         }
         catch (JsonException)
         {
-            return ("comment", raw.Length > 800 ? raw[..800] : raw, []);
+            return (VerdictComment, raw.Length > 800 ? raw[..800] : raw, []);
         }
+    }
+
+    private static Finding ParseFinding(JsonObject f)
+    {
+        var kind = f["kind"]?.GetValue<string>()?.ToLowerInvariant() ?? "flag";
+        var severity = f["severity"]?.GetValue<string>()?.ToLowerInvariant() ?? "info";
+        if (!Kinds.Contains(kind)) kind = "flag";
+        if (!Severities.Contains(severity)) severity = "info";
+        var cwe = f["cwe"]?.GetValue<string>();
+        if (!string.IsNullOrWhiteSpace(cwe) && !cwe.StartsWith("CWE-", StringComparison.OrdinalIgnoreCase))
+            cwe = $"CWE-{cwe}";
+        return new Finding(
+            kind, severity,
+            f["file"]?.GetValue<string>(),
+            f["line"] is JsonValue lv && lv.TryGetValue<int>(out var ln) ? ln : null,
+            cwe,
+            f["rationale"]?.GetValue<string>() ?? "",
+            f["suggestion"]?.GetValue<string>(),
+            f["confidence"] is JsonValue cv && cv.TryGetValue<double>(out var cd) ? cd : 1.0);
     }
 }

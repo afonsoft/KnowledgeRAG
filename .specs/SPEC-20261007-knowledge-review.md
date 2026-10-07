@@ -10,7 +10,7 @@
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/devin-20261007-knowledge-review` |
 | Ticket | [#567](https://github.com/afonsoft/KnowledgeRAG/issues/567) |
-| Status | `In implementation` |
+| Status | `Done` |
 
 ## 1. User Story
 

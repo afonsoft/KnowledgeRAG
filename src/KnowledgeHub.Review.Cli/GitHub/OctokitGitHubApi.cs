@@ -62,7 +62,7 @@ public sealed class OctokitGitHubApi : IGitHubApi
             c.Status.StringValue,
             c.Conclusion?.StringValue,
             IsRequired: false, // filled by collector after branch protection lookup
-            Source: c.App?.Slug)).Cast<CheckSignal>().ToList();
+            Source: c.App?.Slug)).ToList();
 
         result.AddRange(statuses.Select(s => new CheckSignal(
             s.Context, s.State.StringValue, Conclusion: s.State.StringValue, IsRequired: false, Source: "status")));
@@ -70,7 +70,7 @@ public sealed class OctokitGitHubApi : IGitHubApi
         return result;
     }
 
-    public async Task<IReadOnlyList<string>> GetRequiredChecksAsync(string owner, string repo, string baseRef, CancellationToken ct)
+    public async Task<IReadOnlyList<string>?> GetRequiredChecksAsync(string owner, string repo, string baseRef, CancellationToken ct)
     {
         try
         {
@@ -78,10 +78,12 @@ public sealed class OctokitGitHubApi : IGitHubApi
             var contexts = protection?.RequiredStatusChecks?.Contexts ?? [];
             return contexts.ToList();
         }
-        catch (NotFoundException)
+        catch (ApiException)
         {
-            // No branch protection or no permission — gates fall back to "all checks must pass".
-            return [];
+            // 403 for the default GITHUB_TOKEN (branch protection needs admin/PAT),
+            // 404 when the branch has no protection — either way the required set
+            // is unknown, so callers treat every check as required.
+            return null;
         }
     }
 
@@ -152,39 +154,38 @@ public sealed class OctokitGitHubApi : IGitHubApi
         return created.Id;
     }
 
-    public async Task SubmitReviewAsync(string owner, string repo, int number, string commitSha, string reviewEvent,
-        string? body, IReadOnlyList<InlineComment> comments, CancellationToken ct)
+    public async Task SubmitReviewAsync(string owner, string repo, int number, ReviewRequest request, CancellationToken ct)
     {
         var review = new PullRequestReviewCreate
         {
-            CommitId = commitSha,
-            Event = reviewEvent switch
+            CommitId = request.CommitSha,
+            Event = request.Event switch
             {
                 "APPROVE" => Octokit.PullRequestReviewEvent.Approve,
                 "REQUEST_CHANGES" => Octokit.PullRequestReviewEvent.RequestChanges,
                 _ => Octokit.PullRequestReviewEvent.Comment,
             },
-            Body = body,
+            Body = request.Body,
         };
-        foreach (var c in comments)
+        foreach (var c in request.Comments)
             review.Comments.Add(new Octokit.DraftPullRequestReviewComment(c.Body, c.Path, c.Position));
         await _rest.PullRequest.Review.Create(owner, repo, number, review).WaitAsync(ct);
     }
 
-    public async Task CreateStatusAsync(string owner, string repo, string sha, string state, string context, string? description, string? targetUrl, CancellationToken ct)
+    public async Task CreateStatusAsync(string owner, string repo, string sha, StatusRequest request, CancellationToken ct)
     {
         var status = new NewCommitStatus
         {
-            State = state switch
+            State = request.State switch
             {
                 "success" => CommitState.Success,
                 "failure" => CommitState.Failure,
                 "error" => CommitState.Error,
                 _ => CommitState.Pending,
             },
-            Context = context,
-            Description = description,
-            TargetUrl = targetUrl,
+            Context = request.Context,
+            Description = request.Description,
+            TargetUrl = request.TargetUrl,
         };
         await _rest.Repository.Status.Create(owner, repo, sha, status).WaitAsync(ct);
     }

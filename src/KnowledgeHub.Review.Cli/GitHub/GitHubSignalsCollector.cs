@@ -19,21 +19,26 @@ public sealed class GitHubSignalsCollector(IGitHubApi api, ReviewOptions options
         var comments = await api.GetCommentsAsync(owner, repo, prNumber, ct);
         var reviews = await api.GetReviewsAsync(owner, repo, prNumber, ct);
 
-        var requiredSet = new HashSet<string>(required, StringComparer.OrdinalIgnoreCase);
-        checks = checks.Select(c => c with { IsRequired = requiredSet.Contains(c.Name) }).ToList();
+        // null = branch protection unreadable (e.g. default GITHUB_TOKEN gets 403)
+        // → conservative: every check counts as required so gates never auto-merge
+        // over an unknown protection state.
+        var requiredSet = required is null ? null : new HashSet<string>(required, StringComparer.OrdinalIgnoreCase);
+        checks = checks.Select(c => c with { IsRequired = requiredSet?.Contains(c.Name) ?? true }).ToList();
 
         // Annotations only from concluded check-runs that failed/warned — keeps
         // the payload small and focused on actionable bot output.
         var checkIds = await api.GetCheckRunIdsAsync(owner, repo, meta.HeadSha, ct);
         var annotations = new List<AnnotationSignal>();
-        foreach (var check in checks.Where(c =>
-                     c.Source is not null && c.Source != "status" &&
-                     c.Conclusion is "failure" or "neutral" or "action_required"))
+        var failedRunNames = checks
+            .Where(c => c.Source is not null && c.Source != "status" &&
+                        c.Conclusion is "failure" or "neutral" or "action_required")
+            .Select(c => c.Name);
+        foreach (var name in failedRunNames)
         {
-            if (!checkIds.TryGetValue(check.Name, out var runId))
+            if (!checkIds.TryGetValue(name, out var runId))
                 continue;
             var items = await api.GetAnnotationsAsync(owner, repo, runId, ct);
-            annotations.AddRange(items.Select(a => a with { CheckRunName = check.Name }));
+            annotations.AddRange(items.Select(a => a with { CheckRunName = name }));
         }
 
         var openPrs = await api.GetOpenPullRequestsAsync(owner, repo, ct);

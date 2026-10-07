@@ -13,6 +13,8 @@ namespace KnowledgeHub.Review.Review;
 /// </summary>
 public sealed class OpenAiCompatChatClient : IChatClient
 {
+    private const string ChatCompletionsPath = "v1/chat/completions";
+
     private readonly HttpClient _http;
     private readonly string _model;
 
@@ -39,7 +41,7 @@ public sealed class OpenAiCompatChatClient : IChatClient
             max_tokens = options?.MaxOutputTokens,
             response_format = new { type = "json_object" },
         };
-        using var response = await _http.PostAsJsonAsync("v1/chat/completions", payload, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(ChatCompletionsPath, payload, cancellationToken);
         var raw = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"LLM call failed HTTP {(int)response.StatusCode}: {raw[..Math.Min(500, raw.Length)]}");

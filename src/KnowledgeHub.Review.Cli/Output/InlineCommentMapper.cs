@@ -42,30 +42,46 @@ public static class InlineCommentMapper
     /// </summary>
     internal static int? PositionInPatch(string patch, int line)
     {
-        var newLine = 0;
-        var position = 0;
+        var state = new PatchCursor();
         foreach (var l in patch.Split('\n'))
         {
             if (l.StartsWith("@@", StringComparison.Ordinal))
             {
-                // @@ -a,b +c,d @@ — header itself counts as a position once the
-                // first hunk has started (first header is the position-0 anchor).
-                if (position > 0 || newLine > 0) position++;
-                var plus = l.IndexOf('+');
-                var comma = l.IndexOf(',', plus);
-                var end = comma > 0 ? comma : l.IndexOf(' ', plus);
-                newLine = int.TryParse(l.AsSpan(plus + 1, end - plus - 1), out var n) ? n : 0;
+                state.StartHunk(l);
                 continue;
             }
-            if (newLine == 0) continue;
-            position++;
-            if (l.StartsWith('-')) continue;
-            if (l.StartsWith('+') || l.StartsWith(' '))
-            {
-                if (newLine == line) return position;
-                newLine++;
-            }
+            var hit = state.Advance(l, line);
+            if (hit is not null) return hit;
         }
         return null;
+    }
+
+    /// <summary>Walking state for <see cref="PositionInPatch"/>.</summary>
+    private sealed class PatchCursor
+    {
+        private int _newLine;
+        private int _position;
+
+        public void StartHunk(string header)
+        {
+            // @@ -a,b +c,d @@ — header itself counts as a position once the
+            // first hunk has started (first header is the position-0 anchor).
+            if (_position > 0 || _newLine > 0) _position++;
+            var plus = header.IndexOf('+');
+            var comma = header.IndexOf(',', plus);
+            var end = comma > 0 ? comma : header.IndexOf(' ', plus);
+            _newLine = int.TryParse(header.AsSpan(plus + 1, end - plus - 1), out var n) ? n : 0;
+        }
+
+        public int? Advance(string l, int line)
+        {
+            if (_newLine == 0) return null;
+            _position++;
+            if (l.StartsWith('-')) return null;
+            if (!l.StartsWith('+') && !l.StartsWith(' ')) return null;
+            var hit = _newLine == line ? _position : (int?)null;
+            _newLine++;
+            return hit;
+        }
     }
 }
