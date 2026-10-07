@@ -16,8 +16,10 @@ public interface IGitHubApi
     /// <summary>Check-runs + commit statuses for <paramref name="sha"/>.</summary>
     Task<IReadOnlyList<CheckSignal>> GetChecksAsync(string owner, string repo, string sha, CancellationToken ct);
 
-    /// <summary>Required check contexts from branch protection of <paramref name="baseRef"/>.</summary>
-    Task<IReadOnlyList<string>> GetRequiredChecksAsync(string owner, string repo, string baseRef, CancellationToken ct);
+    /// <summary>Required check contexts from branch protection of <paramref name="baseRef"/>.
+    /// Returns <c>null</c> when protection cannot be read (no rules or insufficient token —
+    /// the default GITHUB_TOKEN gets 403 here); callers must treat "unknown" conservatively.</summary>
+    Task<IReadOnlyList<string>?> GetRequiredChecksAsync(string owner, string repo, string baseRef, CancellationToken ct);
 
     /// <summary>Issue comments + review comments on the PR.</summary>
     Task<IReadOnlyList<BotCommentSignal>> GetCommentsAsync(string owner, string repo, int number, CancellationToken ct);
@@ -36,10 +38,9 @@ public interface IGitHubApi
 
     Task<long> CreateOrUpdateSummaryCommentAsync(string owner, string repo, int number, string marker, string body, CancellationToken ct);
 
-    Task SubmitReviewAsync(string owner, string repo, int number, string commitSha, string reviewEvent,
-        string? body, IReadOnlyList<InlineComment> comments, CancellationToken ct);
+    Task SubmitReviewAsync(string owner, string repo, int number, ReviewRequest review, CancellationToken ct);
 
-    Task CreateStatusAsync(string owner, string repo, string sha, string state, string context, string? description, string? targetUrl, CancellationToken ct);
+    Task CreateStatusAsync(string owner, string repo, string sha, StatusRequest status, CancellationToken ct);
 
     /// <summary>enablePullRequestAutoMerge via GraphQL.</summary>
     Task<bool> EnableAutoMergeAsync(string prNodeId, string mergeMethod, CancellationToken ct);
@@ -55,3 +56,9 @@ public interface IGitHubApi
 /// draft comments).
 /// </summary>
 public sealed record InlineComment(string Path, int Line, string Side, int Position, string Body);
+
+/// <summary>Payload of a pull-request review submission (event + inline comments).</summary>
+public sealed record ReviewRequest(string CommitSha, string Event, string? Body, IReadOnlyList<InlineComment> Comments);
+
+/// <summary>Payload of a commit status.</summary>
+public sealed record StatusRequest(string State, string Context, string? Description, string? TargetUrl);

@@ -614,6 +614,7 @@ Knowledge MCP Hub solves the problem of fragmented organizational knowledge by p
 - [Contributing Guide](docs/en/CONTRIBUTING.md) — How to contribute
 - [Installation Guide](docs/en/INSTALL.md) — Platform-specific setup
 - [API Documentation](docs/en/API.md) — REST API reference
+- [Knowledge Review](docs/en/KNOWLEDGE-REVIEW.md) — Self-hosted AI code review for PRs · [Reuse in other repositories](docs/en/KNOWLEDGE-REVIEW-REUSE.md) — reusable workflow setup
 - [Changelog](CHANGELOG.md) — Notable changes
 - [GitHub Issues](https://github.com/afonsoft/KnowledgeRAG/issues) — Bug reports and feature requests
 - [Releases](https://github.com/afonsoft/KnowledgeRAG/releases) — Version history

@@ -22,7 +22,7 @@ public static class SummaryCommentRenderer
 
         var sb = new StringBuilder();
         sb.AppendLine(Marker);
-        sb.AppendLine(pt ? "## Knowledge Review" : "## Knowledge Review");
+        sb.AppendLine("## Knowledge Review");
         sb.AppendLine();
 
         sb.AppendLine(T("### Overview", "### Visão geral"));
@@ -74,7 +74,9 @@ public static class SummaryCommentRenderer
         sb.AppendLine(title);
         foreach (var f in list)
         {
-            var loc = f.File is { } file ? $"`{file}`{(f.Line is { } l ? $":{l}" : "")}" : "_repo-level_";
+            var loc = f.File is { } file
+                ? $"`{file}`{(f.Line is { } l ? $":{l}" : "")}"
+                : "_repo-level_";
             var cwe = f.Cwe is { } c ? $" ({c})" : "";
             sb.AppendLine($"- **{f.Severity}** {loc}{cwe} — {f.Rationale}");
         }

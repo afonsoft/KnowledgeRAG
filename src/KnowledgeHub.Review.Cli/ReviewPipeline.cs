@@ -110,8 +110,8 @@ public sealed class ReviewPipeline(
 
         // 1. commit status — always published so checks reflect the verdict.
         await github.CreateStatusAsync(owner, repo, signal.Meta.HeadSha,
-            verdict.StatusState, options.StatusContext, verdict.StatusDescription,
-            signal.Meta.HtmlUrl, ct);
+            new StatusRequest(verdict.StatusState, options.StatusContext,
+                verdict.StatusDescription, signal.Meta.HtmlUrl), ct);
 
         // 2. idempotent summary comment.
         await github.CreateOrUpdateSummaryCommentAsync(owner, repo, signal.Number,
@@ -120,8 +120,8 @@ public sealed class ReviewPipeline(
         // 3. PR review with inline comments (never REQUEST_CHANGES — spec RF-005).
         var inline = InlineCommentMapper.Map(analysis.Findings, signal);
         var reviewEvent = verdict.MayApprove ? "APPROVE" : "COMMENT";
-        await github.SubmitReviewAsync(owner, repo, signal.Number, signal.Meta.HeadSha,
-            reviewEvent, null, inline, ct);
+        await github.SubmitReviewAsync(owner, repo, signal.Number,
+            new ReviewRequest(signal.Meta.HeadSha, reviewEvent, null, inline), ct);
 
         // 4. auto-merge — only when verdict approved AND repo allows it.
         if (verdict.MayAutoMerge && await github.GetAllowAutoMergeAsync(owner, repo, ct))

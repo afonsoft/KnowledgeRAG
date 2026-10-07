@@ -15,15 +15,10 @@ public static class InstructionLoader
         string? agents = ReadFile(Path.Combine(repoRoot, "AGENTS.md"));
         string? claude = ReadFile(Path.Combine(repoRoot, "CLAUDE.md"));
 
-        string? lang = null;
-        if (review is not null)
-        {
-            foreach (var line in review.Split('\n', StringSplitOptions.TrimEntries).Take(10))
-            {
-                if (line.StartsWith("language:", StringComparison.OrdinalIgnoreCase))
-                    lang = line["language:".Length..].Trim();
-            }
-        }
+        var lang = review?.Split('\n', StringSplitOptions.TrimEntries).Take(10)
+            .Where(line => line.StartsWith("language:", StringComparison.OrdinalIgnoreCase))
+            .Select(line => line["language:".Length..].Trim())
+            .FirstOrDefault();
         return new Instructions(review, agents, claude, lang);
     }
 
