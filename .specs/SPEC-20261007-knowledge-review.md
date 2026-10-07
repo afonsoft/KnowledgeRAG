@@ -9,8 +9,8 @@
 | Stack | `.NET 10 console CLI + GitHub Actions` |
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/devin-20261007-knowledge-review` |
-| Ticket | `[a criar via create-issues após aprovação]` |
-| Status | `Draft` |
+| Ticket | [#567](https://github.com/afonsoft/KnowledgeRAG/issues/567) |
+| Status | `Approved` |
 
 ## 1. User Story
 
