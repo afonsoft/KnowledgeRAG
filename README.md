@@ -629,3 +629,7 @@ Knowledge MCP Hub solves the problem of fragmented organizational knowledge by p
 - [ONNX Runtime](https://onnxruntime.ai/) + [all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2) — local embedding provider
 - [BootstrapBlazor](https://www.blazor.zone/) — SPA component library
 - [SQLite FTS5](https://sqlite.org/fts5.html) — lexical arm of hybrid retrieval
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/chart?repos=afonsoft/knowledgerag&type=date&legend=top-left)](https://www.star-history.com/?repos=afonsoft%2Fknowledgerag&type=date&legend=top-left)

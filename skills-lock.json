@@ -95,7 +95,7 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/notebooklm-mcp/SKILL.md",
-      "computedHash": "7d588d6decca8f37d2f3872e21810574182b24fe6b2cfbc8c1086f0c763f3a1a"
+      "computedHash": "f469d2949dce85ce3d718dd2daba302eb8f06bd33822ef804fac93c021902ace"
     },
     "observability-and-instrumentation": {
       "source": "afonsoft/skills",
@@ -137,7 +137,7 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/sonarqube-autofix/SKILL.md",
-      "computedHash": "aa44e3f7a8738ce3be0fbb4e6cae48ae62266fe5576bf75eaf9725dce84de4d2"
+      "computedHash": "5f90d557c11694c733666210c95c9d83a0dc3db5034f44f6220c64bc5c5123df"
     },
     "web-design-guidelines": {
       "source": "afonsoft/skills",
