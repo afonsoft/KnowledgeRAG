@@ -21,7 +21,7 @@ Base: `origin/main` @ `70fa44e` mergeado na `feature/devin-20261007-knowledge-re
 
 | # | Key | Categoria | Veredito | Evidência |
 |---|-----|-----------|----------|-----------|
-| 1 | GAP-documentation-knowledge-review-cli | documentation | **CONFIRMADO** | `grep -c "knowledge-review\|Review.Cli" CLAUDE.md README.md` → 0/0; feature mergeada (#568/#569), workflows ativos; convenção CLAUDE.md-as-catalog (SPEC-20260918-claude-md-feature-sync) |
+| 1 | GAP-documentation-knowledge-review-cli | documentation | **CONFIRMADO (parcial)** | CLAUDE.md: 0 menções (gap real). READMEs JÁ linkam `docs/{en,pt}/KNOWLEDGE-REVIEW.md` (README.md:617, README.pt-br.md:613) — evidência original (`grep "knowledge-review\|Review.Cli"`) não cobria a forma com espaço; RF-002 da SPEC reclassificado como coberto |
 | 2 | GAP-hygiene-issue-567-label | automation | **CONFIRMADO** | `gh issue view 567` → state CLOSED, labels `[feature,todo]`; Label Contract exige `done` em trabalho mergeado; recorrência da SPEC-20261002-close-done-issues |
 | 3 | GAP-hygiene-stale-branches | hygiene | **CONFIRMADO** | `origin/feature/devin-20261006-a2a-card-scheme` + local órfãs — PR #564 mergeado por squash (`bf48c40`), ancestry não marca `--merged`; convenção: deletar pós-confirmação |
 | 4 | 9 SonarCloud CODE_SMELL residuais | implementation | DUPLICADO | Tratado nesta sessão: SPEC-20261008-sonarqube-backlog-wave3 (Approved) + Epic #570 |
