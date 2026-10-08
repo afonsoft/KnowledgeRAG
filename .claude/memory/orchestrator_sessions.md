@@ -5,6 +5,41 @@ context — see `.agents/skills/orchestrator/SKILL.md` Phase 8.
 
 ---
 
+## Session — 2026-10-08 (orchestrator → sonarqube-autofix → gap-analysis)
+
+**Scope**: Cadeia de 3 skills pedida pelo owner. Branch
+`feature/devin-20261007-knowledge-review` sincronizada com `origin/main`
+(merge `7593216` — knowledge-review já entregue via PRs #568/#569).
+
+**Decisions**:
+- Tree sujo de tooling (symlinks .claude/skills → store local) commitado
+  antes do fluxo (`c78fe8c`), a pedido do owner.
+- sonarqube-autofix: 9 issues CODE_SMELL (3 CRIT/5 MAJ/1 MIN, 101min) —
+  API SonarCloud pública funciona sem token para este projeto. SPEC
+  consolidada wave3 (padrão wave2) em vez de 9 SPECs.
+- gap-analysis: 9 candidatos → 3 CONFIRMADOS (docs knowledge-review,
+  label #567, branch a2a órfã), 3 REJEITADOS com evidência, 2 DUPLICADOS,
+  1 INCONCLUSIVO. Owner aprovou GATE: issues criadas + SPEC
+  docker-base-cve-refresh → `Superseded` (mitigada via #518).
+
+**Delivered**: commits `c78fe8c` + merge `7593216`; SPEC-20261008-sonarqube-
+backlog-wave3 (Approved, RF-01..RF-07) + Epic #570; SPECs
+docs-knowledge-review-sync e hygiene-labels-branches (Approved) + Epic #571,
+slices #572/#573; relatório gap-analysis-20261008.md; board/notes/metrics em
+.sonar_devin_auto_fix/ (gitignored).
+
+**Remaining**: fila com 3 SPECs Approved aguardando /execute-specs —
+wave3 sonar (#570), docs review (#572), higiene (#573). Nada implementado
+nesta sessão (skills de análise apenas).
+
+**Lessons**:
+- SonarCloud `api/issues/search` aceita consulta anônima em projeto público
+  (sem SONAR_TOKEN) — download de backlog não precisa mais de credencial.
+- SPECs antigas usam 3 formatos de Status (`**Status:**`, `- **Status**:',
+  `status:`) — parser de inventário precisa cobrir os três.
+- Branch de PR squash-mergeado não aparece em `--merged` (ancestry) —
+  confirmar por conteúdo (`git diff main...branch`) antes de deletar.
+
 ## Session — 2026-10-01 (orchestrator + QA chain)
 
 **Scope**: Execução sequencial das skills pedidas pelo owner —
