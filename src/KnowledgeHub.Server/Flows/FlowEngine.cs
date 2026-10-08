@@ -294,7 +294,7 @@ public sealed class FlowEngine(
         FlowStepResult result, CancellationToken ct)
     {
         var (attempts, backoffMs) = RetryOf(step);
-        for (var attempt = 1; ; attempt++)
+        for (var attempt = 1; attempt <= attempts; attempt++)
         {
             try
             {
@@ -314,6 +314,7 @@ public sealed class FlowEngine(
                     await Task.Delay(TimeSpan.FromMilliseconds(backoffMs), ct);
             }
         }
+        throw new UnreachableException($"step '{step.Id}' exited the retry loop without an outcome");
     }
 
     private static bool ContinueOnError(FlowStepDto step) =>

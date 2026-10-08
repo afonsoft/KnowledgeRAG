@@ -47,8 +47,13 @@ public static class FindingClassifier
 
         var summary = string.Join("\n\n", results.Select(r => r.Summary)
             .Where(s => !string.IsNullOrWhiteSpace(s)).Distinct());
-        var verdict = findings.Any(f => f.BlocksMerge) ? "request_changes"
-            : findings.Count > 0 ? VerdictComment : "approved";
+        string verdict;
+        if (findings.Any(f => f.BlocksMerge))
+            verdict = "request_changes";
+        else if (findings.Count > 0)
+            verdict = VerdictComment;
+        else
+            verdict = "approved";
         return new AnalysisResult(verdict, summary, findings);
     }
 

@@ -154,40 +154,40 @@ public sealed class OctokitGitHubApi : IGitHubApi
         return created.Id;
     }
 
-    public async Task SubmitReviewAsync(string owner, string repo, int number, ReviewRequest request, CancellationToken ct)
+    public async Task SubmitReviewAsync(string owner, string repo, int number, ReviewRequest review, CancellationToken ct)
     {
-        var review = new PullRequestReviewCreate
+        var create = new PullRequestReviewCreate
         {
-            CommitId = request.CommitSha,
-            Event = request.Event switch
+            CommitId = review.CommitSha,
+            Event = review.Event switch
             {
                 "APPROVE" => Octokit.PullRequestReviewEvent.Approve,
                 "REQUEST_CHANGES" => Octokit.PullRequestReviewEvent.RequestChanges,
                 _ => Octokit.PullRequestReviewEvent.Comment,
             },
-            Body = request.Body,
+            Body = review.Body,
         };
-        foreach (var c in request.Comments)
-            review.Comments.Add(new Octokit.DraftPullRequestReviewComment(c.Body, c.Path, c.Position));
-        await _rest.PullRequest.Review.Create(owner, repo, number, review).WaitAsync(ct);
+        foreach (var c in review.Comments)
+            create.Comments.Add(new Octokit.DraftPullRequestReviewComment(c.Body, c.Path, c.Position));
+        await _rest.PullRequest.Review.Create(owner, repo, number, create).WaitAsync(ct);
     }
 
-    public async Task CreateStatusAsync(string owner, string repo, string sha, StatusRequest request, CancellationToken ct)
+    public async Task CreateStatusAsync(string owner, string repo, string sha, StatusRequest status, CancellationToken ct)
     {
-        var status = new NewCommitStatus
+        var newStatus = new NewCommitStatus
         {
-            State = request.State switch
+            State = status.State switch
             {
                 "success" => CommitState.Success,
                 "failure" => CommitState.Failure,
                 "error" => CommitState.Error,
                 _ => CommitState.Pending,
             },
-            Context = request.Context,
-            Description = request.Description,
-            TargetUrl = request.TargetUrl,
+            Context = status.Context,
+            Description = status.Description,
+            TargetUrl = status.TargetUrl,
         };
-        await _rest.Repository.Status.Create(owner, repo, sha, status).WaitAsync(ct);
+        await _rest.Repository.Status.Create(owner, repo, sha, newStatus).WaitAsync(ct);
     }
 
     public async Task<bool> EnableAutoMergeAsync(string prNodeId, string mergeMethod, CancellationToken ct)

@@ -4,6 +4,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.AI;
 
+// SonarQube S1075: o trailing slash do BaseAddress é exigência do protocolo para
+// resolução relativa de 'v1/chat/completions' — não há URI/delimiter hardcoded.
+#pragma warning disable S1075
+
 namespace KnowledgeHub.Review.Review;
 
 /// <summary>
