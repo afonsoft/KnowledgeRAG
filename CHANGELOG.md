@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-08
+
+### Added
+- **Knowledge Review** — self-hosted AI code review agent (SPEC-20261007): console CLI `src/KnowledgeHub.Review.Cli` with `collect`/`review`/`gate`/`run` subcommands — collects review-bot signals (Devin Review, SonarCloud, CodeQL, check-runs) via Octokit, analyzes the PR diff with an LLM against SOLID/repo conventions, evaluates deterministic gates and approves/auto-merges or comments; reusable GitHub Actions workflows (`knowledge-review.yml`, `knowledge-review-reusable.yml`) for other repositories (docs: `docs/{en,pt}/KNOWLEDGE-REVIEW.md`, `KNOWLEDGE-REVIEW-REUSE.md`).
+
 ### Fixed
 - `DocumentFileConnector.GlobMatcher`: `{a,b}` brace groups were never matched — groups are now split before `Regex.Escape` (braces are not escaped chars), with alternation terms individually escaped.
 - Settings → Assistente (A2A): Endpoint/Model do assistente de baixo custo agora têm default igual ao provider do chat quando não há configuração salva; toggle "Habilitado" usa o mesmo componente `Switch` da aba GraphRAG.
+- Sonar wave 3 (9 residual code smells): `OctokitGitHubApi` parameter names aligned with `IGitHubApi` (S927), nested ternaries extracted (S3358), `LoadSignalAsync` parameter count 9→4 via `CliOptionsBundle` (S107), `Program.cs` handlers extracted to `CliCommands` (S3776), justified S1075 pragma for the protocol-required `BaseAddress` trailing slash, empty catch filled (S108), retry-loop stop condition now tests the attempt counter (S1994).
 
-### Added
-- Unit tests (36) covering paths touched by the sonarqube-autofix pass: `GlobMatcher.Compile`, `McpProxyToolsProvider.ParseConfig`, `ResolvedSearchFilter.TryResolve`, `A2AEndpointExtensions.BuildAgentCard`, `ChunkerSelector.ChunkAsync`. Suite: 1245 unit tests, 100% pass; line coverage 20.17% (baseline gate 20%).
+### Changed
+- SonarCloud AutoScan excludes the agent-harness skills catalog (`.claude/skills/`, `skills/`) — tooling content, not product code.
+
+### Tests
+- Unit tests (49 new since 0.1.1) covering the sonar autofix paths and the review CLI: retry attempt counting (single/N/exhaustion), finding location rendering, non-blocking verdict, `OpenAiCompatChatClient` BaseAddress/auth. Suite: 1659 unit tests green.
 
 ## [0.0.3] - 2026-09-26
 
