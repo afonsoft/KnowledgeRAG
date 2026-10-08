@@ -32,6 +32,17 @@ slices #572/#573; relatório gap-analysis-20261008.md; board/notes/metrics em
 wave3 sonar (#570), docs review (#572), higiene (#573). Nada implementado
 nesta sessão (skills de análise apenas).
 
+**Update (mesmo dia, execução aprovada pelo owner)**: fila 100% entregue —
+#573 higiene (label #567→done, branch a2a removida, issue fechada); PR #574
+(SPECs+memória+Star History+skills store, squash `4fe717d`); PR #575 (CLAUDE.md
+Knowledge Review, `fc21da2`); PR #576 (sonar wave3 RF-01..RF-07, `192a417`).
+Sonar backlog 9→0 confirmado via API. Epics #570/#571 fechados. Sonar gate do
+PR #574 quebrou com a duplicação skills×2 (42.2% vs gate 3%) → resolvido com
+exclusão `.claude/skills/**,skills/**` no `.sonarcloud.properties` (padrão
+archify HTML da wave2). Falha pré-existente na base em
+`Ask_FinalFloor_Empty_Abstains_WithoutSynthesis` (integration) — passa no CI
+main, divergência ambiental local, não bloqueou.
+
 **Lessons**:
 - SonarCloud `api/issues/search` aceita consulta anônima em projeto público
   (sem SONAR_TOKEN) — download de backlog não precisa mais de credencial.

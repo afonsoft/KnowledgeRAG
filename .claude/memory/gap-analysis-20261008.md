@@ -56,3 +56,10 @@ docker-base-cve-refresh marcada `Superseded`.
 - Implementação da SPEC-20261008-sonarqube-backlog-wave3 (Epic #570) via /execute-specs.
 - ~~Decisão do owner sobre SPEC-20261002-docker-base-cve-refresh~~ → resolvido: `Superseded` (2026-10-08).
 - Monitorar SonarCloud pós-merge da wave3 (aceite: 0 das 9 chaves OPEN).
+
+## Outcome (2026-10-08, pós-execução)
+
+- SPEC-20261008-hygiene-labels-branches → Done (#573 fechada; label #567=done; branch a2a removida).
+- SPEC-20261008-docs-knowledge-review-sync → Done (PR #575; escopo reduzido a CLAUDE.md — READMEs já linkavam docs).
+- SPEC-20261008-sonarqube-backlog-wave3 → Done (PR #576; Sonar backlog 9→0 confirmado via API).
+- Epics #570/#571 fechados. Nenhum SPEC Approved pendente na fila.

@@ -10,7 +10,7 @@
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | n/a (operação direta, sem commit de código) |
 | Ticket | GAP-hygiene-issue-567-label + GAP-hygiene-stale-branches (gap-analysis 2026-10-08) |
-| Status | `Approved` |
+| Status | `Done` — executado direto (ops de repo): label #567→done, branch a2a removida; issue #573 fechada |
 
 ## 1. User Story
 

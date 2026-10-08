@@ -10,7 +10,7 @@
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/devin-20261008-docs-review-sync` |
 | Ticket | GAP-documentation-knowledge-review-cli (gap-analysis 2026-10-08) |
-| Status | `Approved` |
+| Status | `Done` — mergeado via PR [#575](https://github.com/afonsoft/KnowledgeRAG/pull/575) (`fc21da2`); RF-002 coberto (READMEs já linkavam docs) |
 
 ## 1. User Story
 

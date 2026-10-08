@@ -8,7 +8,7 @@
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/devin-20261008-sonar-wave3` |
 | Ticket | Epic [#570](https://github.com/afonsoft/KnowledgeRAG/issues/570) |
-| Status | `Approved` |
+| Status | `Done` — mergeado via PR [#576](https://github.com/afonsoft/KnowledgeRAG/pull/576) (`192a417`); Sonar backlog 9→0 |
 | Origem | Skill sonarqube-autofix (sessão 2026-10-08) |
 | Pré-requisito | SPEC-20261002-sonarqube-backlog-wave2 (Done) |
 
