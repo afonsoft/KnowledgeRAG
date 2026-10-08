@@ -51,6 +51,33 @@ main, divergência ambiental local, não bloqueou.
 - Branch de PR squash-mergeado não aparece em `--merged` (ancestry) —
   confirmar por conteúdo (`git diff main...branch`) antes de deletar.
 
+## Session — 2026-10-08 (redeploy v0.2.0)
+
+**Scope**: Redeploy do KnowledgeHub no ambiente VM a pedido do owner.
+
+**Decisions**:
+- Release via tag `v0.2.0` (SemVer minor — knowledge-review CLI é feature nova):
+  PR #578 (CHANGELOG 0.2.0) → tag → release.yml publicou ghcr `latest`+`0.2.0`
+  e Docker Hub (run 37842629699, ~5min).
+- **A imagem publicada NÃO tem manifest linux/arm64** (release.yml sem
+  `platforms`/buildx) — `docker compose pull` falha nesta VM aarch64 com
+  "no matching manifest". O compose tem `build: .` exatamente para isso:
+  `docker compose build` local (arm64 nativo) + `up -d` recriou o container.
+
+**Delivered**: container `knowledgerag` na imagem `d679b3723728` (build
+2026-10-08 18:01, main `3a2c560`) — healthy, /health 200, UI 200, MCP 401
+sem token (correto), agent-card 200, ingestion incremental OK (873 skipped).
+
+**Remaining**: se o deploy em host arm64 via imagem publicada for necessário,
+adicionar buildx multi-arch (`platforms: linux/amd64,linux/arm64`) no
+release.yml — workflow protegido, requer PR do owner.
+
+**Lessons**:
+- `docker compose pull` em host arm falha silenciosamente no compose up
+  (mantém o container antigo) — sempre conferir o image ID pós-redeploy.
+- A VM local é aarch64: deploys por imagem publicada exigem multi-arch ou
+  build local.
+
 ## Session — 2026-10-01 (orchestrator + QA chain)
 
 **Scope**: Execução sequencial das skills pedidas pelo owner —
