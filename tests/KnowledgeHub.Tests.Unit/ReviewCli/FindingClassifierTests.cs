@@ -105,6 +105,15 @@ public sealed class FindingClassifierTests
     }
 
     [Fact]
+    public void Merge_verdict_is_comment_when_findings_do_not_block()
+    {
+        var nit = new Finding("style", "info", "a.cs", 1, null, "naming", null, 0.9);
+        var merged = FindingClassifier.Merge([new AnalysisResult("comment", "", [nit])], passes: 1);
+        Assert.Equal("comment", merged.Verdict);
+        Assert.Single(merged.Findings);
+    }
+
+    [Fact]
     public void Merge_empty_returns_comment()
     {
         var merged = FindingClassifier.Merge([], passes: 2);

@@ -299,6 +299,36 @@ public sealed class FlowEngineTests
     }
 
     [Fact]
+    public async Task Retry_single_attempt_succeeds_without_retry()
+    {
+        var calls = 0;
+        var fake = new FakeCatalog(new CatalogTool
+        {
+            Name = "stable_tool",
+            Description = "fake",
+            InputSchema = new JsonObject(),
+            Handler = (_, _) =>
+            {
+                calls++;
+                return ValueTask.FromResult(new CallToolResult
+                {
+                    Content = [new TextContentBlock { Text = "ok" }],
+                });
+            },
+        });
+        var sp = Services(s => s.AddSingleton<IDynamicToolCatalog>(fake));
+        var engine = NewEngine();
+        var def = new FlowDefinitionDto([],
+            [Step("t", "tool", new { tool = "stable_tool", retry = new { attempts = 1, backoffMs = 0 } })]);
+
+        var result = await engine.ExecuteAsync(def, new JsonObject(), sp, null, null, CancellationToken.None);
+
+        Assert.Equal("done", result.Status);
+        Assert.Equal(1, calls);
+        Assert.Equal(1, result.Steps[0].Attempts);
+    }
+
+    [Fact]
     public async Task Retry_exhausted_fails_with_attempt_count()
     {
         var calls = 0;

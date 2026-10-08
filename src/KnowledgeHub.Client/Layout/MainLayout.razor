@@ -180,6 +180,6 @@
             await JS.InvokeVoidAsync("khNav.unregisterEscape");
         }
         catch (JSDisconnectedException) { /* circuit já encerrado */ }
-        catch (TaskCanceledException) { }
+        catch (TaskCanceledException) { /* timeout durante dispose — esperado */ }
     }
 }

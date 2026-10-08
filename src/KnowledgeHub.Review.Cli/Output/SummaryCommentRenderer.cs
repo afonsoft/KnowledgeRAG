@@ -74,9 +74,9 @@ public static class SummaryCommentRenderer
         sb.AppendLine(title);
         foreach (var f in list)
         {
-            var loc = f.File is { } file
-                ? $"`{file}`{(f.Line is { } l ? $":{l}" : "")}"
-                : "_repo-level_";
+            var loc = "_repo-level_";
+            if (f.File is { } file)
+                loc = f.Line is { } l ? $"`{file}`:{l}" : $"`{file}`";
             var cwe = f.Cwe is { } c ? $" ({c})" : "";
             sb.AppendLine($"- **{f.Severity}** {loc}{cwe} — {f.Rationale}");
         }

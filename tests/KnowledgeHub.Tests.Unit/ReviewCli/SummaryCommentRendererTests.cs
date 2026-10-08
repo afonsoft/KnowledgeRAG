@@ -43,6 +43,18 @@ public sealed class SummaryCommentRendererTests
     }
 
     [Fact]
+    public void Finding_locations_render_path_and_line()
+    {
+        var findings = new[]
+        {
+            new Finding("bug", "severe", "src/a.cs", 42, null, "npe", null),
+        };
+        var text = SummaryCommentRenderer.Render(TestSignals.Signal(),
+            new AnalysisResult("request_changes", "", findings), Approved(), "en", true);
+        Assert.Contains("`src/a.cs`:42", text);
+    }
+
+    [Fact]
     public void Renders_portuguese_when_pt_br()
     {
         var text = SummaryCommentRenderer.Render(TestSignals.Signal(),

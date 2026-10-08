@@ -8,6 +8,16 @@ using Microsoft.Extensions.AI;
 
 namespace KnowledgeHub.Review;
 
+/// <summary>Shared CLI options passed as a single bundle — keeps command
+/// handler signatures within the parameter-count budget (S107).</summary>
+internal sealed record CliOptionsBundle(
+    Option<string?> Input,
+    Option<string?> Repo,
+    Option<int?> Pr,
+    Option<bool> Wait,
+    Option<bool> DryRun,
+    Option<string> Reasoning);
+
 /// <summary>
 /// Factories shared by the CLI subcommands — keeps Program.cs a thin
 /// command table (complexity budget) and makes the wiring unit-inspectable.
@@ -53,17 +63,16 @@ internal static class CliRuntime
             ct => HubKnowledgeBridge.ConnectAsync(effective, ct));
     }
 
-    public static async Task<PullRequestSignal?> LoadSignalAsync(ParseResult r, Option<string?> inputOption,
-        Option<string?> repoOption, Option<int?> prOption, Option<bool> waitOption, Option<bool> dryRunOption,
-        Option<string> reasoningOption, ReviewOptions options, CancellationToken ct)
+    public static async Task<PullRequestSignal?> LoadSignalAsync(ParseResult r, CliOptionsBundle bundle,
+        ReviewOptions options, CancellationToken ct)
     {
-        if (r.GetValue(inputOption) is { } path && File.Exists(path))
+        if (r.GetValue(bundle.Input) is { } path && File.Exists(path))
             return System.Text.Json.JsonSerializer.Deserialize<PullRequestSignal>(
                 await File.ReadAllTextAsync(path, ct), SignalJson.Options);
-        var t = Target(r, repoOption, prOption, options);
+        var t = Target(r, bundle.Repo, bundle.Pr, options);
         if (t is null || GitHub(options) is null) return null;
-        return await Pipeline(r, dryRunOption, reasoningOption, options)
-            .CollectAsync(t.Value.Owner, t.Value.Repo, t.Value.Pr, r.GetValue(waitOption), ct);
+        return await Pipeline(r, bundle.DryRun, bundle.Reasoning, options)
+            .CollectAsync(t.Value.Owner, t.Value.Repo, t.Value.Pr, r.GetValue(bundle.Wait), ct);
     }
 
     private static IChatClient? Chat(ReviewOptions o)
