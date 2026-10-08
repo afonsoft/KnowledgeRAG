@@ -4,6 +4,7 @@
     <Project Path="src/KnowledgeHub.McpEngine/KnowledgeHub.McpEngine.csproj" />
     <Project Path="src/KnowledgeHub.Server/KnowledgeHub.Server.csproj" />
     <Project Path="src/KnowledgeHub.Shared/KnowledgeHub.Shared.csproj" />
+    <Project Path="src/KnowledgeHub.Review.Cli/KnowledgeHub.Review.Cli.csproj" />
   </Folder>
   <Folder Name="/sdks/">
     <Project Path="sdks/dotnet/KnowledgeHub.Sdk/KnowledgeHub.Sdk.csproj" />

@@ -358,11 +358,6 @@
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
-      "Microsoft.DotNet.HotReload.WebAssembly.Browser": {
-        "type": "Transitive",
-        "resolved": "10.0.112",
-        "contentHash": "1k5ylG+88HAS1Gy72U6BXo+TVGkdGSMsKeaf3shHs46JuxwSbT8adKMcv22XWEi6ERr/blPZJc8tb49LtasLGQ=="
-      },
       "Microsoft.EntityFrameworkCore": {
         "type": "Transitive",
         "resolved": "10.0.12",
@@ -904,6 +899,19 @@
           "Npgsql": "10.0.3"
         }
       },
+      "Octokit": {
+        "type": "Transitive",
+        "resolved": "14.0.0",
+        "contentHash": "jGOuTH1l+TCpJH+fwYOp7USzHDuGfN1jKbLz3J2COwyn+wL08eynvpnM6rY2qkzIEXum3PN2p2QkP3BW/p9Qcw=="
+      },
+      "Octokit.GraphQL": {
+        "type": "Transitive",
+        "resolved": "0.4.0-beta",
+        "contentHash": "vxywq2lDCskJ5lINXRLS8uwAYj3WdaZR7hElFH1n5faNDcmv06cGodmXrvrXa/z2EVRAIUJ3wgNvwh282ZWYrQ==",
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.1"
+        }
+      },
       "OpenTelemetry": {
         "type": "Transitive",
         "resolved": "1.19.1",
@@ -1138,6 +1146,11 @@
           "System.Memory.Data": "10.0.3"
         }
       },
+      "System.CommandLine": {
+        "type": "Transitive",
+        "resolved": "2.0.12",
+        "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
+      },
       "System.IO.Hashing": {
         "type": "Transitive",
         "resolved": "10.0.3",
@@ -1261,6 +1274,17 @@
         "resolved": "6.6.1",
         "contentHash": "9sVVl1n/YqzVN4olebZuZgMdhNCuYXOUt9KPhyivi90QIfm8QQt7GoTQtPpMJCtON6QUCUGZubBxK2xwlGHRMg=="
       },
+      "knowledge-review": {
+        "type": "Project",
+        "dependencies": {
+          "KnowledgeHub.Sdk": "[0.1.0, )",
+          "Microsoft.Extensions.AI.Abstractions": "[10.9.0, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.0.0, )",
+          "Octokit": "[14.0.0, )",
+          "Octokit.GraphQL": "[0.4.0-beta, )",
+          "System.CommandLine": "[2.0.12, )"
+        }
+      },
       "KnowledgeHub": {
         "type": "Project",
         "dependencies": {
@@ -1305,8 +1329,7 @@
           "BootstrapBlazor.FontAwesome": "[10.0.3, )",
           "KnowledgeHub.Shared": "[1.0.0, )",
           "Microsoft.AspNetCore.Components.WebAssembly": "[10.0.12, )",
-          "Microsoft.AspNetCore.SignalR.Client": "[10.0.12, )",
-          "Microsoft.DotNet.HotReload.WebAssembly.Browser": "[10.0.112, )"
+          "Microsoft.AspNetCore.SignalR.Client": "[10.0.12, )"
         }
       },
       "knowledgehub.mcpengine": {

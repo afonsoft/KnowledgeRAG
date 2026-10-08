@@ -1,0 +1,51 @@
+name: 🔍 Knowledge Review
+
+# SPEC-20261007-knowledge-review — dogfooding wrapper: this repo reviews its own
+# PRs by calling the reusable workflow (knowledge-review-reusable.yml), which is
+# also what other repositories should call. Secrets/vars resolve in the caller
+# context (this repo's), so REVIEW_* vars and secrets are configured here.
+#
+# Required secrets: REVIEW_LLM_API_KEY (OpenAI-compatible). Optional:
+# KNOWLEDGE_HUB_API_KEY (aft_*) + KNOWLEDGE_HUB_URL to persist reviews,
+# KNOWLEDGE_REVIEW_TOKEN (PAT) for branch-protection lookups, REVIEW_* vars —
+# see docs/{en,pt}/KNOWLEDGE-REVIEW.md.
+
+permissions: {}
+
+concurrency:
+  group: knowledge-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches: ["main"]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to review"
+        required: true
+        type: number
+      dry_run:
+        description: "Plan only — no comments/status/merge"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  review:
+    name: Knowledge Review
+    uses: ./.github/workflows/knowledge-review-reusable.yml
+    with:
+      pr: ${{ github.event.pull_request.number || inputs.pr }}
+      dry_run: ${{ inputs.dry_run || vars.REVIEW_DRY_RUN == 'true' }}
+      wait_for_signals: true
+      cli_ref: ${{ github.sha }}
+      enable_pr_agent: ${{ vars.REVIEW_ENABLE_PR_AGENT == 'true' }}
+    secrets:
+      REVIEW_LLM_API_KEY: ${{ secrets.REVIEW_LLM_API_KEY }}
+      REVIEW_LLM_ENDPOINT: ${{ vars.REVIEW_LLM_ENDPOINT }}
+      REVIEW_LLM_MODEL: ${{ vars.REVIEW_LLM_MODEL }}
+      KNOWLEDGE_REVIEW_TOKEN: ${{ secrets.KNOWLEDGE_REVIEW_TOKEN }}
+      KNOWLEDGE_HUB_URL: ${{ vars.KNOWLEDGE_HUB_URL }}
+      KNOWLEDGE_HUB_API_KEY: ${{ secrets.KNOWLEDGE_HUB_API_KEY }}

@@ -1,0 +1,151 @@
+# Knowledge Review — reusable workflow (SPEC-20261007).
+# Call from any repository:
+#
+#   jobs:
+#     review:
+#       uses: afonsoft/KnowledgeRAG/.github/workflows/knowledge-review-reusable.yml@main
+#       secrets:
+#         REVIEW_LLM_API_KEY: ${{ secrets.REVIEW_LLM_API_KEY }}
+#         KNOWLEDGE_REVIEW_TOKEN: ${{ secrets.KNOWLEDGE_REVIEW_TOKEN }}   # optional PAT
+#
+# The caller's GITHUB_TOKEN is enough to collect signals and publish comments;
+# branch-protection lookups need a PAT (KNOWLEDGE_REVIEW_TOKEN) — without it the
+# required-check set degrades to "every check counts" (conservative).
+name: Knowledge Review (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      pr:
+        description: "PR number to review (default: the triggering pull_request event)"
+        type: number
+        required: false
+      dry_run:
+        description: "Print the mutation plan without publishing anything"
+        type: boolean
+        default: false
+      wait_for_signals:
+        description: "Poll required checks until REVIEW_SIGNAL_TIMEOUT_MIN before reviewing"
+        type: boolean
+        default: true
+      dotnet_version:
+        description: ".NET SDK version used to build the CLI"
+        type: string
+        default: "10.0.x"
+      cli_ref:
+        description: "afonsoft/KnowledgeRAG ref to build knowledge-review from"
+        type: string
+        default: "main"
+      enable_pr_agent:
+        description: "Also run pr-agent before collecting — its comments enter as bot signals"
+        type: boolean
+        default: false
+    secrets:
+      REVIEW_LLM_API_KEY:
+        description: "API key for the OpenAI-compatible review model (absent → comment-only mode)"
+        required: false
+      REVIEW_LLM_ENDPOINT:
+        description: "OpenAI-compatible endpoint base (e.g. https://llm.example.com)"
+        required: false
+      REVIEW_LLM_MODEL:
+        description: "Model id for the review passes"
+        required: false
+      KNOWLEDGE_REVIEW_TOKEN:
+        description: "PAT overriding GITHUB_TOKEN — unlocks branch protection + cross-repo"
+        required: false
+      KNOWLEDGE_HUB_URL:
+        description: "Knowledge MCP Hub base URL (absent → local mode, no knowledge persistence)"
+        required: false
+      KNOWLEDGE_HUB_API_KEY:
+        description: "aft_* key for the hub (search_knowledge + write_knowledge)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  knowledge-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: read
+      statuses: write
+      issues: write
+    env:
+      PR_NUMBER: ${{ inputs.pr || github.event.pull_request.number }}
+      REVIEW_DRY_RUN: ${{ inputs.dry_run }}
+      GITHUB_TOKEN: ${{ secrets.KNOWLEDGE_REVIEW_TOKEN || secrets.GITHUB_TOKEN }}
+      REVIEW_LLM_ENDPOINT: ${{ secrets.REVIEW_LLM_ENDPOINT }}
+      REVIEW_LLM_MODEL: ${{ secrets.REVIEW_LLM_MODEL }}
+      REVIEW_LLM_API_KEY: ${{ secrets.REVIEW_LLM_API_KEY }}
+      KNOWLEDGE_HUB_URL: ${{ secrets.KNOWLEDGE_HUB_URL }}
+      KNOWLEDGE_HUB_API_KEY: ${{ secrets.KNOWLEDGE_HUB_API_KEY }}
+      REVIEW_LANGUAGE: ${{ vars.REVIEW_LANGUAGE }}
+      REVIEW_SKIP_LABEL: ${{ vars.REVIEW_SKIP_LABEL }}
+      REVIEW_MAX_DIFF_KB: ${{ vars.REVIEW_MAX_DIFF_KB }}
+      REVIEW_MIN_CONFIDENCE: ${{ vars.REVIEW_MIN_CONFIDENCE }}
+      REVIEW_PASSES: ${{ vars.REVIEW_PASSES }}
+      REVIEW_SIGNAL_TIMEOUT_MIN: ${{ vars.REVIEW_SIGNAL_TIMEOUT_MIN }}
+      REVIEW_MERGE_METHOD: ${{ vars.REVIEW_MERGE_METHOD }}
+      REVIEW_BOT_AUTHORS: ${{ vars.REVIEW_BOT_AUTHORS }}
+      REVIEW_WRITE_KNOWLEDGE: ${{ vars.REVIEW_WRITE_KNOWLEDGE }}
+    steps:
+      - name: Checkout KnowledgeRAG (CLI source)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+        with:
+          repository: afonsoft/KnowledgeRAG
+          ref: ${{ inputs.cli_ref }}
+          path: .knowledge-review
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68   # v6.0.0
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Restore cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9   # v6
+        with:
+          path: ~/.nuget/packages
+          key: knowledge-review-${{ runner.os }}-${{ hashFiles('.knowledge-review/src/KnowledgeHub.Review.Cli/packages.lock.json') }}
+          restore-keys: knowledge-review-${{ runner.os }}-
+
+      - name: Build CLI
+        working-directory: .knowledge-review
+        run: dotnet build src/KnowledgeHub.Review.Cli -c Release --nologo -v minimal
+
+      # RF-008 — optional external reviewer. Its comments enter the generic
+      # bot-signal ingestion on the next collect; failure never blocks.
+      - name: PR Agent (optional)
+        if: inputs.enable_pr_agent
+        continue-on-error: true
+        uses: the-pr-agent/pr-agent@a0731020c272d96373d86f404871db90b04926e3   # main 2026-10-07
+        env:
+          OPENAI_KEY: ${{ secrets.REVIEW_LLM_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.KNOWLEDGE_REVIEW_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Collect signals
+        working-directory: .knowledge-review
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER")
+          if [ "${{ inputs.wait_for_signals }}" = "true" ]; then args+=(--wait-for-signals); fi
+          dotnet run --project src/KnowledgeHub.Review.Cli --no-build -c Release -- collect "${args[@]}" > signal.json
+
+      - name: Review + publish
+        working-directory: .knowledge-review
+        run: >-
+          dotnet run --project src/KnowledgeHub.Review.Cli --no-build -c Release --
+          run --repo "$GITHUB_REPOSITORY" --pr "$PR_NUMBER" --input signal.json
+          | tee run.json
+
+      - name: Upload review artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
+        with:
+          name: knowledge-review-pr${{ env.PR_NUMBER }}
+          path: |
+            .knowledge-review/signal.json
+            .knowledge-review/run.json
+          if-no-files-found: ignore
+          retention-days: 14
