@@ -35,7 +35,7 @@ public sealed class ThreadsApiClient(HttpClient http)
     public async Task<AgentResponse?> SendAsync(Guid id, string content, CancellationToken ct = default)
     {
         var r = await http.PostAsJsonAsync($"api/threads/{id}/messages", new PostThreadMessageRequest { Content = content }, SharedJson.Options, ct);
-        r.EnsureSuccessStatusCode();
+        await r.EnsureSuccessOrApiErrorAsync(ct);
         return await r.Content.ReadFromJsonAsync<AgentResponse>(SharedJson.Options, ct);
     }
 }
