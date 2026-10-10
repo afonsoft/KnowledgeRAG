@@ -736,7 +736,20 @@ public static class KnowledgeHubServiceCollectionExtensions
             options.Handlers.ListToolsHandler = async (ctx, ct) =>
             {
                 var catalog = ctx.Services!.GetRequiredService<IDynamicToolCatalog>();
-                var tools = await catalog.GetToolsAsync(ctx.Services!, ct);
+                // HybridCache: the serialized tool list (DTO projection of the
+                // memoized catalog) is itself per-request work — ~50 Tool
+                // records + JsonElement clones per call. Cache it per
+                // (catalog version, caller scope) so hits serve from L1; a
+                // catalog bump or scope change re-keys automatically.
+                var scope = ctx.Services!.GetService<Auth.ICallerScopeProvider>() is { } sp
+                    ? await sp.GetAsync(ct)
+                    : Auth.CallerScope.Unrestricted;
+                var version = ctx.Services!.GetRequiredService<IToolCatalogChangeNotifier>().Version;
+                var hybrid = ctx.Services!.GetRequiredService<Microsoft.Extensions.Caching.Hybrid.HybridCache>();
+                var tools = await Caching.EndpointCache.GetJsonAsync(hybrid,
+                    $"mcp:toolslist:v{version}:{scope.Fingerprint}",
+                    async c => BuildMcpToolList(await catalog.GetToolsAsync(ctx.Services!, c)),
+                    ctx.Services!.GetRequiredService<ILoggerFactory>(), ct);
                 return new ListToolsResult
                 {
                     // RF-005 (SPEC-20260926-mcp-sdk-alignment): the catalog is
@@ -744,23 +757,7 @@ public static class KnowledgeHubServiceCollectionExtensions
                     // integration changes propagate quickly.
                     CacheScope = CacheScope.Private,
                     TimeToLive = TimeSpan.FromMinutes(5),
-                    Tools = tools.Select(t => new Tool
-                    {
-                        Name = t.Name,
-                        Title = t.Title,
-                        Description = t.Description,
-                        InputSchema = JsonSerializer.SerializeToElement(t.InputSchema),
-                        OutputSchema = t.OutputSchema is { } os
-                            ? JsonSerializer.SerializeToElement(os) : null,
-                        Annotations = new ToolAnnotations
-                        {
-                            Title = t.Title,
-                            ReadOnlyHint = t.ReadOnly,
-                            DestructiveHint = t.DestructiveHint,
-                            IdempotentHint = t.IdempotentHint,
-                            OpenWorldHint = t.OpenWorldHint
-                        }
-                    }).ToList()
+                    Tools = tools ?? []
                 };
             };
 
@@ -804,6 +801,28 @@ public static class KnowledgeHubServiceCollectionExtensions
                 otel.WithMetrics(m => m.AddPrometheusExporter());
         }
     }
+
+    /// <summary>DTO projection of the catalog for tools/list — one
+    /// <see cref="Tool"/> record per <see cref="CatalogTool"/>. Cached per
+    /// (catalog version, caller scope) by the handler.</summary>
+    private static List<Tool> BuildMcpToolList(IReadOnlyList<CatalogTool> tools) =>
+        tools.Select(t => new Tool
+        {
+            Name = t.Name,
+            Title = t.Title,
+            Description = t.Description,
+            InputSchema = JsonSerializer.SerializeToElement(t.InputSchema),
+            OutputSchema = t.OutputSchema is { } os
+                ? JsonSerializer.SerializeToElement(os) : null,
+            Annotations = new ToolAnnotations
+            {
+                Title = t.Title,
+                ReadOnlyHint = t.ReadOnly,
+                DestructiveHint = t.DestructiveHint,
+                IdempotentHint = t.IdempotentHint,
+                OpenWorldHint = t.OpenWorldHint
+            }
+        }).ToList();
 
     /// <summary>MCP CallTool pipeline: scope gate → MRTR approval → rate limit →
     /// tool cache → handler with duration metric.</summary>

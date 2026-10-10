@@ -26,6 +26,20 @@ public sealed record CallerScope(
             ? "*"
             : CacheKeys.Hash(string.Join(',', AllowedSourceIds.OrderBy(g => g)));
 
+    /// <summary>Stable cache-key segment covering BOTH filter sets — payloads
+    /// whose shape depends on the scope (tool lists) key on this so callers
+    /// with different scopes never share a cached entry.</summary>
+    public string Fingerprint =>
+        IsUnrestricted
+            ? "*"
+            : CacheKeys.Hash($"{SourceFingerprint}|{ToolsFingerprint}");
+
+    /// <summary>Stable cache-key segment for <see cref="AllowedTools"/>.</summary>
+    public string ToolsFingerprint =>
+        AllowedTools is null
+            ? "*"
+            : CacheKeys.Hash(string.Join(',', AllowedTools.OrderBy(s => s, StringComparer.OrdinalIgnoreCase)));
+
     public bool AllowsSource(Guid sourceId) =>
         AllowedSourceIds is null || AllowedSourceIds.Contains(sourceId);
 

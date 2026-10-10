@@ -24,26 +24,37 @@ public static class ToolsEndpoints
     }
 
     private static async Task<IResult> ListToolsAsync(
-        IDynamicToolCatalog catalog, HttpContext http, CancellationToken ct)
+        IDynamicToolCatalog catalog, HttpContext http,
+        Microsoft.Extensions.Caching.Hybrid.HybridCache cache,
+        ILoggerFactory lf, CancellationToken ct)
     {
-        var tools = await catalog.GetToolsAsync(http.RequestServices, ct);
-        return Results.Ok(new ToolListResponse
-        {
-            Tools = tools.Select(t => new ToolDescriptorDto
-            {
-                Name = t.Name,
-                Title = t.Title,
-                Description = t.Description,
-                InputSchema = JsonSerializer.SerializeToElement(t.InputSchema),
-                OutputSchema = t.OutputSchema is { } os
-                    ? JsonSerializer.SerializeToElement(os) : null,
-                ReadOnly = t.ReadOnly,
-                DestructiveHint = t.DestructiveHint,
-                IdempotentHint = t.IdempotentHint,
-                OpenWorldHint = t.OpenWorldHint
-            }).ToList()
-        });
+        // Same per-request DTO projection as MCP tools/list — cache it per
+        // (catalog version, caller scope); bumps/scope changes re-key.
+        var scope = http.RequestServices.GetService<ICallerScopeProvider>() is { } sp
+            ? await sp.GetAsync(ct)
+            : CallerScope.Unrestricted;
+        var version = http.RequestServices.GetRequiredService<IToolCatalogChangeNotifier>().Version;
+        var tools = await Caching.EndpointCache.GetJsonAsync(cache,
+            $"mcp:toolslist:rest:v{version}:{scope.Fingerprint}",
+            async c => BuildToolList(await catalog.GetToolsAsync(http.RequestServices, c)),
+            lf, ct);
+        return Results.Ok(new ToolListResponse { Tools = tools ?? [] });
     }
+
+    private static List<ToolDescriptorDto> BuildToolList(IReadOnlyList<CatalogTool> tools) =>
+        tools.Select(t => new ToolDescriptorDto
+        {
+            Name = t.Name,
+            Title = t.Title,
+            Description = t.Description,
+            InputSchema = JsonSerializer.SerializeToElement(t.InputSchema),
+            OutputSchema = t.OutputSchema is { } os
+                ? JsonSerializer.SerializeToElement(os) : null,
+            ReadOnly = t.ReadOnly,
+            DestructiveHint = t.DestructiveHint,
+            IdempotentHint = t.IdempotentHint,
+            OpenWorldHint = t.OpenWorldHint
+        }).ToList();
 
     private static async Task<IResult> InvokeToolAsync(
         IDynamicToolCatalog catalog, HttpContext http, string name, CancellationToken ct)
