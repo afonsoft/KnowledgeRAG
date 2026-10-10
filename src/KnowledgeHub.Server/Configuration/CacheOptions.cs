@@ -37,6 +37,9 @@ public sealed class CacheOptions
         ["list"] = 2,          // list payloads (sources/api-keys) — tag invalidation on every mutation
         ["a2a"] = 60,          // agent card — config changes only via redeploy
         ["mcp:proxy-tools"] = 5, // upstream tools/list protos — per-source fingerprint already re-keys
+        ["mcp:toolslist"] = 5, // tools/list + /api/tools payloads — catalog version + scope already re-key
+        ["eval"] = 2,          // evaluation dashboard stats — poll-freshness bound, no mutation hook
+        ["diagnostics"] = 2,   // ops inspection — index version in the key re-keys on sync
     };
 
     /// <summary>Fallback when a key's region isn't in <see cref="RegionTtlMinutes"/>.</summary>

@@ -125,3 +125,40 @@ public class AuthTests
     public void Prefix_IsFirstTwelveChars()
         => Assert.Equal(12, ApiKeyService.PrefixOf(ApiKeyService.GenerateKey()).Length);
 }
+
+// CallerScope.Fingerprint: cache-key segment covering both filter sets —
+// scoped callers must never share the unrestricted "*" entry, and the hash is
+// order-insensitive so equivalent scopes collide (same cached payload).
+public class CallerScopeFingerprintTests
+{
+    [Fact]
+    public void Unrestricted_IsStar()
+        => Assert.Equal("*", CallerScope.Unrestricted.Fingerprint);
+
+    [Fact]
+    public void Scoped_DiffersFromUnrestricted_AndStableAcrossOrder()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var scope1 = new CallerScope(Guid.NewGuid(), new HashSet<Guid> { a, b }, new HashSet<string> { "t1", "t2" });
+        var scope2 = new CallerScope(Guid.NewGuid(), new HashSet<Guid> { b, a }, new HashSet<string> { "t2", "t1" });
+
+        Assert.Equal(scope1.Fingerprint, scope2.Fingerprint);
+        Assert.NotEqual("*", scope1.Fingerprint);
+
+        var differentTools = new CallerScope(Guid.NewGuid(), new HashSet<Guid> { a, b }, new HashSet<string> { "t3" });
+        var differentSources = new CallerScope(Guid.NewGuid(), new HashSet<Guid> { a }, new HashSet<string> { "t1", "t2" });
+        Assert.NotEqual(scope1.Fingerprint, differentTools.Fingerprint);
+        Assert.NotEqual(scope1.Fingerprint, differentSources.Fingerprint);
+    }
+
+    [Fact]
+    public void FromJson_PreservesFingerprintSemantics()
+    {
+        var keyId = Guid.NewGuid();
+        var scoped = CallerScope.FromJson(keyId, "[\"00000000-0000-0000-0000-000000000001\"]", "[\"t1\"]");
+        Assert.NotEqual("*", scoped.Fingerprint);
+        var unrestricted = CallerScope.FromJson(keyId, null, null);
+        Assert.Equal("*", unrestricted.Fingerprint);
+    }
+}
