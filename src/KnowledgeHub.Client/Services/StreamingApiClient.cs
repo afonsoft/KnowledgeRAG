@@ -23,7 +23,7 @@ public sealed class StreamingApiClient(HttpClient http)
             Content = JsonContent.Create(payload, options: SharedJson.Options)
         };
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
+        await response.EnsureSuccessOrApiErrorAsync(ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream);
