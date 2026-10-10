@@ -11,6 +11,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/KnowledgeHub.Tests.Integration/KnowledgeHub.Tests.Integration.csproj" />
+    <Project Path="tests/KnowledgeHub.Tests.Performance/KnowledgeHub.Tests.Performance.csproj" />
     <Project Path="tests/KnowledgeHub.Tests.Unit/KnowledgeHub.Tests.Unit.csproj" />
   </Folder>
 </Solution>
