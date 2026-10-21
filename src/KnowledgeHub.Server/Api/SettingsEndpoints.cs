@@ -66,7 +66,8 @@ public static class SettingsEndpoints
                 .FirstOrDefaultAsync(p => p.ModelPattern == pattern, ct)
                 ?? new Domain.Entities.ModelProfile
                 {
-                    ModelPattern = pattern, Source = "user"
+                    ModelPattern = pattern,
+                    Source = "user"
                 };
             row.ContextWindowTokens = Math.Max(0, body.ContextWindowTokens);
             row.MaxOutputTokens = body.MaxOutputTokens;
