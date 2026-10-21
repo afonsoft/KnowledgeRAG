@@ -24,7 +24,10 @@ public static class ContextEndpoints
         group.MapGet("/snapshots", ListSnapshots);
         group.MapGet("/snapshots/latest", LatestSnapshot);
         group.MapGet("/snapshots/{version:int}", SnapshotByVersion);
-        group.MapPost("/compact", Compact);
+        // SPEC-20261021-context-rest-contract-fixes RF-4: compact may trigger
+        // LLM summarization — own bucket mirroring the MCP 'context' partition
+        // instead of the loose general policy.
+        group.MapPost("/compact", Compact).RequireRateLimiting("context");
         return group;
     }
 
@@ -36,7 +39,12 @@ public static class ContextEndpoints
             foreach (var prop in body)
                 if (prop.Value is not null)
                     args[prop.Key] = JsonSerializer.SerializeToElement(prop.Value);
-        return new ToolCallContext { Services = http.RequestServices, Arguments = args };
+        return new ToolCallContext
+        {
+            Services = http.RequestServices,
+            Arguments = args,
+            Transport = "rest"
+        };
     }
 
     private sealed record RestResult(IResult Result, JsonObject? Payload);
@@ -44,7 +52,8 @@ public static class ContextEndpoints
     /// <summary>Invokes a catalog tool handler and maps the outcome to HTTP.
     /// <c>McpProtocolException</c> code prefixes map to the contract table.</summary>
     private static async Task<RestResult> InvokeAsync(
-        HttpContext http, string toolName, JsonObject? body, CancellationToken ct)
+        HttpContext http, string toolName, JsonObject? body, CancellationToken ct,
+        bool created = false)
     {
         var catalog = http.RequestServices.GetRequiredService<IDynamicToolCatalog>();
         var tool = (await catalog.GetToolsAsync(http.RequestServices, ct))
@@ -60,11 +69,17 @@ public static class ContextEndpoints
                 .FirstOrDefault()?.Text ?? "";
             if (result.IsError == true)
                 return new RestResult(ProblemFor(text), null);
-            return new RestResult(
-                Results.Ok(result.StructuredContent is { } el
-                    ? el.Deserialize<JsonObject>() ?? new JsonObject()
-                    : new JsonObject()),
-                null);
+            var payload = result.StructuredContent is { } el
+                ? el.Deserialize<JsonObject>() ?? new JsonObject()
+                : new JsonObject();
+            // SPEC-20261021 RF-2: resource creation returns 201 + Location.
+            if (created && payload["version"] is not null && payload["repo"] is not null)
+            {
+                var location = $"/api/context/snapshots/{payload["version"]?.GetValue<int>()}"
+                    + $"?repo={Uri.EscapeDataString(payload["repo"]!.GetValue<string>()!)}";
+                return new RestResult(Results.Created(location, payload), payload);
+            }
+            return new RestResult(Results.Ok(payload), payload);
         }
         catch (McpProtocolException ex)
         {
@@ -95,7 +110,7 @@ public static class ContextEndpoints
 
     private static async Task<IResult> SaveSnapshot(HttpContext http, CancellationToken ct)
     {
-        var r = await InvokeAsync(http, "context_save", await BodyAsync(http, ct), ct);
+        var r = await InvokeAsync(http, "context_save", await BodyAsync(http, ct), ct, created: true);
         return r.Result;
     }
 

@@ -191,6 +191,11 @@ public partial class Program
                 ResolveRateLimitPartition(http, http.RequestServices.GetRequiredService<KnowledgeHub.Server.RateLimiting.RateLimitOptions>(), llm: true));
             options.AddPolicy("sync", http =>
                 ResolveRateLimitPartition(http, http.RequestServices.GetRequiredService<KnowledgeHub.Server.RateLimiting.RateLimitOptions>(), llm: false, sync: true));
+            // SPEC-20261021-context-rest-contract-fixes RF-4: context_* REST —
+            // compact can trigger LLM summarization, so it uses its own
+            // partition instead of the loose general bucket.
+            options.AddPolicy("context", http =>
+                ResolveContextRateLimitPartition(http, http.RequestServices.GetRequiredService<KnowledgeHub.Server.RateLimiting.RateLimitOptions>()));
             options.AddPolicy(GeneralPolicy, http =>
                 ResolveRateLimitPartition(http, http.RequestServices.GetRequiredService<KnowledgeHub.Server.RateLimiting.RateLimitOptions>(), llm: false));
         });
@@ -253,6 +258,20 @@ public partial class Program
             {
                 PermitLimit = sync ? (ov?.SyncPermits ?? o.SyncPermitLimit) : o.GeneralPermitLimit,
                 Window = TimeSpan.FromSeconds(sync ? (ov?.SyncWindowSeconds ?? o.SyncWindowSeconds) : o.GeneralWindowSeconds),
+                QueueLimit = 0
+            });
+    }
+
+    private static System.Threading.RateLimiting.RateLimitPartition<string> ResolveContextRateLimitPartition(
+        HttpContext http, KnowledgeHub.Server.RateLimiting.RateLimitOptions o)
+    {
+        var (key, _, _) = KnowledgeHub.Server.RateLimiting.CallerPartitioner.Resolve(http, o.TrustForwardedHeaders);
+        return System.Threading.RateLimiting.RateLimitPartition.GetSlidingWindowLimiter(key, _ =>
+            new System.Threading.RateLimiting.SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = o.ContextPermitLimit,
+                Window = TimeSpan.FromSeconds(o.ContextWindowSeconds),
+                SegmentsPerWindow = 6,
                 QueueLimit = 0
             });
     }

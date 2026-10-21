@@ -23,4 +23,10 @@ public sealed record ToolCallContext
     /// set it; long-running tools report human-readable progress lines.
     /// Best-effort: handlers invoke it, callers tolerate null.</summary>
     public Func<string, CancellationToken, ValueTask>? OnProgress { get; init; }
+
+    /// <summary>SPEC-20261021-context-rest-contract-fixes RF-1: which surface
+    /// invoked the handler — <c>"rest"</c> for dedicated REST endpoints, null
+    /// for the MCP dispatcher. Lets tools record the real origin (e.g.
+    /// <c>ContextSnapshot.Source</c>).</summary>
+    public string? Transport { get; init; }
 }

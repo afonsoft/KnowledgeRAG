@@ -10,7 +10,7 @@
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/Devin-20261020-context-snapshots` |
 | Ticket | [#585](https://github.com/afonsoft/KnowledgeRAG/issues/585) |
-| Status | `In implementation` |
+| Status | `Done` (merged #586; gap-fixes Epic #587) |
 | Supersedes | SPEC v1 (`6aae991c-…`), v2 (`318fde74-…`), v3 (draft `20261004`) — ver seção 10 |
 
 ## 1. User Story
