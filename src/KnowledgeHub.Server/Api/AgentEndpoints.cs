@@ -17,6 +17,10 @@ public static class AgentEndpoints
             if (!agent.IsConfigured)
                 return Results.BadRequest(new { error = "agent requires a chat provider (Chat:Provider)" });
 
+            // SPEC-20261021-agent-structured-output RF-5: invalid schema → 400.
+            try { Agent.StructuredOutput.Validate(request.ResponseFormat); }
+            catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+
             return Results.Ok(await agent.RunAsync(request, ct));
         });
 

@@ -36,9 +36,11 @@ public sealed partial class AnswerService(
     public bool IsConfigured => chatClient is not null;
 
     public async Task<AskResponse> AnswerAsync(
-        string question, IReadOnlyList<SearchResultItem> context, CancellationToken cancellationToken = default)
+        string question, IReadOnlyList<SearchResultItem> context, CancellationToken cancellationToken = default,
+        ResponseFormatSpec? responseFormat = null)
     {
         var sw = Stopwatch.StartNew();
+        Agent.StructuredOutput.Validate(responseFormat); // RF-5: 400 before retrieval/model
 
         if (context.Count == 0)
             return Result(NoMatchAnswer, [], null, sw);
@@ -50,9 +52,14 @@ public sealed partial class AnswerService(
         // The ordered chunk ids fingerprint the retrieval exactly (source
         // scope, filters, topK); indexVersion invalidates on every sync.
         var cacheEnabled = configuration.GetValue("Cache:AnswerCache:Enabled", false);
+        // SPEC-20261021 RF-1: the requested format is part of the answer's
+        // identity — a json_schema call must never serve a free-text cache hit.
+        var formatKey = responseFormat is null ? null
+            : JsonSerializer.Serialize(responseFormat, JsonSerializerOptions.Web);
         var answerKey = cacheEnabled
             ? CacheKeys.Answer(
-                options.Model ?? "unknown", question,
+                options.Model ?? "unknown",
+                formatKey is null ? question : question + "" + formatKey,
                 context.Select(CacheKeys.AnswerIdentityPart),
                 await IndexVersionToken.GetAsync(cache, logger, cancellationToken))
             : null;
@@ -71,23 +78,42 @@ public sealed partial class AnswerService(
         using var activity = KnowledgeHubActivity.Start("ask");
         ChatResponse response;
         var llmSw = Stopwatch.StartNew();
+        var strict = responseFormat?.JsonSchema?.Strict == true;
+        var providerFallback = false;
         using (var llmSpan = KnowledgeHubActivity.Start("llm_synthesis"))
         {
             llmSpan?.SetTag("llm.model", options.Model);
             llmSpan?.SetTag("llm.kind", "ask");
+            var chatOptions = new ChatOptions
+            {
+                Temperature = options.Temperature is null ? null : (float)options.Temperature,
+                MaxOutputTokens = options.MaxTokens,
+                ResponseFormat = responseFormat is null ? null
+                    : Agent.StructuredOutput.ToChatFormat(responseFormat)
+            };
             try
             {
-                response = await client.GetResponseAsync(
-                    [
-                        new ChatMessage(ChatRole.System, SystemPrompt),
-                        new ChatMessage(ChatRole.User, BuildUserPrompt(question, context))
-                    ],
-                    new ChatOptions
+                var messages = new List<ChatMessage>
+                {
+                    new(ChatRole.System, SystemPrompt),
+                    new(ChatRole.User, BuildUserPrompt(question, context))
+                };
+                try
+                {
+                    response = await client.GetResponseAsync(messages, chatOptions, cancellationToken);
+                }
+                catch (Exception ex) when (!strict && responseFormat is not null
+                    && ex is not OperationCanceledException)
+                {
+                    // RF-3: provider cannot honor the format — retry once
+                    // without it and report provider_no_support.
+                    providerFallback = true;
+                    response = await client.GetResponseAsync(messages, new ChatOptions
                     {
-                        Temperature = options.Temperature is null ? null : (float)options.Temperature,
-                        MaxOutputTokens = options.MaxTokens
-                    },
-                    cancellationToken);
+                        Temperature = chatOptions.Temperature,
+                        MaxOutputTokens = chatOptions.MaxOutputTokens
+                    }, cancellationToken);
+                }
             }
             catch (Exception ex)
             {
@@ -110,6 +136,21 @@ public sealed partial class AnswerService(
 
         var citations = ExtractCitations(answer, context);
         var result = Result(answer, citations, response.ModelId ?? options.Model, sw);
+        // SPEC-20261021 RF-3: structured output when the format was honored.
+        if (responseFormat is not null)
+        {
+            var parsed = providerFallback ? null : Agent.StructuredOutput.TryParse(answer);
+            var reason = providerFallback ? Agent.StructuredOutput.ProviderNoSupport
+                : parsed is null ? Agent.StructuredOutput.InvalidJson : null;
+            if (reason is not null && responseFormat.JsonSchema?.Strict == true)
+                throw new ChatProviderException(
+                    $"structured output requested with strict=true but got {reason}");
+            result = result with
+            {
+                StructuredOutput = parsed,
+                StructuredOutputFallbackReason = reason
+            };
+        }
         if (answerKey is not null)
         {
             await SafeCache.SetJsonAsync(cache, answerKey, result, null, logger, cancellationToken);
@@ -140,13 +181,26 @@ public sealed partial class AnswerService(
     /// <inheritdoc />
     public async IAsyncEnumerable<SseEvent> StreamAsync(
         string question, IReadOnlyList<SearchResultItem> context,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default,
+        ResponseFormatSpec? responseFormat = null)
     {
         var sw = Stopwatch.StartNew();
 
         if (context.Count == 0)
         {
             yield return new SseEvent("done", Result(NoMatchAnswer, [], null, sw));
+            yield break;
+        }
+
+        // SPEC-20261021 RF-3/4: formatted asks run buffered — the retry
+        // semantics of provider_no_support cannot be expressed once tokens
+        // are already streaming to the client.
+        if (responseFormat is not null)
+        {
+            var buffered = await AnswerAsync(question, context, cancellationToken, responseFormat);
+            if (buffered.Answer is { Length: > 0 } bufferedText)
+                yield return new SseEvent("token", new { delta = bufferedText });
+            yield return new SseEvent("done", buffered);
             yield break;
         }
 

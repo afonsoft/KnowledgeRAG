@@ -55,8 +55,34 @@ public sealed class AgentService(
     {
         var prep = await PrepareAsync(request, cancellationToken);
         var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken, prep.Thread?.Id);
-        var result = await RunLoopAsync(prep.Client, loop, cancellationToken);
+        var result = await RunWithFormatFallbackAsync(request, prep, loop, null, cancellationToken);
         return await CompleteAsync(prep, request, result, cancellationToken);
+    }
+
+    /// <summary>SPEC-20261021-agent-structured-output RF-3: when the provider
+    /// cannot honor the requested format, retry once without it (unless
+    /// strict) and report provider_no_support — the raw text still answers.</summary>
+    private async Task<AgentResponse> RunWithFormatFallbackAsync(
+        AgentRequest request, Preparation prep, LoopState loop,
+        ChannelWriter<SseEvent>? sink, CancellationToken ct)
+    {
+        if (request.ResponseFormat?.JsonSchema?.Strict == true)
+            return await RunLoopAsync(prep.Client, loop, ct, sink);
+        var freshMessages = loop.Messages.ToList(); // snapshot before the run mutates
+        try
+        {
+            return await RunLoopAsync(prep.Client, loop, ct, sink);
+        }
+        catch (Exception ex) when (request.ResponseFormat is not null
+            && ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "agent_chat responseFormat rejected — retrying without structured output");
+            var retry = await BuildLoopAsync(request, freshMessages, ct, prep.Thread?.Id);
+            retry.ChatOptions.ResponseFormat = null; // retry speaks plain text
+            retry.FormatFallback = StructuredOutput.ProviderNoSupport;
+            return await RunLoopAsync(prep.Client, retry, ct, sink);
+        }
     }
 
     /// <inheritdoc />
@@ -67,7 +93,7 @@ public sealed class AgentService(
         var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken, prep.Thread?.Id);
 
         var channel = CreateEventChannel(options.SseChannelCapacity);
-        var run = RunLoopAsync(prep.Client, loop, cancellationToken, channel.Writer);
+        var run = RunWithFormatFallbackAsync(request, prep, loop, channel.Writer, cancellationToken);
 
         await foreach (var e in channel.Reader.ReadAllAsync(cancellationToken))
             yield return e;
@@ -518,7 +544,7 @@ public sealed class AgentService(
             Functions = functions,
             // RF-002: tool list is fixed at build time — one ChatOptions per run
             // instead of reserializing schemas every iteration.
-            ChatOptions = new ChatOptions { Tools = [.. functions] },
+            ChatOptions = BuildChatOptions(functions, request.ResponseFormat),
             ToolsByName = visible.ToDictionary(t => t.Name),
             MaxIterations = maxIterations,
             Request = request,
@@ -526,6 +552,18 @@ public sealed class AgentService(
             // receipts for this run chain under one session id.
             EvidenceSessionId = $"agent:{threadId?.ToString("N") ?? request.ThreadId?.ToString("N") ?? "ephemeral"}"
         };
+    }
+
+    /// <summary>SPEC-20261021-agent-structured-output: validates the requested
+    /// format (RF-5 → 400) and maps it to M.E.AI ResponseFormat (RF-2).</summary>
+    private static ChatOptions BuildChatOptions(
+        List<AIFunction> functions, ResponseFormatSpec? format)
+    {
+        StructuredOutput.Validate(format);
+        var opts = new ChatOptions { Tools = [.. functions] };
+        if (format is not null)
+            opts.ResponseFormat = StructuredOutput.ToChatFormat(format);
+        return opts;
     }
 
     /// <summary>SPEC-20260924-conversational-query-context: last N user/assistant
@@ -625,6 +663,18 @@ public sealed class AgentService(
             "agent_chat finished: {Iterations} iterations, {ToolCalls} tool calls, limit={LimitReached}",
             loop.Iterations, loop.ToolCalls, loop.LimitReached);
 
+        // SPEC-20261021 RF-3: parse the answer as JSON when a format was asked;
+        // report invalid_json (or the retry's provider_no_support) otherwise.
+        var structured = loop.FormatFallback is null && loop.Request.ResponseFormat is not null
+            ? StructuredOutput.TryParse(answer)
+            : (JsonElement?)null;
+        var fallbackReason = loop.FormatFallback
+            ?? (loop.Request.ResponseFormat is not null && structured is null
+                ? StructuredOutput.InvalidJson : null);
+        if (fallbackReason is not null && loop.Request.ResponseFormat?.JsonSchema?.Strict == true)
+            throw new ChatProviderException(
+                $"structured output requested with strict=true but got {fallbackReason}");
+
         return new AgentResponse
         {
             Answer = answer,
@@ -633,7 +683,9 @@ public sealed class AgentService(
             Iterations = loop.Iterations,
             LatencyMs = sw.Elapsed.TotalMilliseconds,
             LimitReached = loop.LimitReached,
-            Usage = loop.Usage.ToDto()
+            Usage = loop.Usage.ToDto(),
+            StructuredOutput = structured,
+            StructuredOutputFallbackReason = fallbackReason
         };
     }
 
@@ -970,6 +1022,9 @@ public sealed class AgentService(
         public bool LimitReached { get; set; }
         /// <summary>SPEC-20261021 RF-3: token usage aggregated across model calls.</summary>
         public UsageTotals Usage { get; } = new();
+        /// <summary>SPEC-20261021 RF-3: set when the run retried without the
+        /// requested responseFormat — surfaced as structuredOutputFallbackReason.</summary>
+        public string? FormatFallback { get; set; }
     }
 
     /// <summary>SPEC-20261021-agent-streaming-events RF-3: running total of

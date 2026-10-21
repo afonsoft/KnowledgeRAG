@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace KnowledgeHub.Shared.Contracts;
@@ -23,6 +24,26 @@ public sealed record AgentRequest
     /// task updates. Never serialized.</summary>
     [JsonIgnore]
     public Func<string, CancellationToken, ValueTask>? OnProgress { get; init; }
+    /// <summary>SPEC-20261021-agent-structured-output RF-1: optional JSON-schema
+    /// response format — null keeps the default free-text behavior.</summary>
+    public ResponseFormatSpec? ResponseFormat { get; init; }
+}
+
+/// <summary>Requested response format (OpenAI/M.E.AI shape). Only
+/// <c>type = "json_schema"</c> is supported (SPEC-20261021 RF-1).</summary>
+public sealed record ResponseFormatSpec
+{
+    public required string Type { get; init; }
+    public JsonSchemaSpec? JsonSchema { get; init; }
+}
+
+/// <summary>JSON-schema wrapper: name must match ^[a-zA-Z0-9_-]{1,64}$,
+/// schema must be a JSON object (SPEC-20261021 RF-5).</summary>
+public sealed record JsonSchemaSpec
+{
+    public required string Name { get; init; }
+    public required JsonElement Schema { get; init; }
+    public bool? Strict { get; init; }
 }
 
 /// <summary>One prior conversation turn for <see cref="AgentRequest.Messages"/>.</summary>
@@ -62,6 +83,12 @@ public sealed record AgentResponse
     /// <summary>SPEC-20261021-agent-streaming-events RF-3: token usage aggregated
     /// across all model calls of the run; null when the provider reports none.</summary>
     public AgentUsage? Usage { get; init; }
+    /// <summary>SPEC-20261021 RF-1/3: parsed JSON answer when a responseFormat
+    /// was requested and honored; null otherwise.</summary>
+    public JsonElement? StructuredOutput { get; init; }
+    /// <summary>Why structured output was not produced:
+    /// provider_no_support | invalid_json | schema_rejected.</summary>
+    public string? StructuredOutputFallbackReason { get; init; }
 }
 
 /// <summary>Token usage aggregated over an agent run (SPEC-20261021).</summary>

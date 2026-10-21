@@ -55,6 +55,15 @@ public static class StreamingEndpoints
             return;
         }
 
+        // SPEC-20261021-agent-structured-output RF-5: invalid schema → 400.
+        try { Agent.StructuredOutput.Validate(request.ResponseFormat); }
+        catch (ArgumentException ex)
+        {
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = ex.Message }, http.RequestAborted);
+            return;
+        }
+
         var ct = http.RequestAborted;
         var k = request.TopK is null or <= 0 ? SearchEndpoints.DefaultTopK : Math.Min(request.TopK.Value, SearchEndpoints.MaxTopK);
 
@@ -63,12 +72,14 @@ public static class StreamingEndpoints
         // /api/ask — previously it bypassed grading entirely.
         var outcome = await retrieval.RetrieveAsync(
             request.Question, k, request.SourceId, mode.Value, streamFilter, ct: ct);
-        await WriteSseAsync(http, StreamAskOutcomeAsync(retrieval, answers, request.Question, outcome, ct), ct);
+        await WriteSseAsync(http, StreamAskOutcomeAsync(
+            retrieval, answers, request.Question, outcome, request.ResponseFormat, ct), ct);
     }
 
     private static async IAsyncEnumerable<SseEvent> StreamAskOutcomeAsync(
         CorrectiveRetrievalService retrieval, IAnswerService answers,
         string question, CorrectiveRetrievalService.RetrievalOutcome outcome,
+        ResponseFormatSpec? responseFormat,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         yield return new SseEvent("meta", new
@@ -95,7 +106,7 @@ public static class StreamingEndpoints
         }
 
         await foreach (var e in answers
-            .StreamAsync(question, outcome.Results, cancellationToken)
+            .StreamAsync(question, outcome.Results, cancellationToken, responseFormat)
             .WithCancellation(cancellationToken))
             yield return e;
     }
@@ -112,6 +123,15 @@ public static class StreamingEndpoints
         {
             http.Response.StatusCode = 400;
             await http.Response.WriteAsJsonAsync(new { error = "agent requires a chat provider (Chat:Provider)" }, http.RequestAborted);
+            return;
+        }
+
+        // SPEC-20261021-agent-structured-output RF-5: invalid schema → 400.
+        try { Agent.StructuredOutput.Validate(request.ResponseFormat); }
+        catch (ArgumentException ex)
+        {
+            http.Response.StatusCode = 400;
+            await http.Response.WriteAsJsonAsync(new { error = ex.Message }, http.RequestAborted);
             return;
         }
 

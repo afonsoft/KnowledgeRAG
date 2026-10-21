@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace KnowledgeHub.Shared.Contracts;
 
 /// <summary>POST /api/ask request (SPEC-20260914-llm-answer-synthesis RF-003).</summary>
@@ -12,6 +14,9 @@ public sealed record AskRequest
     public bool? Generate { get; init; }
     /// <summary>Optional metadata filters (SPEC-20260923-retrieval-quality RF-003).</summary>
     public SearchFilter? Filters { get; init; }
+    /// <summary>SPEC-20261021-agent-structured-output RF-1: optional JSON-schema
+    /// response format — null keeps the default free-text answer.</summary>
+    public ResponseFormatSpec? ResponseFormat { get; init; }
 }
 
 /// <summary>One citation linking an answer marker [n] to a retrieved chunk.</summary>
@@ -64,4 +69,10 @@ public sealed record AskResponse
     /// <summary>SPEC-20261001-mcp-recall-ergonomics RF-002: the retrieved
     /// context was cut to fit the caller's maxTokens budget.</summary>
     public bool TruncatedByTokens { get; init; }
+    /// <summary>SPEC-20261021 RF-1/3: parsed JSON answer when a responseFormat
+    /// was requested and honored; null otherwise.</summary>
+    public JsonElement? StructuredOutput { get; init; }
+    /// <summary>Why structured output was not produced:
+    /// provider_no_support | invalid_json | schema_rejected.</summary>
+    public string? StructuredOutputFallbackReason { get; init; }
 }

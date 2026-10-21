@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Approved |
+| Status | Done |
 | Ticket | [#597](https://github.com/afonsoft/KnowledgeRAG/issues/597) |
 | Escopo | `responseFormat`/JSON-schema opcional em `agent_chat`/`ask_knowledge` — resposta validada por schema, inspirado no `create_agent(response_format=…)` do LangChain |
 

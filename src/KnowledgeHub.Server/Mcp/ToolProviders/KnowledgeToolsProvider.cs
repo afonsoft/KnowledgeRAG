@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Ingestion;
@@ -68,7 +69,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "maxTokens":{"type":"integer","description":"Context token budget (default 4096, clamped 256-32768) — truncates the passage list by ~4 chars/token after ranking; sets truncatedByTokens when applied"},
           "minScores":{"type":"object","properties":{"semantic":{"type":"number"},"lexical":{"type":"number"},"final":{"type":"number"}},"description":"Per-stage score floors 0-1: semantic = cosine floor on each vector arm, lexical = fraction of the arm's best FTS score, final = post-fusion floor (empty result → abstains instead of answering)"},
           "temporalWindow":{"type":"object","properties":{"start":{"type":"string","description":"ISO-8601"},"end":{"type":"string","description":"ISO-8601"}},"description":"Explicit recency window — documents indexed inside it rank higher (boost, not filter)"},
-          "enableLiveActions":{"type":"boolean","description":"Action-Augmented RAG: execute live MCP tools nominated by the question itself — or by retrieved-chunk markers when the server opts in (Agent:AllowDocumentMarkers) — then fuse outputs with document citations (default: server config)"}
+          "enableLiveActions":{"type":"boolean","description":"Action-Augmented RAG: execute live MCP tools nominated by the question itself — or by retrieved-chunk markers when the server opts in (Agent:AllowDocumentMarkers) — then fuse outputs with document citations (default: server config)"},
+          "responseFormat":{"type":"object","description":"Optional JSON-schema output: {\"type\":\"json_schema\",\"jsonSchema\":{\"name\":\"answer\",\"schema\":{...},\"strict\":false}} — the answer is validated as JSON and returned in structuredOutput; on provider no-support the raw text answer is kept with structuredOutputFallbackReason"}
         },"required":["question"],
         "examples":[{"question":"How does synchronization work?","topK":5,"generate":true}]}
         """)!.AsObject();
@@ -80,7 +82,8 @@ public sealed class KnowledgeToolsProvider : IToolProvider
           "maxIterations":{"type":"integer","description":"Max model→tools→model iterations (default 10)"},
           "allowWrite":{"type":"boolean","description":"Opt-in: exposes write tools (write_knowledge, write_note)"},
           "threadId":{"type":"string","description":"Existing thread GUID — continues the conversation with context"},
-          "persist":{"type":"boolean","description":"Creates a new thread and persists this call's turns"}
+          "persist":{"type":"boolean","description":"Creates a new thread and persists this call's turns"},
+          "responseFormat":{"type":"object","description":"Optional JSON-schema output: {\"type\":\"json_schema\",\"jsonSchema\":{\"name\":\"answer\",\"schema\":{...},\"strict\":false}} — the answer is validated as JSON and returned in structuredOutput; on provider no-support the raw text answer is kept with structuredOutputFallbackReason"}
         },"required":["prompt"],
         "examples":[{"prompt":"Summarize this week's notes","tools":["search_knowledge","ask_knowledge"],"maxIterations":10,"persist":true}]}
         """)!.AsObject();
@@ -505,7 +508,11 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         ToolCallContext ctx, CorrectiveRetrievalService retrieval,
         IAnswerService answers, AskContext ask, CancellationToken ct)
     {
-        var rawAnswer = await answers.AnswerAsync(ask.Question, ask.Results, ct);
+        // SPEC-20261021-agent-structured-output RF-4: optional JSON-schema answer.
+        var format = ToolArgs.OptionalObject(ctx, "responseFormat") is { } fmt
+            ? fmt.Deserialize<ResponseFormatSpec>(JsonSerializerOptions.Web)
+            : null;
+        var rawAnswer = await answers.AnswerAsync(ask.Question, ask.Results, ct, format);
         var answer = rawAnswer with
         {
             RetrievalGrade = retrieval.GradingEnabled
@@ -583,7 +590,11 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             Persist = ToolArgs.OptionalBool(ctx, "persist") == true,
             // SPEC-20261001-a2a-task-durability RF-002: A2A task calls carry a
             // progress sink — the loop reports iteration/tool progress lines.
-            OnProgress = ctx.OnProgress
+            OnProgress = ctx.OnProgress,
+            // SPEC-20261021-agent-structured-output RF-4.
+            ResponseFormat = ToolArgs.OptionalObject(ctx, "responseFormat") is { } fmt
+                ? fmt.Deserialize<ResponseFormatSpec>(JsonSerializerOptions.Web)
+                : null
         };
 
         try
