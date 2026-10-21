@@ -26,6 +26,10 @@ public sealed class ContextToolsProvider : IToolProvider
 {
     public const string SourceTag = "mcp";
 
+    /// <summary>RF-002 Source enum — the handler's real surface.</summary>
+    private static string SourceOf(ToolCallContext ctx) =>
+        ctx.Transport == "rest" ? "rest" : SourceTag;
+
     private static readonly JsonObject SaveSchema = JsonNode.Parse("""
         {"type":"object","properties":{
           "repo":{"type":"string","description":"Repository scope 'owner/name' (or github.com URL); normalized lowercase","examples":["afonsoft/knowledgerag"]},
@@ -90,6 +94,18 @@ public sealed class ContextToolsProvider : IToolProvider
          "required":["repo","version","items","stats","withinBudget"]}
         """)!.AsObject();
 
+    // SPEC-20261021-context-rest-contract-fixes RF-3: the real response shape
+    // (`compacted` array + optional `savedVersion`), not the recovery shape.
+    private static readonly JsonObject CompactOutputSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "repo":{"type":"string"},
+          "compacted":{"type":"array","items":{"type":"object"}},
+          "droppedCount":{"type":"integer"},"elidedCount":{"type":"integer"},
+          "stats":{"type":"object"},"withinBudget":{"type":"boolean"},
+          "savedVersion":{"type":["integer","null"]}},
+         "required":["repo","compacted","stats","withinBudget"]}
+        """)!.AsObject();
+
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(
         IServiceProvider services, CancellationToken cancellationToken)
     {
@@ -123,7 +139,7 @@ public sealed class ContextToolsProvider : IToolProvider
                 Title = "Compact context",
                 Description = "Compacts a set of items (or an existing snapshot) with deterministic elision plus optional LLM summarization, then optionally persists the result via save=true.",
                 InputSchema = CompactSchema,
-                OutputSchema = RecoveryOutputSchema,
+                OutputSchema = CompactOutputSchema,
                 ReadOnly = true, // save=true writes caller-scoped snapshots only
                 IdempotentHint = true,
                 Handler = CompactAsync
@@ -199,7 +215,7 @@ public sealed class ContextToolsProvider : IToolProvider
         var service = ctx.Services.GetRequiredService<ContextSnapshotService>();
         var save = await service.SaveAsync(
             repo, items, label, ToolArgs.OptionalString(ctx, "idempotencyKey"),
-            compact, compacted, SourceTag, CallerIdentity.TryGetApiKeyId(ctx), ct);
+            compact, compacted, SourceOf(ctx), CallerIdentity.TryGetApiKeyId(ctx), ct);
 
         var snap = save.Snapshot;
         return await ToolResults.Structured(
@@ -342,7 +358,7 @@ public sealed class ContextToolsProvider : IToolProvider
         {
             var saved = await service.SaveAsync(
                 repo, result.Items, label, null,
-                strategy, compacted: true, SourceTag, CallerIdentity.TryGetApiKeyId(ctx), ct);
+                strategy, compacted: true, SourceOf(ctx), CallerIdentity.TryGetApiKeyId(ctx), ct);
             savedVersion = saved.Snapshot.Version;
         }
 

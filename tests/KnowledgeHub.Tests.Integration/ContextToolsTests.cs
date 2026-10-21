@@ -331,7 +331,7 @@ public class ContextToolsTests : IClassFixture<ContextToolsTests.Fixture>
             repo,
             items = new[] { new { kind = "decision", content = "d1" } }
         });
-        Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, save.StatusCode);
 
         var latest = await http.GetFromJsonAsync<JsonElement>(
             $"/api/context/snapshots/latest?repo={Uri.EscapeDataString(repo)}");
@@ -346,5 +346,95 @@ public class ContextToolsTests : IClassFixture<ContextToolsTests.Fixture>
         var res = await http.GetAsync(
             $"/api/context/snapshots/latest?repo={Uri.EscapeDataString(Repo())}");
         Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
+    }
+
+    // ---- SPEC-20261021-context-test-coverage + rest-contract-fixes --------
+
+    [Fact]
+    public async Task Concurrency_FiveSaves_ProduceVersions1To5()
+    {
+        var mcp = await ConnectAsync(_factory);
+        var repo = Repo();
+        var saves = Enumerable.Range(0, 5).Select(i =>
+            mcp.SendAsync("tools/call", new
+            {
+                name = "context_save",
+                arguments = new { repo, items = new[] { new { kind = "note", content = $"n{i}" } } }
+            })).ToArray();
+        var results = await Task.WhenAll(saves);
+        var versions = results
+            .Select(r => Structured(r).GetProperty("version").GetInt32())
+            .OrderBy(v => v).ToArray();
+        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, versions);
+        Assert.All(results, r => Assert.False(r.GetProperty("isError").GetBoolean()));
+    }
+
+    [Fact]
+    public async Task Recovery_ByLabel_ReturnsLatestWithThatLabel()
+    {
+        var mcp = await ConnectAsync(_factory);
+        var repo = Repo();
+        await mcp.SendAsync("tools/call", new
+        {
+            name = "context_save",
+            arguments = new { repo, label = "s1", items = new[] { new { kind = "note", content = "first" } } }
+        });
+        await mcp.SendAsync("tools/call", new
+        {
+            name = "context_save",
+            arguments = new { repo, label = "s1", items = new[] { new { kind = "note", content = "second" } } }
+        });
+        await mcp.SendAsync("tools/call", new
+        {
+            name = "context_save",
+            arguments = new { repo, label = "other", items = new[] { new { kind = "note", content = "other" } } }
+        });
+        var rec = await mcp.SendAsync("tools/call", new
+        {
+            name = "context_recovery",
+            arguments = new { repo, label = "s1" }
+        });
+        var s = Structured(rec);
+        Assert.Equal(2, s.GetProperty("version").GetInt32());
+        Assert.Equal("s1", s.GetProperty("label").GetString());
+        Assert.Equal("second", s.GetProperty("items")[0].GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task Compact_WithDirectItems_WorksWithoutSnapshot()
+    {
+        var mcp = await ConnectAsync(_factory);
+        var res = await mcp.SendAsync("tools/call", new
+        {
+            name = "context_compact",
+            arguments = new
+            {
+                repo = Repo(),
+                items = new[] { new { kind = "decision", content = "d" } },
+                strategy = "none",
+                tokenBudget = 4096
+            }
+        });
+        var s = Structured(res);
+        Assert.Single(s.GetProperty("compacted").EnumerateArray());
+        Assert.False(s.GetProperty("savedVersion").ValueKind is JsonValueKind.Number);
+    }
+
+    [Fact]
+    public async Task Rest_Save_Returns201_AndSourceIsRest()
+    {
+        var http = await TestAuth.LoginAsync(_factory);
+        var repo = Repo();
+        var save = await http.PostAsJsonAsync("/api/context/snapshots", new
+        {
+            repo,
+            items = new[] { new { kind = "note", content = "via rest" } }
+        });
+        Assert.Equal(HttpStatusCode.Created, save.StatusCode);
+        Assert.NotNull(save.Headers.Location);
+
+        var list = await http.GetFromJsonAsync<JsonElement>(
+            $"/api/context/snapshots?repo={Uri.EscapeDataString(repo)}");
+        Assert.Equal("rest", list[0].GetProperty("source").GetString());
     }
 }
