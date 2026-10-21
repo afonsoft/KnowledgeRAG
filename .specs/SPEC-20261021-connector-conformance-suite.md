@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Approved |
+| Status | Done |
 | Ticket | [#595](https://github.com/afonsoft/KnowledgeRAG/issues/595) |
 | Escopo | Pacote de testes de conformidade compartilhado que toda implementação de `ISourceConnector`/`IIncrementalSourceConnector`/`IItemFetchConnector` deve passar — inspirado no `langchain-tests` |
 

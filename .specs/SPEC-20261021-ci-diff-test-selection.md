@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Approved |
+| Status | Done |
 | Ticket | [#596](https://github.com/afonsoft/KnowledgeRAG/issues/596) |
 | Escopo | Seleção de testes por diff — script que mapeia arquivos alterados para projetos de teste afetados, inspirado no `check_diff.py` do LangChain |
 
