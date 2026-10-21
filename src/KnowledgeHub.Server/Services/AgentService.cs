@@ -632,7 +632,8 @@ public sealed class AgentService(
             ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
             Iterations = loop.Iterations,
             LatencyMs = sw.Elapsed.TotalMilliseconds,
-            LimitReached = loop.LimitReached
+            LimitReached = loop.LimitReached,
+            Usage = loop.Usage.ToDto()
         };
     }
 
@@ -663,7 +664,8 @@ public sealed class AgentService(
                     LimitReached = false,
                     AwaitingApprovalId = approval.Id,
                     PendingTool = call.Name,
-                    PendingArgsJson = approval.ArgumentsJson
+                    PendingArgsJson = approval.ArgumentsJson,
+                    Usage = loop.Usage.ToDto()
                 };
             }
 
@@ -734,6 +736,11 @@ public sealed class AgentService(
         toolSpan?.SetTag("tool.name", call.Name);
         object? result;
         var isError = false;
+        // SPEC-20261021 RF-4: opt-in partial-output deltas — tools that call
+        // ToolOutputDeltaChannel.ReportAsync get { tool, delta } SSE events.
+        ToolOutputDeltaChannel.Bind(sink is null ? null : (d, token) =>
+            WriteEventAsync(sink, new SseEvent("tool_output_delta",
+                new { tool = call.Name, delta = d }), token));
         try
         {
             result = fn is null
@@ -749,6 +756,7 @@ public sealed class AgentService(
         }
         finally
         {
+            ToolOutputDeltaChannel.Bind(null);
             Telemetry.KnowledgeHubMetrics.ToolDuration.Record(stepSw.Elapsed.TotalMilliseconds,
                 new KeyValuePair<string, object?>("tool", call.Name));
         }
@@ -807,6 +815,13 @@ public sealed class AgentService(
             var buffered = await client.GetResponseAsync(loop.Messages, chatOptions, ct);
             if (sink is not null && buffered.Text is { Length: > 0 } text)
                 await WriteEventAsync(sink, new SseEvent("token", new { delta = text }), ct);
+            // RF-3: buffered path still reports usage when the provider does.
+            if (buffered.Usage is { } bufferedUsage)
+            {
+                loop.Usage.Accumulate(bufferedUsage, buffered.ModelId);
+                await WriteEventAsync(sink, new SseEvent("usage",
+                    UsageTotals.Payload(bufferedUsage, buffered.ModelId)), ct);
+            }
             return buffered;
         }
 
@@ -818,8 +833,32 @@ public sealed class AgentService(
             foreach (var content in update.Contents)
             {
                 contents.Add(content);
-                if (content is TextContent { Text.Length: > 0 } delta)
-                    await WriteEventAsync(sink, new SseEvent("token", new { delta = delta.Text }), ct);
+                switch (content)
+                {
+                    case TextContent { Text.Length: > 0 } delta:
+                        await WriteEventAsync(sink, new SseEvent("token", new { delta = delta.Text }), ct);
+                        break;
+                    // SPEC-20261021-agent-streaming-events: fine-grained events
+                    // inspired by LangChain astream_events — all additive.
+                    case TextReasoningContent { Text.Length: > 0 } reasoning:
+                        await WriteEventAsync(sink,
+                            new SseEvent("reasoning", new { delta = reasoning.Text }), ct);
+                        break;
+                    case FunctionCallContent call:
+                        await WriteEventAsync(sink, new SseEvent("tool_call_chunk", new
+                        {
+                            name = call.Name,
+                            callId = call.CallId,
+                            argsDelta = call.Arguments is null ? "{}" :
+                                JsonSerializer.Serialize(call.Arguments, JsonSerializerOptions.Web)
+                        }), ct);
+                        break;
+                    case UsageContent usage:
+                        loop.Usage.Accumulate(usage.Details, modelId);
+                        await WriteEventAsync(sink, new SseEvent("usage",
+                            UsageTotals.Payload(usage.Details, modelId)), ct);
+                        break;
+                }
             }
         }
         var message = new ChatMessage(ChatRole.Assistant, contents);
@@ -929,6 +968,42 @@ public sealed class AgentService(
         public int Iterations { get; set; }
         public int ToolCalls { get; set; }
         public bool LimitReached { get; set; }
+        /// <summary>SPEC-20261021 RF-3: token usage aggregated across model calls.</summary>
+        public UsageTotals Usage { get; } = new();
+    }
+
+    /// <summary>SPEC-20261021-agent-streaming-events RF-3: running total of
+    /// provider-reported token usage; null fields stay null when unreported.</summary>
+    private sealed class UsageTotals
+    {
+        private long? _in, _out, _total;
+        private string? _modelId;
+        private bool _seen;
+
+        public void Accumulate(UsageDetails? details, string? modelId)
+        {
+            if (details is null) return;
+            _seen = true;
+            _in = (_in ?? 0) + details.InputTokenCount;
+            _out = (_out ?? 0) + details.OutputTokenCount;
+            _total = (_total ?? 0) + details.TotalTokenCount;
+            _modelId = modelId ?? _modelId;
+        }
+
+        public AgentUsage? ToDto() => _seen ? new AgentUsage
+        {
+            InputTokens = _in, OutputTokens = _out,
+            TotalTokens = _total, ModelId = _modelId
+        } : null;
+
+        /// <summary>Per-call SSE payload — omits counts the provider did not report.</summary>
+        public static object Payload(UsageDetails details, string? modelId) => new
+        {
+            inputTokens = details.InputTokenCount,
+            outputTokens = details.OutputTokenCount,
+            totalTokens = details.TotalTokenCount,
+            modelId
+        };
     }
 
     private sealed record SuspendState(

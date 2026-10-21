@@ -65,7 +65,13 @@ public class AgentApiTests : IClassFixture<AgentApiTests.Fixture>, IClassFixture
             {
                 return Task.FromResult(new ChatResponse(
                     new ChatMessage(ChatRole.Assistant, "agent final answer"))
-                { ModelId = "scripted" });
+                {
+                    ModelId = "scripted",
+                    Usage = new UsageDetails
+                    {
+                        InputTokenCount = 12, OutputTokenCount = 3, TotalTokenCount = 15
+                    }
+                });
             }
 
             // WRITE_TEST: exercise a mutating tool end-to-end when it is exposed.

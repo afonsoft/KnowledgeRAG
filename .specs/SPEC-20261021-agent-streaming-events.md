@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Approved |
+| Status | In implementation |
 | Ticket | [#593](https://github.com/afonsoft/KnowledgeRAG/issues/593) |
 | Escopo | Enriquecer o stream SSE do agente/ask com eventos de granularidade fina inspirados no `astream_events` do LangChain: `reasoning`, `usage`, `tool_call_chunk`, `tool_output_delta` |
 

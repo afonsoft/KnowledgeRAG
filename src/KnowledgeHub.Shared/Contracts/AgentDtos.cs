@@ -59,4 +59,16 @@ public sealed record AgentResponse
     public string? PendingArgsJson { get; init; }
     /// <summary>Thread this run was persisted to (when threadId/persist were used).</summary>
     public Guid? ThreadId { get; init; }
+    /// <summary>SPEC-20261021-agent-streaming-events RF-3: token usage aggregated
+    /// across all model calls of the run; null when the provider reports none.</summary>
+    public AgentUsage? Usage { get; init; }
+}
+
+/// <summary>Token usage aggregated over an agent run (SPEC-20261021).</summary>
+public sealed record AgentUsage
+{
+    public long? InputTokens { get; init; }
+    public long? OutputTokens { get; init; }
+    public long? TotalTokens { get; init; }
+    public string? ModelId { get; init; }
 }

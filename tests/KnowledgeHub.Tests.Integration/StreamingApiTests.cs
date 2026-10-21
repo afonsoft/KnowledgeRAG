@@ -126,6 +126,21 @@ public class StreamingApiTests : IClassFixture<StreamingApiTests.Fixture>
         Assert.True(done.GetProperty("generated").GetBoolean());
     }
 
+    // SPEC-20261021-agent-streaming-events RF-3: buffered path emits usage.
+    [Fact]
+    public async Task AgentStream_BufferedPath_EmitsUsage()
+    {
+        var body = await PostSseAsync("/api/agent/stream", new { prompt = "search then answer" });
+        var events = ParseSse(body);
+
+        var usage = Assert.Single(events, e => e.Event == "usage");
+        Assert.Equal(12, usage.Data.GetProperty("data").GetProperty("inputTokens").GetInt32());
+        Assert.Equal("scripted", usage.Data.GetProperty("data").GetProperty("modelId").GetString());
+
+        var done = events.Last().Data.GetProperty("data");
+        Assert.Equal(12, done.GetProperty("usage").GetProperty("inputTokens").GetInt32());
+    }
+
     [Fact]
     public async Task AgentStream_MissingPrompt_Returns400()
     {
