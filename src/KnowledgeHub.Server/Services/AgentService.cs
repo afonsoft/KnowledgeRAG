@@ -35,7 +35,8 @@ public sealed class AgentService(
     KnowledgeHubDbContext db,
     AgentOptions options,
     AgentDiagnostics diagnostics,
-    ILogger<AgentService> logger) : IAgentService
+    ILogger<AgentService> logger,
+    Chat.ChatProviderOptions chatOptions) : IAgentService
 {
     private IMcpActivityFeed? Feed => diagnostics.Feed;
     private McpEngine.Agents.ChainAst.IChainCompactor? Compactor => diagnostics.Compactor;
@@ -151,6 +152,19 @@ public sealed class AgentService(
     {
         var client = chatClient
             ?? throw new ChatProviderException("agent_chat requires a chat provider (Chat:Provider)");
+
+        // SPEC-20261021-model-capability-profiles RF-4 (opt-in): a model whose
+        // profile declares no tool support would burn every iteration asking
+        // for calls the provider cannot make — fail fast instead.
+        if (options.UseModelProfiles && chatOptions.Model is { Length: > 0 } modelName)
+        {
+            var profile = ModelProfiles.Resolve(modelName,
+                ModelProfiles.Merge(await db.ModelProfiles.AsNoTracking().ToListAsync(ct)));
+            if (profile?.SupportsToolCalls == false)
+                throw new ChatProviderException(
+                    $"model '{modelName}' does not support tool calls " +
+                    $"(model profile '{profile.ModelPattern}')");
+        }
 
         var messages = new List<ChatMessage> { new(ChatRole.System, SystemPrompt) };
 

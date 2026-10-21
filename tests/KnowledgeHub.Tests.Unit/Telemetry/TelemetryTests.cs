@@ -191,7 +191,7 @@ public sealed class TelemetryTests
         var agent = new AgentService(new TwoTurnChatClient(),
             new ServiceCollection().BuildServiceProvider(), new StubCatalog(tool), db,
             new AgentOptions(), new AgentDiagnostics(null, null, null),
-            NullLogger<AgentService>.Instance);
+            NullLogger<AgentService>.Instance, new KnowledgeHub.Server.Chat.ChatProviderOptions());
 
         var activities = CollectActivities(() =>
             agent.RunAsync(new AgentRequest { Prompt = "hi" }).GetAwaiter().GetResult());

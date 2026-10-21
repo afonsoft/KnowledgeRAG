@@ -350,7 +350,8 @@ public static class KnowledgeHubServiceCollectionExtensions
                 sp.GetService<IMcpActivityFeed>(),
                 sp.GetService<McpEngine.Agents.ChainAst.IChainCompactor>(),
                 sp.GetService<Audit.Evidence.IEvidenceChainService>()),
-            sp.GetRequiredService<ILogger<AgentService>>()));
+            sp.GetRequiredService<ILogger<AgentService>>(),
+            sp.GetRequiredService<IOptions<Chat.ChatProviderOptions>>().Value));
         services.AddScoped<IApprovalService>(sp => new ApprovalService(
             sp.GetRequiredService<Data.KnowledgeHubDbContext>(),
             TimeSpan.FromMinutes(

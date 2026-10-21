@@ -126,7 +126,8 @@ public sealed class ReviewBacklogTests
             new ScriptedChatClient(responses), services,
             new FakeCatalog(tools), db,
             new AgentOptions { RequireApprovalFor = ["*"] },
-            new AgentDiagnostics(null, null, null), NullLogger<AgentService>.Instance);
+            new AgentDiagnostics(null, null, null), NullLogger<AgentService>.Instance,
+            new KnowledgeHub.Server.Chat.ChatProviderOptions());
 
         var request = new AgentRequest { Prompt = "do it", AllowWrite = true, ThreadId = thread.Id };
         var first = await agent.RunAsync(request);

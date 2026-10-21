@@ -1,7 +1,9 @@
 using KnowledgeHub.Server.Caching;
+using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Mcp.Upstream;
 using KnowledgeHub.Server.Settings;
 using KnowledgeHub.Shared.Contracts;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 
 namespace KnowledgeHub.Server.Api;
@@ -34,8 +36,67 @@ public static class SettingsEndpoints
         MapAssistantEndpoints(group);
         MapCacheEndpoints(group);
         MapDiagnosticsEndpoints(group);
+        MapModelProfileEndpoints(group);
 
         return group;
+    }
+
+    /// <summary>SPEC-20261021-model-capability-profiles RF-3: merged catalog
+    /// read + per-pattern user overrides (builtin entries are read-only).</summary>
+    private static void MapModelProfileEndpoints(RouteGroupBuilder group)
+    {
+        group.MapGet("/model-profiles", async (KnowledgeHubDbContext db, CancellationToken ct) =>
+        {
+            var user = await db.ModelProfiles.AsNoTracking().ToListAsync(ct);
+            var merged = Agent.ModelProfiles.Merge(user)
+                .OrderByDescending(p => p.ModelPattern.TrimEnd('*').Length);
+            return Results.Ok(new { profiles = merged });
+        });
+
+        group.MapPut("/model-profiles/{pattern}", async (
+            string pattern, SaveModelProfileRequest? body,
+            KnowledgeHubDbContext db, CancellationToken ct) =>
+        {
+            if (body is null)
+                return Results.BadRequest(new { error = BodyRequired });
+            if (string.IsNullOrWhiteSpace(pattern) || pattern.Length > 200)
+                return Results.BadRequest(new { error = "pattern is required (max 200 chars)" });
+
+            var row = await db.ModelProfiles
+                .FirstOrDefaultAsync(p => p.ModelPattern == pattern, ct)
+                ?? new Domain.Entities.ModelProfile
+                {
+                    ModelPattern = pattern, Source = "user"
+                };
+            row.ContextWindowTokens = Math.Max(0, body.ContextWindowTokens);
+            row.MaxOutputTokens = body.MaxOutputTokens;
+            row.SupportsToolCalls = body.SupportsToolCalls;
+            row.SupportsStructuredOutput = body.SupportsStructuredOutput;
+            row.SupportsReasoning = body.SupportsReasoning;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            if (row.Id == 0) db.ModelProfiles.Add(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        });
+
+        group.MapDelete("/model-profiles/{pattern}", async (
+            string pattern, KnowledgeHubDbContext db, CancellationToken ct) =>
+        {
+            var removed = await db.ModelProfiles
+                .Where(p => p.ModelPattern == pattern)
+                .ExecuteDeleteAsync(ct);
+            return removed > 0 ? Results.NoContent() : Results.NotFound();
+        });
+    }
+
+    /// <summary>PUT body for model-profile overrides (SPEC-20261021 RF-3).</summary>
+    public sealed record SaveModelProfileRequest
+    {
+        public int ContextWindowTokens { get; init; }
+        public int? MaxOutputTokens { get; init; }
+        public bool SupportsToolCalls { get; init; }
+        public bool SupportsStructuredOutput { get; init; }
+        public bool SupportsReasoning { get; init; }
     }
 
     private static void MapIntegrationEndpoints(RouteGroupBuilder group)

@@ -146,7 +146,8 @@ public sealed class OpsUiPolishTests
     {
         public bool IsConfigured => true;
         public async Task<AskResponse> AnswerAsync(
-            string question, IReadOnlyList<SearchResultItem> context, CancellationToken ct = default)
+            string question, IReadOnlyList<SearchResultItem> context, CancellationToken ct = default,
+            ResponseFormatSpec? responseFormat = null)
         {
             await Task.Delay(300, ct); // LLM time must not inflate search p95
             return new AskResponse
@@ -161,7 +162,8 @@ public sealed class OpsUiPolishTests
 
         public async IAsyncEnumerable<SseEvent> StreamAsync(
             string question, IReadOnlyList<SearchResultItem> context,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default,
+            ResponseFormatSpec? responseFormat = null)
         {
             yield break;
         }
