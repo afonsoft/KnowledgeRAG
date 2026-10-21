@@ -502,6 +502,15 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.SourceQueryToolsProvider>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.ObsidianToolsProvider>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.FlowsToolsProvider>();
+        // SPEC-20261004-context-snapshots: context_save/recovery/compact tools
+        // + their services (snapshot persistence, compaction, ctx:* cache).
+        services.AddOptions<KnowledgeHub.Server.Context.ContextOptions>()
+            .Configure<IConfiguration>((options, cfg) =>
+                cfg.GetSection(KnowledgeHub.Server.Context.ContextOptions.SectionName).Bind(options));
+        services.AddSingleton<KnowledgeHub.Server.Context.ContextCompactionService>();
+        services.AddSingleton<KnowledgeHub.Server.Context.ContextCacheService>();
+        services.AddSingleton<KnowledgeHub.Server.Context.ContextSnapshotService>();
+        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.ContextToolsProvider>();
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
 

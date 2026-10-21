@@ -517,6 +517,8 @@ public partial class Program
         app.MapThreadsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapStreamingApi(); // RequireAuthorization + RequireRateLimiting applied per-endpoint inside (returns void)
         app.MapToolsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
+        // SPEC-20261004-context-snapshots RF-009: REST mirror of context_*.
+        app.MapContextApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapSettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapApiKeySettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapEvalApi().RequireAuthorization(AuthPolicies.Operational);

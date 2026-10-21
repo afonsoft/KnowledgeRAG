@@ -51,6 +51,8 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<AgentFlow> AgentFlows => Set<AgentFlow>();
     public DbSet<FlowRun> FlowRuns => Set<FlowRun>();
     public DbSet<FlowTrigger> FlowTriggers => Set<FlowTrigger>();
+    /// <summary>SPEC-20261004-context-snapshots RF-002: repo-scoped context.</summary>
+    public DbSet<ContextSnapshot> ContextSnapshots => Set<ContextSnapshot>();
 
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -405,6 +407,26 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
                 .WithMany()
                 .HasForeignKey(t => t.FlowId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SPEC-20261004-context-snapshots RF-002.
+        modelBuilder.Entity<ContextSnapshot>(e =>
+        {
+            e.HasKey(s => s.Id);
+            e.Property(s => s.RepoKey).IsRequired().HasMaxLength(201);
+            e.Property(s => s.Label).HasMaxLength(200);
+            e.Property(s => s.IdempotencyKey).HasMaxLength(128);
+            e.Property(s => s.PayloadJson).IsRequired()
+                .HasColumnType(Database.IsNpgsql() ? "jsonb" : "TEXT");
+            e.Property(s => s.Strategy).IsRequired().HasMaxLength(32);
+            e.Property(s => s.Source).IsRequired().HasMaxLength(64);
+            // Latest-by-version and dedup lookups; the CreatedAt index serves
+            // retention pruning and the REST list endpoint.
+            e.HasIndex(s => new { s.RepoKey, s.Version }).IsUnique();
+            e.HasIndex(s => new { s.RepoKey, s.IdempotencyKey }).IsUnique()
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL");
+            e.HasIndex(s => new { s.RepoKey, s.CreatedAt });
+            e.HasIndex(s => new { s.RepoKey, s.Label });
         });
     }
 }

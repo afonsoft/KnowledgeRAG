@@ -49,6 +49,7 @@ public static class ConfigurationValidator
         ValidateChat(configuration, problems);
         ValidateAuth(configuration, problems);
         ValidateRateLimiting(configuration, problems);
+        ValidateContext(configuration, problems);
 
         if (problems.Count > 0)
             throw new InvalidOperationException(
@@ -249,9 +250,35 @@ public static class ConfigurationValidator
         foreach (var key in new[]
         {
             "LlmPermitLimit", "LlmWindowSeconds", "AnonymousLlmPermitLimit",
-            "SyncPermitLimit", "SyncWindowSeconds", "GeneralPermitLimit", "GeneralWindowSeconds"
+            "SyncPermitLimit", "SyncWindowSeconds", "GeneralPermitLimit", "GeneralWindowSeconds",
+            "ContextPermitLimit", "ContextWindowSeconds"
         })
             RequirePositiveInt(section, key, "RateLimiting", problems);
+    }
+
+    /// <summary>SPEC-20261004-context-snapshots RF-010: ranged knobs for the
+    /// <c>Context:*</c> section — fail fast at startup, not at request time.</summary>
+    private static void ValidateContext(IConfiguration cfg, List<string> problems)
+    {
+        var section = cfg.GetSection("Context");
+        RequireIntRange(section, "MaxSnapshotsPerRepo", "Context", problems, 1, 500);
+        RequireIntRange(section, "MaxItemsPerSnapshot", "Context", problems, 1, 1000);
+        RequireIntRange(section, "DefaultTokenBudget", "Context", problems, 256, 32768);
+        RequireIntRange(section, "SummaryTimeoutSeconds", "Context", problems, 1, 120);
+        RequireIntRange(section, "ElisionTokenLimit", "Context", problems, 32, 32768);
+        RequireIntRange(section, "MaxPayloadBytes", "Context", problems, 1024, 4 * 1024 * 1024);
+        RequirePositiveInt(section, "KeepMinLastItems", "Context", problems);
+        RequirePositiveInt(section, "SummaryInputMaxChars", "Context", problems);
+        RequirePositiveInt(section, "SummaryMaxTokens", "Context", problems);
+    }
+
+    private static void RequireIntRange(
+        IConfigurationSection section, string key, string prefix,
+        List<string> problems, int min, int max)
+    {
+        if (section[key] is { } raw
+            && (!int.TryParse(raw, out var v) || v < min || v > max))
+            problems.Add($"{prefix}:{key} '{raw}' must be an integer in [{min},{max}]");
     }
 
     private static bool IsHttpUri(string? value) =>
