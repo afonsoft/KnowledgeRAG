@@ -78,6 +78,7 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 3. **Configurações per-key**:
    - `set_chat_settings(endpoint, model, apiKey)`: Configura modelo LLM e endpoint específicos para a sessão da chave chamadora.
    - `set_api_key_settings(provider, apiKey)`: Configura chaves de integração upstream (`firecrawl`, `deepwiki`, `tavily`, `context7`) para a sessão da chave chamadora.
+4. **Context snapshots** (SPEC-20261004): snapshots de contexto de trabalho versionados por repositório (`repo` obrigatório, `owner/name` ou URL do GitHub, normalizado lowercase). `context_save` persiste itens tipados (decision/note/passage/tool_output/summary, scan de secrets, idempotencyKey); `context_recovery` retorna o snapshot mais recente/versão/label já compactado ao `tokenBudget`; `context_compact` compacta itens ou um snapshot (elision determinística + summarization com fallback, nunca falha) e pode persistir via `save=true`. Espelho REST em `/api/context/*`. Nunca grava no vault nem em `ConversationMessage`.
 
 ### Recomendações para Agentes
 
