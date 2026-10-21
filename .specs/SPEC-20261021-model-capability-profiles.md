@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | In implementation |
+| Status | Done |
 | Ticket | [#594](https://github.com/afonsoft/KnowledgeRAG/issues/594) |
 | Escopo | Store de capacidades por modelo (`ModelProfiles`) — context window, tool support, structured output, reasoning — para dirigir budgets e validação, inspirado no `langchain-model-profiles` |
 
