@@ -64,20 +64,35 @@ flowchart LR
 
 ## How it compares
 
-| | **Knowledge MCP Hub** | LangChain stack (LangServe + LangGraph) | Open WebUI | AnythingLLM / Dify |
+Scope note: [`langchain-ai/langchain`](https://github.com/langchain-ai/langchain) is a **framework** — a monorepo of libraries (`langchain-core`, `langchain`, partners) you assemble into your own application. Knowledge MCP Hub is a **product** — a deployable platform with UI, auth, MCP server and ingestion built in. The comparison is toolkit vs appliance.
+
+| | **Knowledge MCP Hub** | LangChain stack (framework + LangGraph) | Open WebUI | AnythingLLM / Dify |
 |---|---|---|---|---|
+| What you get | Product: server + UI + MCP + A2A, ready to run | Libraries: `Runnable`/LCEL abstractions, agent factory, provider integrations — you build the app | Product | Product/platform |
 | Stack | Single .NET 10 process | Python services + separate UI | Python + Svelte/Node | Node.js/Python + web app |
-| Deploy units | 1 container (or `install.sh` on bare metal) | API + UI + vector DB + queue — usually 3+ | 1–2 containers | 2–3 containers |
-| MCP **server** | Native, hybrid transport (Streamable HTTP + SSE) | Adapter needed (LangServe isn't MCP) | Client only | Client only / limited |
+| Deploy units | 1 container (or `install.sh` on bare metal) | App + UI + vector DB + queue — usually 3+ | 1–2 containers | 2–3 containers |
+| MCP **server** | Native, hybrid transport (Streamable HTTP + SSE) | Adapter needed | Client only | Client only / limited |
 | A2A v1.0 | Agent Card + JSON-RPC + push notifications | No | No | No |
 | RAG pipeline | Hybrid FTS5+vector+graph RRF, MMR, corrective loop, eval gates | Assembled per-project (retrievers + graph) | Basic RAG | Platform RAG, varies |
-| Agent loop | Tool-calling + HITL approvals + auto-resume + task-eligible tools | LangGraph state machines (code-defined) | Function calling | Agent flows (UI-defined) |
+| Agent extensibility | Tool-calling loop + HITL approvals + auto-resume; config knobs (`Agent:*`, fallback policies) | Composable **middleware** (`wrap_model_call`/`wrap_tool_call`/`before_agent`…) + built-ins (retry, call limits, PII, HITL, summarization) | Function calling | Agent flows (UI-defined) |
+| Streaming events | SSE: `token` / `tool_start` / `tool_end` / `awaiting_approval` / `done` | `astream_events`: `text-delta`, `reasoning-delta`, `tool_call_chunk`, `usage`, `tool_output_delta` | Basic | Platform-defined |
 | Connectors | 15+ incl. Obsidian, SQL, REST, S3/Azure/OCI, RSS, YouTube, Git, Unstructured | DIY per connector | Files/URLs | Workspace docs |
 | Auth & keys | Cookie + `aft_*` keys with per-key source/tool scopes, rate limits, usage audit | Auth usually custom | Single-user/multi-user login | Workspace ACLs |
 | Persistence | SQLite by default, Postgres/pgvector opt-in | External DB required | SQLite/Postgres | External DB |
 | Observability | Serilog + OTel spans + live MCP monitor (SignalR) + eval/RAG-quality dashboards | LangSmith (SaaS) or DIY | Logs | Vendor dashboards |
 
 Differentiators in one line: **one process** that is simultaneously the admin UI, the REST API, an MCP server *and* an A2A agent — no sidecar services to wire.
+
+### What we can still borrow from LangChain
+
+Honest gaps, ordered by usefulness — tracked as improvement candidates, not commitments:
+
+- **Agent middleware model.** The loop in `AgentService` hardcodes ordering (repair → compact → model → tools → approval). LangChain v1's `AgentMiddleware` hooks (`before_agent`/`before_model`/`wrap_model_call`/`wrap_tool_call`/`after_model`/`after_agent`) would turn approvals, retries, call-limits and context compaction into composable, per-key pluggable units.
+- **Richer streaming events.** They emit `reasoning-delta`, incremental `tool_call_chunk` args, `usage` and `tool_output_delta`; we stream `token`/`tool_start`/`tool_end`. Adding reasoning traces, progressive tool args and token spend to SSE would give clients a live, auditable view.
+- **Model capability profiles.** `langchain-model-profiles` keeps per-model metadata (context window, tool support, structured output). A `ModelProfiles` store could drive `MaxIterations` defaults, context budgets and provider validation instead of free-form endpoint+model strings.
+- **Connector conformance suite.** `langchain-tests` ships shared contract tests every partner package must pass. A conformance test pack for our 15+ `ISourceConnector` implementations would enforce uniform guarantees (incremental sync, fingerprinting, secret handling).
+- **Diff-based CI test selection.** Their `check_diff.py` maps changed files to affected packages and runs only those tests. With 1567 tests on every PR, path-filtered selection would shorten feedback loops.
+- **Structured output.** Their agent factory produces schema-validated responses; `agent_chat`/`ask_knowledge` return free text + citations. A `response_format`/JSON-schema option would help programmatic consumers.
 
 ## Endpoints
 
