@@ -81,7 +81,9 @@ public class AgentApiTests : IClassFixture<AgentApiTests.Fixture>, IClassFixture
                     ModelId = "scripted",
                     Usage = new UsageDetails
                     {
-                        InputTokenCount = 12, OutputTokenCount = 3, TotalTokenCount = 15
+                        InputTokenCount = 12,
+                        OutputTokenCount = 3,
+                        TotalTokenCount = 15
                     }
                 });
             }

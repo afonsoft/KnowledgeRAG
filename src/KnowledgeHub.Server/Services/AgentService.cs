@@ -1047,8 +1047,10 @@ public sealed class AgentService(
 
         public AgentUsage? ToDto() => _seen ? new AgentUsage
         {
-            InputTokens = _in, OutputTokens = _out,
-            TotalTokens = _total, ModelId = _modelId
+            InputTokens = _in,
+            OutputTokens = _out,
+            TotalTokens = _total,
+            ModelId = _modelId
         } : null;
 
         /// <summary>Per-call SSE payload — omits counts the provider did not report.</summary>
