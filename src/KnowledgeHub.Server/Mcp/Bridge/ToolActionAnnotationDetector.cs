@@ -35,7 +35,10 @@ public static class ToolActionAnnotationDetector
         "read_document", "write_note", "set_api_key_settings", "set_chat_settings",
         "find_dependencies", "find_dependents", "find_path", "analyze_impact",
         "search_graph_temporal", "search_graph_recent", "search_graph_diverse",
-        "search_graph_relationships", "search_graph_episode"
+        "search_graph_relationships", "search_graph_episode",
+        // SPEC-20261004-context-snapshots: context_* manage caller-scoped
+        // snapshots — never auto-triggered as live actions from markers.
+        "context_save", "context_recovery", "context_compact"
     };
 
     /// <summary>Only nominations resolvable against this set are returned —

@@ -170,6 +170,9 @@ integrações mudam, e sessões ativas recebem `tools/list_changed`.
 | `find_dependencies` / `find_dependents` | Travessia GraphRAG outbound/inbound com evidência por aresta (chunk + doc + fonte) |
 | `find_path` / `analyze_impact` | Caminho mais curto entre entidades; blast radius de 1 hop com documentos de suporte |
 | `search_graph_temporal` / `search_graph_recent` | GraphRAG temporal — janela por `timeStart`/`timeEnd` (RFC3339) ou recente (`1h`/`6h`/`24h`/`7d`) sobre `ObservedAt`/`ValidFrom`/`ValidTo` |
+| `context_save` | Persiste snapshot versionado de contexto por repositório (`repo` obrigatório, `owner/name`) — itens tipados, scan de secrets, dedup por `idempotencyKey` |
+| `context_recovery` | Retorna o snapshot mais recente/versão/label compactado ao `tokenBudget` (`none`/`elision`/`elision+summary`); cache por repo com `stats.cacheHit` |
+| `context_compact` | Compacta `items` ou `fromVersion` (elision determinística + summarization LLM com fallback); `save=true` persiste como novo snapshot |
 | `search_graph_relationships` / `search_graph_diverse` | Expansão de relacionamentos em 2 hops; resultados diversificados por cluster (low/med/high) |
 | `search_graph_episode` | Retrieval escopado a um episódio de ingestão (`KgEpisode`) |
 | `ask_question`, `read_wiki_structure`, `read_wiki_contents` | Proxy upstream DeepWiki |

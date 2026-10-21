@@ -26,6 +26,13 @@ public sealed class RateLimitOptions
     /// <summary>Fixed window for the <c>sync</c> policy.</summary>
     public int SyncWindowSeconds { get; set; } = 3600;
 
+    /// <summary>Permits for the <c>context</c> MCP tool bucket
+    /// (context_save/recovery/compact — SPEC-20261004-context-snapshots RF-009).</summary>
+    public int ContextPermitLimit { get; set; } = 60;
+
+    /// <summary>Sliding window for the <c>context</c> bucket.</summary>
+    public int ContextWindowSeconds { get; set; } = 60;
+
     /// <summary>Permits for the <c>general</c> policy (remaining /api/*).</summary>
     public int GeneralPermitLimit { get; set; } = 300;
 

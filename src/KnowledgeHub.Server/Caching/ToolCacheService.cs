@@ -31,6 +31,13 @@ public sealed class ToolCacheService : IToolCacheService
         if (!_options.ToolCacheEnabled)
             return false;
 
+        // SPEC-20261004-context-snapshots D-1: context_* tools manage their own
+        // ctx:* HybridCache layer with per-repo tag invalidation. The generic
+        // key (tool,args,indexVersion) never changes on context_save, so it
+        // would serve stale `latest` reads for up to the 1h minimum TTL.
+        if (toolName.StartsWith("context_", StringComparison.Ordinal))
+            return false;
+
         if (isReadOnly)
             return true;
 

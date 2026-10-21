@@ -18,11 +18,17 @@ public sealed class McpToolRateLimiter : IDisposable
     private static readonly HashSet<string> SyncTools = new(StringComparer.Ordinal)
         { "write_knowledge", "write_note" };
 
+    // SPEC-20261004-context-snapshots RF-009: own bucket — snapshots are
+    // caller-scoped state, not llm/sync class.
+    private static readonly HashSet<string> ContextTools = new(StringComparer.Ordinal)
+        { "context_save", "context_recovery", "context_compact" };
+
     private readonly RateLimitOptions _options;
     private readonly IApiKeyRateLimitResolver _overrides;
     private readonly ILogger<McpToolRateLimiter> _logger;
     private readonly PartitionedRateLimiter<string> _llm;
     private readonly PartitionedRateLimiter<string> _sync;
+    private readonly PartitionedRateLimiter<string> _ctx;
 
     public McpToolRateLimiter(RateLimitOptions options, ILogger<McpToolRateLimiter> logger)
         : this(options, new NoOpApiKeyRateLimitResolver(), logger)
@@ -39,6 +45,10 @@ public sealed class McpToolRateLimiter : IDisposable
             o => (o.LlmPermits, o.LlmWindowSeconds));
         _sync = Build(options.SyncPermitLimit, options.SyncPermitLimit, options.SyncWindowSeconds, sliding: false,
             o => (o.SyncPermits, o.SyncWindowSeconds));
+        // Context bucket reuses the sync override fields — per-key overrides
+        // apply to it the same way.
+        _ctx = Build(options.ContextPermitLimit, options.ContextPermitLimit, options.ContextWindowSeconds, sliding: true,
+            o => (o.SyncPermits, o.SyncWindowSeconds));
     }
 
     /// <summary>
@@ -54,6 +64,8 @@ public sealed class McpToolRateLimiter : IDisposable
         var limiter = _sync;
         if (LlmTools.Contains(toolName))
             limiter = _llm;
+        else if (ContextTools.Contains(toolName))
+            limiter = _ctx;
         else if (!SyncTools.Contains(toolName))
             limiter = null;
         if (limiter is null)
@@ -141,5 +153,6 @@ public sealed class McpToolRateLimiter : IDisposable
     {
         _llm.Dispose();
         _sync.Dispose();
+        _ctx.Dispose();
     }
 }

@@ -168,6 +168,9 @@ integrations change, and live sessions get `tools/list_changed`.
 | `find_dependencies` / `find_dependents` | GraphRAG outbound/inbound traversal with evidence per edge (chunk + doc + source) |
 | `find_path` / `analyze_impact` | Shortest entity path; 1-hop blast radius with backing documents |
 | `search_graph_temporal` / `search_graph_recent` | Temporal GraphRAG — time-windowed (`timeStart`/`timeEnd` RFC3339) or recent-window (`1h`/`6h`/`24h`/`7d`) entity/edge retrieval over `ObservedAt`/`ValidFrom`/`ValidTo` |
+| `context_save` | Persists a versioned working-context snapshot per repository (`repo` required, `owner/name`) — typed items, secret scan, `idempotencyKey` dedup |
+| `context_recovery` | Returns the latest/version/label snapshot compacted to `tokenBudget` (`none`/`elision`/`elision+summary`); repo-scoped cache with `stats.cacheHit` |
+| `context_compact` | Compacts `items` or `fromVersion` (deterministic elision + optional LLM summary with fallback); `save=true` persists as a new snapshot |
 | `search_graph_relationships` / `search_graph_diverse` | 2-hop relationship expansion; cluster-diversified results (low/med/high) |
 | `search_graph_episode` | Retrieval scoped to a single ingestion episode (`KgEpisode`) |
 | `ask_question`, `read_wiki_structure`, `read_wiki_contents` | DeepWiki upstream proxy |

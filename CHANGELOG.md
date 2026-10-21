@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Context snapshots** (SPEC-20261004, issue #585) — repository-scoped working-context persistence via 3 new MCP tools + REST mirror: `context_save` (versioned, idempotencyKey, secret scan), `context_recovery` (latest/version/label, compacted to `tokenBudget`), `context_compact` (deterministic elision + optional LLM summarization with deterministic fallback, `save=true` persists). `ContextSnapshots` table on SQLite and Postgres, dedicated `ctx:*` HybridCache with per-repo tag invalidation, `context` rate-limit bucket (60/min), `Context:*` configuration block with startup validation.
+
 ## [0.2.0] - 2026-10-08
 
 ### Added
