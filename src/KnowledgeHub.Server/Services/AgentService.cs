@@ -36,10 +36,22 @@ public sealed class AgentService(
     AgentOptions options,
     AgentDiagnostics diagnostics,
     ILogger<AgentService> logger,
-    Chat.ChatProviderOptions chatOptions) : IAgentService
+    Chat.ChatProviderOptions chatOptions,
+    IEnumerable<Agent.IAgentMiddleware>? middlewares = null) : IAgentService
 {
+    // SPEC-20261021-agent-middleware-pipeline RF-2/RF-3: built-ins always run
+    // in fixed order (outermost first); DI-registered customs follow; a
+    // non-empty Agent:Middleware list re-orders/filters the resolved set.
+    private readonly AgentMiddlewarePipeline _pipeline = new(
+        new Agent.IAgentMiddleware[]
+        {
+            new Agent.TelemetryMiddleware(AgentTag),
+            new Agent.HitlApprovalMiddleware(options),
+            new Agent.IterationLimitMiddleware(options),
+            new Agent.ChainAstCompactionMiddleware(diagnostics.Compactor, options)
+        }.Concat(middlewares ?? []), options.Middleware);
+
     private IMcpActivityFeed? Feed => diagnostics.Feed;
-    private McpEngine.Agents.ChainAst.IChainCompactor? Compactor => diagnostics.Compactor;
     private Audit.Evidence.IEvidenceChainService? Evidence => diagnostics.Evidence;
 
     private const string AgentTag = "agent";
@@ -517,11 +529,6 @@ public sealed class AgentService(
     private bool IsExpired(ToolApproval approval) =>
         approval.CreatedAt + TimeSpan.FromMinutes(options.ApprovalTimeoutMinutes) < DateTimeOffset.UtcNow;
 
-    private bool RequiresApproval(CatalogTool tool) =>
-        !tool.ReadOnly
-        && (options.RequireApprovalFor.Contains("*")
-            || options.RequireApprovalFor.Contains(tool.Name, StringComparer.OrdinalIgnoreCase));
-
     private async Task<LoopState> BuildLoopAsync(
         AgentRequest request, List<ChatMessage> messages, CancellationToken ct,
         Guid? threadId = null)
@@ -633,7 +640,19 @@ public sealed class AgentService(
     {
         var sw = Stopwatch.StartNew();
         var answer = "";
+        var mwCtx = new AgentMiddlewareContext
+        {
+            Request = loop.Request,
+            Messages = loop.Messages,
+            Services = services,
+            ChatClient = client,
+            MaxIterations = loop.MaxIterations,
+            ToolCalls = loop.ToolCalls,
+            ToolsByName = loop.ToolsByName,
+            SuspendAsync = (c, rem, t) => SuspendIntoApprovalAsync(loop, c, rem, sw, t)
+        };
         using var agentSpan = Telemetry.KnowledgeHubActivity.Start("agent_chat");
+        await _pipeline.BeforeAgentAsync(mwCtx, cancellationToken);
         try
         {
             while (loop.Iterations < loop.MaxIterations && !loop.LimitReached)
@@ -643,8 +662,13 @@ public sealed class AgentService(
                 await ReportProgressAsync(loop, $"iteration {loop.Iterations}/{loop.MaxIterations} — reasoning",
                     cancellationToken);
 
-                var response = await GetIterationResponseAsync(client, loop, sink, agentSpan, cancellationToken);
+                var response = await GetIterationResponseAsync(client, loop, sink, agentSpan, mwCtx, cancellationToken);
                 loop.Messages.AddRange(response.Messages);
+                if (mwCtx.LimitReached)
+                {
+                    loop.LimitReached = true;
+                    break;
+                }
 
                 var calls = response.Messages
                     .SelectMany(m => m.Contents)
@@ -657,8 +681,11 @@ public sealed class AgentService(
                     break;
                 }
 
-                if (await DispatchCallsAsync(loop, calls, sw, sink, cancellationToken) is { } pending)
+                if (await DispatchCallsAsync(loop, calls, sw, sink, mwCtx, cancellationToken) is { } pending)
+                {
+                    await _pipeline.AfterAgentAsync(mwCtx, cancellationToken);
                     return pending;
+                }
             }
         }
         finally
@@ -689,6 +716,7 @@ public sealed class AgentService(
             throw new ChatProviderException(
                 $"structured output requested with strict=true but got {fallbackReason}");
 
+        await _pipeline.AfterAgentAsync(mwCtx, cancellationToken);
         return new AgentResponse
         {
             Answer = answer,
@@ -708,87 +736,81 @@ public sealed class AgentService(
     /// HITL approval — null otherwise.</summary>
     private async Task<AgentResponse?> DispatchCallsAsync(
         LoopState loop, List<FunctionCallContent> calls, Stopwatch sw,
-        ChannelWriter<SseEvent>? sink, CancellationToken cancellationToken)
+        ChannelWriter<SseEvent>? sink, AgentMiddlewareContext mwCtx,
+        CancellationToken cancellationToken)
     {
         for (var i = 0; i < calls.Count; i++)
         {
             var call = calls[i];
             cancellationToken.ThrowIfCancellationRequested();
+            mwCtx.RemainingCalls = calls.Skip(i + 1).ToList();
 
-            // HITL gate: mutating tool → suspend into a pending approval.
-            if (loop.ToolsByName.TryGetValue(call.Name, out var gated) && RequiresApproval(gated))
-            {
-                var approval = await SuspendAsync(loop, call, calls.Skip(i + 1).ToList(), cancellationToken);
-                logger.LogInformation("agent_chat awaiting approval {ApprovalId} for {Tool}", approval.Id, call.Name);
-                return new AgentResponse
-                {
-                    Answer = $"awaiting approval for tool '{call.Name}'",
-                    Steps = loop.Steps,
-                    ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
-                    Iterations = loop.Iterations,
-                    LatencyMs = sw.Elapsed.TotalMilliseconds,
-                    LimitReached = false,
-                    AwaitingApprovalId = approval.Id,
-                    PendingTool = call.Name,
-                    PendingArgsJson = approval.ArgumentsJson,
-                    Usage = loop.Usage.ToDto()
-                };
-            }
-
-            loop.ToolCalls++;
-            if (loop.ToolCalls > options.MaxToolCalls)
+            // SPEC-20261021-agent-middleware-pipeline RF-2: every call runs
+            // the wrap chain — HitlApprovalMiddleware gates mutating tools
+            // into a suspended response, IterationLimitMiddleware owns the
+            // tool-call budget, then the terminal dispatch executes.
+            await _pipeline.InvokeToolCallAsync(mwCtx, call,
+                async () => await ExecuteToolCallAsync(loop, call, sink, cancellationToken),
+                cancellationToken);
+            loop.ToolCalls = mwCtx.ToolCalls;
+            if (mwCtx.SuspendedResponse is { } suspended)
+                return suspended;
+            if (mwCtx.LimitReached)
             {
                 loop.LimitReached = true;
                 break;
             }
-
-            await ExecuteToolCallAsync(loop, call, sink, cancellationToken);
         }
         return null;
     }
 
-    /// <summary>One model round-trip: chain compaction, the call itself, span +
-    /// LLM-duration metric bookkeeping.</summary>
+    /// <summary>Mechanism behind <see cref="AgentMiddlewareContext.SuspendAsync"/>:
+    /// persists the pending HITL approval and builds the suspended response.</summary>
+    private async Task<AgentResponse> SuspendIntoApprovalAsync(
+        LoopState loop, FunctionCallContent call,
+        IReadOnlyList<FunctionCallContent> remainingCalls, Stopwatch sw, CancellationToken ct)
+    {
+        var approval = await SuspendAsync(loop, call, remainingCalls, ct);
+        logger.LogInformation("agent_chat awaiting approval {ApprovalId} for {Tool}", approval.Id, call.Name);
+        return new AgentResponse
+        {
+            Answer = $"awaiting approval for tool '{call.Name}'",
+            Steps = loop.Steps,
+            ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
+            Iterations = loop.Iterations,
+            LatencyMs = sw.Elapsed.TotalMilliseconds,
+            LimitReached = false,
+            AwaitingApprovalId = approval.Id,
+            PendingTool = call.Name,
+            PendingArgsJson = approval.ArgumentsJson,
+            Usage = loop.Usage.ToDto()
+        };
+    }
+
+    /// <summary>One model round-trip through the middleware wrap chain —
+    /// TelemetryMiddleware owns the iteration span + LLM metric and
+    /// ChainAstCompactionMiddleware the history compaction.</summary>
     private async Task<ChatResponse> GetIterationResponseAsync(
         IChatClient client, LoopState loop, ChannelWriter<SseEvent>? sink,
-        Activity? agentSpan, CancellationToken ct)
+        Activity? agentSpan, AgentMiddlewareContext mwCtx, CancellationToken ct)
     {
-        using var iterSpan = Telemetry.KnowledgeHubActivity.Start("agent_iteration");
-        iterSpan?.SetTag("agent.iteration", loop.Iterations);
-        var llmSw = Stopwatch.StartNew();
+        mwCtx.Iteration = loop.Iterations;
+        mwCtx.ChatClient = client;
         try
         {
-            // SPEC-20260927-chain-ast-thread-compactor: repair
-            // dangling tool calls and compact history before the
-            // model sees it (never on the persisted transcript).
-            if (Compactor is not null)
-            {
-                var ast = McpEngine.Agents.ChainAst.ChainAstParser.Parse(
-                    loop.Messages, options.ContextManagement.AutoRepairBrokenToolCalls);
-                ast = await Compactor.CompactAsync(ast, ct);
-                loop.Messages.Clear();
-                loop.Messages.AddRange(ast.ToChatMessages());
-            }
-            return await GetModelResponseAsync(client, loop, sink, ct);
+            return await _pipeline.InvokeModelCallAsync(
+                mwCtx, () => GetModelResponseAsync(client, loop, sink, ct), ct);
         }
         catch (Exception ex)
         {
-            Telemetry.KnowledgeHubActivity.Fail(iterSpan, ex);
             Telemetry.KnowledgeHubActivity.Fail(agentSpan, ex);
             throw;
         }
-        finally
-        {
-            Telemetry.KnowledgeHubMetrics.LlmDuration.Record(llmSw.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("provider", client.GetType().Name),
-                new KeyValuePair<string, object?>("model", AgentTag),
-                new KeyValuePair<string, object?>("kind", AgentTag));
-        }
     }
 
-    /// <summary>Executes one non-gated tool call: SSE events, step record,
-    /// prompt-boundary wrap, evidence receipt.</summary>
-    private async Task ExecuteToolCallAsync(
+    /// <summary>Terminal of the tool-call wrap chain: SSE events, step record,
+    /// prompt-boundary wrap, evidence receipt — returns the tool result.</summary>
+    private async Task<object?> ExecuteToolCallAsync(
         LoopState loop, FunctionCallContent call,
         ChannelWriter<SseEvent>? sink, CancellationToken ct)
     {
@@ -856,6 +878,7 @@ public sealed class AgentService(
                 call.Name ?? "",
                 Summarize(call.Arguments), result?.ToString(),
                 loop.LastReceipt, ct);
+        return result;
     }
 
     /// <summary>

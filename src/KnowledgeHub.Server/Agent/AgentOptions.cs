@@ -73,6 +73,12 @@ public sealed class AgentOptions
     /// fast instead of looping until MaxIterations. Off by default.</summary>
     public bool UseModelProfiles { get; set; }
 
+    /// <summary>SPEC-20261021-agent-middleware-pipeline RF-3: ordered list of
+    /// <see cref="IAgentMiddleware"/> names — when empty, all DI-registered
+    /// middlewares run in registration order; when set, only the named ones
+    /// run, in this order.</summary>
+    public List<string> Middleware { get; set; } = [];
+
     public sealed class QueryContextOptions
     {
         /// <summary>Pass the conversation snapshot to retrieval tools.</summary>

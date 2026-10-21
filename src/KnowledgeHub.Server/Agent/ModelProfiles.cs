@@ -31,14 +31,14 @@ public static class ModelProfiles
     private static ModelProfile P(
         string pattern, int contextWindow,
         bool tools, bool structured, bool reasoning = false) => new()
-    {
-        ModelPattern = pattern,
-        ContextWindowTokens = contextWindow,
-        SupportsToolCalls = tools,
-        SupportsStructuredOutput = structured,
-        SupportsReasoning = reasoning,
-        Source = "builtin"
-    };
+        {
+            ModelPattern = pattern,
+            ContextWindowTokens = contextWindow,
+            SupportsToolCalls = tools,
+            SupportsStructuredOutput = structured,
+            SupportsReasoning = reasoning,
+            Source = "builtin"
+        };
 
     /// <summary>Matches a pattern against a model name: "name" exact or
     /// "prefix*" wildcard. Comparison is case-insensitive.</summary>

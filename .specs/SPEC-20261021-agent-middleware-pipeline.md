@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Approved |
+| Status | In review |
 | Ticket | [#592](https://github.com/afonsoft/KnowledgeRAG/issues/592) |
 | Escopo | Refatorar o loop do `AgentService` (951 linhas, ordenação hardcoded) para um pipeline de middlewares componíveis, inspirado no `AgentMiddleware` do LangChain v1 (`before_agent`/`before_model`/`wrap_model_call`/`wrap_tool_call`/`after_model`/`after_agent`) |
 
