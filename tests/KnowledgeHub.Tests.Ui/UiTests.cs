@@ -190,9 +190,12 @@ public class UiTests : IClassFixture<UiFixture>
         await LoginViaFormAsync(page);
 
         await page.ClickAsync(".sidebar a.nav-link[href='sources']");
-        // WaitForSelector on shell chrome races the SPA navigation —
-        // wait for the URL itself instead.
-        await page.WaitForURLAsync("**/sources", new() { Timeout = 30_000 });
+        // Shell chrome exists on every page and SPA pushState is not a document
+        // navigation — poll the live URL instead of waiting on selectors or
+        // navigation events.
+        await page.WaitForFunctionAsync(
+            "() => location.pathname.endsWith('/sources')",
+            options: new() { Timeout = 30_000 });
         Assert.EndsWith("/sources", page.Url);
         await ctx.DisposeAsync();
     }
