@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Approved |
+| Status | Done |
 | Ticket | #602 |
 | Autor | Devin |
 | Data | 2026-10-22 |
