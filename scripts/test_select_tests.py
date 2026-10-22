@@ -100,6 +100,27 @@ class SelectTests(unittest.TestCase):
             ["sdks/dotnet/KnowledgeHub.Sdk/Client.cs"], GRAPH)
         self.assertEqual(["tests/KnowledgeHub.Tests.Unit"], projects)
 
+    def test_workflow_change_runs_everything(self):
+        projects, fallback, _ = sel.select(
+            [".github/workflows/ci-build-test.yml"], GRAPH)
+        self.assertTrue(fallback)
+        self.assertEqual(4, len(projects))
+
+    def test_non_workflow_github_files_ignorable(self):
+        projects, fallback, _ = sel.select(
+            [".github/dependabot.yml", ".github/CODEOWNERS"], GRAPH)
+        self.assertEqual([], projects)
+        self.assertFalse(fallback)
+
+    def test_fallback_result_is_json_serializable(self):
+        # CI serializes select() output via --format=json — the fallback
+        # branch used to return a set and crash the runner.
+        import json
+        projects, fallback, changed = sel.select(
+            [".github/workflows/ci-build-test.yml"], GRAPH)
+        self.assertTrue(fallback)
+        json.dumps({"projects": projects, "fallback": fallback, "changed": changed})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

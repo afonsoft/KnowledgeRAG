@@ -93,6 +93,10 @@ def classify(path: str, graph: dict[str, list[str]]) -> str:
         return "none"
     if path in ALL_TRIGGER_FILES:
         return "all"
+    if path.startswith(".github/"):
+        # workflow edits change CI itself — run everything; templates,
+        # CODEOWNERS, dependabot configs etc. are inert for tests.
+        return "all" if path.startswith(".github/workflows/") else "none"
     if any(path.startswith(p) for p in IGNORABLE_PREFIXES):
         return "none"
     if any(path.startswith(p) for p in NON_DOTNET_SDKS):
@@ -144,7 +148,7 @@ def select(files: list[str], graph: dict[str, list[str]]) -> tuple[list[str], bo
 
     if fallback:
         projects = sorted(d for d in graph if d.startswith("tests/"))
-        return projects, True, changed_projects.symmetric_difference(set())
+        return projects, True, sorted(changed_projects)
 
     impacted = affected(changed_projects, graph)
     projects = sorted(d for d in impacted if d.startswith("tests/"))

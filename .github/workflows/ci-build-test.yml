@@ -63,10 +63,63 @@ jobs:
       - name: Build Solution
         run: dotnet build ${{ env.SOLUTION }} --no-restore --configuration Release --verbosity minimal
 
+  # SPEC-20261021-ci-diff-test-selection: on PRs run only the test projects
+  # the diff affects (ProjectReference graph, transitive — the .NET analogue
+  # of langchain's check_diff.py). Push events always run the full suite so
+  # post-merge signal is never lost; a selector failure also falls back to
+  # the full suite. Skipped required checks report success, so a scoped-out
+  # suite never blocks the merge.
+  # NOTE: this job must never be skipped — a skipped `needs` propagates to
+  # its dependents regardless of their `if`, which would silently disable
+  # every test suite on pushes. Non-PR events emit all-true instead.
+  select-tests:
+    name: Diff-Scoped Test Selection
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      unit: ${{ steps.sel.outputs.unit }}
+      integration: ${{ steps.sel.outputs.integration }}
+      performance: ${{ steps.sel.outputs.performance }}
+      ui: ${{ steps.sel.outputs.ui }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
+        with:
+          fetch-depth: 0   # the base...HEAD merge-base diff needs history
+
+      - name: Select affected test projects
+        id: sel
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if ! python3 scripts/select-tests.py --base "origin/${{ github.base_ref }}" --format=json > sel.json; then
+              echo "::warning::select-tests.py failed — running the full suite"
+              echo '{"projects":[],"fallback":true,"changed":[]}' > sel.json
+            fi
+          else
+            echo "non-PR event — full suite"
+            echo '{"projects":[],"fallback":true,"changed":[]}' > sel.json
+          fi
+          cat sel.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          sel = json.load(open('sel.json'))
+          mapping = {
+              'unit': 'tests/KnowledgeHub.Tests.Unit',
+              'integration': 'tests/KnowledgeHub.Tests.Integration',
+              'performance': 'tests/KnowledgeHub.Tests.Performance',
+              'ui': 'tests/KnowledgeHub.Tests.Ui',
+          }
+          for key, proj in mapping.items():
+              print(f"{key}={'true' if sel['fallback'] or proj in sel['projects'] else 'false'}")
+          PY
+
   test-unit:
     name: Unit Tests (xUnit)
     runs-on: ubuntu-latest
-    needs: build-knowledgerag
+    needs: [build-knowledgerag, select-tests]
+    if: needs.select-tests.outputs.unit == 'true'
     permissions:
       contents: read
 
@@ -130,7 +183,8 @@ jobs:
   test-integration:
     name: Integration Tests (SQLite)
     runs-on: ubuntu-latest
-    needs: build-knowledgerag
+    needs: [build-knowledgerag, select-tests]
+    if: needs.select-tests.outputs.integration == 'true'
     permissions:
       contents: read
 
@@ -165,7 +219,8 @@ jobs:
   test-performance:
     name: Performance Tests (load)
     runs-on: ubuntu-latest
-    needs: build-knowledgerag
+    needs: [build-knowledgerag, select-tests]
+    if: needs.select-tests.outputs.performance == 'true'
     permissions:
       contents: read
 
@@ -246,7 +301,8 @@ jobs:
   test-ui:
     name: UI Tests (Playwright)
     runs-on: ubuntu-latest
-    needs: build-knowledgerag
+    needs: [build-knowledgerag, select-tests]
+    if: needs.select-tests.outputs.ui == 'true'
     permissions:
       contents: read
 
