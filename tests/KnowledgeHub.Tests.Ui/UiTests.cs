@@ -190,7 +190,9 @@ public class UiTests : IClassFixture<UiFixture>
         await LoginViaFormAsync(page);
 
         await page.ClickAsync(".sidebar a.nav-link[href='sources']");
-        await page.WaitForSelectorAsync(".top-row-title", new() { Timeout = 30_000 });
+        // WaitForSelector on shell chrome races the SPA navigation —
+        // wait for the URL itself instead.
+        await page.WaitForURLAsync("**/sources", new() { Timeout = 30_000 });
         Assert.EndsWith("/sources", page.Url);
         await ctx.DisposeAsync();
     }
