@@ -30,6 +30,15 @@ Special case: `KnowledgeHub.Tests.Ui` has no `ProjectReference` (it drives
 the built app), so the script adds explicit edges to `Server` + `Client`.
 
 Rationale: any ambiguity resolves to running more tests, never fewer.
-The workflow itself cannot be changed by ordinary PRs (`.github/workflows/`
-is protected) — wiring this script into `ci.yml` requires a maintainer
-edit: replace the `dotnet test` matrix with the script's output.
+
+## Workflow wiring
+
+`ci-build-test.yml` has a `select-tests` job that runs only on
+`pull_request` events: it executes the script against `origin/${{ github.base_ref }}`
+and publishes per-suite outputs (`unit`, `integration`, `performance`, `ui`).
+Each test job carries `needs: [build-knowledgerag, select-tests]` and
+`if: github.event_name != 'pull_request' || needs.select-tests.outputs.<suite> == 'true'`
+— so pushes always run the full suite (post-merge signal stays complete),
+while PRs run only the affected projects. Skipped jobs report success to
+required-check gating. A selector failure falls back to the full suite
+rather than blocking the merge.
