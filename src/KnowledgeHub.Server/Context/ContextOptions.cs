@@ -37,4 +37,9 @@ public sealed class ContextOptions
 
     /// <summary>Summarizer call timeout — own CTS, never inherits the request.</summary>
     public int SummaryTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Timeout for the context_recovery wiki enrichment call
+    /// (SPEC-20261022 RF-2) — bounded tighter than DeepWiki:TimeoutSeconds
+    /// (60s) so a slow upstream can't stall snapshot recovery.</summary>
+    public int WikiTimeoutSeconds { get; set; } = 15;
 }
