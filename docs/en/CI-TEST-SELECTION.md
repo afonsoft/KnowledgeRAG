@@ -33,12 +33,17 @@ Rationale: any ambiguity resolves to running more tests, never fewer.
 
 ## Workflow wiring
 
-`ci-build-test.yml` has a `select-tests` job that runs only on
-`pull_request` events: it executes the script against `origin/${{ github.base_ref }}`
-and publishes per-suite outputs (`unit`, `integration`, `performance`, `ui`).
-Each test job carries `needs: [build-knowledgerag, select-tests]` and
-`if: github.event_name != 'pull_request' || needs.select-tests.outputs.<suite> == 'true'`
-— so pushes always run the full suite (post-merge signal stays complete),
-while PRs run only the affected projects. Skipped jobs report success to
-required-check gating. A selector failure falls back to the full suite
-rather than blocking the merge.
+`ci-build-test.yml` has a `select-tests` job that publishes per-suite
+outputs (`unit`, `integration`, `performance`, `ui`). On `pull_request`
+it executes the script against `origin/${{ github.base_ref }}`; on every
+other event it emits all-true — pushes always run the full suite so the
+post-merge signal stays complete. Each test job carries
+`needs: [build-knowledgerag, select-tests]` and
+`if: needs.select-tests.outputs.<suite> == 'true'`.
+
+Two GitHub Actions semantics drove this shape: (a) a job that `needs` a
+*skipped* job is skipped regardless of its own `if`, so `select-tests`
+must always run (non-PR events emit all-true rather than `if:`-ing the
+job out); (b) a job skipped by its own `if` reports success to
+required-check gating, so a scoped-out suite never blocks a merge. A
+selector failure also falls back to the full suite.

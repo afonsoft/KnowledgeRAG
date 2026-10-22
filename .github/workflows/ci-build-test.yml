@@ -69,10 +69,12 @@ jobs:
   # post-merge signal is never lost; a selector failure also falls back to
   # the full suite. Skipped required checks report success, so a scoped-out
   # suite never blocks the merge.
+  # NOTE: this job must never be skipped — a skipped `needs` propagates to
+  # its dependents regardless of their `if`, which would silently disable
+  # every test suite on pushes. Non-PR events emit all-true instead.
   select-tests:
     name: Diff-Scoped Test Selection
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     permissions:
       contents: read
     outputs:
@@ -90,8 +92,13 @@ jobs:
       - name: Select affected test projects
         id: sel
         run: |
-          if ! python3 scripts/select-tests.py --base "origin/${{ github.base_ref }}" --format=json > sel.json; then
-            echo "::warning::select-tests.py failed — running the full suite"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if ! python3 scripts/select-tests.py --base "origin/${{ github.base_ref }}" --format=json > sel.json; then
+              echo "::warning::select-tests.py failed — running the full suite"
+              echo '{"projects":[],"fallback":true,"changed":[]}' > sel.json
+            fi
+          else
+            echo "non-PR event — full suite"
             echo '{"projects":[],"fallback":true,"changed":[]}' > sel.json
           fi
           cat sel.json
@@ -112,7 +119,7 @@ jobs:
     name: Unit Tests (xUnit)
     runs-on: ubuntu-latest
     needs: [build-knowledgerag, select-tests]
-    if: github.event_name != 'pull_request' || needs.select-tests.outputs.unit == 'true'
+    if: needs.select-tests.outputs.unit == 'true'
     permissions:
       contents: read
 
@@ -177,7 +184,7 @@ jobs:
     name: Integration Tests (SQLite)
     runs-on: ubuntu-latest
     needs: [build-knowledgerag, select-tests]
-    if: github.event_name != 'pull_request' || needs.select-tests.outputs.integration == 'true'
+    if: needs.select-tests.outputs.integration == 'true'
     permissions:
       contents: read
 
@@ -213,7 +220,7 @@ jobs:
     name: Performance Tests (load)
     runs-on: ubuntu-latest
     needs: [build-knowledgerag, select-tests]
-    if: github.event_name != 'pull_request' || needs.select-tests.outputs.performance == 'true'
+    if: needs.select-tests.outputs.performance == 'true'
     permissions:
       contents: read
 
@@ -295,7 +302,7 @@ jobs:
     name: UI Tests (Playwright)
     runs-on: ubuntu-latest
     needs: [build-knowledgerag, select-tests]
-    if: github.event_name != 'pull_request' || needs.select-tests.outputs.ui == 'true'
+    if: needs.select-tests.outputs.ui == 'true'
     permissions:
       contents: read
 
