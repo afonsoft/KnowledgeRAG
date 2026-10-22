@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using KnowledgeHub.Server.Context;
+using KnowledgeHub.Server.Mcp.Upstream;
+using KnowledgeHub.Server.Settings;
 using KnowledgeHub.Server.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -42,7 +44,7 @@ public sealed class ContextToolsProvider : IToolProvider
               "tool":{"type":"string","description":"Originating tool name for tool_output items"},
               "content":{"type":"string"},"score":{"type":"number"}},
             "required":["kind","content"]}},
-          "compact":{"type":"string","enum":["none","elision","elision+summary"],"description":"Compact before saving (default none)"},
+          "compact":{"type":"string","enum":["none","elision","elision+summary"],"description":"Compact before saving (default elision+summary)"},
           "tokenBudget":{"type":"integer","description":"Token budget for the optional compaction (256–32768, default 4096)"}
         },"required":["repo","items"],
         "examples":[{"repo":"afonsoft/knowledgerag","label":"sprint-42","items":[{"kind":"decision","title":"Usar Tier 4","content":"..."}],"compact":"none"}]}
@@ -54,7 +56,7 @@ public sealed class ContextToolsProvider : IToolProvider
           "version":{"type":"integer","description":"Specific version (default: latest)"},
           "label":{"type":"string","description":"Latest snapshot carrying this label (alternative to version)"},
           "tokenBudget":{"type":"integer","description":"Token budget for the returned items (clamped 256–32768, default 4096)"},
-          "strategy":{"type":"string","enum":["none","elision","elision+summary"],"description":"Compaction strategy applied to a copy (default none)"}
+          "strategy":{"type":"string","enum":["none","elision","elision+summary"],"description":"Compaction strategy applied to a copy (default elision+summary)"}
         },"required":["repo"],
         "examples":[{"repo":"afonsoft/knowledgerag","tokenBudget":2048,"strategy":"elision"}]}
         """)!.AsObject();
@@ -90,7 +92,8 @@ public sealed class ContextToolsProvider : IToolProvider
         {"type":"object","properties":{
           "repo":{"type":"string"},"version":{"type":"integer"},"label":{"type":["string","null"]},
           "createdAt":{"type":"string"},"items":{"type":"array","items":{"type":"object"}},
-          "stats":{"type":"object"},"withinBudget":{"type":"boolean"}},
+          "stats":{"type":"object"},"withinBudget":{"type":"boolean"},
+          "wiki":{"type":["string","null"],"description":"DeepWiki read_wiki_structure for the repo; null when the upstream is unavailable"}},
          "required":["repo","version","items","stats","withinBudget"]}
         """)!.AsObject();
 
@@ -160,7 +163,12 @@ public sealed class ContextToolsProvider : IToolProvider
 
     private static string Strategy(ToolCallContext ctx, string fallback)
     {
-        var s = ToolArgs.OptionalString(ctx, "strategy") ?? fallback;
+        // context_save names the arg 'compact' in its schema — read it first,
+        // then fall back to 'strategy' for callers that adopted the bug's
+        // behavior (SPEC-20261022 RF-1).
+        var s = ToolArgs.OptionalString(ctx, "compact")
+            ?? ToolArgs.OptionalString(ctx, "strategy")
+            ?? fallback;
         return s is ContextCompactionService.StrategyNone
             or ContextCompactionService.StrategyElision
             or ContextCompactionService.StrategyElisionSummary
@@ -198,7 +206,7 @@ public sealed class ContextToolsProvider : IToolProvider
         var items = ContextPayload.ParseItems(ItemsArg(ctx), options.MaxItemsPerSnapshot);
         var label = ToolArgs.OptionalString(ctx, "label");
         ContextPayload.EnsureNoSecret(label, "label");
-        var compact = Strategy(ctx, "none");
+        var compact = Strategy(ctx, ContextCompactionService.StrategyElisionSummary);
         var budget = TokenBudget(ctx, options);
 
         var compacted = false;
@@ -245,7 +253,7 @@ public sealed class ContextToolsProvider : IToolProvider
         var options = ctx.Services.GetRequiredService<IOptions<ContextOptions>>().Value;
         var service = ctx.Services.GetRequiredService<ContextSnapshotService>();
         var cache = ctx.Services.GetRequiredService<ContextCacheService>();
-        var strategy = Strategy(ctx, "none");
+        var strategy = Strategy(ctx, ContextCompactionService.StrategyElisionSummary);
         var budget = TokenBudget(ctx, options);
         var version = ToolArgs.OptionalIntOrNull(ctx, "version");
         var label = ToolArgs.OptionalString(ctx, "label");
@@ -281,12 +289,18 @@ public sealed class ContextToolsProvider : IToolProvider
             return await ToolResults.Error(
                 "context_not_found: no snapshot for the requested repo/selector");
 
+        // SPEC-20261022 RF-2: wiki enrichment lives OUTSIDE the snapshot cache
+        // — a transient upstream failure must not poison a cached entry with
+        // wiki=null, and cacheHit keeps describing only the snapshot portion.
+        var wiki = await FetchWikiStructureAsync(ctx, options, repo, ct);
+
         var stats = found.Stats with { CacheHit = hit };
         return await ToolResults.Structured(
             $"Context v{found.Version} for {repo.Key}: {found.Items.Count} items, " +
             $"{stats.TokensAfter}/{stats.Budget} tokens" +
             (hit ? " [cache hit]" : "") +
-            (found.WithinBudget ? "" : " [over budget — protected items only]"),
+            (found.WithinBudget ? "" : " [over budget — protected items only]") +
+            (wiki is null ? "" : " [+wiki]"),
             new
             {
                 repo = found.Repo,
@@ -295,8 +309,62 @@ public sealed class ContextToolsProvider : IToolProvider
                 createdAt = found.CreatedAt,
                 items = found.Items,
                 stats = StatsObject(stats),
-                withinBudget = found.WithinBudget
+                withinBudget = found.WithinBudget,
+                wiki
             });
+    }
+
+    /// <summary>Best-effort DeepWiki <c>read_wiki_structure</c> for the repo —
+    /// returns the concatenated text payload, or null on any failure mode
+    /// (provider disabled, integration toggled off, upstream error, timeout,
+    /// empty payload). Never throws: wiki is enrichment, not the payload.
+    /// </summary>
+    private static async Task<string?> FetchWikiStructureAsync(
+        ToolCallContext ctx, ContextOptions options, RepoScope repo, CancellationToken ct)
+    {
+        try
+        {
+            var deepwiki = ctx.Services.GetRequiredService<IOptions<DeepWikiOptions>>().Value;
+            if (!deepwiki.Enabled)
+                return null;
+            if (ctx.Services.GetService<IIntegrationStateService>() is { } state
+                && !await state.IsEnabledAsync(IntegrationProviders.DeepWiki, ct))
+                return null;
+
+            // Same per-key secret resolution as the passthrough provider —
+            // the caller's private key also governs this upstream call.
+            string? overrideKey = null;
+            if (CallerIdentity.TryGetApiKeyId(ctx) is { } keyId)
+            {
+                var settings = ctx.Services.GetRequiredService<IApiKeyChatSettingsService>();
+                overrideKey = await settings.GetIntegrationSecretAsync(
+                    keyId, IntegrationProviders.DeepWiki, ct);
+            }
+
+            var upstream = ctx.Services.GetRequiredService<DeepWikiUpstreamClient>();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(options.WikiTimeoutSeconds));
+            var result = await upstream.CallAsync(
+                "read_wiki_structure",
+                new Dictionary<string, JsonElement>
+                {
+                    ["repoName"] = JsonSerializer.SerializeToElement(repo.Key)
+                },
+                timeout.Token,
+                overrideKey);
+
+            if (result.IsError == true)
+                return null;
+            var text = string.Join('\n', result.Content
+                .OfType<TextContentBlock>()
+                .Select(b => b.Text)
+                .Where(t => !string.IsNullOrWhiteSpace(t)));
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private sealed record RecoveryResponse(

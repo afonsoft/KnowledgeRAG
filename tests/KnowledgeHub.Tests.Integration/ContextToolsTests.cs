@@ -175,6 +175,7 @@ public class ContextToolsTests : IClassFixture<ContextToolsTests.Fixture>
             arguments = new
             {
                 repo,
+                compact = "none", // SPEC-20261022: raw storage — default now compacts on save
                 items = new object[]
                 {
                     new { kind = "tool_output", tool = "search_knowledge", content = big },
@@ -286,6 +287,7 @@ public class ContextToolsTests : IClassFixture<ContextToolsTests.Fixture>
             arguments = new
             {
                 repo,
+                compact = "none", // SPEC-20261022: raw v1 — default now compacts on save
                 items = new object[]
                 {
                     new { kind = "tool_output", tool = "t", content = big },
@@ -418,6 +420,94 @@ public class ContextToolsTests : IClassFixture<ContextToolsTests.Fixture>
         var s = Structured(res);
         Assert.Single(s.GetProperty("compacted").EnumerateArray());
         Assert.False(s.GetProperty("savedVersion").ValueKind is JsonValueKind.Number);
+    }
+
+    // ---- SPEC-20261022-context-recovery-wiki-and-compact-default -----------
+
+    [Fact]
+    public async Task Save_DefaultStrategy_IsElisionSummary()
+    {
+        var mcp = await ConnectAsync(_factory);
+        var save = await mcp.SendAsync("tools/call", new
+        {
+            name = "context_save",
+            arguments = new { repo = Repo(), items = new[] { new { kind = "note", content = "n" } } }
+        });
+        var s = Structured(save);
+        Assert.Equal("elision+summary", s.GetProperty("strategy").GetString());
+        Assert.True(s.GetProperty("compacted").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Save_CompactArg_IsHonored()
+    {
+        // The documented arg is 'compact'; previously the handler read
+        // 'strategy' and ignored it (SPEC-20261022 RF-1 fix).
+        var mcp = await ConnectAsync(_factory);
+        var repo = Repo();
+        var save = await mcp.SendAsync("tools/call", new
+        {
+            name = "context_save",
+            arguments = new
+            {
+                repo,
+                compact = "none",
+                items = new[] { new { kind = "note", content = "n" } }
+            }
+        });
+        Assert.Equal("none", Structured(save).GetProperty("strategy").GetString());
+        Assert.False(Structured(save).GetProperty("compacted").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Recovery_DefaultStrategy_ElidesCopy()
+    {
+        var mcp = await ConnectAsync(_factory);
+        var repo = Repo();
+        await mcp.SendAsync("tools/call", new
+        {
+            name = "context_save",
+            arguments = new
+            {
+                repo,
+                compact = "none",
+                items = new object[]
+                {
+                    new { kind = "tool_output", tool = "t", content = new string('q', 3000) },
+                    new { kind = "note", content = "t1" },
+                    new { kind = "note", content = "t2" },
+                    new { kind = "note", content = "t3" }
+                }
+            }
+        });
+        var rec = await mcp.SendAsync("tools/call", new
+        {
+            name = "context_recovery",
+            arguments = new { repo } // no strategy — default is elision+summary
+        });
+        var first = Structured(rec).GetProperty("items")[0];
+        Assert.StartsWith("[Output elided:", first.GetProperty("content").GetString());
+    }
+
+    [Fact]
+    public async Task Recovery_WikiField_NullWhenDeepWikiDisabled()
+    {
+        // Fixture sets DeepWiki:Enabled=false — enrichment must degrade to
+        // wiki=null without failing the recovery (SPEC-20261022 RF-2).
+        var mcp = await ConnectAsync(_factory);
+        var repo = Repo();
+        await mcp.SendAsync("tools/call", new
+        {
+            name = "context_save",
+            arguments = new { repo, items = new[] { new { kind = "note", content = "n" } } }
+        });
+        var rec = await mcp.SendAsync("tools/call", new
+        {
+            name = "context_recovery",
+            arguments = new { repo }
+        });
+        Assert.False(rec.GetProperty("isError").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, Structured(rec).GetProperty("wiki").ValueKind);
     }
 
     [Fact]
