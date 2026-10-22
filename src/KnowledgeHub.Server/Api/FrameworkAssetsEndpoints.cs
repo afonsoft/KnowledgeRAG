@@ -41,12 +41,13 @@ public static partial class FrameworkAssetsEndpoints
             return Results.NotFound();
 
         var root = env.WebRootFileProvider;
-        var file = root.GetFileInfo($"_framework/{fileName}");
-        if (!file.Exists || file.IsDirectory)
+        var resolved = ResolveFrameworkFile(root, fileName);
+        if (resolved is null)
             return Results.NotFound();
+        var (dir, file) = resolved.Value;
 
         // Publish emits .br/.gz siblings for every asset; dev emits .gz.
-        var compressed = TryCompressed(root, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
+        var compressed = TryCompressed(root, dir, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
 
         http.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
         // Shared caches (corporate proxies) must key on Accept-Encoding.
@@ -66,9 +67,10 @@ public static partial class FrameworkAssetsEndpoints
 
         var fileName = $"{stem}.{ext}";
         var root = env.WebRootFileProvider;
-        var file = root.GetFileInfo($"_framework/{fileName}");
-        if (!file.Exists || file.IsDirectory)
+        var resolved = ResolveFrameworkFile(root, fileName);
+        if (resolved is null)
             return Results.NotFound();
+        var (dir, file) = resolved.Value;
 
         http.Response.Headers.CacheControl = "public,max-age=31536000,immutable";
 
@@ -82,13 +84,35 @@ public static partial class FrameworkAssetsEndpoints
         }
 
         http.Response.Headers.Vary = "Accept-Encoding";
-        var compressed = TryCompressed(root, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
+        var compressed = TryCompressed(root, dir, fileName, http.Request.Headers.AcceptEncoding.ToString(), out var encoding);
         if (compressed is not null)
         {
             http.Response.Headers.ContentEncoding = encoding;
             return Results.File(compressed.CreateReadStream(), ContentType(ext));
         }
         return Results.File(file.CreateReadStream(), ContentType(ext));
+    }
+
+    /// <summary>Resolves a boot asset under <c>_framework</c>: root first, then
+    /// the culture subdirectories (<c>_framework/{culture}/</c>) where satellite
+    /// resource assemblies publish — the mirror URL carries no culture segment.
+    /// Returns the resolved directory plus the file.</summary>
+    private static (string Dir, IFileInfo File)? ResolveFrameworkFile(
+        IFileProvider root, string fileName)
+    {
+        var direct = root.GetFileInfo($"_framework/{fileName}");
+        if (direct.Exists && !direct.IsDirectory)
+            return ("_framework", direct);
+
+        var contents = root.GetDirectoryContents("_framework");
+        if (contents.Exists)
+            foreach (var sub in contents.Where(d => d.IsDirectory))
+            {
+                var candidate = root.GetFileInfo($"_framework/{sub.Name}/{fileName}");
+                if (candidate.Exists && !candidate.IsDirectory)
+                    return ($"_framework/{sub.Name}", candidate);
+            }
+        return null;
     }
 
     private static string ContentType(string ext) => ext switch
@@ -99,13 +123,13 @@ public static partial class FrameworkAssetsEndpoints
         _ => "application/octet-stream"
     };
 
-    private static IFileInfo? TryCompressed(IFileProvider root, string fileName, string acceptEncoding, out string encoding)
+    private static IFileInfo? TryCompressed(IFileProvider root, string dir, string fileName, string acceptEncoding, out string encoding)
     {
         foreach (var (suffix, enc) in new[] { (".br", "br"), (".gz", "gzip") })
         {
             if (!acceptEncoding.Contains(enc, StringComparison.OrdinalIgnoreCase))
                 continue;
-            var sibling = root.GetFileInfo($"_framework/{fileName}{suffix}");
+            var sibling = root.GetFileInfo($"{dir}/{fileName}{suffix}");
             if (sibling.Exists && !sibling.IsDirectory)
             {
                 encoding = enc;
