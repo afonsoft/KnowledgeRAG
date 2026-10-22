@@ -238,6 +238,50 @@ public class FrameworkAssetsTests
         Assert.Equal("application/octet-stream", response.Content.Headers.ContentType?.MediaType);
     }
 
+    private static IFileInfo PickCultureSatellite(IWebHostEnvironment env) =>
+        env.WebRootFileProvider.GetDirectoryContents("_framework")
+            .Where(d => d.IsDirectory)
+            .Select(d => env.WebRootFileProvider.GetDirectoryContents($"_framework/{d.Name}")
+                .FirstOrDefault(f => !f.IsDirectory && f.Name.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase)))
+            .First(f => f is { Exists: true })!;
+
+    [Fact]
+    public async Task GetStemExt_CultureSatellite_ResolvesSubdirectory()
+    {
+        // Culture satellites publish under _framework/{culture}/ but the mirror
+        // URL carries no culture segment — the endpoint must probe subdirs
+        // (production gap: proxies blocking .wasm would lose the satellite).
+        await using var factory = new Fixture();
+        var env = factory.Services.GetRequiredService<IWebHostEnvironment>();
+        var satellite = PickCultureSatellite(env);
+
+        var (stem, ext) = Split(satellite.Name);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/framework-assets/{stem}/{ext}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/wasm", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task GetStemExt_CultureSatellite_EncB64_ByteIdentical()
+    {
+        await using var factory = new Fixture();
+        var env = factory.Services.GetRequiredService<IWebHostEnvironment>();
+        var satellite = PickCultureSatellite(env);
+
+        var (stem, ext) = Split(satellite.Name);
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/framework-assets/{stem}/{ext}?enc=b64");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var expected = new MemoryStream();
+        await satellite.CreateReadStream().CopyToAsync(expected);
+        Assert.Equal(expected.ToArray(), Convert.FromBase64String(await response.Content.ReadAsStringAsync()));
+    }
+
     [Fact]
     public async Task GetStemExt_UnknownStem_Returns404()
     {
