@@ -1285,6 +1285,48 @@ namespace KnowledgeHub.Server.Migrations
                     b.ToTable("McpTasks");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ModelProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ContextWindowTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ModelPattern")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("SupportsReasoning")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("SupportsStructuredOutput")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("SupportsToolCalls")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModelPattern")
+                        .IsUnique();
+
+                    b.ToTable("ModelProfiles");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.RagEvaluationEntity", b =>
                 {
                     b.Property<Guid>("Id")

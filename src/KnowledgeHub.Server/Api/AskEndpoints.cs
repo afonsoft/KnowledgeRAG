@@ -34,6 +34,10 @@ public static class AskEndpoints
         if (!Search.ResolvedSearchFilter.TryResolve(request.Filters, out var filter, out var filterError))
             return Results.BadRequest(new { error = filterError });
 
+        // SPEC-20261021-agent-structured-output RF-5: invalid schema → 400.
+        try { Agent.StructuredOutput.Validate(request.ResponseFormat); }
+        catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+
         var generate = request.Generate ?? answers.IsConfigured;
         var k = request.TopK is null or <= 0 ? SearchEndpoints.DefaultTopK : Math.Min(request.TopK.Value, SearchEndpoints.MaxTopK);
         var outcome = await retrieval.RetrieveAsync(request.Question, k, request.SourceId, mode.Value, filter, ct: ct);
@@ -64,7 +68,7 @@ public static class AskEndpoints
         if (!answers.IsConfigured)
             return Results.BadRequest(new { error = "chat provider not configured (Chat:Provider=none)" });
 
-        var answer = (await answers.AnswerAsync(request.Question, context, ct)) with
+        var answer = (await answers.AnswerAsync(request.Question, context, ct, request.ResponseFormat)) with
         {
             RetrievalGrade = grade,
             Retried = outcome.Retried

@@ -61,11 +61,31 @@ public class AgentApiTests : IClassFixture<AgentApiTests.Fixture>, IClassFixture
             var wantsWrite = messages.Any(m => m.Role == ChatRole.User && (m.Text ?? "").Contains("WRITE_TEST"));
             var hasToolResult = messages.SelectMany(m => m.Contents).OfType<FunctionResultContent>().Any();
 
+            // SPEC-20261021-agent-structured-output RF-6: FAIL_FORMAT simulates a
+            // provider that rejects JSON mode; otherwise honor it with JSON.
+            if (options?.ResponseFormat is ChatResponseFormatJson
+                && messages.Any(m => m.Role == ChatRole.User && (m.Text ?? "").Contains("FAIL_FORMAT")))
+                throw new NotSupportedException("json mode not supported");
+
             if (!loopForever && hasToolResult)
             {
+                if (options?.ResponseFormat is ChatResponseFormatJson)
+                {
+                    return Task.FromResult(new ChatResponse(
+                        new ChatMessage(ChatRole.Assistant, "{\"answer\":\"structured final\"}"))
+                    { ModelId = "scripted" });
+                }
                 return Task.FromResult(new ChatResponse(
                     new ChatMessage(ChatRole.Assistant, "agent final answer"))
-                { ModelId = "scripted" });
+                {
+                    ModelId = "scripted",
+                    Usage = new UsageDetails
+                    {
+                        InputTokenCount = 12,
+                        OutputTokenCount = 3,
+                        TotalTokenCount = 15
+                    }
+                });
             }
 
             // WRITE_TEST: exercise a mutating tool end-to-end when it is exposed.
@@ -201,6 +221,69 @@ public class AgentApiTests : IClassFixture<AgentApiTests.Fixture>, IClassFixture
         Assert.True(result.LimitReached);
         Assert.Equal(2, result.Iterations);
         Assert.Contains("iteration limit reached", result.Answer);
+    }
+
+    // SPEC-20261021-agent-structured-output RF-1/3: honored format → parsed JSON.
+    [Fact]
+    public async Task Agent_StructuredOutput_ReturnsParsedJson()
+    {
+        var response = await _client.PostAsJsonAsync("/api/agent", new
+        {
+            prompt = "search then answer",
+            responseFormat = new
+            {
+                type = "json_schema",
+                jsonSchema = new
+                {
+                    name = "answer",
+                    schema = new { type = "object" }
+                }
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = (await response.Content.ReadFromJsonAsync<AgentResponse>())!;
+        Assert.NotNull(result.StructuredOutput);
+        Assert.Equal("structured final",
+            result.StructuredOutput.Value.GetProperty("answer").GetString());
+        Assert.Null(result.StructuredOutputFallbackReason);
+    }
+
+    // SPEC-20261021-agent-structured-output RF-3: provider no-support → fallback.
+    [Fact]
+    public async Task Agent_StructuredOutput_ProviderNoSupport_FallsBack()
+    {
+        var response = await _client.PostAsJsonAsync("/api/agent", new
+        {
+            prompt = "FAIL_FORMAT search then answer",
+            responseFormat = new
+            {
+                type = "json_schema",
+                jsonSchema = new { name = "answer", schema = new { type = "object" } }
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = (await response.Content.ReadFromJsonAsync<AgentResponse>())!;
+        Assert.Null(result.StructuredOutput);
+        Assert.Equal("provider_no_support", result.StructuredOutputFallbackReason);
+        Assert.Equal("agent final answer", result.Answer);
+    }
+
+    // SPEC-20261021-agent-structured-output RF-5: malformed schema → 400.
+    [Fact]
+    public async Task Agent_InvalidResponseFormat_Returns400()
+    {
+        var response = await _client.PostAsJsonAsync("/api/agent", new
+        {
+            prompt = "x",
+            responseFormat = new
+            {
+                type = "json_schema",
+                jsonSchema = new { name = "bad name!", schema = new { type = "object" } }
+            }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

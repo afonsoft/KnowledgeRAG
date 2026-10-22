@@ -21,6 +21,9 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<IntegrationSecret> IntegrationSecrets => Set<IntegrationSecret>();
     public DbSet<IntegrationState> IntegrationStates => Set<IntegrationState>();
     public DbSet<ChatSettings> ChatSettings => Set<ChatSettings>();
+    /// <summary>SPEC-20261021-model-capability-profiles RF-1: user overrides;
+    /// builtin profiles live in <see cref="Agent.ModelProfiles"/>.</summary>
+    public DbSet<ModelProfile> ModelProfiles => Set<ModelProfile>();
 
     public DbSet<EmbeddingSettings> EmbeddingSettings => Set<EmbeddingSettings>();
     public DbSet<GraphSettings> GraphSettings => Set<GraphSettings>();
@@ -200,6 +203,14 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.HasKey(s => s.Id);
             e.Property(s => s.Endpoint).IsRequired().HasMaxLength(512);
             e.Property(s => s.Model).IsRequired().HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<ModelProfile>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.Property(p => p.ModelPattern).IsRequired().HasMaxLength(200);
+            e.Property(p => p.Source).IsRequired().HasMaxLength(20);
+            e.HasIndex(p => p.ModelPattern).IsUnique();
         });
 
         modelBuilder.Entity<EmbeddingSettings>(e =>

@@ -61,7 +61,8 @@ public sealed class AgentRuntimeHardeningTests
         var chat = new CapturingChatClient();
         var services = new ServiceCollection().BuildServiceProvider();
         var agent = new AgentService(chat, services, catalog, db, new AgentOptions(),
-            new AgentDiagnostics(null, null, null), NullLogger<AgentService>.Instance);
+            new AgentDiagnostics(null, null, null), NullLogger<AgentService>.Instance,
+            new KnowledgeHub.Server.Chat.ChatProviderOptions());
 
         var response = await agent.RunAsync(new AgentRequest { Prompt = "hi" });
 

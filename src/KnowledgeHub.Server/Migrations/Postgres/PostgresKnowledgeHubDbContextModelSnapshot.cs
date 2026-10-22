@@ -1301,6 +1301,50 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.ToTable("McpTasks");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ModelProfile", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ContextWindowTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxOutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ModelPattern")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("SupportsReasoning")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsStructuredOutput")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsToolCalls")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModelPattern")
+                        .IsUnique();
+
+                    b.ToTable("ModelProfiles");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.RagEvaluationEntity", b =>
                 {
                     b.Property<Guid>("Id")

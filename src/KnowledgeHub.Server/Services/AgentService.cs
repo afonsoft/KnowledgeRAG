@@ -35,10 +35,23 @@ public sealed class AgentService(
     KnowledgeHubDbContext db,
     AgentOptions options,
     AgentDiagnostics diagnostics,
-    ILogger<AgentService> logger) : IAgentService
+    ILogger<AgentService> logger,
+    Chat.ChatProviderOptions chatOptions,
+    IEnumerable<Agent.IAgentMiddleware>? middlewares = null) : IAgentService
 {
+    // SPEC-20261021-agent-middleware-pipeline RF-2/RF-3: built-ins always run
+    // in fixed order (outermost first); DI-registered customs follow; a
+    // non-empty Agent:Middleware list re-orders/filters the resolved set.
+    private readonly AgentMiddlewarePipeline _pipeline = new(
+        new Agent.IAgentMiddleware[]
+        {
+            new Agent.TelemetryMiddleware(AgentTag),
+            new Agent.HitlApprovalMiddleware(options),
+            new Agent.IterationLimitMiddleware(options),
+            new Agent.ChainAstCompactionMiddleware(diagnostics.Compactor, options)
+        }.Concat(middlewares ?? []), options.Middleware);
+
     private IMcpActivityFeed? Feed => diagnostics.Feed;
-    private McpEngine.Agents.ChainAst.IChainCompactor? Compactor => diagnostics.Compactor;
     private Audit.Evidence.IEvidenceChainService? Evidence => diagnostics.Evidence;
 
     private const string AgentTag = "agent";
@@ -55,8 +68,34 @@ public sealed class AgentService(
     {
         var prep = await PrepareAsync(request, cancellationToken);
         var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken, prep.Thread?.Id);
-        var result = await RunLoopAsync(prep.Client, loop, cancellationToken);
+        var result = await RunWithFormatFallbackAsync(request, prep, loop, null, cancellationToken);
         return await CompleteAsync(prep, request, result, cancellationToken);
+    }
+
+    /// <summary>SPEC-20261021-agent-structured-output RF-3: when the provider
+    /// cannot honor the requested format, retry once without it (unless
+    /// strict) and report provider_no_support — the raw text still answers.</summary>
+    private async Task<AgentResponse> RunWithFormatFallbackAsync(
+        AgentRequest request, Preparation prep, LoopState loop,
+        ChannelWriter<SseEvent>? sink, CancellationToken ct)
+    {
+        if (request.ResponseFormat?.JsonSchema?.Strict == true)
+            return await RunLoopAsync(prep.Client, loop, ct, sink);
+        var freshMessages = loop.Messages.ToList(); // snapshot before the run mutates
+        try
+        {
+            return await RunLoopAsync(prep.Client, loop, ct, sink);
+        }
+        catch (Exception ex) when (request.ResponseFormat is not null
+            && ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "agent_chat responseFormat rejected — retrying without structured output");
+            var retry = await BuildLoopAsync(request, freshMessages, ct, prep.Thread?.Id);
+            retry.ChatOptions.ResponseFormat = null; // retry speaks plain text
+            retry.FormatFallback = StructuredOutput.ProviderNoSupport;
+            return await RunLoopAsync(prep.Client, retry, ct, sink);
+        }
     }
 
     /// <inheritdoc />
@@ -67,7 +106,7 @@ public sealed class AgentService(
         var loop = await BuildLoopAsync(request, prep.Messages, cancellationToken, prep.Thread?.Id);
 
         var channel = CreateEventChannel(options.SseChannelCapacity);
-        var run = RunLoopAsync(prep.Client, loop, cancellationToken, channel.Writer);
+        var run = RunWithFormatFallbackAsync(request, prep, loop, channel.Writer, cancellationToken);
 
         await foreach (var e in channel.Reader.ReadAllAsync(cancellationToken))
             yield return e;
@@ -125,6 +164,19 @@ public sealed class AgentService(
     {
         var client = chatClient
             ?? throw new ChatProviderException("agent_chat requires a chat provider (Chat:Provider)");
+
+        // SPEC-20261021-model-capability-profiles RF-4 (opt-in): a model whose
+        // profile declares no tool support would burn every iteration asking
+        // for calls the provider cannot make — fail fast instead.
+        if (options.UseModelProfiles && chatOptions.Model is { Length: > 0 } modelName)
+        {
+            var profile = ModelProfiles.Resolve(modelName,
+                ModelProfiles.Merge(await db.ModelProfiles.AsNoTracking().ToListAsync(ct)));
+            if (profile?.SupportsToolCalls == false)
+                throw new ChatProviderException(
+                    $"model '{modelName}' does not support tool calls " +
+                    $"(model profile '{profile.ModelPattern}')");
+        }
 
         var messages = new List<ChatMessage> { new(ChatRole.System, SystemPrompt) };
 
@@ -477,11 +529,6 @@ public sealed class AgentService(
     private bool IsExpired(ToolApproval approval) =>
         approval.CreatedAt + TimeSpan.FromMinutes(options.ApprovalTimeoutMinutes) < DateTimeOffset.UtcNow;
 
-    private bool RequiresApproval(CatalogTool tool) =>
-        !tool.ReadOnly
-        && (options.RequireApprovalFor.Contains("*")
-            || options.RequireApprovalFor.Contains(tool.Name, StringComparer.OrdinalIgnoreCase));
-
     private async Task<LoopState> BuildLoopAsync(
         AgentRequest request, List<ChatMessage> messages, CancellationToken ct,
         Guid? threadId = null)
@@ -518,7 +565,7 @@ public sealed class AgentService(
             Functions = functions,
             // RF-002: tool list is fixed at build time — one ChatOptions per run
             // instead of reserializing schemas every iteration.
-            ChatOptions = new ChatOptions { Tools = [.. functions] },
+            ChatOptions = BuildChatOptions(functions, request.ResponseFormat),
             ToolsByName = visible.ToDictionary(t => t.Name),
             MaxIterations = maxIterations,
             Request = request,
@@ -526,6 +573,18 @@ public sealed class AgentService(
             // receipts for this run chain under one session id.
             EvidenceSessionId = $"agent:{threadId?.ToString("N") ?? request.ThreadId?.ToString("N") ?? "ephemeral"}"
         };
+    }
+
+    /// <summary>SPEC-20261021-agent-structured-output: validates the requested
+    /// format (RF-5 → 400) and maps it to M.E.AI ResponseFormat (RF-2).</summary>
+    private static ChatOptions BuildChatOptions(
+        List<AIFunction> functions, ResponseFormatSpec? format)
+    {
+        StructuredOutput.Validate(format);
+        var opts = new ChatOptions { Tools = [.. functions] };
+        if (format is not null)
+            opts.ResponseFormat = StructuredOutput.ToChatFormat(format);
+        return opts;
     }
 
     /// <summary>SPEC-20260924-conversational-query-context: last N user/assistant
@@ -581,7 +640,19 @@ public sealed class AgentService(
     {
         var sw = Stopwatch.StartNew();
         var answer = "";
+        var mwCtx = new AgentMiddlewareContext
+        {
+            Request = loop.Request,
+            Messages = loop.Messages,
+            Services = services,
+            ChatClient = client,
+            MaxIterations = loop.MaxIterations,
+            ToolCalls = loop.ToolCalls,
+            ToolsByName = loop.ToolsByName,
+            SuspendAsync = (c, rem, t) => SuspendIntoApprovalAsync(loop, c, rem, sw, t)
+        };
         using var agentSpan = Telemetry.KnowledgeHubActivity.Start("agent_chat");
+        await _pipeline.BeforeAgentAsync(mwCtx, cancellationToken);
         try
         {
             while (loop.Iterations < loop.MaxIterations && !loop.LimitReached)
@@ -591,8 +662,13 @@ public sealed class AgentService(
                 await ReportProgressAsync(loop, $"iteration {loop.Iterations}/{loop.MaxIterations} — reasoning",
                     cancellationToken);
 
-                var response = await GetIterationResponseAsync(client, loop, sink, agentSpan, cancellationToken);
+                var response = await GetIterationResponseAsync(client, loop, sink, agentSpan, mwCtx, cancellationToken);
                 loop.Messages.AddRange(response.Messages);
+                if (mwCtx.LimitReached)
+                {
+                    loop.LimitReached = true;
+                    break;
+                }
 
                 var calls = response.Messages
                     .SelectMany(m => m.Contents)
@@ -605,8 +681,11 @@ public sealed class AgentService(
                     break;
                 }
 
-                if (await DispatchCallsAsync(loop, calls, sw, sink, cancellationToken) is { } pending)
+                if (await DispatchCallsAsync(loop, calls, sw, sink, mwCtx, cancellationToken) is { } pending)
+                {
+                    await _pipeline.AfterAgentAsync(mwCtx, cancellationToken);
                     return pending;
+                }
             }
         }
         finally
@@ -625,6 +704,19 @@ public sealed class AgentService(
             "agent_chat finished: {Iterations} iterations, {ToolCalls} tool calls, limit={LimitReached}",
             loop.Iterations, loop.ToolCalls, loop.LimitReached);
 
+        // SPEC-20261021 RF-3: parse the answer as JSON when a format was asked;
+        // report invalid_json (or the retry's provider_no_support) otherwise.
+        var structured = loop.FormatFallback is null && loop.Request.ResponseFormat is not null
+            ? StructuredOutput.TryParse(answer)
+            : (JsonElement?)null;
+        var fallbackReason = loop.FormatFallback
+            ?? (loop.Request.ResponseFormat is not null && structured is null
+                ? StructuredOutput.InvalidJson : null);
+        if (fallbackReason is not null && loop.Request.ResponseFormat?.JsonSchema?.Strict == true)
+            throw new ChatProviderException(
+                $"structured output requested with strict=true but got {fallbackReason}");
+
+        await _pipeline.AfterAgentAsync(mwCtx, cancellationToken);
         return new AgentResponse
         {
             Answer = answer,
@@ -632,7 +724,10 @@ public sealed class AgentService(
             ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
             Iterations = loop.Iterations,
             LatencyMs = sw.Elapsed.TotalMilliseconds,
-            LimitReached = loop.LimitReached
+            LimitReached = loop.LimitReached,
+            Usage = loop.Usage.ToDto(),
+            StructuredOutput = structured,
+            StructuredOutputFallbackReason = fallbackReason
         };
     }
 
@@ -641,86 +736,81 @@ public sealed class AgentService(
     /// HITL approval — null otherwise.</summary>
     private async Task<AgentResponse?> DispatchCallsAsync(
         LoopState loop, List<FunctionCallContent> calls, Stopwatch sw,
-        ChannelWriter<SseEvent>? sink, CancellationToken cancellationToken)
+        ChannelWriter<SseEvent>? sink, AgentMiddlewareContext mwCtx,
+        CancellationToken cancellationToken)
     {
         for (var i = 0; i < calls.Count; i++)
         {
             var call = calls[i];
             cancellationToken.ThrowIfCancellationRequested();
+            mwCtx.RemainingCalls = calls.Skip(i + 1).ToList();
 
-            // HITL gate: mutating tool → suspend into a pending approval.
-            if (loop.ToolsByName.TryGetValue(call.Name, out var gated) && RequiresApproval(gated))
-            {
-                var approval = await SuspendAsync(loop, call, calls.Skip(i + 1).ToList(), cancellationToken);
-                logger.LogInformation("agent_chat awaiting approval {ApprovalId} for {Tool}", approval.Id, call.Name);
-                return new AgentResponse
-                {
-                    Answer = $"awaiting approval for tool '{call.Name}'",
-                    Steps = loop.Steps,
-                    ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
-                    Iterations = loop.Iterations,
-                    LatencyMs = sw.Elapsed.TotalMilliseconds,
-                    LimitReached = false,
-                    AwaitingApprovalId = approval.Id,
-                    PendingTool = call.Name,
-                    PendingArgsJson = approval.ArgumentsJson
-                };
-            }
-
-            loop.ToolCalls++;
-            if (loop.ToolCalls > options.MaxToolCalls)
+            // SPEC-20261021-agent-middleware-pipeline RF-2: every call runs
+            // the wrap chain — HitlApprovalMiddleware gates mutating tools
+            // into a suspended response, IterationLimitMiddleware owns the
+            // tool-call budget, then the terminal dispatch executes.
+            await _pipeline.InvokeToolCallAsync(mwCtx, call,
+                async () => await ExecuteToolCallAsync(loop, call, sink, cancellationToken),
+                cancellationToken);
+            loop.ToolCalls = mwCtx.ToolCalls;
+            if (mwCtx.SuspendedResponse is { } suspended)
+                return suspended;
+            if (mwCtx.LimitReached)
             {
                 loop.LimitReached = true;
                 break;
             }
-
-            await ExecuteToolCallAsync(loop, call, sink, cancellationToken);
         }
         return null;
     }
 
-    /// <summary>One model round-trip: chain compaction, the call itself, span +
-    /// LLM-duration metric bookkeeping.</summary>
+    /// <summary>Mechanism behind <see cref="AgentMiddlewareContext.SuspendAsync"/>:
+    /// persists the pending HITL approval and builds the suspended response.</summary>
+    private async Task<AgentResponse> SuspendIntoApprovalAsync(
+        LoopState loop, FunctionCallContent call,
+        IReadOnlyList<FunctionCallContent> remainingCalls, Stopwatch sw, CancellationToken ct)
+    {
+        var approval = await SuspendAsync(loop, call, remainingCalls, ct);
+        logger.LogInformation("agent_chat awaiting approval {ApprovalId} for {Tool}", approval.Id, call.Name);
+        return new AgentResponse
+        {
+            Answer = $"awaiting approval for tool '{call.Name}'",
+            Steps = loop.Steps,
+            ToolCalls = loop.Steps.Select(s => s.Tool).ToList(),
+            Iterations = loop.Iterations,
+            LatencyMs = sw.Elapsed.TotalMilliseconds,
+            LimitReached = false,
+            AwaitingApprovalId = approval.Id,
+            PendingTool = call.Name,
+            PendingArgsJson = approval.ArgumentsJson,
+            Usage = loop.Usage.ToDto()
+        };
+    }
+
+    /// <summary>One model round-trip through the middleware wrap chain —
+    /// TelemetryMiddleware owns the iteration span + LLM metric and
+    /// ChainAstCompactionMiddleware the history compaction.</summary>
     private async Task<ChatResponse> GetIterationResponseAsync(
         IChatClient client, LoopState loop, ChannelWriter<SseEvent>? sink,
-        Activity? agentSpan, CancellationToken ct)
+        Activity? agentSpan, AgentMiddlewareContext mwCtx, CancellationToken ct)
     {
-        using var iterSpan = Telemetry.KnowledgeHubActivity.Start("agent_iteration");
-        iterSpan?.SetTag("agent.iteration", loop.Iterations);
-        var llmSw = Stopwatch.StartNew();
+        mwCtx.Iteration = loop.Iterations;
+        mwCtx.ChatClient = client;
         try
         {
-            // SPEC-20260927-chain-ast-thread-compactor: repair
-            // dangling tool calls and compact history before the
-            // model sees it (never on the persisted transcript).
-            if (Compactor is not null)
-            {
-                var ast = McpEngine.Agents.ChainAst.ChainAstParser.Parse(
-                    loop.Messages, options.ContextManagement.AutoRepairBrokenToolCalls);
-                ast = await Compactor.CompactAsync(ast, ct);
-                loop.Messages.Clear();
-                loop.Messages.AddRange(ast.ToChatMessages());
-            }
-            return await GetModelResponseAsync(client, loop, sink, ct);
+            return await _pipeline.InvokeModelCallAsync(
+                mwCtx, () => GetModelResponseAsync(client, loop, sink, ct), ct);
         }
         catch (Exception ex)
         {
-            Telemetry.KnowledgeHubActivity.Fail(iterSpan, ex);
             Telemetry.KnowledgeHubActivity.Fail(agentSpan, ex);
             throw;
         }
-        finally
-        {
-            Telemetry.KnowledgeHubMetrics.LlmDuration.Record(llmSw.Elapsed.TotalMilliseconds,
-                new KeyValuePair<string, object?>("provider", client.GetType().Name),
-                new KeyValuePair<string, object?>("model", AgentTag),
-                new KeyValuePair<string, object?>("kind", AgentTag));
-        }
     }
 
-    /// <summary>Executes one non-gated tool call: SSE events, step record,
-    /// prompt-boundary wrap, evidence receipt.</summary>
-    private async Task ExecuteToolCallAsync(
+    /// <summary>Terminal of the tool-call wrap chain: SSE events, step record,
+    /// prompt-boundary wrap, evidence receipt — returns the tool result.</summary>
+    private async Task<object?> ExecuteToolCallAsync(
         LoopState loop, FunctionCallContent call,
         ChannelWriter<SseEvent>? sink, CancellationToken ct)
     {
@@ -734,6 +824,11 @@ public sealed class AgentService(
         toolSpan?.SetTag("tool.name", call.Name);
         object? result;
         var isError = false;
+        // SPEC-20261021 RF-4: opt-in partial-output deltas — tools that call
+        // ToolOutputDeltaChannel.ReportAsync get { tool, delta } SSE events.
+        ToolOutputDeltaChannel.Bind(sink is null ? null : (d, token) =>
+            WriteEventAsync(sink, new SseEvent("tool_output_delta",
+                new { tool = call.Name, delta = d }), token));
         try
         {
             result = fn is null
@@ -749,6 +844,7 @@ public sealed class AgentService(
         }
         finally
         {
+            ToolOutputDeltaChannel.Bind(null);
             Telemetry.KnowledgeHubMetrics.ToolDuration.Record(stepSw.Elapsed.TotalMilliseconds,
                 new KeyValuePair<string, object?>("tool", call.Name));
         }
@@ -782,6 +878,7 @@ public sealed class AgentService(
                 call.Name ?? "",
                 Summarize(call.Arguments), result?.ToString(),
                 loop.LastReceipt, ct);
+        return result;
     }
 
     /// <summary>
@@ -807,6 +904,13 @@ public sealed class AgentService(
             var buffered = await client.GetResponseAsync(loop.Messages, chatOptions, ct);
             if (sink is not null && buffered.Text is { Length: > 0 } text)
                 await WriteEventAsync(sink, new SseEvent("token", new { delta = text }), ct);
+            // RF-3: buffered path still reports usage when the provider does.
+            if (buffered.Usage is { } bufferedUsage)
+            {
+                loop.Usage.Accumulate(bufferedUsage, buffered.ModelId);
+                await WriteEventAsync(sink, new SseEvent("usage",
+                    UsageTotals.Payload(bufferedUsage, buffered.ModelId)), ct);
+            }
             return buffered;
         }
 
@@ -818,8 +922,32 @@ public sealed class AgentService(
             foreach (var content in update.Contents)
             {
                 contents.Add(content);
-                if (content is TextContent { Text.Length: > 0 } delta)
-                    await WriteEventAsync(sink, new SseEvent("token", new { delta = delta.Text }), ct);
+                switch (content)
+                {
+                    case TextContent { Text.Length: > 0 } delta:
+                        await WriteEventAsync(sink, new SseEvent("token", new { delta = delta.Text }), ct);
+                        break;
+                    // SPEC-20261021-agent-streaming-events: fine-grained events
+                    // inspired by LangChain astream_events — all additive.
+                    case TextReasoningContent { Text.Length: > 0 } reasoning:
+                        await WriteEventAsync(sink,
+                            new SseEvent("reasoning", new { delta = reasoning.Text }), ct);
+                        break;
+                    case FunctionCallContent call:
+                        await WriteEventAsync(sink, new SseEvent("tool_call_chunk", new
+                        {
+                            name = call.Name,
+                            callId = call.CallId,
+                            argsDelta = call.Arguments is null ? "{}" :
+                                JsonSerializer.Serialize(call.Arguments, JsonSerializerOptions.Web)
+                        }), ct);
+                        break;
+                    case UsageContent usage:
+                        loop.Usage.Accumulate(usage.Details, modelId);
+                        await WriteEventAsync(sink, new SseEvent("usage",
+                            UsageTotals.Payload(usage.Details, modelId)), ct);
+                        break;
+                }
             }
         }
         var message = new ChatMessage(ChatRole.Assistant, contents);
@@ -929,6 +1057,47 @@ public sealed class AgentService(
         public int Iterations { get; set; }
         public int ToolCalls { get; set; }
         public bool LimitReached { get; set; }
+        /// <summary>SPEC-20261021 RF-3: token usage aggregated across model calls.</summary>
+        public UsageTotals Usage { get; } = new();
+        /// <summary>SPEC-20261021 RF-3: set when the run retried without the
+        /// requested responseFormat — surfaced as structuredOutputFallbackReason.</summary>
+        public string? FormatFallback { get; set; }
+    }
+
+    /// <summary>SPEC-20261021-agent-streaming-events RF-3: running total of
+    /// provider-reported token usage; null fields stay null when unreported.</summary>
+    private sealed class UsageTotals
+    {
+        private long? _in, _out, _total;
+        private string? _modelId;
+        private bool _seen;
+
+        public void Accumulate(UsageDetails? details, string? modelId)
+        {
+            if (details is null) return;
+            _seen = true;
+            _in = (_in ?? 0) + details.InputTokenCount;
+            _out = (_out ?? 0) + details.OutputTokenCount;
+            _total = (_total ?? 0) + details.TotalTokenCount;
+            _modelId = modelId ?? _modelId;
+        }
+
+        public AgentUsage? ToDto() => _seen ? new AgentUsage
+        {
+            InputTokens = _in,
+            OutputTokens = _out,
+            TotalTokens = _total,
+            ModelId = _modelId
+        } : null;
+
+        /// <summary>Per-call SSE payload — omits counts the provider did not report.</summary>
+        public static object Payload(UsageDetails details, string? modelId) => new
+        {
+            inputTokens = details.InputTokenCount,
+            outputTokens = details.OutputTokenCount,
+            totalTokens = details.TotalTokenCount,
+            modelId
+        };
     }
 
     private sealed record SuspendState(
