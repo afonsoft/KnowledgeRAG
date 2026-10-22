@@ -148,7 +148,7 @@ def select(files: list[str], graph: dict[str, list[str]]) -> tuple[list[str], bo
 
     if fallback:
         projects = sorted(d for d in graph if d.startswith("tests/"))
-        return projects, True, changed_projects.symmetric_difference(set())
+        return projects, True, sorted(changed_projects)
 
     impacted = affected(changed_projects, graph)
     projects = sorted(d for d in impacted if d.startswith("tests/"))

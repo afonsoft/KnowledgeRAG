@@ -112,6 +112,15 @@ class SelectTests(unittest.TestCase):
         self.assertEqual([], projects)
         self.assertFalse(fallback)
 
+    def test_fallback_result_is_json_serializable(self):
+        # CI serializes select() output via --format=json — the fallback
+        # branch used to return a set and crash the runner.
+        import json
+        projects, fallback, changed = sel.select(
+            [".github/workflows/ci-build-test.yml"], GRAPH)
+        self.assertTrue(fallback)
+        json.dumps({"projects": projects, "fallback": fallback, "changed": changed})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
