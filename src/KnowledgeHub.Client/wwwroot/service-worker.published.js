@@ -25,14 +25,106 @@ const networkOnlyPaths = [
     /^\/framework-assets(\/|$)/
 ];
 
+// SPEC-20260915-wasm-boot-proxy-hardening gap fix: the boot chain fetches
+// _framework binaries through the extensionless /framework-assets mirror, but
+// the precache kept hitting /_framework/*.dat|wasm|dll|blat|pdb directly —
+// corporate proxies (Itaú SWG media-type blocklist) answer those with a block
+// page, the SRI check fails on the mangled body and cache.addAll aborts the
+// whole install. Precache _framework assets through the same three layers as
+// js/boot.js: extensionless mirror (identical bytes → native SRI) → base64
+// mirror (manual SHA-256) → canonical URL.
+const frameworkPrefix = '_framework/';
+const mimeByExt = { wasm: 'application/wasm', json: 'application/json', js: 'text/javascript' };
+
+function decodeBase64(text) {
+    var clean = text.replace(/\s+/g, '');
+    if (typeof Uint8Array.fromBase64 === 'function') {
+        return Uint8Array.fromBase64(clean);
+    }
+    var bin = atob(clean);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) {
+        bytes[i] = bin.codePointAt(i);
+    }
+    return bytes;
+}
+
+function verifyIntegrity(bytes, integrity) {
+    if (!integrity) {
+        return Promise.resolve(true);
+    }
+    var tokens = integrity.split(/\s+/);
+    var hash = null;
+    for (const t of tokens) {
+        if (t.indexOf('sha256-') === 0) {
+            hash = t.substring(7);
+            break;
+        }
+    }
+    if (hash === null || !crypto || !crypto.subtle) {
+        return Promise.resolve(false);
+    }
+    return crypto.subtle.digest('SHA-256', bytes).then(function (buf) {
+        var digest = new Uint8Array(buf);
+        var bin = '';
+        for (const b of digest) {
+            bin += String.fromCodePoint(b);
+        }
+        return btoa(bin) === hash;
+    });
+}
+
+// Returns a Response for a _framework asset fetched via the mirror chain, or
+// null when the name can't be split or every mirror layer failed — the caller
+// then falls back to the canonical /_framework/* URL.
+async function fetchFrameworkAsset(asset) {
+    // Mirror takes the basename only — satellite assemblies live under
+    // _framework/{culture}/ and the server resolves them by name.
+    const name = asset.url.substring(asset.url.lastIndexOf('/') + 1);
+    const dot = name.lastIndexOf('.');
+    if (dot <= 0) {
+        return null;
+    }
+    const mirror = `framework-assets/${name.substring(0, dot)}/${name.substring(dot + 1)}`;
+
+    // Layer 1 — extensionless mirror: identical bytes, SRI validates natively.
+    try {
+        const mirrorResponse = await fetch(mirror, { integrity: asset.hash, cache: 'no-cache' });
+        if (mirrorResponse.ok) {
+            return mirrorResponse;
+        }
+    } catch { /* blocked or tampered — try the encoded mirror */ }
+
+    // Layer 2 — base64 mirror: defeats binary content-sniffing; verify manually.
+    try {
+        const encodedResponse = await fetch(`${mirror}?enc=b64`, { cache: 'no-cache' });
+        if (encodedResponse.ok) {
+            const bytes = decodeBase64(await encodedResponse.text());
+            if (await verifyIntegrity(bytes, asset.hash)) {
+                return new Response(bytes, {
+                    headers: { 'Content-Type': mimeByExt[name.substring(dot + 1)] || 'application/octet-stream' }
+                });
+            }
+        }
+    } catch { /* fall through to the canonical URL */ }
+
+    return null;
+}
+
 async function onInstall(event) {
     const assets = self.assetsManifest.assets
         .filter(asset => offlineAssetsInclude.some(pattern => pattern.test(asset.url)))
         .filter(asset => !offlineAssetsExclude.some(pattern => pattern.test(asset.url)));
-    const assetsRequests = assets
-        .map(asset => new Request(asset.url, { integrity: asset.hash, cache: 'no-cache' }));
     const cache = await caches.open(cacheName);
-    await cache.addAll(assetsRequests);
+    for (const asset of assets) {
+        const isFramework = asset.url.startsWith(frameworkPrefix) && !asset.url.endsWith('.js');
+        const response = (isFramework ? await fetchFrameworkAsset(asset) : null)
+            ?? await fetch(new Request(asset.url, { integrity: asset.hash, cache: 'no-cache' }));
+        if (!response.ok) {
+            throw new Error(`precache ${asset.url}: HTTP ${response.status}`);
+        }
+        await cache.put(asset.url, response);
+    }
 
     // _framework assets are fingerprinted (dotnet.{fp}.js) but the boot chain
     // may request canonical names (dotnet.js) — MapStaticAssets serves both.
