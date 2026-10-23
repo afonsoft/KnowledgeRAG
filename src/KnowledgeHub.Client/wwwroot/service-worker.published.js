@@ -3,7 +3,7 @@
 // always network-only (authenticated data must never be served from cache).
 // The custom boot chain in js/boot.js still works: its /framework-assets
 // mirrors fail offline and fall back to /_framework/*, which is precached.
-self.importScripts('./service-worker-assets.js');
+self.importScripts('./service-worker-assets.js', './js/asset-integrity.js');
 self.addEventListener('install', event => event.waitUntil(onInstall(event)));
 self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
 self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
@@ -36,44 +36,6 @@ const networkOnlyPaths = [
 const frameworkPrefix = '_framework/';
 const mimeByExt = { wasm: 'application/wasm', json: 'application/json', js: 'text/javascript' };
 
-function decodeBase64(text) {
-    var clean = text.replace(/\s+/g, '');
-    if (typeof Uint8Array.fromBase64 === 'function') {
-        return Uint8Array.fromBase64(clean);
-    }
-    var bin = atob(clean);
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) {
-        bytes[i] = bin.codePointAt(i);
-    }
-    return bytes;
-}
-
-function verifyIntegrity(bytes, integrity) {
-    if (!integrity) {
-        return Promise.resolve(true);
-    }
-    var tokens = integrity.split(/\s+/);
-    var hash = null;
-    for (const t of tokens) {
-        if (t.indexOf('sha256-') === 0) {
-            hash = t.substring(7);
-            break;
-        }
-    }
-    if (hash === null || !crypto || !crypto.subtle) {
-        return Promise.resolve(false);
-    }
-    return crypto.subtle.digest('SHA-256', bytes).then(function (buf) {
-        var digest = new Uint8Array(buf);
-        var bin = '';
-        for (const b of digest) {
-            bin += String.fromCodePoint(b);
-        }
-        return btoa(bin) === hash;
-    });
-}
-
 // Returns a Response for a _framework asset fetched via the mirror chain, or
 // null when the name can't be split or every mirror layer failed — the caller
 // then falls back to the canonical /_framework/* URL.
@@ -99,8 +61,8 @@ async function fetchFrameworkAsset(asset) {
     try {
         const encodedResponse = await fetch(`${mirror}?enc=b64`, { cache: 'no-cache' });
         if (encodedResponse.ok) {
-            const bytes = decodeBase64(await encodedResponse.text());
-            if (await verifyIntegrity(bytes, asset.hash)) {
+            const bytes = khAssets.decodeBase64(await encodedResponse.text());
+            if (await khAssets.verifyIntegrity(bytes, asset.hash)) {
                 return new Response(bytes, {
                     headers: { 'Content-Type': mimeByExt[name.substring(dot + 1)] || 'application/octet-stream' }
                 });

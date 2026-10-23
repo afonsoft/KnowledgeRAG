@@ -22,47 +22,8 @@
         return url;
     }
 
-    function decodeBase64(text) {
-        var clean = text.replace(/\s+/g, "");
-        if (typeof Uint8Array.fromBase64 === "function") {
-            return Uint8Array.fromBase64(clean);
-        }
-        var bin = atob(clean);
-        var bytes = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) {
-            bytes[i] = bin.codePointAt(i);
-        }
-        return bytes;
-    }
-
-    // The boot manifest integrity is "sha256-<base64>" (possibly a list); the
-    // encoded payload transforms the bytes on the wire, so the browser cannot
-    // check it — we re-verify the decoded bytes ourselves before use.
-    function verifyIntegrity(bytes, integrity) {
-        if (!integrity) {
-            return Promise.resolve(true);
-        }
-        var tokens = integrity.split(/\s+/);
-        var hash = null;
-        for (const t of tokens) {
-            if (t.indexOf("sha256-") === 0) {
-                hash = t.substring(7);
-                break;
-            }
-        }
-        if (hash === null || !window.crypto || !crypto.subtle) {
-            return Promise.resolve(false);
-        }
-        return crypto.subtle.digest("SHA-256", bytes).then(function (buf) {
-            var digest = new Uint8Array(buf);
-            var bin = "";
-            for (const b of digest) {
-                bin += String.fromCodePoint(b);
-            }
-            return btoa(bin) === hash;
-        });
-    }
-
+    // decodeBase64/verifyIntegrity live in js/asset-integrity.js (khAssets) —
+    // shared with service-worker.published.js.
     function fetchEncoded(url, ext, integrity) {
         return fetch(url).then(function (response) {
             if (!response.ok) {
@@ -70,8 +31,8 @@
             }
             return response.text();
         }).then(function (text) {
-            var bytes = decodeBase64(text);
-            return verifyIntegrity(bytes, integrity).then(function (ok) {
+            var bytes = khAssets.decodeBase64(text);
+            return khAssets.verifyIntegrity(bytes, integrity).then(function (ok) {
                 if (!ok) {
                     throw new Error("integrity mismatch for " + url.pathname);
                 }

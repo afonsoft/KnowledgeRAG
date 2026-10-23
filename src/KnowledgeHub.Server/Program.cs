@@ -475,6 +475,7 @@ public partial class Program
         {
             var path = context.Request.Path.Value ?? string.Empty;
             var bootShell = path is "/js/boot.js"
+                or "/js/asset-integrity.js"
                 or "/service-worker.js"
                 or "/service-worker-assets.js"
                 or "/manifest.webmanifest"
