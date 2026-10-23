@@ -48,6 +48,11 @@ builder.Services.AddScoped<FlowsApiClient>();
 builder.Services.AddTransient<McpMonitorClient>();
 builder.Services.AddLocalization();
 
+// BootstrapBlazor's JsonStringLocalizer logs every untranslated key at
+// Information — expected fallbacks (enum member names, *.PlaceHolder) that
+// only add console noise; keep Warning+ for real localization failures.
+builder.Logging.AddFilter("BootstrapBlazor.Components.JsonStringLocalizer", LogLevel.Warning);
+
 var host = builder.Build();
 
 // Restore the persisted culture BEFORE the first render so every
