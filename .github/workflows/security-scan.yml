@@ -45,7 +45,7 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: 🔍 Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63   # v4
+        uses: github/codeql-action/init@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d   # v4.39.1
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
@@ -53,7 +53,7 @@ jobs:
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: 🔍 Perform Analysis
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63   # v4
+        uses: github/codeql-action/analyze@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d   # v4.39.1
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -116,12 +116,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e   # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069   # v4.4.1
 
       # build-push-action + gha cache reuses the CI Build & Test image layers
       # (same Dockerfile/context) — a bare `docker build` re-did ~10min of work.
       - name: 🐳 Build image to scan
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a   # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc   # v7.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -132,7 +132,7 @@ jobs:
           cache-to: type=gha,mode=max,ignore-error=true
 
       - name: 🔐 Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8   # v0.36.0
         with:
           image-ref: 'knowledgerag:scan'
           format: 'sarif'
@@ -141,7 +141,7 @@ jobs:
           exit-code: '0'
 
       - name: 🔐 Upload Trivy Results
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63   # v4
+        uses: github/codeql-action/upload-sarif@8498dc4c2b27cdd99baf0f87955b29ebbf30c78d   # v4.39.1
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'

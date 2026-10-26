@@ -120,7 +120,7 @@ jobs:
       - name: PR Agent (optional)
         if: inputs.enable_pr_agent
         continue-on-error: true
-        uses: the-pr-agent/pr-agent@a0731020c272d96373d86f404871db90b04926e3   # main 2026-10-07
+        uses: the-pr-agent/pr-agent@efdde4afe14aa401a3889012c7f3e9ef3081a430   # v0.49.0 2026-10-07
         env:
           OPENAI_KEY: ${{ secrets.REVIEW_LLM_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.KNOWLEDGE_REVIEW_TOKEN || secrets.GITHUB_TOKEN }}
@@ -141,7 +141,7 @@ jobs:
 
       - name: Upload review artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: knowledge-review-pr${{ env.PR_NUMBER }}
           path: |
