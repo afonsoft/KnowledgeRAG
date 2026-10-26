@@ -64,7 +64,7 @@ jobs:
             --skip-duplicate
 
       - name: 📤 Upload Package Artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: knowledgehub-sdk-dotnet-${{ needs.validate-tag.outputs.version }}
           path: ./nupkgs
@@ -79,7 +79,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
       - name: 🐍 Setup Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1   # v6
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0   # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -101,7 +101,7 @@ jobs:
         run: twine upload ./dist/* -u __token__ -p "$PYPI_API_TOKEN" --skip-existing
 
       - name: 📤 Upload Package Artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: knowledgehub-sdk-python-${{ needs.validate-tag.outputs.version }}
           path: sdks/python/dist
@@ -116,7 +116,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
       - name: ☕ Setup JDK
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961   # v5
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad   # v6.1.0
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
@@ -129,7 +129,7 @@ jobs:
           mvn -B verify
 
       - name: 📤 Upload Package Artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9   # v7.0.2
         with:
           name: knowledgehub-sdk-java-${{ needs.validate-tag.outputs.version }}
           path: sdks/java/target/*.jar
@@ -146,7 +146,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7
 
       - name: 🐹 Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16   # v6
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e   # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: sdks/go/go.sum

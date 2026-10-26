@@ -20,7 +20,7 @@ attrs==26.1.0 \
     # via
     #   jsonschema
     #   referencing
-backports-asyncio-runner==1.2.0 \
+backports-asyncio-runner==1.2.0 ; python_version < '3.12' \
     --hash=sha256:0da0a936a8aeb554eccb426dc55af3ba63bcdc69fa1a600b5bb305413a4477b5 \
     --hash=sha256:0da0a936a8aeb554eccb426dc55af3ba63bcdc69fa1a600b5bb305413a4477b5 \
     --hash=sha256:a5aa7b2b7d8f8bfcaa2b57313f70792df84e32a2a746f585213373f900b42162 \
