@@ -26,6 +26,7 @@ public sealed class MemoryRetainService(
     IMemoryDefenseScreen defense,
     IServiceProvider sp,
     Embeddings.IEmbeddingProvider embeddings,
+    IMemoryConsolidationTrigger consolidation,
     ILogger<MemoryRetainService> logger)
 {
     /// <summary>
@@ -184,6 +185,10 @@ public sealed class MemoryRetainService(
         }
 
         await db.SaveChangesAsync(ct);
+        // SPEC-20261111-memory-observations-consolidation RF-001 (a): signal the
+        // consolidation worker when new facts landed and a chat provider exists.
+        if (newUnits.Count > 0 && sp.GetService<IChatClient>() is not null)
+            consolidation.Signal(bank.Id);
         var allIds = preserved.Values.SelectMany(v => v.Select(u => u.Id))
             .Concat(newUnits.Select(u => u.Id))
             .Concat(dedupedIds).Distinct().ToList();

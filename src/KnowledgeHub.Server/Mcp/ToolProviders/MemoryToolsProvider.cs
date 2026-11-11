@@ -112,6 +112,22 @@ public sealed class MemoryToolsProvider : IToolProvider
         "examples":[{"bankKey":"projeto-x","mission":"memória do agente + decisões arquiteturais"}]}
         """)!.AsObject();
 
+    private static readonly JsonObject ConsolidateSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "wait":{"type":["boolean","null"],"description":"true (default) runs inline and returns the summary; false queues a consolidate operation (poll operations_get)"}
+        },
+        "examples":[{"bankKey":"projeto-x"},{"bankKey":"default","wait":false}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject ObsHistorySchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "observationId":{"type":"string","description":"Observation unit id (GUID)"}
+        },"required":["observationId"],
+        "examples":[{"observationId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}]}
+        """)!.AsObject();
+
     private static readonly JsonObject BankDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
           "bankKey":{"type":"string"},
@@ -206,6 +222,25 @@ public sealed class MemoryToolsProvider : IToolProvider
                 InputSchema = BankUpdateSchema,
                 IdempotentHint = true,
                 Handler = BankUpdateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_consolidate",
+                Title = "Consolidate memories",
+                Description = "Run observation consolidation on a bank: unconsolidated facts are merged into durable observations (evidence-backed, refine-not-overwrite) by an LLM pass. wait=false queues the run as an operation.",
+                InputSchema = ConsolidateSchema,
+                IdempotentHint = true,
+                Handler = ConsolidateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_observation_history",
+                Title = "Observation history",
+                Description = "Audit trail of an observation — every create/update version with its added source ids and proof count.",
+                InputSchema = ObsHistorySchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = ObsHistoryAsync
             },
             new CatalogTool
             {
@@ -337,6 +372,63 @@ public sealed class MemoryToolsProvider : IToolProvider
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
                 ToolArgs.OptionalBool(ctx, "hard") == true, ct);
             return await ToolResults.Structured("memory deleted", new { deleted = true });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    // ---------- consolidation (SPEC-20261111-memory-observations-consolidation) ----------
+
+    private static async ValueTask<CallToolResult> ConsolidateAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey"));
+        var banks = ctx.Services.GetRequiredService<MemoryBankService>();
+        try
+        {
+            var bank = await banks.ResolveAsync(bankKey, ct, create: false);
+            if (ToolArgs.OptionalBool(ctx, "wait") == false)
+            {
+                var queue = ctx.Services.GetRequiredService<IMemoryRetainQueue>();
+                var scope = await banks.ScopeKeyAsync(ct);
+                var op = await queue.EnqueueAsync(bank, scope, "consolidate",
+                    new { bankKey = bank.BankKey }, ct);
+                return await ToolResults.Structured("consolidation queued",
+                    new MemoryConsolidateResult(bank.Id, bank.BankKey, 0, 0, 0, 0, 0, 0, true, op.Id));
+            }
+            var svc = ctx.Services.GetRequiredService<MemoryConsolidationService>();
+            var result = await svc.RunAsync(bank, ct);
+            return await ToolResults.Structured(
+                $"consolidated {result.Processed} fact(s): {result.Created} created, " +
+                $"{result.Updated} updated, {result.Skipped} skipped, {result.Failed} failed",
+                result);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+        catch (MemoryConflictException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+        catch (MemoryServiceUnavailableException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> ObsHistoryAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemoryConsolidationService>();
+        var banks = ctx.Services.GetRequiredService<MemoryBankService>();
+        try
+        {
+            var history = await svc.HistoryAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                ParseGuid(ToolArgs.RequiredString(ctx, "observationId")), banks, ct);
+            return await ToolResults.Structured($"{history.Count} version(s)",
+                new { count = history.Count, versions = history });
         }
         catch (MemoryBadRequestException ex)
         {

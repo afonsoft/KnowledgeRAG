@@ -35,6 +35,12 @@ public sealed class MemoryUnit
     /// <summary>Stamped when a consolidation run folded this unit into an observation.</summary>
     public DateTime? ConsolidatedAt { get; set; }
     public DateTime? ConsolidationFailedAt { get; set; }
+    /// <summary>Observation rows only: JSON array of source fact unit ids —
+    /// the evidence that produced this observation (SPEC-20261111
+    /// -memory-observations-consolidation RF-002).</summary>
+    public string? SourceMemoryIdsJson { get; set; }
+    /// <summary>Observation rows only: how many source facts back it.</summary>
+    public int ProofCount { get; set; }
     /// <summary>Embedding blob for the semantic arm (per-bank dims guard via model).</summary>
     public byte[]? Embedding { get; set; }
     public string? EmbeddingModel { get; set; }

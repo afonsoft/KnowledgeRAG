@@ -65,6 +65,7 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<MemoryUnitEntity> MemoryUnitEntities => Set<MemoryUnitEntity>();
     public DbSet<MemoryDirective> MemoryDirectives => Set<MemoryDirective>();
     public DbSet<MemoryOperation> MemoryOperations => Set<MemoryOperation>();
+    public DbSet<ObservationHistory> ObservationHistories => Set<ObservationHistory>();
 
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -541,6 +542,19 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.HasIndex(o => new { o.ApiKeyId, o.Status });
             e.HasOne(o => o.Bank).WithMany()
                 .HasForeignKey(o => o.BankId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SPEC-20261111-memory-observations-consolidation RF-003.
+        modelBuilder.Entity<ObservationHistory>(e =>
+        {
+            e.HasKey(h => h.Id);
+            e.Property(h => h.Text).IsRequired();
+            e.Property(h => h.AddedSourceIdsJson).IsRequired();
+            e.Property(h => h.Action).IsRequired().HasMaxLength(16);
+            e.HasIndex(h => new { h.ObservationUnitId, h.Version }).IsUnique();
+            e.HasIndex(h => h.BankId);
+            e.HasOne(h => h.Observation).WithMany()
+                .HasForeignKey(h => h.ObservationUnitId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

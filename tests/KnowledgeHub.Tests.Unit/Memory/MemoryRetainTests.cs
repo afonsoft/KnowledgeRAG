@@ -64,7 +64,8 @@ public class MemoryRetainTests : IDisposable
             new MemoryConfigResolver(new ConfigurationBuilder().Build()),
             new MemoryEntityLinker(db), new NoOpMemoryDefenseScreen(),
             sp ?? services.BuildServiceProvider(),
-            new FakeEmbeddings(), NullLogger<MemoryRetainService>.Instance);
+            new FakeEmbeddings(), new MemoryConsolidationTrigger(),
+            NullLogger<MemoryRetainService>.Instance);
     }
 
     [Fact]
@@ -148,7 +149,7 @@ public class MemoryRetainTests : IDisposable
         var banks = new MemoryBankService(db, new FakeScope(CallerScope.Unrestricted));
         var recall = new MemoryRecallService(db, banks, new FakeEmbeddings(),
             NullLogger<MemoryRecallService>.Instance);
-        var ex = await Assert.ThrowsAsync<MemoryBadRequestException>(() =>
+        var ex = await Assert.ThrowsAsync<MemoryNotFoundException>(() =>
             recall.RecallAsync("nao-existe", new MemoryRecallRequest("q"), default));
         Assert.Contains("not found", ex.Message);
     }

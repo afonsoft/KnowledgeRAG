@@ -32,7 +32,7 @@ public sealed class MemoryBankService(KnowledgeHubDbContext db, ICallerScopeProv
             db.MemoryBanks.Add(bank);
             await db.SaveChangesAsync(ct);
         }
-        return bank ?? throw new MemoryBadRequestException($"memory bank '{key}' not found");
+        return bank ?? throw new MemoryNotFoundException($"memory bank '{key}' not found");
     }
 
     public async Task<IReadOnlyList<MemoryBankDto>> ListAsync(CancellationToken ct)

@@ -529,6 +529,12 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddScoped<Memory.MemoryRetainService>();
         services.AddScoped<Memory.MemoryRecallService>();
         services.AddScoped<Memory.MemoryUnitService>();
+        // SPEC-20261111-memory-observations-consolidation.
+        services.AddSingleton<Memory.MemoryConsolidationLocks>();
+        services.AddSingleton<Memory.IMemoryConsolidationTrigger, Memory.MemoryConsolidationTrigger>();
+        services.AddSingleton<Memory.IMemoryConsolidationHook, Memory.NoOpMemoryConsolidationHook>();
+        services.AddHostedService<Memory.MemoryConsolidationWorker>();
+        services.AddScoped<Memory.MemoryConsolidationService>();
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
 

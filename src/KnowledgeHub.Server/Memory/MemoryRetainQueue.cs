@@ -19,6 +19,8 @@ public interface IMemoryRetainQueue
 {
     ChannelReader<Guid> Reader { get; }
     Task<MemoryOperation> EnqueueAsync(MemoryBank bank, Guid apiKeyId, MemoryRetainRequest req, CancellationToken ct);
+    /// <summary>Generic op — "consolidate" (and future kinds) share the drain.</summary>
+    Task<MemoryOperation> EnqueueAsync(MemoryBank bank, Guid apiKeyId, string kind, object payload, CancellationToken ct);
     bool TryCancel(Guid operationId);
     CancellationToken TokenFor(Guid operationId, CancellationToken stopping);
     void Complete(Guid operationId);
@@ -32,16 +34,20 @@ public sealed class MemoryRetainQueue(IServiceScopeFactory scopeFactory) : IMemo
 
     public ChannelReader<Guid> Reader => _channel.Reader;
 
+    public Task<MemoryOperation> EnqueueAsync(
+        MemoryBank bank, Guid apiKeyId, MemoryRetainRequest req, CancellationToken ct) =>
+        EnqueueAsync(bank, apiKeyId, "retain", req, ct);
+
     public async Task<MemoryOperation> EnqueueAsync(
-        MemoryBank bank, Guid apiKeyId, MemoryRetainRequest req, CancellationToken ct)
+        MemoryBank bank, Guid apiKeyId, string kind, object payload, CancellationToken ct)
     {
         var op = new MemoryOperation
         {
             BankId = bank.Id,
             ApiKeyId = apiKeyId,
-            Kind = "retain",
+            Kind = kind,
             Status = "queued",
-            PayloadJson = JsonSerializer.Serialize(req)
+            PayloadJson = JsonSerializer.Serialize(payload)
         };
         // The op row persists on its own scope — enqueue must survive the
         // caller's request scope (same pattern as IngestionQueue).

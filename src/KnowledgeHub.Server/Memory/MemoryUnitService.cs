@@ -81,5 +81,7 @@ public sealed class MemoryUnitService(KnowledgeHubDbContext db, MemoryBankServic
         u.MetadataJson is { } m
             ? JsonSerializer.Deserialize<Dictionary<string, string>>(m)
             : null,
-        u.ContentHash, u.Document != null ? u.Document.ExternalId : null, u.ChunkIndex);
+        u.ContentHash, u.Document != null ? u.Document.ExternalId : null, u.ChunkIndex,
+        u.FactType == "observation" ? MemoryRecallService.ParseSources(u.SourceMemoryIdsJson) : null,
+        u.FactType == "observation" ? u.ProofCount : null);
 }

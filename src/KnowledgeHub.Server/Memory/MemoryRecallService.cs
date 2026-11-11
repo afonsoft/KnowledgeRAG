@@ -1,3 +1,4 @@
+using System.Text.Json;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Domain.Entities;
 using KnowledgeHub.Server.Embeddings;
@@ -52,7 +53,7 @@ public sealed class MemoryRecallService(
             .Select(u => new
             {
                 u.Id, u.Text, u.FactType, u.Context, u.EventDate, u.MentionedAt,
-                u.Tags, u.Embedding, u.EmbeddingModel
+                u.Tags, u.Embedding, u.EmbeddingModel, u.SourceMemoryIdsJson, u.ProofCount
             })
             .ToListAsync(ct);
 
@@ -142,11 +143,33 @@ public sealed class MemoryRecallService(
         var entitiesByUnit = entityLookup.GroupBy(e => e.UnitId)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(x => x.Name).Distinct().ToList());
 
+        // RF-006 (SPEC-20261111-memory-observations-consolidation): when
+        // preferObservations (default true once observations exist), an
+        // observation supersedes its source facts in the output.
+        var prefer = req.PreferObservations
+            ?? units.Any(u => u.FactType == "observation" && u.SourceMemoryIdsJson != null);
+        var suppressed = new HashSet<Guid>();
+        if (prefer)
+        {
+            var fusedIds = fused.Select(f => f.ChunkId).ToHashSet();
+            foreach (var u in units.Where(u =>
+                u.FactType == "observation" && u.SourceMemoryIdsJson != null && fusedIds.Contains(u.Id)))
+            {
+                foreach (var src in ParseSources(u.SourceMemoryIdsJson))
+                    suppressed.Add(src);
+            }
+        }
+
         var results = new List<RecalledMemory>();
         var budgetChars = req.Budget is { } b ? Math.Max(b, 0) * 4 : int.MaxValue;
         var spent = 0;
         foreach (var hit in fused)
         {
+            if (results.Count >= topK) break;
+            if (suppressed.Contains(hit.ChunkId)
+                && byId.TryGetValue(hit.ChunkId, out var su)
+                && su.FactType != "observation")
+                continue;
             var score = max > 0 ? hit.Fused / max : 0;
             if (req.MinScore is { } min && score < min) continue;
             if (!byId.TryGetValue(hit.ChunkId, out var u)) continue;
@@ -154,13 +177,33 @@ public sealed class MemoryRecallService(
             spent += u.Text.Length;
             var hitArms = arms.Where(a => a.Ranked.Contains(u.Id))
                 .Select(a => a.Arm == "vector" ? "semantic" : a.Arm).ToList();
+            var sourceIds = ParseSources(u.SourceMemoryIdsJson);
             results.Add(new RecalledMemory(
                 u.Id, u.Text, u.FactType, u.Context, u.EventDate, u.MentionedAt,
                 u.Tags, entitiesByUnit.GetValueOrDefault(u.Id, []),
-                Math.Round(score, 4), hitArms));
-            if (results.Count >= topK) break;
+                Math.Round(score, 4), hitArms,
+                sourceIds.Count > 0 ? sourceIds : null,
+                u.FactType == "observation" ? u.ProofCount : null,
+                req.IncludeSourceFacts && sourceIds.Count > 0
+                    ? sourceIds.Select(id => byId.TryGetValue(id, out var s)
+                            ? new RecalledMemorySource(id, s.Text) : null)
+                        .Where(s => s is not null).Cast<RecalledMemorySource>().ToList()
+                    : null));
         }
         return new MemoryRecallResult(bank.Id, results, units.Count, used);
+    }
+
+    internal static List<Guid> ParseSources(string? json)
+    {
+        if (json is not { Length: > 0 } j) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<Guid>>(j) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     internal static double Cosine(float[] a, float[] b)

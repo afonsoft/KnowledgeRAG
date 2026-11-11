@@ -60,7 +60,8 @@ public class MemoryRecallTests : IDisposable
             new MemoryConfigResolver(new ConfigurationBuilder().Build()),
             new MemoryEntityLinker(db), new NoOpMemoryDefenseScreen(),
             new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
-            new FakeEmbeddings(), NullLogger<MemoryRetainService>.Instance);
+            new FakeEmbeddings(), new MemoryConsolidationTrigger(),
+            NullLogger<MemoryRetainService>.Instance);
         var recall = new MemoryRecallService(db, banks, new FakeEmbeddings(),
             NullLogger<MemoryRecallService>.Instance);
         return (retain, recall, bank);

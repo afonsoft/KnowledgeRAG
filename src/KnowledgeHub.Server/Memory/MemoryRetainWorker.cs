@@ -78,15 +78,27 @@ public sealed class MemoryRetainWorker(
 
         try
         {
-            var req = JsonSerializer.Deserialize<MemoryRetainRequest>(op.PayloadJson)
-                ?? throw new InvalidOperationException("corrupt retain payload");
             var bank = await db.MemoryBanks.FirstOrDefaultAsync(b => b.Id == op.BankId, ct)
                 ?? throw new InvalidOperationException("memory bank was deleted");
-            var retain = scope.ServiceProvider.GetRequiredService<MemoryRetainService>();
-            var result = await retain.ExecuteAsync(bank, req, ct);
-            op.Status = "done";
-            op.UnitsCreated = result.UnitsCreated;
-            op.ResultJson = JsonSerializer.Serialize(result);
+            if (op.Kind == "consolidate")
+            {
+                // SPEC-20261111-memory-observations-consolidation RF-001 (c).
+                var svc = scope.ServiceProvider.GetRequiredService<MemoryConsolidationService>();
+                var result = await svc.RunAsync(bank, ct);
+                op.Status = "done";
+                op.UnitsCreated = result.Created;
+                op.ResultJson = JsonSerializer.Serialize(result);
+            }
+            else
+            {
+                var req = JsonSerializer.Deserialize<MemoryRetainRequest>(op.PayloadJson)
+                    ?? throw new InvalidOperationException("corrupt retain payload");
+                var retain = scope.ServiceProvider.GetRequiredService<MemoryRetainService>();
+                var result = await retain.ExecuteAsync(bank, req, ct);
+                op.Status = "done";
+                op.UnitsCreated = result.UnitsCreated;
+                op.ResultJson = JsonSerializer.Serialize(result);
+            }
         }
         catch (OperationCanceledException)
         {

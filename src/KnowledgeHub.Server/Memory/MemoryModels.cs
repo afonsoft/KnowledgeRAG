@@ -31,7 +31,15 @@ public sealed record MemoryRecallRequest(
     string? Window = null,
     /// <summary>Token budget for the returned text payload.</summary>
     int? Budget = null,
-    string? FactType = null);
+    string? FactType = null,
+    /// <summary>SPEC-20261111-memory-observations-consolidation RF-006: observations
+    /// supersede their source facts in the output. Default true when the bank has
+    /// observations.</summary>
+    bool? PreferObservations = null,
+    /// <summary>Expand each returned observation's source facts {id, text}.</summary>
+    bool IncludeSourceFacts = false);
+
+public sealed record RecalledMemorySource(Guid Id, string Text);
 
 public sealed record RecalledMemory(
     Guid UnitId,
@@ -43,7 +51,12 @@ public sealed record RecalledMemory(
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Entities,
     double Score,
-    IReadOnlyList<string> Arms);
+    IReadOnlyList<string> Arms,
+    /// <summary>Observation rows only: source fact unit ids backing it.</summary>
+    IReadOnlyList<Guid>? SourceMemoryIds = null,
+    int? ProofCount = null,
+    /// <summary>Set when IncludeSourceFacts — expanded {id, text} of sources.</summary>
+    IReadOnlyList<RecalledMemorySource>? SourceFacts = null);
 
 public sealed record MemoryRecallResult(
     Guid BankId,
@@ -56,7 +69,8 @@ public sealed record MemoryUnitDto(
     DateTime? EventDate, DateTime? OccurredStart, DateTime? OccurredEnd,
     DateTime MentionedAt, IReadOnlyList<string> Tags,
     IReadOnlyDictionary<string, string>? Metadata, string ContentHash,
-    string? DocumentId, int? ChunkIndex);
+    string? DocumentId, int? ChunkIndex,
+    IReadOnlyList<Guid>? SourceMemoryIds = null, int? ProofCount = null);
 
 public sealed record MemoryBankDto(
     Guid Id, string BankKey, string Name, string? Mission,
@@ -76,4 +90,35 @@ public sealed record ExtractedFact(
 public sealed record ExtractedEntity(string Name, string? Type);
 
 /// <summary>Thrown for caller-fixable memory errors → maps to HTTP 400.</summary>
-public sealed class MemoryBadRequestException(string message) : Exception(message);
+public class MemoryBadRequestException(string message) : Exception(message);
+
+/// <summary>Missing bank/unit/observation → maps to HTTP 404 in REST.</summary>
+public sealed class MemoryNotFoundException(string message) : MemoryBadRequestException(message);
+
+/// <summary>SPEC-20261111-memory-observations-consolidation RF-001: a consolidation
+/// run is already active for the bank → maps to HTTP 409 in REST.</summary>
+public sealed class MemoryConflictException(string message) : Exception(message);
+
+/// <summary>SPEC-20261111-memory-observations-consolidation RF-001: run summary.</summary>
+public sealed record MemoryConsolidateResult(
+    Guid BankId,
+    string BankKey,
+    int Processed,
+    int Created,
+    int Updated,
+    int Deleted,
+    int Skipped,
+    int Failed,
+    bool Async = false,
+    Guid? OperationId = null);
+
+/// <summary>SPEC-20261111-memory-observations-consolidation RF-003.</summary>
+public sealed record ObservationHistoryDto(
+    Guid Id,
+    Guid ObservationUnitId,
+    int Version,
+    string Text,
+    IReadOnlyList<Guid> AddedSourceIds,
+    int ProofCount,
+    string Action,
+    DateTime CreatedAt);

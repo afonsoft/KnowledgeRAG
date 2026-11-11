@@ -42,6 +42,13 @@ public static class MemoryEndpoints
             await Invoke(http, "memory_bank_update", Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct));
         group.MapDelete("/banks/{key}", (HttpContext http, string key, CancellationToken ct) =>
             Invoke(http, "memory_bank_delete", Merge(new JsonObject(), "bankKey", key, ("confirm", true)), ct));
+        group.MapPost("/banks/{key}/consolidate", async (HttpContext http, string key, CancellationToken ct) =>
+            await Invoke(http, "memory_consolidate",
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct))
+            .RequireRateLimiting("llm");
+        group.MapGet("/observations/{id:guid}/history", (HttpContext http, Guid id, CancellationToken ct) =>
+            Invoke(http, "memory_observation_history",
+                Merge(Query(http), "observationId", id.ToString()), ct));
 
         return group;
     }
@@ -80,6 +87,14 @@ public static class MemoryEndpoints
         catch (McpProtocolException ex)
         {
             return Results.Problem(statusCode: 400, title: "invalid_argument", detail: ex.Message);
+        }
+        catch (MemoryNotFoundException ex)
+        {
+            return Results.Problem(statusCode: 404, title: "memory_not_found", detail: ex.Message);
+        }
+        catch (MemoryConflictException ex)
+        {
+            return Results.Problem(statusCode: 409, title: "memory_conflict", detail: ex.Message);
         }
         catch (MemoryBadRequestException ex)
         {
