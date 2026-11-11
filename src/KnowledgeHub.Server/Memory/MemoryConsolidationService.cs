@@ -128,8 +128,17 @@ public sealed class MemoryConsolidationService(
         var rows = await db.ObservationHistories.AsNoTracking()
             .Where(h => h.ObservationUnitId == observationId)
             .OrderBy(h => h.Version)
-            .Select(h => new { h.Id, h.ObservationUnitId, h.Version, h.Text,
-                h.AddedSourceIdsJson, h.ProofCount, h.Action, h.CreatedAt })
+            .Select(h => new
+            {
+                h.Id,
+                h.ObservationUnitId,
+                h.Version,
+                h.Text,
+                h.AddedSourceIdsJson,
+                h.ProofCount,
+                h.Action,
+                h.CreatedAt
+            })
             .ToListAsync(ct);
         return rows.Select(h => new ObservationHistoryDto(h.Id, h.ObservationUnitId,
             h.Version, h.Text, ParseSources(h.AddedSourceIdsJson), h.ProofCount,

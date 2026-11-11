@@ -106,7 +106,9 @@ public class MemoryConsolidationTests : IDisposable
         foreach (var f in facts)
             db.MemoryUnits.Add(new MemoryUnit
             {
-                BankId = bank.Id, Text = f, FactType = "world",
+                BankId = bank.Id,
+                Text = f,
+                FactType = "world",
                 ContentHash = MemoryHasher.Hash(f)
             });
         await db.SaveChangesAsync();
@@ -148,27 +150,38 @@ public class MemoryConsolidationTests : IDisposable
         db.MemoryBanks.Add(bank);
         var src = new MemoryUnit
         {
-            BankId = bank.Id, Text = "v1 fato", FactType = "world",
-            ContentHash = "h1", ConsolidatedAt = DateTime.UtcNow
+            BankId = bank.Id,
+            Text = "v1 fato",
+            FactType = "world",
+            ContentHash = "h1",
+            ConsolidatedAt = DateTime.UtcNow
         };
         var obs = new MemoryUnit
         {
-            BankId = bank.Id, Text = "Alice é engenheira", FactType = "observation",
+            BankId = bank.Id,
+            Text = "Alice é engenheira",
+            FactType = "observation",
             ContentHash = MemoryHasher.Hash("Alice é engenheira"),
             SourceMemoryIdsJson = JsonSerializer.Serialize(new[] { src.Id }),
             ProofCount = 1
         };
         var newFact = new MemoryUnit
         {
-            BankId = bank.Id, Text = "Alice foi promovida a staff", FactType = "world",
+            BankId = bank.Id,
+            Text = "Alice foi promovida a staff",
+            FactType = "world",
             ContentHash = "h3"
         };
         db.MemoryUnits.AddRange(src, obs, newFact);
         db.ObservationHistories.Add(new ObservationHistory
         {
-            ObservationUnitId = obs.Id, BankId = bank.Id, Version = 1,
-            Text = "Alice é engenheira", AddedSourceIdsJson = "[]",
-            ProofCount = 1, Action = "create"
+            ObservationUnitId = obs.Id,
+            BankId = bank.Id,
+            Version = 1,
+            Text = "Alice é engenheira",
+            AddedSourceIdsJson = "[]",
+            ProofCount = 1,
+            Action = "create"
         });
         await db.SaveChangesAsync();
 
@@ -202,10 +215,13 @@ public class MemoryConsolidationTests : IDisposable
         unit.Embedding = MemoryRetainService.ToBytes(await emb.EmbedAsync(unit.Text));
         var obs = new MemoryUnit
         {
-            BankId = bank.Id, Text = "O deploy falhou por falta de memória no nó",
-            FactType = "observation", ContentHash = "oh",
+            BankId = bank.Id,
+            Text = "O deploy falhou por falta de memória no nó",
+            FactType = "observation",
+            ContentHash = "oh",
             SourceMemoryIdsJson = JsonSerializer.Serialize(new[] { unit.Id }),
-            ProofCount = 1, Embedding = MemoryRetainService.ToBytes(
+            ProofCount = 1,
+            Embedding = MemoryRetainService.ToBytes(
                 await emb.EmbedAsync("O deploy falhou por falta de memória no nó")),
             EmbeddingModel = emb.ModelId
         };
@@ -266,8 +282,10 @@ public class MemoryConsolidationTests : IDisposable
         // Retain a near-identical fact (different hash).
         db.MemoryUnits.Add(new MemoryUnit
         {
-            BankId = bank.Id, Text = "Alice trabalha como engenheira de software",
-            FactType = "world", ContentHash = "different-hash"
+            BankId = bank.Id,
+            Text = "Alice trabalha como engenheira de software",
+            FactType = "world",
+            ContentHash = "different-hash"
         });
         await db.SaveChangesAsync();
 
@@ -386,18 +404,26 @@ public class MemoryConsolidationTests : IDisposable
         db.MemoryBanks.Add(bank);
         var obs = new MemoryUnit
         {
-            BankId = bank.Id, Text = "Alice é engenheira", FactType = "observation",
-            ContentHash = "oh", SourceMemoryIdsJson = "[]", ProofCount = 0
+            BankId = bank.Id,
+            Text = "Alice é engenheira",
+            FactType = "observation",
+            ContentHash = "oh",
+            SourceMemoryIdsJson = "[]",
+            ProofCount = 0
         };
         db.MemoryUnits.AddRange(obs,
             new MemoryUnit
             {
-                BankId = bank.Id, Text = "Alice é engenheira de software",
-                FactType = "world", ContentHash = "f1h"
+                BankId = bank.Id,
+                Text = "Alice é engenheira de software",
+                FactType = "world",
+                ContentHash = "f1h"
             },
             new MemoryUnit
             {
-                BankId = bank.Id, Text = "haha lol", FactType = "experience",
+                BankId = bank.Id,
+                Text = "haha lol",
+                FactType = "experience",
                 ContentHash = "f2h"
             });
         await db.SaveChangesAsync();

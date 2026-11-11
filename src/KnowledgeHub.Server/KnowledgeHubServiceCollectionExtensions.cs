@@ -535,6 +535,9 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Memory.IMemoryConsolidationHook, Memory.NoOpMemoryConsolidationHook>();
         services.AddHostedService<Memory.MemoryConsolidationWorker>();
         services.AddScoped<Memory.MemoryConsolidationService>();
+        // SPEC-20261111-memory-reflect-directives.
+        services.AddScoped<Memory.MemoryReflectService>();
+        services.AddScoped<Memory.MemoryDirectiveService>();
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
 

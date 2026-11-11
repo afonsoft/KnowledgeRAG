@@ -528,6 +528,7 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
         modelBuilder.Entity<MemoryDirective>(e =>
         {
             e.HasKey(d => d.Id);
+            e.Property(d => d.Name).HasMaxLength(200);
             e.Property(d => d.Content).IsRequired().HasMaxLength(2000);
             e.HasIndex(d => new { d.BankId, d.IsActive });
         });

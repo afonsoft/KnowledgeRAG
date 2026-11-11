@@ -56,6 +56,12 @@ public sealed class MemoryConfigResolver(IConfiguration config)
     public TimeSpan ConsolidationInterval() =>
         TimeSpan.FromMinutes(config.GetValue("Memory:Consolidation:IntervalMinutes", 15));
 
+    // ---- SPEC-20261111-memory-reflect-directives ----
+
+    /// <summary>Hard cap on reflect loop iterations (high budget reaches it).</summary>
+    public int ReflectMaxIterations(MemoryBank? bank = null) =>
+        OverrideInt(bank, "reflectMaxIterations") ?? config.GetValue("Memory:Reflect:MaxIterations", 10);
+
     private static int? OverrideInt(MemoryBank? bank, string key) =>
         Override(bank, key) is { ValueKind: JsonValueKind.Number } el && el.TryGetInt32(out var v) ? v : null;
 

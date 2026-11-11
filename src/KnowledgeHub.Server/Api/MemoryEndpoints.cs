@@ -50,6 +50,24 @@ public static class MemoryEndpoints
             Invoke(http, "memory_observation_history",
                 Merge(Query(http), "observationId", id.ToString()), ct));
 
+        // SPEC-20261111-memory-reflect-directives RF-005.
+        group.MapPost("/banks/{key}/reflect", async (HttpContext http, string key, CancellationToken ct) =>
+            await Invoke(http, "memory_reflect",
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct))
+            .RequireRateLimiting("llm");
+        group.MapGet("/banks/{key}/directives", (HttpContext http, string key, CancellationToken ct) =>
+            Invoke(http, "memory_directives_list",
+                Merge(Query(http), "bankKey", key), ct));
+        group.MapPost("/banks/{key}/directives", async (HttpContext http, string key, CancellationToken ct) =>
+            await Invoke(http, "memory_directives_create",
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct));
+        group.MapPatch("/banks/{key}/directives/{id:guid}", async (HttpContext http, string key, Guid id, CancellationToken ct) =>
+            await Invoke(http, "memory_directives_update",
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key, ("id", id.ToString())), ct));
+        group.MapDelete("/banks/{key}/directives/{id:guid}", (HttpContext http, string key, Guid id, CancellationToken ct) =>
+            Invoke(http, "memory_directives_delete",
+                Merge(new JsonObject(), "bankKey", key, ("id", id.ToString()), ("confirm", true)), ct));
+
         return group;
     }
 

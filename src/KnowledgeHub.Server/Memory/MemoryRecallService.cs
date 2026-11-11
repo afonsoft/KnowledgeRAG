@@ -43,17 +43,28 @@ public sealed class MemoryRecallService(
             .Where(u => u.BankId == bank.Id && !u.IsDeleted);
         if (req.FactType is { Length: > 0 } ft)
         {
-            if (!MemoryUnit.FactTypes.Contains(ft))
+            // Comma-separated types allowed (e.g. "world,experience" = raw facts).
+            var types = ft.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (types.Length == 0 || types.Any(t => !MemoryUnit.FactTypes.Contains(t)))
                 throw new MemoryBadRequestException($"factType must be one of {string.Join('|', MemoryUnit.FactTypes)}");
-            query = query.Where(u => u.FactType == ft);
+            query = query.Where(u => types.Contains(u.FactType));
         }
         var units = await query
             .OrderByDescending(u => u.MentionedAt)
             .Take(ScanCap)
             .Select(u => new
             {
-                u.Id, u.Text, u.FactType, u.Context, u.EventDate, u.MentionedAt,
-                u.Tags, u.Embedding, u.EmbeddingModel, u.SourceMemoryIdsJson, u.ProofCount
+                u.Id,
+                u.Text,
+                u.FactType,
+                u.Context,
+                u.EventDate,
+                u.MentionedAt,
+                u.Tags,
+                u.Embedding,
+                u.EmbeddingModel,
+                u.SourceMemoryIdsJson,
+                u.ProofCount
             })
             .ToListAsync(ct);
 

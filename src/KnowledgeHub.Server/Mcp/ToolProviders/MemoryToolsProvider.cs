@@ -128,6 +128,65 @@ public sealed class MemoryToolsProvider : IToolProvider
         "examples":[{"observationId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}]}
         """)!.AsObject();
 
+    private static readonly JsonObject ReflectSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "query":{"type":"string","description":"Question to reflect over the bank's memory"},
+          "context":{"type":["string","null"],"description":"Extra context injected into the reflect prompt"},
+          "budget":{"type":["string","null"],"enum":["low","mid","high",null],"description":"Reflect depth — iterations: low=3, mid=6, high=Memory:Reflect:MaxIterations (default 10)"},
+          "maxTokens":{"type":["integer","null"],"description":"Max output tokens per model call"},
+          "responseSchema":{"type":["object","null"],"description":"JSON Schema — triggers a structured-output extraction pass"},
+          "tags":{"type":["array","null"],"items":{"type":"string"},"description":"Scope directives by tag"},
+          "tagsMatch":{"type":["string","null"],"enum":["any","all",null]},
+          "applyAllDirectives":{"type":["boolean","null"],"description":"Ignore tag scoping — apply every active directive"},
+          "includeBasedOn":{"type":["boolean","null"],"description":"Include validated citations (default true)"},
+          "includeTrace":{"type":["boolean","null"],"description":"Include the tool-call trace + dropped citations"}
+        },"required":["query"],
+        "examples":[{"query":"o que sabemos sobre a falha de deploy?"},
+                    {"query":"resuma decisões de arquitetura","budget":"high","includeTrace":true}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject DirectivesListSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "includeInactive":{"type":["boolean","null"]}
+        },"examples":[{}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject DirectiveCreateSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "name":{"type":["string","null"],"description":"Short label"},
+          "content":{"type":"string","description":"The standing instruction (max 2000 chars)"},
+          "priority":{"type":["integer","null"],"description":"Higher applies first (default 0)"},
+          "isActive":{"type":["boolean","null"]},
+          "tags":{"type":["array","null"],"items":{"type":"string"},"description":"Scope tags — empty = bank-global"}
+        },"required":["content"],
+        "examples":[{"content":"Sempre responda em pt-BR","priority":10},
+                    {"content":"Nunca exponha dados de billing","tags":["public"]}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject DirectiveUpdateSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "id":{"type":"string"},
+          "isActive":{"type":["boolean","null"]},
+          "priority":{"type":["integer","null"]},
+          "content":{"type":["string","null"]},
+          "tags":{"type":["array","null"],"items":{"type":"string"}}
+        },"required":["id"],
+        "examples":[{"id":"3fa85f64-…","isActive":false}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject DirectiveDeleteSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "id":{"type":"string"},
+          "confirm":{"type":"boolean","description":"Must be true"}
+        },"required":["id","confirm"],
+        "examples":[{"id":"3fa85f64-…","confirm":true}]}
+        """)!.AsObject();
+
     private static readonly JsonObject BankDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
           "bankKey":{"type":"string"},
@@ -222,6 +281,50 @@ public sealed class MemoryToolsProvider : IToolProvider
                 InputSchema = BankUpdateSchema,
                 IdempotentHint = true,
                 Handler = BankUpdateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_reflect",
+                Title = "Reflect over memory",
+                Description = "Agentic, read-only reasoning over a bank — the model gathers evidence from observations first, then raw facts, and answers with validated citations (based_on). Bank mission/disposition/directives shape the response. Use for synthesized answers, not raw lookups.",
+                InputSchema = ReflectSchema,
+                Handler = ReflectAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_directives_list",
+                Title = "List directives",
+                Description = "List a bank's standing instructions (priority-ordered; empty tags = bank-global).",
+                InputSchema = DirectivesListSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = DirectivesListAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_directives_create",
+                Title = "Create directive",
+                Description = "Add a standing instruction to a bank (e.g. 'always answer in pt-BR'). Injected into every reflect prompt.",
+                InputSchema = DirectiveCreateSchema,
+                Handler = DirectiveCreateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_directives_update",
+                Title = "Update directive",
+                Description = "Patch a directive's active flag, priority, content or tags.",
+                InputSchema = DirectiveUpdateSchema,
+                IdempotentHint = true,
+                Handler = DirectiveUpdateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_directives_delete",
+                Title = "Delete directive",
+                Description = "Remove a directive. Requires confirm=true.",
+                InputSchema = DirectiveDeleteSchema,
+                DestructiveHint = true,
+                Handler = DirectiveDeleteAsync
             },
             new CatalogTool
             {
@@ -372,6 +475,114 @@ public sealed class MemoryToolsProvider : IToolProvider
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
                 ToolArgs.OptionalBool(ctx, "hard") == true, ct);
             return await ToolResults.Structured("memory deleted", new { deleted = true });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    // ---------- reflect + directives (SPEC-20261111-memory-reflect-directives) ----------
+
+    private static async ValueTask<CallToolResult> ReflectAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var req = new MemoryReflectRequest(
+            ToolArgs.RequiredString(ctx, "query"),
+            ToolArgs.OptionalString(ctx, "context"),
+            ToolArgs.OptionalString(ctx, "budget") ?? "mid",
+            ToolArgs.OptionalIntOrNull(ctx, "maxTokens"),
+            ctx.Arguments?.TryGetValue("responseSchema", out var rs) == true
+                && rs is { ValueKind: JsonValueKind.Object } rsel ? rsel : null,
+            OptionalStringList(ctx, "tags"),
+            ToolArgs.OptionalString(ctx, "tagsMatch") ?? "any",
+            ToolArgs.OptionalBool(ctx, "applyAllDirectives") == true,
+            ToolArgs.OptionalBool(ctx, "includeBasedOn") != false,
+            ToolArgs.OptionalBool(ctx, "includeTrace") == true);
+        var svc = ctx.Services.GetRequiredService<MemoryReflectService>();
+        try
+        {
+            var result = await svc.ReflectAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")), req, ct);
+            return await ToolResults.Structured("reflect answer", result);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+        catch (MemoryServiceUnavailableException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> DirectivesListAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemoryDirectiveService>();
+        try
+        {
+            var items = await svc.ListAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                ToolArgs.OptionalBool(ctx, "includeInactive") == true, ct);
+            return await ToolResults.Structured($"{items.Count} directive(s)",
+                new { count = items.Count, directives = items });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> DirectiveCreateAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemoryDirectiveService>();
+        try
+        {
+            var d = await svc.CreateAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                ToolArgs.OptionalString(ctx, "name"),
+                ToolArgs.RequiredString(ctx, "content"),
+                ToolArgs.OptionalInt(ctx, "priority", 0, int.MaxValue),
+                ToolArgs.OptionalBool(ctx, "isActive"),
+                OptionalStringList(ctx, "tags"), ct);
+            return await ToolResults.Structured("directive created", d);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> DirectiveUpdateAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemoryDirectiveService>();
+        try
+        {
+            var d = await svc.UpdateAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                ParseGuid(ToolArgs.RequiredString(ctx, "id")),
+                ToolArgs.OptionalBool(ctx, "isActive"),
+                ctx.Arguments?.TryGetValue("priority", out _) == true ? ToolArgs.OptionalInt(ctx, "priority", 0, int.MaxValue) : null,
+                ToolArgs.OptionalString(ctx, "content"),
+                OptionalStringList(ctx, "tags"), ct);
+            return await ToolResults.Structured("directive updated", d);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> DirectiveDeleteAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        if (ToolArgs.OptionalBool(ctx, "confirm") != true)
+            return await ToolResults.Error("memory_directives_delete requires confirm:true");
+        var svc = ctx.Services.GetRequiredService<MemoryDirectiveService>();
+        try
+        {
+            await svc.DeleteAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                ParseGuid(ToolArgs.RequiredString(ctx, "id")), ct);
+            return await ToolResults.Structured("directive deleted", new { deleted = true });
         }
         catch (MemoryBadRequestException ex)
         {
