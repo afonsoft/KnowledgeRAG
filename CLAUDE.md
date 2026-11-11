@@ -98,6 +98,16 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 - **Secrets**: nunca commitar `.env`, `*.key`, `*.pem`. API keys via variáveis de ambiente (`Chat__ApiKey`, `Embeddings__ApiKey`).
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`).
 
+## Convenções de Testes (SPEC-20261111-agent-rules-hardening)
+
+- **Asserts determinísticos primeiro**: regras, parsing e contratos usam `Assert.*` rígido em testes unitários rápidos. **Nunca** hard-assert campos internos decididos por LLM (ex.: `fact_type`, classificação, atribuição).
+- **LLM-as-judge** (`tests/KnowledgeHub.Tests.Unit/Testing/LlmJudgeAssert.cs`): para comportamento não-determinístico use `await LlmJudgeAssert.PassesAsync(criteria, actual)` — julga uma *propriedade* do output, nunca a string exata. Configurar via env `Tests__LlmJudge__Endpoint`/`Model`/`ApiKey` (qualquer endpoint OpenAI-compatible); sem config o teste é no-op determinístico (xunit v2 não honra skip dinâmico no console/CI), nunca falha máquina sem judge.
+- **Blackbox** (`tests/KnowledgeHub.Tests.Blackbox/`): suite separada que exerce o app **só por seams públicos** (MCP JSON-RPC, REST, SDK publicado) — sem internals. Toda capability nomeável nova deve ganhar um cenário blackbox. Smoke atual: `initialize → tools/list → tools/call` com `isError=false`.
+- **Paridade de migrations** (`Conventions/MigrationParityTests.cs`): migration adicionada a `src/KnowledgeHub.Server/Migrations/` exige contraparte de mesmo *name-base* em `Migrations/Postgres/` (e vice-versa). Opt-out explícito por arquivo: comentário `// dialect: sqlite-only` ou `// dialect: postgres-only`. Baseline: migrações SQLite anteriores a `PostgresInitial` são grandfathered.
+- **`.env.example` sync** (`Conventions/EnvExampleTests.cs`): todo `Environment.GetEnvironmentVariable("VAR")` em `src/` exige entrada em `.env.example` (comentada ou não); opt-out por linha com `// env:optional`.
+- **Config hierárquica vs estática**: campo é **hierárquico** quando resolve por escopo (env → key/caller → bank/source) e **estático** quando é infra do processo (port, DB path, session mode). Checklist ao adicionar config: (1) decidir hierárquica vs estática; (2) registrar o default em `appsettings*.json` ou `.env.example`; (3) ler via `IConfiguration`/per-key settings conforme o tipo; (4) documentar na tabela de config dos docs quando pública; (5) teste cobrindo o override por escopo quando hierárquica.
+- **Gates antes de PR**: rodar `dotnet format --verify-no-changes`, `dotnet test` completo, e invocar a skill `code-review-and-quality` no diff. Feature com componente externo (conector, proxy, provider) exige: testes de integração reais do sistema externo + cenário blackbox quando a capability é pública + registro de config/docs.
+
 ## Comandos
 
 ```bash
