@@ -9,7 +9,7 @@
 | Stack | `Markdown/Agent Skills spec (agentskills.io) + MCP config snippets` |
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/Devin-20261111-knowledge-hub-skill` |
-| Status | `Approved` |
+| Status | `Done` |
 | Ticket | [#617](https://github.com/afonsoft/KnowledgeRAG/issues/617) — Epic E29 #609 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (`skills/` na raiz + `hindsight-coding-agents` integration) |
 
