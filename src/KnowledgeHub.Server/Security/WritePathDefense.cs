@@ -21,7 +21,9 @@ public static class WritePathDefense
         var defense = sp.GetRequiredService<MemoryDefense>();
         var resolver = sp.GetRequiredService<DefensePolicyResolver>();
         var outcome = defense.Screen(text, resolver.ForSource(source));
-        foreach (var f in outcome.Findings)
+        // Audit actionable findings only — allow-actioned (weak PII) hits are
+        // noise, not signal; a vault full of emails must not flood the table.
+        foreach (var f in outcome.Findings.Where(f => f.Action != SecretAction.Allow))
             db.SecurityEvents.Add(new SecurityEvent
             {
                 SourceId = source?.Id,
@@ -51,11 +53,4 @@ public static class WritePathDefense
                 McpErrorCode.InvalidParams);
     }
 
-    public static void EnsureItemsNoSecrets(
-        ISecretScanner scanner, DefensePolicy policy,
-        IEnumerable<(string? Content, string Label)> fields)
-    {
-        foreach (var (content, label) in fields)
-            EnsureNoSecretFindings(scanner, policy, content, label);
-    }
 }

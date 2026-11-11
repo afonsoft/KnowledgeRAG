@@ -151,4 +151,20 @@ public sealed class MemoryDefense(ISecretScanner scanner)
         var redactions = grouped.Where(f => f.Action == SecretAction.Redact).ToList();
         return new DefenseOutcome(rewritten, redactions, grouped, false);
     }
+
+    /// <summary>
+    /// Redact EVERY non-allow finding (redact + block) — for text that is
+    /// persisted even when an individual chunk is dropped (e.g. document
+    /// <c>RawContent</c>). Invariant: nothing stored contains a non-allow
+    /// pattern, so reads can never serve a blocked secret back to an LLM.
+    /// </summary>
+    public string RedactNonAllow(string text, DefensePolicy policy)
+    {
+        if (!policy.Enabled || string.IsNullOrEmpty(text))
+            return text;
+        var hits = scanner.Scan(text)
+            .Where(f => policy.ActionFor(f.Pattern) != SecretAction.Allow)
+            .ToList();
+        return scanner.Redact(text, hits);
+    }
 }

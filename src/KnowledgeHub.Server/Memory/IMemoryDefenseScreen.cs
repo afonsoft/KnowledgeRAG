@@ -31,7 +31,7 @@ public sealed class MemoryDefenseScreen(
         if (outcome.Findings.Count == 0)
             return Task.FromResult(outcome.Text);
 
-        foreach (var f in outcome.Findings)
+        foreach (var f in outcome.Findings.Where(f => f.Action != SecretAction.Allow))
             db.SecurityEvents.Add(new SecurityEvent
             {
                 SourceId = null,

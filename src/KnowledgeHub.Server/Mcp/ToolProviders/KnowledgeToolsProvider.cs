@@ -644,17 +644,33 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         if (ObsidianNoteWriter.IsReadOnly(target))
             return await ToolResults.Error($"source '{target.Name}' is read-only");
 
-        // SPEC-20261111-memory-defense RF-003: screen once before either write path.
+        // SPEC-20261111-memory-defense RF-003: screen once before either write
+        // path — title and tags land in frontmatter, so they are content too.
+        var titleOutcome = Security.WritePathDefense.Screen(
+            ctx.Services, db, target, note.Title, "write_knowledge");
         var outcome = Security.WritePathDefense.Screen(
             ctx.Services, db, target, note.Content, "write_knowledge");
-        if (outcome.Blocked)
+        var tagOutcome = note.Tags is { Length: > 0 }
+            ? Security.WritePathDefense.Screen(
+                ctx.Services, db, target, string.Join(',', note.Tags), "write_knowledge")
+            : null;
+        if (titleOutcome.Blocked || outcome.Blocked || tagOutcome?.Blocked == true)
+        {
+            var blocked = titleOutcome.Findings.Concat(outcome.Findings)
+                .Concat(tagOutcome?.Findings ?? [])
+                .Where(f => f.Action == Security.SecretAction.Block);
             return await ToolResults.Error(JsonSerializer.Serialize(new
             {
                 blocked = true,
-                findings = outcome.Findings.Where(f => f.Action == Security.SecretAction.Block)
-                    .Select(f => new { pattern = f.Pattern, count = f.Count })
+                findings = blocked.Select(f => new { pattern = f.Pattern, count = f.Count })
             }));
-        note = note with { Content = outcome.Text };
+        }
+        note = note with
+        {
+            Title = titleOutcome.Text,
+            Content = outcome.Text,
+            Tags = tagOutcome is null ? note.Tags : tagOutcome.Text.Split(',', StringSplitOptions.TrimEntries)
+        };
 
         return target.SourceType == SourceType.ObsidianVault
             ? await WriteToVaultAsync(db, ingestion, target, note, ct)

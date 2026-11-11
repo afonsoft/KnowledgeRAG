@@ -627,7 +627,7 @@ public sealed class IngestionService : IIngestionService
                     EnrichedText = EnrichPiece(plan.Source.Name, plan.Title, piece)
                 }).ToList();
                 plan.Db.Chunks.AddRange(newChunks);
-                ScanChunks(newChunks, doc.Id, plan.Source, plan.Title, plan.Db, plan.Warnings);
+                ScanChunks(newChunks, doc, plan.Source, plan.Title, plan.Db, plan.Warnings);
 
                 await plan.Db.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
@@ -731,7 +731,7 @@ public sealed class IngestionService : IIngestionService
     /// warning for the sync result.
     /// </summary>
     private void ScanChunks(
-        List<DocumentChunk> chunks, Guid documentId, KnowledgeSource source, string title,
+        List<DocumentChunk> chunks, KnowledgeDocument doc, KnowledgeSource source, string title,
         KnowledgeHubDbContext db, List<string> warnings)
     {
         var flaggedCount = 0;
@@ -751,7 +751,7 @@ public sealed class IngestionService : IIngestionService
                 db.SecurityEvents.Add(new SecurityEvent
                 {
                     SourceId = source.Id,
-                    DocumentId = documentId,
+                    DocumentId = doc.Id,
                     ChunkIndex = chunk.ChunkIndex,
                     Flags = chunk.SuspicionFlags
                 });
@@ -761,11 +761,11 @@ public sealed class IngestionService : IIngestionService
             // block drops the chunk entirely (nothing persists), redact
             // rewrites TextContent and the enriched/FTS copy, allow audits.
             var outcome = defense.Screen(chunk.TextContent, policy);
-            foreach (var f in outcome.Findings)
+            foreach (var f in outcome.Findings.Where(f => f.Action != Security.SecretAction.Allow))
                 db.SecurityEvents.Add(new SecurityEvent
                 {
                     SourceId = source.Id,
-                    DocumentId = documentId,
+                    DocumentId = doc.Id,
                     ChunkIndex = chunk.ChunkIndex,
                     Flags = "secret_scan",
                     Detail = $"ingest:{f.Pattern}:{f.Action.ToString().ToLowerInvariant()}:{f.Fingerprint}"
@@ -786,11 +786,19 @@ public sealed class IngestionService : IIngestionService
             }
         }
 
+        // Same invariant for the persisted raw document: read_document must
+        // never serve a blocked/redacted secret back to an LLM. Chunk-level
+        // block drops the chunk; the raw copy keeps the item minus every
+        // non-allow pattern (change-detection hash is computed upstream on
+        // the connector bytes, unaffected).
+        if (doc.RawContent is not null)
+            doc.RawContent = defense.RedactNonAllow(doc.RawContent, policy);
+
         if (flaggedCount > 0)
         {
             logger.LogWarning(
                 "Security scan flagged {Count} chunk(s) in '{Title}' ({DocumentId}): {Flags}",
-                flaggedCount, title, documentId, string.Join(',', flagNames));
+                flaggedCount, title, doc.Id, string.Join(',', flagNames));
             warnings.Add($"{title}: {flaggedCount} chunk(s) flagged ({string.Join(',', flagNames)})");
         }
 
@@ -798,7 +806,7 @@ public sealed class IngestionService : IIngestionService
         {
             logger.LogWarning(
                 "Secret scan in '{Title}' ({DocumentId}): {Blocked} chunk(s) dropped, {Redacted} redacted",
-                title, documentId, blockedCount, redactedCount);
+                title, doc.Id, blockedCount, redactedCount);
             warnings.Add(
                 $"{title}: secret scan dropped {blockedCount} chunk(s), redacted {redactedCount}");
         }
@@ -1224,7 +1232,7 @@ public sealed class IngestionService : IIngestionService
             EnrichedText = EnrichPiece(source.Name, file.Title, piece)
         }).ToList();
         ctx.Db.Chunks.AddRange(newChunks);
-        ScanChunks(newChunks, doc.Id, source, file.Title, ctx.Db, watcherWarnings);
+        ScanChunks(newChunks, doc, source, file.Title, ctx.Db, watcherWarnings);
 
         await ctx.Db.SaveChangesAsync(cancellationToken);
         await EmbedChunksAsync(newChunks, doc, source, ctx.Vectors, cancellationToken);
