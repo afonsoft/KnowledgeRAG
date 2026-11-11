@@ -12,8 +12,20 @@ namespace KnowledgeHub.Server.Mcp;
 /// </summary>
 public sealed class DynamicToolCatalog(
     IEnumerable<IToolProvider> providers,
-    IToolCatalogChangeNotifier notifier) : IDynamicToolCatalog
+    IToolCatalogChangeNotifier notifier,
+    Microsoft.Extensions.Configuration.IConfiguration configuration) : IDynamicToolCatalog
 {
+    /// <summary>SPEC-20261111-mcp-ergonomics-wave2 RF-005: deployment notes
+    /// (<c>Mcp:Instructions</c>) are echoed on the tools an agent touches
+    /// first — keep the set small so tools/list stays compact.</summary>
+    private static readonly HashSet<string> PrincipalTools = new(StringComparer.Ordinal)
+    {
+        "search_knowledge", "ask_knowledge", "agent_chat",
+        "read_document", "write_knowledge", "write_note",
+        "context_save", "context_recovery", "context_compact",
+        "memory_retain", "memory_recall", "memory_reflect"
+    };
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IReadOnlyList<CatalogTool>? _cached;
     private long _cachedVersion = -1;
@@ -71,6 +83,8 @@ public sealed class DynamicToolCatalog(
                 foreach (var tool in await provider.GetToolsAsync(services, cancellationToken))
                     tools[tool.Name] = tool;
 
+            ApplyDeploymentInstructions(tools.Values);
+
             _cached = [.. tools.Values];
             _cachedVersion = version;
             return _cached;
@@ -79,5 +93,15 @@ public sealed class DynamicToolCatalog(
         {
             _gate.Release();
         }
+    }
+
+    private void ApplyDeploymentInstructions(IEnumerable<CatalogTool> tools)
+    {
+        var raw = configuration["Mcp:Instructions"];
+        if (string.IsNullOrWhiteSpace(raw)) return;
+        var note = McpEngine.McpServiceCollectionExtensions.SanitizeInstructions(raw);
+        foreach (var tool in tools)
+            if (PrincipalTools.Contains(tool.Name))
+                tool.Description = $"{tool.Description}\n\nDeployment: {note}";
     }
 }

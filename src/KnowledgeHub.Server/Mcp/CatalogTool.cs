@@ -11,7 +11,9 @@ namespace KnowledgeHub.Server.Mcp;
 public sealed record CatalogTool
 {
     public required string Name { get; init; }
-    public required string Description { get; init; }
+    /// <summary>Mutable: the catalog appends deployment instructions
+    /// (<c>Mcp:Instructions</c>) on principal tools after build.</summary>
+    public required string Description { get; set; }
     public required JsonObject InputSchema { get; init; }
     public bool ReadOnly { get; init; }
     /// <summary>SPEC-20260926-mcp-sdk-alignment RF-001: human-readable display

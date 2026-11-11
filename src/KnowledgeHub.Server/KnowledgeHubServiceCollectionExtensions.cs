@@ -513,6 +513,9 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<KnowledgeHub.Server.Context.ContextCacheService>();
         services.AddSingleton<KnowledgeHub.Server.Context.ContextSnapshotService>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.ContextToolsProvider>();
+        // SPEC-20261111-mcp-ergonomics-wave2 RF-002/RF-003: operations_* job
+        // tools + document_*/source_rescan corpus management.
+        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.OperationsToolsProvider>();
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
 

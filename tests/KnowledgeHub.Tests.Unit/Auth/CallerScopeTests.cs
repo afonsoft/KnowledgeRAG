@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using KnowledgeHub.Server.Auth;
 using KnowledgeHub.Server.Mcp;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
 
@@ -60,7 +61,7 @@ public class CallerScopeTests
                 Tool("search_knowledge"),
                 Tool("query_a", sourceA),
                 Tool("query_b", sourceB))],
-            new StubNotifier());
+            new StubNotifier(), new ConfigurationBuilder().Build());
 
         // Scoped key: source A + name allowlist → only search_knowledge + query_a.
         var scoped = await catalog.GetToolsAsync(
@@ -82,7 +83,7 @@ public class CallerScopeTests
         var sourceA = Guid.NewGuid();
         var catalog = new DynamicToolCatalog(
             [new StubProvider(Tool("search_knowledge"), Tool("query_a", sourceA), Tool("query_b", Guid.NewGuid()))],
-            new StubNotifier());
+            new StubNotifier(), new ConfigurationBuilder().Build());
 
         var scoped = await catalog.GetToolsAsync(
             Services(new CallerScope(Guid.NewGuid(), new HashSet<Guid> { sourceA }, null)),

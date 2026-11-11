@@ -17,12 +17,19 @@ public sealed class McpServiceCollectionExtensionsTests
             .AddInMemoryCollection(pairs.ToDictionary(p => p.Key, p => (string?)p.Value))
             .Build();
 
+    private static IServiceCollection ServicesWith(params (string Key, string Value)[] pairs)
+    {
+        var services = new ServiceCollection();
+        var config = Config(pairs);
+        services.AddKnowledgeHubMcp(config);
+        services.AddSingleton<IConfiguration>(config);
+        return services;
+    }
+
     [Fact]
     public void AddKnowledgeHubMcp_RegistersFeedGateRegistryAndMetrics()
     {
-        var services = new ServiceCollection();
-        services.AddKnowledgeHubMcp(Config());
-        var sp = services.BuildServiceProvider();
+        var sp = ServicesWith().BuildServiceProvider();
 
         Assert.IsType<McpActivityFeed>(sp.GetRequiredService<IMcpActivityFeed>());
         Assert.IsType<SessionCallGate>(sp.GetRequiredService<SessionCallGate>());
@@ -33,9 +40,7 @@ public sealed class McpServiceCollectionExtensionsTests
     [Fact]
     public void AddKnowledgeHubMcp_WiresFiltersIntoServerOptions()
     {
-        var services = new ServiceCollection();
-        services.AddKnowledgeHubMcp(Config());
-        var sp = services.BuildServiceProvider();
+        var sp = ServicesWith().BuildServiceProvider();
 
         var options = sp.GetRequiredService<IOptions<McpServerOptions>>().Value;
         Assert.Equal("knowledge", options.ServerInfo!.Name);
@@ -47,10 +52,9 @@ public sealed class McpServiceCollectionExtensionsTests
     [Fact]
     public void AddKnowledgeHubMcp_HonoursFeedCapacityAndGateLimit()
     {
-        var services = new ServiceCollection();
-        services.AddKnowledgeHubMcp(Config(
+        var services = ServicesWith(
             ("Mcp:ActivityFeedCapacity", "42"),
-            ("Mcp:MaxConcurrentCallsPerSession", "3")));
+            ("Mcp:MaxConcurrentCallsPerSession", "3"));
         var sp = services.BuildServiceProvider();
         Assert.Equal(42, sp.GetRequiredService<IMcpActivityFeed>().Capacity);
     }
