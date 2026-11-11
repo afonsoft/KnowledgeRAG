@@ -9,7 +9,7 @@
 | Stack | `.NET 10`, segurança no write-path |
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/Devin-20261111-memory-defense` |
-| Status | `Approved` |
+| Status | `Done` |
 | Ticket | [#615](https://github.com/afonsoft/KnowledgeRAG/issues/615) — Epic E29 #609 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (`extensions/memory_defense.py`) |
 | Depends on | Independente; integra com `SPEC-20261111-agent-memory-retain` via hook `IMemoryDefenseScreen` |
