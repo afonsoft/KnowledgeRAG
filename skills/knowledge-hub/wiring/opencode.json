@@ -1,0 +1,13 @@
+{
+  "_comment": "OpenCode — merge into ~/.config/opencode/opencode.json under \"mcp\". SSE fallback: https://HOST/mcp/sse?access_token=AFT_KEY_HERE",
+  "mcp": {
+    "knowledge-hub": {
+      "type": "remote",
+      "url": "https://HOST/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer AFT_KEY_HERE"
+      }
+    }
+  }
+}

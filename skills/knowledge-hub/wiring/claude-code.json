@@ -1,0 +1,12 @@
+{
+  "_comment": "Claude Code (~/.claude.json) or `claude mcp add knowledge-hub --transport http --header \"Authorization: Bearer AFT_KEY_HERE\" https://HOST/mcp`. SSE fallback: https://HOST/mcp/sse?access_token=AFT_KEY_HERE",
+  "mcpServers": {
+    "knowledge-hub": {
+      "type": "http",
+      "url": "https://HOST/mcp",
+      "headers": {
+        "Authorization": "Bearer AFT_KEY_HERE"
+      }
+    }
+  }
+}

@@ -1,6 +1,27 @@
 # REST API
 
+<!-- skill-docs:begin -->
 All `/api/*` endpoints require authentication (cookie session or `Authorization: Bearer aft_...` API key) except `POST /api/auth/login` and `/health*`. Rate limits apply (`llm`/`sync`/`general` policies; 429 + `Retry-After` when exceeded).
+
+### Auth & keys
+
+| Route | Purpose |
+|---|---|
+| `POST /api/auth/login` | `{username, password}` → session cookie |
+| `GET /api/auth/me` | current user + `mustChangePassword` |
+| `POST /api/auth/change-password` | `{currentPassword, newPassword}` → 204 |
+| `GET/POST /api/apikeys` · `DELETE /api/apikeys/{id}` | manage `aft_*` keys (cookie session only; secret shown at creation) |
+| `PUT/DELETE /api/api-keys/{id}/scopes` | restrict key to allowed sources/tools |
+| `PUT/DELETE /api/api-keys/{id}/rate-limit` | per-key LLM/sync rate-limit overrides |
+
+### Ingestion jobs & memory operations
+
+| Route | Purpose |
+|---|---|
+| `GET /api/ingestion/jobs?sourceId=&status=&limit=` | list jobs |
+| `GET /api/ingestion/jobs/{id}` · `POST /api/ingestion/jobs/{id}/cancel` | job detail / cancel (`409` when running) |
+| `GET/POST /api/memory/...` | memory banks, units, recall/reflect, consolidation, mental models & pages — mirror of the `memory_*` MCP tools |
+<!-- skill-docs:end -->
 
 ## Auth
 

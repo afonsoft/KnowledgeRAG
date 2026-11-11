@@ -1,0 +1,18 @@
+[
+  {
+    "name": "knowledge-hub",
+    "description": "Use Knowledge MCP Hub as persistent memory + grounding layer — session lifecycle, retain/recall, correction & credit protocols.",
+    "path": "skills/knowledge-hub"
+  },
+  {
+    "name": "knowledge-hub-docs",
+    "description": "Operational docs for the hub — endpoints, aft_* auth, tool catalog, transports, jobs, troubleshooting.",
+    "path": "skills/knowledge-hub-docs",
+    "generated": "scripts/generate-skills.sh"
+  },
+  {
+    "name": "knowledge-hub-architect",
+    "description": "Design a hub adoption plan — source types, memory banks, tag schema, eval baseline.",
+    "path": "skills/knowledge-hub-architect"
+  }
+]

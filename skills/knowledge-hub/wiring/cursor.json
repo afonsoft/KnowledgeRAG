@@ -1,0 +1,11 @@
+{
+  "_comment": "Cursor — merge into ~/.cursor/mcp.json. SSE fallback: https://HOST/mcp/sse?access_token=AFT_KEY_HERE",
+  "mcpServers": {
+    "knowledge-hub": {
+      "url": "https://HOST/mcp",
+      "headers": {
+        "Authorization": "Bearer AFT_KEY_HERE"
+      }
+    }
+  }
+}

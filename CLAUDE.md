@@ -54,6 +54,7 @@ Save everything, always. Read `memory.md` and the 3 most recent long-term files 
 
 ## MCP Server & Como Usar
 
+<!-- skill-docs:begin -->
 O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e clientes externos:
 
 - **Endpoints de Transporte**:
@@ -79,6 +80,8 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
    - `set_chat_settings(endpoint, model, apiKey)`: Configura modelo LLM e endpoint específicos para a sessão da chave chamadora.
    - `set_api_key_settings(provider, apiKey)`: Configura chaves de integração upstream (`firecrawl`, `deepwiki`, `tavily`, `context7`) para a sessão da chave chamadora.
 4. **Context snapshots** (SPEC-20261004): snapshots de contexto de trabalho versionados por repositório (`repo` obrigatório, `owner/name` ou URL do GitHub, normalizado lowercase). `context_save` persiste itens tipados (decision/note/passage/tool_output/summary, scan de secrets, idempotencyKey); `context_recovery` retorna o snapshot mais recente/versão/label já compactado ao `tokenBudget`; `context_compact` compacta itens ou um snapshot (elision determinística + summarization com fallback, nunca falha) e pode persistir via `save=true`. Espelho REST em `/api/context/*`. Nunca grava no vault nem em `ConversationMessage`.
+5. **Memória persistente** (Epic E29 — SPECs 20261111): ciclo `memory_retain → memory_consolidate → memory_recall/memory_reflect` por `MemoryBank` (escopo via `/mcp/banks/{key}` ou header `X-Memory-Bank`). `memory_retain` (verbatim|extract, async via operations) grava fatos tipados; `memory_consolidate` refina fatos em observações com evidência; `memory_recall` busca híbrida 4 braços; `memory_reflect` responde com citações validadas sob diretivas do bank; `memory_mental_models_*`/`memory_pages_*` mantêm páginas auto-refresh projetadas no vault; `memory_directives_*` configuram o reflect. Writes passam pelo secret-scan (`422 blocked` quando a política é `block`).
+6. **Operações & documentos** (SPEC-20261111-mcp-ergonomics-wave2): `operations_list`/`operations_get`/`operations_cancel`/`operations_retry` cobrem jobs de ingestão e operações de memória async; `document_update`/`document_delete` completam o CRUD de documentos.
 
 ### Recomendações para Agentes
 
@@ -87,6 +90,7 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 - **Registro de trabalho**: Sempre registre o que foi feito com `write_note`; quando precisar criar conhecimento ou memória persistente, use `write_knowledge`.
 - **Análise de Impacto**: Execute `analyze_impact` antes de refatorar contratos ou tipos compartilhados em `KnowledgeHub.Shared`.
 - **Segurança**: Nunca realize commit ou emita em logs chaves `aft_*`, credenciais ou segredos presentes em `.env`.
+<!-- skill-docs:end -->
 
 ## Convenções
 
