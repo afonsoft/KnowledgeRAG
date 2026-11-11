@@ -152,6 +152,16 @@ public static class MemoryEndpoints
         {
             return Results.Problem(statusCode: 409, title: "memory_conflict", detail: ex.Message);
         }
+        catch (Memory.MemoryDefenseException ex)
+        {
+            // SPEC-20261111-memory-defense RF-003: blocked item → 422 with
+            // pattern/count findings only (never spans or values).
+            return Results.Json(new
+            {
+                blocked = true,
+                findings = ex.Findings.Select(f => new { pattern = f.Pattern, count = f.Count })
+            }, statusCode: 422);
+        }
         catch (MemoryBadRequestException ex)
         {
             return Results.Problem(statusCode: 400, title: "memory_bad_request", detail: ex.Message);

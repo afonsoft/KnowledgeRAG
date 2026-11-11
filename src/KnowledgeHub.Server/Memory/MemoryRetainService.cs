@@ -121,7 +121,7 @@ public sealed class MemoryRetainService(
             for (var i = 0; i < chunks.Count; i++)
             {
                 if (preserved.ContainsKey(i)) continue;
-                var text = await defense.ScreenAsync(chunks[i], bank.BankKey, ct);
+                var text = await defense.ScreenAsync(chunks[i], bank, ct);
                 if (text.Length > maxText)
                     throw new MemoryBadRequestException($"content exceeds maxUnitTextLength ({maxText})");
                 var hash = MemoryHasher.Hash(text);
@@ -146,7 +146,7 @@ public sealed class MemoryRetainService(
             for (var i = 0; i < chunks.Count; i++)
             {
                 if (preserved.ContainsKey(i)) continue;
-                var screened = await defense.ScreenAsync(chunks[i], bank.BankKey, ct);
+                var screened = await defense.ScreenAsync(chunks[i], bank, ct);
                 var facts = await ExtractAsync(chat, screened, req.Context, mentionedAt, ct);
                 foreach (var fact in facts)
                 {

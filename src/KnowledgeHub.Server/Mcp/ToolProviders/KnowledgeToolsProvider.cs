@@ -644,6 +644,18 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         if (ObsidianNoteWriter.IsReadOnly(target))
             return await ToolResults.Error($"source '{target.Name}' is read-only");
 
+        // SPEC-20261111-memory-defense RF-003: screen once before either write path.
+        var outcome = Security.WritePathDefense.Screen(
+            ctx.Services, db, target, note.Content, "write_knowledge");
+        if (outcome.Blocked)
+            return await ToolResults.Error(JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                findings = outcome.Findings.Where(f => f.Action == Security.SecretAction.Block)
+                    .Select(f => new { pattern = f.Pattern, count = f.Count })
+            }));
+        note = note with { Content = outcome.Text };
+
         return target.SourceType == SourceType.ObsidianVault
             ? await WriteToVaultAsync(db, ingestion, target, note, ct)
             : await WriteToDocumentAsync(ctx, db, target, slugs[target.Id], note, ct);

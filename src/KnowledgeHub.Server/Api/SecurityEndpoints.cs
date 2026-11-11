@@ -25,6 +25,22 @@ public static class SecurityEndpoints
             return Results.Ok(events);
         });
 
+        // SPEC-20261111-memory-defense RF-005: scan policy status — pattern
+        // names + actions only, never values or spans.
+        group.MapGet("/secret-scan/status", (
+            Security.ISecretScanner scanner, Security.DefensePolicyResolver resolver) =>
+        {
+            var global = resolver.Global();
+            return Results.Ok(new
+            {
+                enabled = global.Enabled,
+                defaultAction = global.DefaultAction.ToString().ToLowerInvariant(),
+                patternCount = scanner.Patterns.Count,
+                patterns = scanner.Patterns.OrderBy(p => p, StringComparer.Ordinal)
+                    .Select(p => new { name = p, action = global.ActionFor(p).ToString().ToLowerInvariant() })
+            });
+        });
+
         return group;
     }
 }

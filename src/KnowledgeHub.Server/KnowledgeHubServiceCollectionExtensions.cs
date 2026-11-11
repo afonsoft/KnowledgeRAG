@@ -481,6 +481,8 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<IEnumerable<Ingestion.Connectors.ISourceConnector>>(),
             sp.GetRequiredService<Caching.L1L2Cache>(),
             sp.GetRequiredService<Security.IContentSanitizer>(),
+            sp.GetRequiredService<Security.MemoryDefense>(),
+            sp.GetRequiredService<Security.DefensePolicyResolver>(),
             sp.GetRequiredService<Settings.IGraphSettingsService>(),
             sp.GetRequiredService<Settings.IEmbeddingSettingsService>(),
             sp.GetService<Microsoft.Extensions.Caching.Hybrid.HybridCache>()));
@@ -521,7 +523,11 @@ public static class KnowledgeHubServiceCollectionExtensions
         // SPEC-20261111-agent-memory-retain: agent memory layer.
         services.AddScoped<Memory.MemoryBankContext>();
         services.AddSingleton<Memory.MemoryConfigResolver>();
-        services.AddSingleton<Memory.IMemoryDefenseScreen, Memory.NoOpMemoryDefenseScreen>();
+        // SPEC-20261111-memory-defense.
+        services.AddSingleton<Security.ISecretScanner, Security.SecretScanner>();
+        services.AddSingleton<Security.DefensePolicyResolver>();
+        services.AddSingleton<Security.MemoryDefense>();
+        services.AddScoped<Memory.IMemoryDefenseScreen, Memory.MemoryDefenseScreen>();
         services.AddSingleton<Memory.IMemoryRetainQueue, Memory.MemoryRetainQueue>();
         services.AddHostedService<Memory.MemoryRetainWorker>();
         services.AddScoped<Memory.MemoryBankService>();

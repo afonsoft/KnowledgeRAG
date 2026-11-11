@@ -11,6 +11,8 @@ public sealed record IngestionServiceDeps(
     IEnumerable<Connectors.ISourceConnector> Connectors,
     IDistributedCache Cache,
     Security.IContentSanitizer Sanitizer,
+    Security.MemoryDefense Defense,
+    Security.DefensePolicyResolver PolicyResolver,
     Settings.IGraphSettingsService GraphSettings,
     Settings.IEmbeddingSettingsService EmbeddingSettings,
     Microsoft.Extensions.Caching.Hybrid.HybridCache? Hybrid = null);

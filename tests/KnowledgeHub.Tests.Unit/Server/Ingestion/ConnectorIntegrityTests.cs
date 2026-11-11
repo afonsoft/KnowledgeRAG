@@ -289,6 +289,10 @@ public sealed class ConnectorIntegrityTests : IDisposable
             [connector],
             cache ?? new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())),
             sanitizer ?? new FakeSanitizer(),
+            new KnowledgeHub.Server.Security.MemoryDefense(
+                new KnowledgeHub.Server.Security.SecretScanner(
+                    new ConfigurationBuilder().Build(), NullLogger<KnowledgeHub.Server.Security.SecretScanner>.Instance)),
+            new KnowledgeHub.Server.Security.DefensePolicyResolver(new ConfigurationBuilder().Build()),
             new FakeGraphSettings(),
             new FakeEmbeddingSettings()),
             new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build(),

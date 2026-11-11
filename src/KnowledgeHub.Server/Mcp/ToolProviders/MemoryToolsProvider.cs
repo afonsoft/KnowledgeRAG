@@ -575,6 +575,14 @@ public sealed class MemoryToolsProvider : IToolProvider
             return await ToolResults.Structured(
                 $"retained {result.UnitsCreated} unit(s), {result.UnitsPreserved} preserved", result);
         }
+        catch (MemoryDefenseException ex)
+        {
+            return await ToolResults.Error(JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                findings = ex.Findings.Select(f => new { pattern = f.Pattern, count = f.Count })
+            }));
+        }
         catch (MemoryServiceUnavailableException ex)
         {
             return await ToolResults.Error(ex.Message);
