@@ -66,6 +66,8 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     public DbSet<MemoryDirective> MemoryDirectives => Set<MemoryDirective>();
     public DbSet<MemoryOperation> MemoryOperations => Set<MemoryOperation>();
     public DbSet<ObservationHistory> ObservationHistories => Set<ObservationHistory>();
+    public DbSet<MemoryMentalModel> MemoryMentalModels => Set<MemoryMentalModel>();
+    public DbSet<MentalModelHistory> MentalModelHistories => Set<MentalModelHistory>();
 
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -556,6 +558,32 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.HasIndex(h => h.BankId);
             e.HasOne(h => h.Observation).WithMany()
                 .HasForeignKey(h => h.ObservationUnitId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SPEC-20261111-mental-models-pages RF-001.
+        modelBuilder.Entity<MemoryMentalModel>(e =>
+        {
+            e.HasKey(m => m.Id);
+            e.Property(m => m.Subtype).IsRequired().HasMaxLength(16);
+            e.ToTable(t => t.HasCheckConstraint("CK_MentalModel_Subtype",
+                "\"Subtype\" IN ('mental_model','page')"));
+            e.Property(m => m.Name).IsRequired().HasMaxLength(200);
+            e.Property(m => m.Path).IsRequired().HasMaxLength(500);
+            e.Property(m => m.SourceQuery).IsRequired().HasMaxLength(2000);
+            e.Property(m => m.Content).IsRequired();
+            e.HasIndex(m => new { m.BankId, m.Path, m.Name }).IsUnique();
+            e.HasIndex(m => new { m.BankId, m.Subtype });
+            e.HasOne(m => m.Bank).WithMany()
+                .HasForeignKey(m => m.BankId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MentalModelHistory>(e =>
+        {
+            e.HasKey(h => h.Id);
+            e.Property(h => h.Content).IsRequired();
+            e.HasIndex(h => new { h.ModelId, h.Version }).IsUnique();
+            e.HasOne(h => h.Model).WithMany()
+                .HasForeignKey(h => h.ModelId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

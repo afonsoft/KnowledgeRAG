@@ -532,12 +532,22 @@ public static class KnowledgeHubServiceCollectionExtensions
         // SPEC-20261111-memory-observations-consolidation.
         services.AddSingleton<Memory.MemoryConsolidationLocks>();
         services.AddSingleton<Memory.IMemoryConsolidationTrigger, Memory.MemoryConsolidationTrigger>();
-        services.AddSingleton<Memory.IMemoryConsolidationHook, Memory.NoOpMemoryConsolidationHook>();
+        services.AddSingleton<Memory.IMemoryConsolidationHook, Memory.MentalModels.MentalModelConsolidationHook>();
         services.AddHostedService<Memory.MemoryConsolidationWorker>();
         services.AddScoped<Memory.MemoryConsolidationService>();
         // SPEC-20261111-memory-reflect-directives.
         services.AddScoped<Memory.MemoryReflectService>();
         services.AddScoped<Memory.MemoryDirectiveService>();
+        // SPEC-20261111-mental-models-pages.
+        services.AddScoped<Memory.MentalModels.MentalModelService>();
+        services.AddScoped<Memory.MentalModels.MentalModelRefreshService>();
+        services.AddSingleton<Memory.MentalModels.MentalModelRefreshLocks>();
+        services.AddSingleton<Memory.MentalModels.VaultPageProjector>();
+        services.AddSingleton<Memory.MentalModels.MentalModelsWorker>();
+        services.AddSingleton<Memory.MentalModels.IMentalModelRefreshTrigger>(sp =>
+            sp.GetRequiredService<Memory.MentalModels.MentalModelsWorker>());
+        services.AddHostedService(sp =>
+            sp.GetRequiredService<Memory.MentalModels.MentalModelsWorker>());
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
 

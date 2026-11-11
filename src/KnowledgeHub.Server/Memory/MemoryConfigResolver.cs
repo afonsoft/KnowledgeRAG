@@ -62,6 +62,12 @@ public sealed class MemoryConfigResolver(IConfiguration config)
     public int ReflectMaxIterations(MemoryBank? bank = null) =>
         OverrideInt(bank, "reflectMaxIterations") ?? config.GetValue("Memory:Reflect:MaxIterations", 10);
 
+    // ---- SPEC-20261111-mental-models-pages ----
+
+    /// <summary>Versions kept per mental model (default 20).</summary>
+    public int MentalModelHistoryLimit(MemoryBank? bank = null) =>
+        OverrideInt(bank, "mentalModelHistoryLimit") ?? config.GetValue("Memory:MentalModels:HistoryLimit", 20);
+
     private static int? OverrideInt(MemoryBank? bank, string key) =>
         Override(bank, key) is { ValueKind: JsonValueKind.Number } el && el.TryGetInt32(out var v) ? v : null;
 

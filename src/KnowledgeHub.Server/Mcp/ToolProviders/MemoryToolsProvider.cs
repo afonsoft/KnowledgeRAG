@@ -187,6 +187,76 @@ public sealed class MemoryToolsProvider : IToolProvider
         "examples":[{"id":"3fa85f64-…","confirm":true}]}
         """)!.AsObject();
 
+    private static readonly JsonObject MentalModelListSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "subtype":{"type":["string","null"],"enum":["mental_model","page",null]}
+        },"examples":[{}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject MentalModelGetSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "id":{"type":["string","null"]},
+          "path":{"type":["string","null"],"description":"'folder/name' or 'name'"}
+        },"examples":[{"id":"3fa85f64-…"},{"path":"projeto/convencoes/api"}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject MentalModelCreateSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "subtype":{"type":["string","null"],"enum":["mental_model","page",null]},
+          "name":{"type":"string"},
+          "path":{"type":["string","null"],"description":"folder path e.g. 'projeto/convencoes'"},
+          "sourceQuery":{"type":"string","description":"the standing question this model answers"},
+          "trigger":{"type":["object","null"],"description":"refresh trigger: {mode,refreshAfterConsolidation,refreshIntervalMinutes,fullRefreshIntervalMinutes,minRefreshIntervalSeconds,factTypes,tagsMatch,tags}"},
+          "tags":{"type":["array","null"],"items":{"type":"string"}},
+          "wait":{"type":["boolean","null"],"description":"run the initial refresh synchronously (default false — signals the worker)"}
+        },"required":["name","sourceQuery"],
+        "examples":[{"name":"Convenções do projeto","path":"projeto","sourceQuery":"Quais as convenções de código do projeto?","subtype":"page","wait":true}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject MentalModelUpdateSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "id":{"type":"string"},
+          "name":{"type":["string","null"]},
+          "path":{"type":["string","null"]},
+          "sourceQuery":{"type":["string","null"]},
+          "trigger":{"type":["object","null"]},
+          "tags":{"type":["array","null"],"items":{"type":"string"}},
+          "content":{"type":["string","null"],"description":"manual edit — recorded as manual_edit in history"}
+        },"required":["id"],
+        "examples":[{"id":"3fa85f64-…","path":"projeto/api"}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject MentalModelDeleteSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "id":{"type":"string"},
+          "confirm":{"type":"boolean","description":"Must be true"}
+        },"required":["id","confirm"],
+        "examples":[{"id":"3fa85f64-…","confirm":true}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject MentalModelRefreshSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "id":{"type":"string"},
+          "wait":{"type":["boolean","null"],"description":"true = run now synchronously (ignores min-interval); false = signal the worker"}
+        },"required":["id"],
+        "examples":[{"id":"3fa85f64-…","wait":true}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject PageSearchSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "query":{"type":"string"},
+          "limit":{"type":["integer","null"]}
+        },"required":["query"],
+        "examples":[{"query":"convenções de código","limit":5}]}
+        """)!.AsObject();
+
     private static readonly JsonObject BankDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
           "bankKey":{"type":"string"},
@@ -325,6 +395,118 @@ public sealed class MemoryToolsProvider : IToolProvider
                 InputSchema = DirectiveDeleteSchema,
                 DestructiveHint = true,
                 Handler = DirectiveDeleteAsync
+            },
+            // SPEC-20261111-mental-models-pages RF-004.
+            new CatalogTool
+            {
+                Name = "memory_mental_models_list",
+                Title = "List mental models",
+                Description = "List a bank's mental models and pages (standing synthesized answers refreshed in background). Includes staleness flag.",
+                InputSchema = MentalModelListSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = MentalModelsListAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_mental_models_get",
+                Title = "Get mental model",
+                Description = "Get one mental model/page by id or path ('folder/name'). Cheap DB read — no LLM.",
+                InputSchema = MentalModelGetSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = MentalModelsGetAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_mental_models_create",
+                Title = "Create mental model",
+                Description = "Create a standing question whose answer is synthesized and refreshed in background. subtype 'page' gets wiki defaults (observations-only, delta refresh, vault projection). wait=true runs the initial refresh now.",
+                InputSchema = MentalModelCreateSchema,
+                Handler = MentalModelsCreateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_mental_models_update",
+                Title = "Update mental model",
+                Description = "Rename/move, change sourceQuery/trigger/tags, or manually edit content (recorded in history).",
+                InputSchema = MentalModelUpdateSchema,
+                IdempotentHint = true,
+                Handler = MentalModelsUpdateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_mental_models_delete",
+                Title = "Delete mental model",
+                Description = "Delete a mental model/page and its history. Requires confirm=true.",
+                InputSchema = MentalModelDeleteSchema,
+                DestructiveHint = true,
+                Handler = MentalModelsDeleteAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_mental_model_refresh",
+                Title = "Refresh mental model",
+                Description = "Trigger a refresh: re-synthesizes the answer over in-scope units (delta = new memories only, full = everything). wait=true runs synchronously.",
+                InputSchema = MentalModelRefreshSchema,
+                IdempotentHint = true,
+                Handler = MentalModelsRefreshAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_pages_tree",
+                Title = "Pages tree",
+                Description = "Folder tree of the bank's pages — the recommended session-start read (cheap, no LLM).",
+                InputSchema = MentalModelListSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = PagesTreeAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_pages_search",
+                Title = "Search pages",
+                Description = "Token-overlap search over page names and content; returns hits with snippets.",
+                InputSchema = PageSearchSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = PagesSearchAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_page_get",
+                Title = "Get page",
+                Description = "Read a page's current content by id or path — pure DB read (~0 cost), the recommended session-start call.",
+                InputSchema = MentalModelGetSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = PageGetAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_page_create",
+                Title = "Create page",
+                Description = "Create a wiki page (mental model with page defaults: observations-only scope, delta refresh, Obsidian vault projection).",
+                InputSchema = MentalModelCreateSchema,
+                Handler = PageCreateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_page_update",
+                Title = "Update page",
+                Description = "Rename/move a page or manually edit its content (marked manual_edit in history).",
+                InputSchema = MentalModelUpdateSchema,
+                IdempotentHint = true,
+                Handler = PageUpdateAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_page_delete",
+                Title = "Delete page",
+                Description = "Delete a page (and its projected vault file). Requires confirm=true.",
+                InputSchema = MentalModelDeleteSchema,
+                DestructiveHint = true,
+                Handler = PageDeleteAsync
             },
             new CatalogTool
             {
@@ -589,6 +771,220 @@ public sealed class MemoryToolsProvider : IToolProvider
             return await ToolResults.Error(ex.Message);
         }
     }
+
+    // ---------- mental models + pages (SPEC-20261111-mental-models-pages) ----------
+
+    private static string? EffKey(ToolCallContext ctx) =>
+        MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey"));
+
+    private static async ValueTask<CallToolResult> MentalModelsListAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var items = await svc.ListAsync(EffKey(ctx), ToolArgs.OptionalString(ctx, "subtype"), ct);
+            return await ToolResults.Structured($"{items.Count} model(s)",
+                new { count = items.Count, models = items });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> MentalModelsGetAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var dto = await svc.GetAsync(EffKey(ctx), OptionalGuid(ctx, "id"),
+                ToolArgs.OptionalString(ctx, "path"), ct);
+            return await ToolResults.Structured("mental model", dto);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> MentalModelsCreateAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var dto = await svc.CreateAsync(EffKey(ctx),
+                ToolArgs.OptionalString(ctx, "subtype") ?? "mental_model",
+                ToolArgs.RequiredString(ctx, "name"),
+                ToolArgs.OptionalString(ctx, "path"),
+                ToolArgs.RequiredString(ctx, "sourceQuery"),
+                OptionalJson(ctx, "trigger"),
+                OptionalStringList(ctx, "tags"), ct);
+            if (ToolArgs.OptionalBool(ctx, "wait") == true)
+            {
+                var refresh = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelRefreshService>();
+                var r = await refresh.RefreshAsync(dto.Id, ignoreMinInterval: true, ct);
+                return await ToolResults.Structured("model created + refreshed", new { model = dto, refresh = r });
+            }
+            ctx.Services.GetRequiredService<Memory.MentalModels.IMentalModelRefreshTrigger>().Signal(dto.Id);
+            return await ToolResults.Structured("model created (initial refresh signaled)", dto);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+        catch (MemoryConflictException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> MentalModelsUpdateAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var dto = await svc.UpdateAsync(EffKey(ctx),
+                ParseGuid(ToolArgs.RequiredString(ctx, "id")),
+                ToolArgs.OptionalString(ctx, "name"),
+                ToolArgs.OptionalString(ctx, "path"),
+                ToolArgs.OptionalString(ctx, "sourceQuery"),
+                OptionalJson(ctx, "trigger"),
+                OptionalStringList(ctx, "tags"),
+                ToolArgs.OptionalString(ctx, "content"),
+                manualEdit: true, ct);
+            return await ToolResults.Structured("model updated", dto);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+        catch (MemoryConflictException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> MentalModelsDeleteAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        if (ToolArgs.OptionalBool(ctx, "confirm") != true)
+            return await ToolResults.Error("memory_mental_models_delete requires confirm:true");
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            await svc.DeleteAsync(EffKey(ctx), ParseGuid(ToolArgs.RequiredString(ctx, "id")), ct);
+            return await ToolResults.Structured("model deleted", new { deleted = true });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> MentalModelsRefreshAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var id = ParseGuid(ToolArgs.RequiredString(ctx, "id"));
+        if (ToolArgs.OptionalBool(ctx, "wait") == true)
+        {
+            var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelRefreshService>();
+            try
+            {
+                var r = await svc.RefreshAsync(id, ignoreMinInterval: true, ct);
+                return await ToolResults.Structured(
+                    r.Refreshed ? "refreshed" : "refresh skipped", r);
+            }
+            catch (MemoryBadRequestException ex)
+            {
+                return await ToolResults.Error(ex.Message);
+            }
+        }
+        ctx.Services.GetRequiredService<Memory.MentalModels.IMentalModelRefreshTrigger>().Signal(id);
+        return await ToolResults.Structured("refresh signaled", new { signaled = true, modelId = id });
+    }
+
+    private static async ValueTask<CallToolResult> PagesTreeAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var tree = await svc.PageTreeAsync(EffKey(ctx), ct);
+            return await ToolResults.Structured("pages tree", new { tree });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> PagesSearchAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var hits = await svc.SearchPagesAsync(EffKey(ctx),
+                ToolArgs.RequiredString(ctx, "query"),
+                ToolArgs.OptionalInt(ctx, "limit", 10, 50), ct);
+            return await ToolResults.Structured($"{hits.Count} hit(s)", new { count = hits.Count, hits });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> PageGetAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var dto = await svc.GetPageAsync(EffKey(ctx), OptionalGuid(ctx, "id"),
+                ToolArgs.OptionalString(ctx, "path"), ct);
+            return await ToolResults.Structured("page", dto);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> PageCreateAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        // Subtype fixed to 'page'.
+        var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
+        try
+        {
+            var dto = await svc.CreateAsync(EffKey(ctx), "page",
+                ToolArgs.RequiredString(ctx, "name"),
+                ToolArgs.OptionalString(ctx, "path"),
+                ToolArgs.RequiredString(ctx, "sourceQuery"),
+                OptionalJson(ctx, "trigger"),
+                OptionalStringList(ctx, "tags"), ct);
+            if (ToolArgs.OptionalBool(ctx, "wait") == true)
+            {
+                var refresh = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelRefreshService>();
+                var r = await refresh.RefreshAsync(dto.Id, ignoreMinInterval: true, ct);
+                return await ToolResults.Structured("page created + refreshed", new { page = dto, refresh = r });
+            }
+            ctx.Services.GetRequiredService<Memory.MentalModels.IMentalModelRefreshTrigger>().Signal(dto.Id);
+            return await ToolResults.Structured("page created (initial refresh signaled)", dto);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+        catch (MemoryConflictException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> PageUpdateAsync(ToolCallContext ctx, CancellationToken ct)
+        => await MentalModelsUpdateAsync(ctx, ct);
+
+    private static async ValueTask<CallToolResult> PageDeleteAsync(ToolCallContext ctx, CancellationToken ct)
+        => await MentalModelsDeleteAsync(ctx, ct);
+
+    private static Guid? OptionalGuid(ToolCallContext ctx, string name) =>
+        ToolArgs.OptionalString(ctx, name) is { } s ? ParseGuid(s) : null;
 
     // ---------- consolidation (SPEC-20261111-memory-observations-consolidation) ----------
 
