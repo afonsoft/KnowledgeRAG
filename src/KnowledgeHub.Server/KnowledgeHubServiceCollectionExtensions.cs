@@ -516,6 +516,19 @@ public static class KnowledgeHubServiceCollectionExtensions
         // SPEC-20261111-mcp-ergonomics-wave2 RF-002/RF-003: operations_* job
         // tools + document_*/source_rescan corpus management.
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.OperationsToolsProvider>();
+        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.MemoryToolsProvider>();
+
+        // SPEC-20261111-agent-memory-retain: agent memory layer.
+        services.AddScoped<Memory.MemoryBankContext>();
+        services.AddSingleton<Memory.MemoryConfigResolver>();
+        services.AddSingleton<Memory.IMemoryDefenseScreen, Memory.NoOpMemoryDefenseScreen>();
+        services.AddSingleton<Memory.IMemoryRetainQueue, Memory.MemoryRetainQueue>();
+        services.AddHostedService<Memory.MemoryRetainWorker>();
+        services.AddScoped<Memory.MemoryBankService>();
+        services.AddScoped<Memory.MemoryEntityLinker>();
+        services.AddScoped<Memory.MemoryRetainService>();
+        services.AddScoped<Memory.MemoryRecallService>();
+        services.AddScoped<Memory.MemoryUnitService>();
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
 

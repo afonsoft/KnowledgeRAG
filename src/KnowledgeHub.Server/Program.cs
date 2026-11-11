@@ -539,6 +539,8 @@ public partial class Program
         app.MapToolsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         // SPEC-20261004-context-snapshots RF-009: REST mirror of context_*.
         app.MapContextApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
+        // SPEC-20261111-agent-memory-retain: REST mirror of memory_*.
+        app.MapMemoryApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapSettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapApiKeySettingsApi().RequireAuthorization(AuthPolicies.Operational).RequireRateLimiting(GeneralPolicy);
         app.MapEvalApi().RequireAuthorization(AuthPolicies.Operational);
@@ -555,6 +557,10 @@ public partial class Program
         // SPEC-20260923-observability-metrics RF-003: opt-in Prometheus scrape endpoint.
         if (app.Configuration.GetValue("Telemetry:Metrics:Prometheus", false))
             app.MapPrometheusScrapingEndpoint().RequireAuthorization(AuthPolicies.Operational);
+        // SPEC-20261111-mcp-ergonomics-wave2 RF-004: /mcp/banks/{key}/ +
+        // X-Memory-Bank header bind the request's memory bank.
+        app.UseWhen(c => c.Request.Path.StartsWithSegments("/mcp"),
+            b => b.UseMiddleware<KnowledgeHub.Server.Memory.MemoryBankMiddleware>());
         app.MapKnowledgeHubMcp().RequireAuthorization(AuthPolicies.Operational);
         // SPEC-20260929-a2a-server-interop RF-001: A2A surface (card + JSON-RPC + REST).
         app.MapA2AApi();

@@ -9,7 +9,7 @@
 | Stack | `.NET 10 / ASP.NET Core`, EF Core (SQLite + Postgres), MCP |
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/Devin-20261111-agent-memory-retain` |
-| Status | `Approved` |
+| Status | `In implementation` |
 | Ticket | [#610](https://github.com/afonsoft/KnowledgeRAG/issues/610) — Epic E29 #609 |
 | Source | Benchmark analysis: `vectorize-io/hindsight` (retain pipeline, clone `/tmp/hindsight`) |
 | Depends on | — (fundation do ciclo de memória; consolidation/reflect/mental-models dependem desta) |

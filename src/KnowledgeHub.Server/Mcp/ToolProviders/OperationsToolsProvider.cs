@@ -149,17 +149,36 @@ public sealed class OperationsToolsProvider : IToolProvider
         var offset = ToolArgs.OptionalInt(ctx, "offset", 0, 1_000_000);
         var sourceId = ParseGuid(ToolArgs.OptionalString(ctx, "sourceId"), "sourceId");
 
-        var jobs = (await db.IngestionJobs.AsNoTracking().ToListAsync(ct))
+        var ingest = (await db.IngestionJobs.AsNoTracking().ToListAsync(ct))
             .Where(j => scope.AllowsSource(j.SourceId))
             .Where(j => status is null || j.Status == status)
             .Where(j => kind is null || j.Kind == kind)
             .Where(j => sourceId is null || j.SourceId == sourceId)
-            .OrderByDescending(j => j.CreatedAt)
+            .Select(j => new OpView(j.Id, "ingestion", j.SourceId, j.Kind, j.Status,
+                j.DocsProcessed + j.DocsSkipped + j.DocsFailed, j.Error, null,
+                j.DocsProcessed, j.DocsSkipped, j.DocsFailed, j.ChunksCreated, null,
+                j.CreatedAt, j.StartedAt, j.FinishedAt))
+            .ToList();
+        // SPEC-20261111-agent-memory-retain: async retains surface here too —
+        // callers see only operations their API key enqueued.
+        var scopeKey = scope.ApiKeyId ?? Guid.Empty;
+        var memOps = await db.MemoryOperations.AsNoTracking()
+            .Where(o => o.ApiKeyId == scopeKey)
+            .Where(o => status == null || o.Status == status)
+            .Where(o => kind == null || o.Kind == kind)
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(limit + offset)
+            .Select(o => new OpView(o.Id, "memory", null, o.Kind, o.Status,
+                o.UnitsCreated, o.Error, o.ResultJson,
+                null, null, null, null, o.BankId,
+                Utc(o.CreatedAt), Utc(o.StartedAt), Utc(o.FinishedAt)))
+            .ToListAsync(ct);
+        var all = ingest.Concat(memOps)
+            .OrderByDescending(o => o.CreatedAt)
             .Skip(offset)
             .Take(limit)
-            .Select(Project)
             .ToList();
-        return await ToolResults.Structured($"{jobs.Count} operation(s)", new { count = jobs.Count, operations = jobs });
+        return await ToolResults.Structured($"{all.Count} operation(s)", new { count = all.Count, operations = all });
     }
 
     private static async ValueTask<CallToolResult> GetAsync(ToolCallContext ctx, CancellationToken ct)
@@ -168,9 +187,21 @@ public sealed class OperationsToolsProvider : IToolProvider
         var scope = await ResolveScopeAsync(ctx, ct);
         var id = ParseGuid(ToolArgs.RequiredString(ctx, "id"), "id")!.Value;
         var job = await db.IngestionJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == id, ct);
-        if (job is null || !scope.AllowsSource(job.SourceId))
+        if (job is not null)
+        {
+            if (!scope.AllowsSource(job.SourceId))
+                return await ToolResults.Error("operation not found");
+            return await ToolResults.Structured("operation", Project(job));
+        }
+        var scopeKey = scope.ApiKeyId ?? Guid.Empty;
+        var memOp = await db.MemoryOperations.AsNoTracking()
+            .FirstOrDefaultAsync(o => o.Id == id && o.ApiKeyId == scopeKey, ct);
+        if (memOp is null)
             return await ToolResults.Error("operation not found");
-        return await ToolResults.Structured("operation", Project(job));
+        return await ToolResults.Structured("operation", new OpView(
+            memOp.Id, "memory", null, memOp.Kind, memOp.Status, memOp.UnitsCreated,
+            memOp.Error, memOp.ResultJson, null, null, null, null, memOp.BankId,
+            Utc(memOp.CreatedAt), Utc(memOp.StartedAt), Utc(memOp.FinishedAt)));
     }
 
     private static async ValueTask<CallToolResult> CancelAsync(ToolCallContext ctx, CancellationToken ct)
@@ -181,13 +212,40 @@ public sealed class OperationsToolsProvider : IToolProvider
         var id = ParseGuid(ToolArgs.RequiredString(ctx, "id"), "id")!.Value;
 
         var job = await db.IngestionJobs.FirstOrDefaultAsync(j => j.Id == id, ct);
-        if (job is null || !scope.AllowsSource(job.SourceId))
-            return await ToolResults.Error("operation not found");
+        if (job is not null && !scope.AllowsSource(job.SourceId))
+            job = null;
+        if (job is null)
+        {
+            var scopeKey = scope.ApiKeyId ?? Guid.Empty;
+            var memOp = await db.MemoryOperations
+                .FirstOrDefaultAsync(o => o.Id == id && o.ApiKeyId == scopeKey, ct);
+            if (memOp is null)
+                return await ToolResults.Error("operation not found");
+            var memQueue = ctx.Services.GetRequiredService<Memory.IMemoryRetainQueue>();
+            if (memOp.Status == "queued")
+            {
+                memOp.Status = "cancelled";
+                memOp.FinishedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync(ct);
+                memQueue.TryCancel(id);
+                return await ToolResults.Structured("operation cancelled", new OpView(
+                    memOp.Id, "memory", null, memOp.Kind, memOp.Status, memOp.UnitsCreated,
+                    memOp.Error, memOp.ResultJson, null, null, null, null, memOp.BankId,
+                    Utc(memOp.CreatedAt), Utc(memOp.StartedAt), Utc(memOp.FinishedAt)));
+            }
+            if (memOp.Status == "running")
+            {
+                memQueue.TryCancel(id);
+                return await ToolResults.Structured(
+                    "cancellation requested — the worker stops before commit (no partial units)", new { id });
+            }
+            return await ToolResults.Error($"operation is already {memOp.Status}");
+        }
 
         if (job.Status == "queued")
         {
             job.Status = "cancelled";
-            job.FinishedAt = DateTimeOffset.UtcNow;
+            job.FinishedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
             queue.TryCancel(id);
             return await ToolResults.Structured("operation cancelled", Project(job));
@@ -208,8 +266,28 @@ public sealed class OperationsToolsProvider : IToolProvider
         var id = ParseGuid(ToolArgs.RequiredString(ctx, "id"), "id")!.Value;
 
         var job = await db.IngestionJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == id, ct);
-        if (job is null || !scope.AllowsSource(job.SourceId))
-            return await ToolResults.Error("operation not found");
+        if (job is not null && !scope.AllowsSource(job.SourceId))
+            job = null;
+        if (job is null)
+        {
+            var scopeKey = scope.ApiKeyId ?? Guid.Empty;
+            var memOp = await db.MemoryOperations.AsNoTracking()
+                .FirstOrDefaultAsync(o => o.Id == id && o.ApiKeyId == scopeKey, ct);
+            if (memOp is null)
+                return await ToolResults.Error("operation not found");
+            if (memOp.Status is not ("failed" or "cancelled"))
+                return await ToolResults.Error($"only failed or cancelled operations can be retried (current: {memOp.Status})");
+            var bank = await db.MemoryBanks.AsNoTracking().FirstOrDefaultAsync(b => b.Id == memOp.BankId, ct);
+            if (bank is null)
+                return await ToolResults.Error("the operation's memory bank no longer exists");
+            var memQueue = ctx.Services.GetRequiredService<Memory.IMemoryRetainQueue>();
+            var payload = JsonSerializer.Deserialize<Memory.MemoryRetainRequest>(memOp.PayloadJson);
+            if (payload is null)
+                return await ToolResults.Error("the operation payload is corrupt");
+            var requeued = await memQueue.EnqueueAsync(bank, memOp.ApiKeyId, payload, ct);
+            return await ToolResults.Structured("operation requeued",
+                new { requeued = true, operationId = requeued.Id });
+        }
         if (job.Status is not ("failed" or "cancelled"))
             return await ToolResults.Error($"only failed or cancelled operations can be retried (current: {job.Status})");
 
@@ -307,6 +385,7 @@ public sealed class OperationsToolsProvider : IToolProvider
     private static object Project(IngestionJob j) => new
     {
         j.Id,
+        type = "ingestion",
         j.SourceId,
         j.Kind,
         j.Status,
@@ -319,4 +398,14 @@ public sealed class OperationsToolsProvider : IToolProvider
         j.StartedAt,
         j.FinishedAt
     };
+
+    private static DateTimeOffset Utc(DateTime dt) => new(dt, TimeSpan.Zero);
+    private static DateTimeOffset? Utc(DateTime? dt) => dt is { } v ? new DateTimeOffset(v, TimeSpan.Zero) : null;
+
+    /// <summary>Unified list/get projection for ingestion + memory ops —
+    /// union of both payloads; non-applicable fields serialize as null.</summary>
+    private sealed record OpView(Guid Id, string Type, Guid? SourceId, string Kind, string Status,
+        int ItemsProcessed, string? Error, string? ResultJson,
+        int? DocsProcessed, int? DocsSkipped, int? DocsFailed, int? ChunksCreated, Guid? BankId,
+        DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? FinishedAt);
 }

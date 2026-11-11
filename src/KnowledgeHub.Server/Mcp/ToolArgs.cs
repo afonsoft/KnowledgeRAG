@@ -39,6 +39,27 @@ public static class ToolArgs
         return value;
     }
 
+    /// <summary>Top-level numeric arg (minScore etc.) — JSON-stringified
+    /// numbers coerce like the rest (SPEC-20261111-mcp-ergonomics-wave2).</summary>
+    public static double? OptionalDouble(ToolCallContext ctx, string name)
+    {
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        el = Coerce(ctx, name, el);
+        return el.ValueKind == JsonValueKind.Number && el.TryGetDouble(out var d)
+            ? d
+            : throw new McpProtocolException($"argument '{name}' must be a number", McpErrorCode.InvalidParams);
+    }
+
+    /// <summary>Top-level array-or-null arg — tolerates coercion without the
+    /// object-only restriction of <see cref="OptionalObject"/>.</summary>
+    public static JsonElement? OptionalElement(ToolCallContext ctx, string name)
+    {
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        return Coerce(ctx, name, el);
+    }
+
     public static bool? OptionalBool(ToolCallContext ctx, string name)
     {
         if (!TryGet(ctx, name, out var el))
