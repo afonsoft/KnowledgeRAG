@@ -187,9 +187,15 @@ public class McpRecallErgonomicsTests : IClassFixture<McpRecallErgonomicsTests.F
     [Fact]
     public async Task Ask_FinalFloor_Empty_Abstains_WithoutSynthesis()
     {
-        // RF-003: a final floor that empties the result set makes ask_knowledge
-        // abstain via the corrective-RAG path — the chat provider is never
-        // called, even though evidence exists below the floor.
+        // RF-003: a caller-set final floor on an emptied result set makes
+        // ask_knowledge abstain via the corrective-RAG path — the chat provider
+        // is never called, even though evidence exists outside the scope.
+        // Since E24 (#467) the floor compares the NORMALIZED fused score
+        // (1.0 = rank-1 on every arm): in a single-arm fixture the top hit is
+        // ~1.0 by construction, so the floor alone can no longer empty the
+        // set — the strict pathPrefix below produces the empty set while the
+        // floor remains the abstention trigger (MinScores.Final != null &&
+        // results empty → Insufficient).
         await SeedVaultSource();
         var mcp = await ConnectAsync(_factory);
         var result = await mcp.SendAsync("tools/call", new
@@ -198,7 +204,9 @@ public class McpRecallErgonomicsTests : IClassFixture<McpRecallErgonomicsTests.F
             arguments = new
             {
                 question = "shareword?",
-                minScores = new { final = 0.999 } // fused/cosine scores never reach this
+                minScores = new { final = 0.999 },
+                pathPrefix = "no-such-folder/", // excludes all seeded evidence
+                allowRelaxation = false // strict scope — corrective path must not widen it
             }
         });
 
