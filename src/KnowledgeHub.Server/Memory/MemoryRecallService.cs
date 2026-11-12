@@ -30,7 +30,8 @@ public sealed class MemoryRecallService(
         Guid Id, string Text, string FactType, string? Context,
         DateTime? EventDate, DateTime MentionedAt, List<string> Tags,
         byte[]? Embedding, string? EmbeddingModel,
-        string? SourceMemoryIdsJson, int ProofCount);
+        string? SourceMemoryIdsJson, int ProofCount,
+        string? SourcePrompt, string? SessionId, string? Origin);
 
     public async Task<MemoryRecallResult> RecallAsync(
         string? bankKey, MemoryRecallRequest req, CancellationToken ct)
@@ -40,7 +41,7 @@ public sealed class MemoryRecallService(
         var bank = await banks.ResolveAsync(bankKey, ct, create: false);
         var topK = Math.Clamp(req.TopK, 1, 100);
         var window = ParseWindow(req.Window);
-        var units = await LoadCandidatesAsync(bank, req.FactType, ct);
+        var units = await LoadCandidatesAsync(bank, req.FactType, req.SessionId, ct);
 
         var arms = new List<(string Arm, IReadOnlyList<Guid> Ranked)>();
         var used = new List<string>();
@@ -68,7 +69,7 @@ public sealed class MemoryRecallService(
 
     /// <summary>Candidate universe: bank units (soft-delete + fact-type filtered).</summary>
     private async Task<List<UnitRow>> LoadCandidatesAsync(
-        MemoryBank bank, string? factType, CancellationToken ct)
+        MemoryBank bank, string? factType, string? sessionId, CancellationToken ct)
     {
         var query = db.MemoryUnits.AsNoTracking()
             .Where(u => u.BankId == bank.Id && !u.IsDeleted);
@@ -80,12 +81,16 @@ public sealed class MemoryRecallService(
                 throw new MemoryBadRequestException($"factType must be one of {string.Join('|', MemoryUnit.FactTypes)}");
             query = query.Where(u => types.Contains(u.FactType));
         }
+        // SPEC-20261112-memory-prompt-provenance RF-004: session scope.
+        if (sessionId is { Length: > 0 })
+            query = query.Where(u => u.Document != null && u.Document.SourceSessionId == sessionId);
         return await query
             .OrderByDescending(u => u.MentionedAt)
             .Take(ScanCap)
             .Select(u => new UnitRow(
                 u.Id, u.Text, u.FactType, u.Context, u.EventDate, u.MentionedAt,
-                u.Tags, u.Embedding, u.EmbeddingModel, u.SourceMemoryIdsJson, u.ProofCount))
+                u.Tags, u.Embedding, u.EmbeddingModel, u.SourceMemoryIdsJson, u.ProofCount,
+                u.Document!.SourcePrompt, u.Document.SourceSessionId, u.Document.Origin))
             .ToListAsync(ct);
     }
 
@@ -237,7 +242,11 @@ public sealed class MemoryRecallService(
                     ? sourceIds.Select(id => byId.TryGetValue(id, out var s)
                             ? new RecalledMemorySource(id, s.Text) : null)
                         .Where(s => s is not null).Cast<RecalledMemorySource>().ToList()
-                    : null));
+                    : null,
+                // SPEC-20261112-memory-prompt-provenance RF-004 (preview ≤500).
+                u.SourcePrompt is { Length: > 0 } sp
+                    ? sp[..Math.Min(500, sp.Length)] : null,
+                u.SessionId, u.Origin));
         }
         return results;
     }

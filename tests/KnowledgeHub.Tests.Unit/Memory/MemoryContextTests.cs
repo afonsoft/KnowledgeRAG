@@ -109,18 +109,28 @@ public class MemoryContextTests : IDisposable
             await retain.RetainAsync(null, new MemoryRetainRequest($"fato número {i}", Strategy: "verbatim"), default);
         db.MemoryUnits.Add(new MemoryUnit
         {
-            BankId = bank.Id, Text = "observação consolidada", FactType = "observation",
-            ContentHash = "h-obs", ProofCount = 3
+            BankId = bank.Id,
+            Text = "observação consolidada",
+            FactType = "observation",
+            ContentHash = "h-obs",
+            ProofCount = 3
         });
         db.MemoryMentalModels.Add(new MemoryMentalModel
         {
-            Id = Guid.NewGuid(), BankId = bank.Id, Subtype = "mental_model", Name = "deploy-model",
-            SourceQuery = "deploy", LastMemorySeenAt = DateTime.UtcNow.AddDays(-2)
+            Id = Guid.NewGuid(),
+            BankId = bank.Id,
+            Subtype = "mental_model",
+            Name = "deploy-model",
+            SourceQuery = "deploy",
+            LastMemorySeenAt = DateTime.UtcNow.AddDays(-2)
         });
         db.MemoryOperations.Add(new MemoryOperation
         {
-            BankId = bank.Id, Kind = "retain", Status = "failed",
-            PayloadJson = "{}", Error = "llm offline"
+            BankId = bank.Id,
+            Kind = "retain",
+            Status = "failed",
+            PayloadJson = "{}",
+            Error = "llm offline"
         });
         await db.SaveChangesAsync();
 
@@ -233,8 +243,12 @@ public class MemoryContextTests : IDisposable
         db.MemoryUnits.Add(new MemoryUnit { BankId = bank.Id, Text = "o2", FactType = "observation", ContentHash = "o2", ProofCount = 1 });
         db.MemoryMentalModels.Add(new MemoryMentalModel
         {
-            Id = Guid.NewGuid(), BankId = bank.Id, Subtype = "mental_model", Name = "m1",
-            SourceQuery = "x", LastMemorySeenAt = DateTime.UtcNow.AddDays(-1)
+            Id = Guid.NewGuid(),
+            BankId = bank.Id,
+            Subtype = "mental_model",
+            Name = "m1",
+            SourceQuery = "x",
+            LastMemorySeenAt = DateTime.UtcNow.AddDays(-1)
         });
         await db.SaveChangesAsync();
 

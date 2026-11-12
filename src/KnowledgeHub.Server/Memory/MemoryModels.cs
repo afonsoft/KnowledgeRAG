@@ -11,7 +11,14 @@ public sealed record MemoryRetainRequest(
     string Strategy = "extract",
     /// <summary>Caller-supplied document id — groups units for delta-retain.</summary>
     string? DocumentId = null,
-    string? DocumentTitle = null);
+    string? DocumentTitle = null,
+    /// <summary>SPEC-20261112-memory-prompt-provenance RF-002: originating
+    /// prompt/turn — defense-screened, truncated, deduped by hash.</summary>
+    string? SourcePrompt = null,
+    /// <summary>Caller session/thread id (map agent_chat threadId here).</summary>
+    string? SessionId = null,
+    /// <summary>explicit | passive | import | system (default explicit).</summary>
+    string? Origin = null);
 
 public sealed record MemoryRetainResult(
     Guid BankId,
@@ -20,7 +27,12 @@ public sealed record MemoryRetainResult(
     int UnitsPreserved,
     bool Async = false,
     Guid? OperationId = null,
-    string? Error = null);
+    string? Error = null,
+    /// <summary>SPEC-20261112-memory-prompt-provenance RF-003: same
+    /// (bank, sessionId, promptHash) already retained — extraction skipped.</summary>
+    bool PromptSeen = false,
+    /// <summary>External id of the backing MemoryDocument when one exists.</summary>
+    string? DocumentId = null);
 
 /// <summary>SPEC-20261111-agent-memory-retain RF-004: recall input.</summary>
 public sealed record MemoryRecallRequest(
@@ -32,6 +44,9 @@ public sealed record MemoryRecallRequest(
     /// <summary>Token budget for the returned text payload.</summary>
     int? Budget = null,
     string? FactType = null,
+    /// <summary>SPEC-20261112-memory-prompt-provenance RF-004: restrict to
+    /// units retained under this session id ("what did we learn in session X").</summary>
+    string? SessionId = null,
     /// <summary>SPEC-20261111-memory-observations-consolidation RF-006: observations
     /// supersede their source facts in the output. Default true when the bank has
     /// observations.</summary>
@@ -56,7 +71,11 @@ public sealed record RecalledMemory(
     IReadOnlyList<Guid>? SourceMemoryIds = null,
     int? ProofCount = null,
     /// <summary>Set when IncludeSourceFacts — expanded {id, text} of sources.</summary>
-    IReadOnlyList<RecalledMemorySource>? SourceFacts = null);
+    IReadOnlyList<RecalledMemorySource>? SourceFacts = null,
+    /// <summary>SPEC-20261112-memory-prompt-provenance RF-004 (preview ≤500).</summary>
+    string? SourcePrompt = null,
+    string? SessionId = null,
+    string? Origin = null);
 
 public sealed record MemoryRecallResult(
     Guid BankId,
@@ -70,7 +89,9 @@ public sealed record MemoryUnitDto(
     DateTime MentionedAt, IReadOnlyList<string> Tags,
     IReadOnlyDictionary<string, string>? Metadata, string ContentHash,
     string? DocumentId, int? ChunkIndex,
-    IReadOnlyList<Guid>? SourceMemoryIds = null, int? ProofCount = null);
+    IReadOnlyList<Guid>? SourceMemoryIds = null, int? ProofCount = null,
+    /// <summary>SPEC-20261112-memory-prompt-provenance RF-004 (preview ≤500).</summary>
+    string? SourcePrompt = null, string? SessionId = null, string? Origin = null);
 
 public sealed record MemoryBankDto(
     Guid Id, string BankKey, string Name, string? Mission,

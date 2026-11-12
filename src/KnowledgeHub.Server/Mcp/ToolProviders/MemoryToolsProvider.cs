@@ -34,10 +34,14 @@ public sealed class MemoryToolsProvider : IToolProvider
           "mode":{"type":["string","null"],"enum":["sync","async",null],"description":"sync returns unit ids; async returns operationId (poll operations_get)"},
           "strategy":{"type":["string","null"],"enum":["extract","verbatim",null],"description":"extract = LLM fact extraction (default); verbatim = store content as-is, no LLM"},
           "documentId":{"type":["string","null"],"description":"Logical document id — enables delta-retain (unchanged chunks keep their ids)"},
-          "documentTitle":{"type":["string","null"],"description":"Title for the logical document"}
+          "documentTitle":{"type":["string","null"],"description":"Title for the logical document"},
+          "sourcePrompt":{"type":["string","null"],"description":"Originating prompt/turn — defense-screened, capped at 2000 chars, deduped per (bank, sessionId)"},
+          "sessionId":{"type":["string","null"],"description":"Caller session/thread id — map your agent_chat threadId here"},
+          "origin":{"type":["string","null"],"enum":["explicit","passive","import","system",null],"description":"Who produced the content (default explicit)"}
         },"required":["content"],
         "examples":[{"content":"Deploy da API falhou por falta de memória no nó 3","strategy":"verbatim"},
-                    {"bankKey":"projeto-x","content":"O time decidiu migrar para Postgres em março","mode":"async"}]}
+                    {"bankKey":"projeto-x","content":"O time decidiu migrar para Postgres em março","mode":"async"},
+                    {"content":"Usuário prefere respostas em pt-BR","sourcePrompt":"prefiro respostas curtas em pt-BR","sessionId":"thread-42"}]}
         """)!.AsObject();
 
     private static readonly JsonObject RecallSchema = JsonNode.Parse("""
@@ -48,7 +52,8 @@ public sealed class MemoryToolsProvider : IToolProvider
           "minScore":{"type":["number","null"],"description":"Drop results with normalized score below this (0..1)"},
           "window":{"type":["string","null"],"description":"Temporal window — whitelist: 1h, 6h, 24h, 7d — enables the temporal arm"},
           "budget":{"type":["integer","null"],"description":"Token budget for returned texts"},
-          "factType":{"type":["string","null"],"enum":["world","experience","observation",null],"description":"Restrict to one fact type"}
+          "factType":{"type":["string","null"],"enum":["world","experience","observation",null],"description":"Restrict to one fact type"},
+          "sessionId":{"type":["string","null"],"description":"Restrict to units retained under this session id"}
         },"required":["query"],
         "examples":[{"query":"quando foi o deploy que falhou?","window":"7d"},
                     {"query":"decisões sobre Postgres","topK":5,"factType":"experience"}]}
@@ -59,6 +64,7 @@ public sealed class MemoryToolsProvider : IToolProvider
           "bankKey":{"type":["string","null"]},
           "factType":{"type":["string","null"],"enum":["world","experience","observation",null]},
           "tag":{"type":["string","null"]},
+          "sessionId":{"type":["string","null"],"description":"Restrict to units retained under this session id"},
           "limit":{"type":"integer","description":"Default 20, cap 200"},
           "offset":{"type":"integer"}
         },
@@ -621,7 +627,10 @@ public sealed class MemoryToolsProvider : IToolProvider
             OptionalStringMap(ctx, "metadata"),
             ToolArgs.OptionalString(ctx, "strategy") ?? "extract",
             ToolArgs.OptionalString(ctx, "documentId"),
-            ToolArgs.OptionalString(ctx, "documentTitle"));
+            ToolArgs.OptionalString(ctx, "documentTitle"),
+            ToolArgs.OptionalString(ctx, "sourcePrompt"),
+            ToolArgs.OptionalString(ctx, "sessionId"),
+            ToolArgs.OptionalString(ctx, "origin"));
         var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
 
@@ -664,7 +673,8 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalDouble(ctx, "minScore"),
             ToolArgs.OptionalString(ctx, "window"),
             ToolArgs.OptionalIntOrNull(ctx, "budget"),
-            ToolArgs.OptionalString(ctx, "factType"));
+            ToolArgs.OptionalString(ctx, "factType"),
+            ToolArgs.OptionalString(ctx, "sessionId"));
         var recall = ctx.Services.GetRequiredService<MemoryRecallService>();
         var result = await recall.RecallAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), req, ct);
         return await ToolResults.Structured($"{result.Results.Count} memor(ies)", result);
@@ -680,7 +690,8 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalString(ctx, "factType"),
             ToolArgs.OptionalString(ctx, "tag"),
             ToolArgs.OptionalInt(ctx, "limit", 20, 200),
-            ToolArgs.OptionalInt(ctx, "offset", 0, 1_000_000), ct);
+            ToolArgs.OptionalInt(ctx, "offset", 0, 1_000_000),
+            ToolArgs.OptionalString(ctx, "sessionId"), ct);
         return await ToolResults.Structured($"{items.Count} unit(s)", new { count = items.Count, units = items });
     }
 

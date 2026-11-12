@@ -42,7 +42,8 @@ public sealed class MemoryContextService(
         string? SynthesizedText);
 
     public sealed record TimelineItem(Guid Id, string FactType, string TextPreview,
-        IReadOnlyList<string> Entities, DateTime OccurredAt);
+        IReadOnlyList<string> Entities, DateTime OccurredAt,
+        string? SourcePrompt = null, string? SessionId = null, string? Origin = null);
     public sealed record TimelineBucket(string Bucket, int Count, IReadOnlyList<TimelineItem> Items);
     public sealed record MemoryTimelineResult(Guid BankId, string GroupBy,
         IReadOnlyList<TimelineBucket> Buckets);
@@ -149,8 +150,16 @@ public sealed class MemoryContextService(
         var rows = await q
             .OrderByDescending(u => u.OccurredStart ?? u.MentionedAt)
             .Take(Math.Clamp(limit, 1, 200))
-            .Select(u => new { u.Id, u.FactType, u.Text,
-                At = u.OccurredStart ?? u.MentionedAt })
+            .Select(u => new
+            {
+                u.Id,
+                u.FactType,
+                u.Text,
+                At = u.OccurredStart ?? u.MentionedAt,
+                u.Document!.SourcePrompt,
+                u.Document.SourceSessionId,
+                u.Document.Origin
+            })
             .ToListAsync(ct);
 
         var unitIds = rows.Select(r => r.Id).ToList();
@@ -167,7 +176,10 @@ public sealed class MemoryContextService(
             .Select(g => new TimelineBucket(g.Key, g.Count(),
                 g.Select(r => new TimelineItem(r.Id, r.FactType,
                         r.Text.Length > MaxFactPreview ? r.Text[..MaxFactPreview] : r.Text,
-                        byUnit.GetValueOrDefault(r.Id, []), r.At))
+                        byUnit.GetValueOrDefault(r.Id, []), r.At,
+                        r.SourcePrompt is { Length: > 0 } sp
+                            ? sp[..Math.Min(500, sp.Length)] : null,
+                        r.SourceSessionId, r.Origin))
                     .ToList()))
             .ToList();
         return new MemoryTimelineResult(bank.Id, groupBy, buckets);
