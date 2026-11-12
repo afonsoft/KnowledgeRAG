@@ -30,3 +30,8 @@
 - Unit 1915/1915 | Integration 375/375 | format limpo | build 0 erros.
 - Branch: 14 commits. Resta: push + PR épico.
 - gentle-ai analisado (clone /tmp/gentle-ai): gaps p/ próximo epic = memory_timeline/stats/bank_merge, RDD-lite no review CLI, path deny-list, bench de jornada, delegation triggers.
+
+## 2026-11-12 — E29 merged (PR #618)
+- Squash-merged `bcbca16` into main. SonarCloud gate initially red with 46 new-code issues; fixed all (complexity splits, Deps/Patch records, literal consts, static, ternaries, timeouts, shell positional param).
+- Footgun learned: bulk literal→const replacement MUST skip `"""` raw-string regions — corrupted JSON schemas inside `JsonNode.Parse("""...""")` broke CI unit/integration; local `--no-build` runs used stale binaries and masked it. Re-quoted 63 spots, re-verified 1915+375 on fresh build.
+- Draft SPECs pending approval (Epic E30): `.specs/SPEC-20261112-memory-context-timeline-stats.md`, `SPEC-20261112-memory-prompt-provenance.md`.
