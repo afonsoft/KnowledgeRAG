@@ -23,3 +23,10 @@
 - Falhas: Ask_FinalFloor_Empty (PRÉ-EXISTENTE — reproduzida em worktree de main; floor aplica em Normalized relativo, top hit ≈1.0) + flake de host-timeout sob contenção (passa isolado).
 - Bug pré-existente em main: minScores.final nunca esvazia quando há braço único (Normalized do top = 1.0). Candidato a issue fix.
 - Resta: push + PR épico.
+
+## Gate final E29 — TUDO VERDE (2026-11-12)
+- d362a3b: fix stale Ask_FinalFloor test (Normalized floor semantics; bug era pré-existente em main).
+- 5b0ad40: contract pin E29 + SchemaExamples.
+- Unit 1915/1915 | Integration 375/375 | format limpo | build 0 erros.
+- Branch: 14 commits. Resta: push + PR épico.
+- gentle-ai analisado (clone /tmp/gentle-ai): gaps p/ próximo epic = memory_timeline/stats/bank_merge, RDD-lite no review CLI, path deny-list, bench de jornada, delegation triggers.
