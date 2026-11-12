@@ -109,6 +109,16 @@ public static class MemoryEndpoints
             Invoke(http, "memory_page_delete",
                 Merge(new JsonObject(), BankKey, key, ("id", id.ToString()), (Confirm, true)), ct));
 
+        // SPEC-20261112-memory-context-timeline-stats: digest, timeline, stats.
+        group.MapGet("/banks/{key}/context", (HttpContext http, string key, CancellationToken ct) =>
+            Invoke(http, "memory_context", Merge(Query(http), BankKey, key), ct));
+        group.MapGet("/banks/{key}/timeline", (HttpContext http, string key, CancellationToken ct) =>
+            Invoke(http, "memory_timeline", Merge(Query(http), BankKey, key), ct));
+        group.MapGet("/banks/{key}/stats", (HttpContext http, string key, CancellationToken ct) =>
+            Invoke(http, "memory_stats", Merge(new JsonObject(), BankKey, key), ct));
+        group.MapGet("/stats", (HttpContext http, CancellationToken ct) =>
+            Invoke(http, "memory_stats", new JsonObject(), ct));
+
         return group;
     }
 

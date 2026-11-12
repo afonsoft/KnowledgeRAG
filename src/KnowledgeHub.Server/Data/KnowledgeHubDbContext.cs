@@ -498,6 +498,16 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             e.Property(d => d.Title).HasMaxLength(500);
             e.Property(d => d.ContentHash).IsRequired().HasMaxLength(64);
             e.Property(d => d.MetadataJson).HasColumnType(Database.IsNpgsql() ? "jsonb" : "TEXT");
+            // SPEC-20261112-memory-prompt-provenance RF-001.
+            e.Property(d => d.SourcePrompt).HasMaxLength(2000);
+            e.Property(d => d.SourceSessionId).HasMaxLength(128);
+            e.Property(d => d.Origin).IsRequired().HasMaxLength(16)
+                .HasDefaultValue("explicit");
+            e.Property(d => d.PromptHash).HasMaxLength(64);
+            e.ToTable(t => t.HasCheckConstraint(
+                "CK_MemoryDocuments_Origin",
+                "\"Origin\" IN ('explicit','passive','import','system')"));
+            e.HasIndex(d => new { d.BankId, d.SourceSessionId });
             e.HasIndex(d => new { d.BankId, d.ExternalId }).IsUnique();
         });
 

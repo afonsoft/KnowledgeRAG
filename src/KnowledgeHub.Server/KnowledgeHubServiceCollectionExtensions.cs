@@ -551,6 +551,7 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddScoped<Memory.MemoryConsolidationService>();
         // SPEC-20261111-memory-reflect-directives.
         services.AddScoped<Memory.MemoryReflectService>();
+        services.AddScoped<Memory.MemoryContextService>();
         services.AddScoped<Memory.MemoryDirectiveService>();
         // SPEC-20261111-mental-models-pages.
         services.AddScoped<Memory.MentalModels.MentalModelService>();

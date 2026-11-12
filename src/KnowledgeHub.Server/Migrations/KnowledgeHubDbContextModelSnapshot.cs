@@ -1391,6 +1391,25 @@ namespace KnowledgeHub.Server.Migrations
                     b.Property<string>("MetadataJson")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("explicit");
+
+                    b.Property<string>("PromptHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourcePrompt")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceSessionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
@@ -1403,7 +1422,12 @@ namespace KnowledgeHub.Server.Migrations
                     b.HasIndex("BankId", "ExternalId")
                         .IsUnique();
 
-                    b.ToTable("MemoryDocuments");
+                    b.HasIndex("BankId", "SourceSessionId");
+
+                    b.ToTable("MemoryDocuments", t =>
+                        {
+                            t.HasCheckConstraint("CK_MemoryDocuments_Origin", "\"Origin\" IN ('explicit','passive','import','system')");
+                        });
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryLink", b =>

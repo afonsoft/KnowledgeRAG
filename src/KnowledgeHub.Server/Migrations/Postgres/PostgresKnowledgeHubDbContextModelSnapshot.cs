@@ -1407,6 +1407,25 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.Property<string>("MetadataJson")
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("explicit");
+
+                    b.Property<string>("PromptHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourcePrompt")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("SourceSessionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("Title")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -1419,7 +1438,12 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.HasIndex("BankId", "ExternalId")
                         .IsUnique();
 
-                    b.ToTable("MemoryDocuments");
+                    b.HasIndex("BankId", "SourceSessionId");
+
+                    b.ToTable("MemoryDocuments", t =>
+                        {
+                            t.HasCheckConstraint("CK_MemoryDocuments_Origin", "\"Origin\" IN ('explicit','passive','import','system')");
+                        });
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryLink", b =>

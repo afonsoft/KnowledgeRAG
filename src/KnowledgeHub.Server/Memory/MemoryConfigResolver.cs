@@ -23,6 +23,11 @@ public sealed class MemoryConfigResolver(IConfiguration config)
     public int MaxUnitTextLength(MemoryBank? bank = null) =>
         OverrideInt(bank, "maxUnitTextLength") ?? config.GetValue("Memory:MaxUnitTextLength", 4_000);
 
+    /// <summary>SPEC-20261112-memory-prompt-provenance RF-002: persisted
+    /// sourcePrompt cap — longer prompts are truncated (flag in metadata).</summary>
+    public int ProvenanceMaxPromptLength(MemoryBank? bank = null) =>
+        OverrideInt(bank, "provenanceMaxPromptLength") ?? config.GetValue("Memory:Provenance:MaxPromptLength", 2_000);
+
     /// <summary>Days two units may be apart and still earn a temporal link.</summary>
     public int TemporalLinkWindowDays(MemoryBank? bank = null) =>
         OverrideInt(bank, "temporalLinkWindowDays") ?? config.GetValue("Memory:TemporalLinkWindowDays", 7);

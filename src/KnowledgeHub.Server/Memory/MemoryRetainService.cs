@@ -72,7 +72,32 @@ public sealed class MemoryRetainService(
         public required List<Guid> DedupedIds { get; init; }
         public required Dictionary<int, List<MemoryUnit>> Preserved { get; init; }
         public MemoryDocument? Doc { get; set; }
+        public Provenance? Provenance { get; init; }
         public int PreservedCount => Preserved.Values.Sum(v => v.Count);
+    }
+
+    /// <summary>SPEC-20261112-memory-prompt-provenance: screened + validated
+    /// provenance for one retain batch (lives on the MemoryDocument).</summary>
+    private sealed record Provenance(
+        string? Prompt, string? SessionId, string Origin,
+        string? PromptHash, bool Truncated, MemoryDocument? SeenDoc)
+    {
+        public bool HasAny => Prompt is not null || SessionId is not null || Origin != "explicit";
+
+        /// <summary>ExternalId for provenance-only documents — deterministic on
+        /// the dedupe key so repeats resolve to the same row.</summary>
+        public string ExternalId =>
+            $"prov:{SessionId ?? "nosession"}:{PromptHash?[..16] ?? Guid.NewGuid().ToString("N")[..16]}";
+
+        public void ApplyTo(MemoryDocument doc)
+        {
+            if (Prompt is not null) doc.SourcePrompt = Prompt;
+            if (SessionId is not null) doc.SourceSessionId = SessionId;
+            if (PromptHash is not null) doc.PromptHash = PromptHash;
+            doc.Origin = Origin;
+            if (Truncated)
+                doc.MetadataJson = JsonSerializer.Serialize(new { promptTruncated = true });
+        }
     }
 
     /// <summary>Executes against an already-resolved bank (worker path).</summary>
@@ -84,6 +109,13 @@ public sealed class MemoryRetainService(
         if (strategy is not ("extract" or "verbatim"))
             throw new MemoryBadRequestException($"strategy must be 'extract' or 'verbatim' (got '{strategy}')");
 
+        // SPEC-20261112-memory-prompt-provenance RF-002/RF-003: provenance is
+        // validated + screened + deduped BEFORE any extraction work.
+        var provenance = await PrepareProvenanceAsync(bank, req, ct);
+        if (provenance.SeenDoc is { } seenDoc)
+            return new MemoryRetainResult(bank.Id, [], 0, 0,
+                PromptSeen: true, DocumentId: seenDoc.ExternalId);
+
         var chunks = Chunk(req.Content);
         var run = new RetainRun
         {
@@ -93,7 +125,8 @@ public sealed class MemoryRetainService(
             NewUnits = [],
             SeenHashes = await ExistingHashesAsync(bank, ct),
             DedupedIds = [],
-            Preserved = []
+            Preserved = [],
+            Provenance = provenance
         };
 
         // RF-005 delta-retain: same (bank, externalId) — per-chunk hash reuse.
@@ -107,13 +140,17 @@ public sealed class MemoryRetainService(
         else
             await RetainExtractAsync(run, chunks, maxUnits, ct);
 
-        // RF-005: create the logical document row on first retain of an id.
-        if (run.Doc is null && req.DocumentId is { Length: > 0 } extId)
+        // RF-005: create the logical document row on first retain of an id;
+        // RF-002: also create one when provenance is supplied without an id —
+        // the document is the batch container for prompt/session/origin.
+        if (run.Doc is null && (req.DocumentId is { Length: > 0 } || provenance.HasAny))
         {
             run.Doc = new MemoryDocument
             {
                 BankId = bank.Id,
-                ExternalId = extId,
+                ExternalId = req.DocumentId is { Length: > 0 } extId
+                    ? extId
+                    : provenance.ExternalId,
                 Title = req.DocumentTitle,
                 ContentHash = docHash
             };
@@ -121,6 +158,8 @@ public sealed class MemoryRetainService(
             foreach (var u in run.NewUnits.Concat(run.Preserved.Values.SelectMany(v => v)))
                 u.Document = run.Doc;
         }
+        if (run.Doc is { } doc)
+            provenance.ApplyTo(doc);
 
         await db.SaveChangesAsync(ct);
         // SPEC-20261111-memory-observations-consolidation RF-001 (a): signal the
@@ -133,7 +172,48 @@ public sealed class MemoryRetainService(
         var preservedCount = allIds.Count - run.NewUnits.Count;
         logger.LogInformation("retain: bank {Bank} strategy {Strategy} → {New} new units, {Kept} preserved",
             bank.BankKey, strategy, run.NewUnits.Count, preservedCount);
-        return new MemoryRetainResult(bank.Id, allIds, run.NewUnits.Count, preservedCount);
+        return new MemoryRetainResult(bank.Id, allIds, run.NewUnits.Count, preservedCount,
+            DocumentId: run.Doc?.ExternalId);
+    }
+
+    /// <summary>
+    /// SPEC-20261112-memory-prompt-provenance RF-002/RF-003: validates origin,
+    /// defense-screens sourcePrompt (same policy as content), truncates to the
+    /// configured cap, hashes it, and detects a previous retain of the same
+    /// (bank, sessionId, promptHash) — the prompt-level dedupe.
+    /// </summary>
+    private async Task<Provenance> PrepareProvenanceAsync(
+        MemoryBank bank, MemoryRetainRequest req, CancellationToken ct)
+    {
+        var origin = string.IsNullOrWhiteSpace(req.Origin) ? "explicit" : req.Origin.Trim();
+        if (origin is not ("explicit" or "passive" or "import" or "system"))
+            throw new MemoryBadRequestException(
+                $"origin must be explicit|passive|import|system (got '{req.Origin}')");
+
+        var sessionId = req.SessionId?.Trim();
+        if (sessionId is { Length: > 128 })
+            sessionId = sessionId[..128];
+        if (sessionId is { Length: 0 })
+            sessionId = null;
+
+        string? prompt = null;
+        var truncated = false;
+        if (req.SourcePrompt is { Length: > 0 } rawPrompt)
+        {
+            // Prompts carry secrets just like content — same defense policy.
+            var screened = await deps.Defense.ScreenAsync(rawPrompt, bank, ct);
+            var cap = deps.Config.ProvenanceMaxPromptLength(bank);
+            prompt = screened.Length > cap ? screened[..cap] : screened;
+            truncated = screened.Length > cap;
+        }
+        var hash = prompt is not null ? MemoryHasher.Hash(prompt) : null;
+
+        MemoryDocument? seen = null;
+        if (hash is not null && sessionId is not null)
+            seen = await db.MemoryDocuments.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.BankId == bank.Id
+                    && d.SourceSessionId == sessionId && d.PromptHash == hash, ct);
+        return new Provenance(prompt, sessionId, origin, hash, truncated, seen);
     }
 
     /// <summary>Bank-wide hash dedupe set: real ids for existing units, Empty for this run.</summary>

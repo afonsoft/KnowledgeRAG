@@ -34,10 +34,14 @@ public sealed class MemoryToolsProvider : IToolProvider
           "mode":{"type":["string","null"],"enum":["sync","async",null],"description":"sync returns unit ids; async returns operationId (poll operations_get)"},
           "strategy":{"type":["string","null"],"enum":["extract","verbatim",null],"description":"extract = LLM fact extraction (default); verbatim = store content as-is, no LLM"},
           "documentId":{"type":["string","null"],"description":"Logical document id — enables delta-retain (unchanged chunks keep their ids)"},
-          "documentTitle":{"type":["string","null"],"description":"Title for the logical document"}
+          "documentTitle":{"type":["string","null"],"description":"Title for the logical document"},
+          "sourcePrompt":{"type":["string","null"],"description":"Originating prompt/turn — defense-screened, capped at 2000 chars, deduped per (bank, sessionId)"},
+          "sessionId":{"type":["string","null"],"description":"Caller session/thread id — map your agent_chat threadId here"},
+          "origin":{"type":["string","null"],"enum":["explicit","passive","import","system",null],"description":"Who produced the content (default explicit)"}
         },"required":["content"],
         "examples":[{"content":"Deploy da API falhou por falta de memória no nó 3","strategy":"verbatim"},
-                    {"bankKey":"projeto-x","content":"O time decidiu migrar para Postgres em março","mode":"async"}]}
+                    {"bankKey":"projeto-x","content":"O time decidiu migrar para Postgres em março","mode":"async"},
+                    {"content":"Usuário prefere respostas em pt-BR","sourcePrompt":"prefiro respostas curtas em pt-BR","sessionId":"thread-42"}]}
         """)!.AsObject();
 
     private static readonly JsonObject RecallSchema = JsonNode.Parse("""
@@ -48,7 +52,8 @@ public sealed class MemoryToolsProvider : IToolProvider
           "minScore":{"type":["number","null"],"description":"Drop results with normalized score below this (0..1)"},
           "window":{"type":["string","null"],"description":"Temporal window — whitelist: 1h, 6h, 24h, 7d — enables the temporal arm"},
           "budget":{"type":["integer","null"],"description":"Token budget for returned texts"},
-          "factType":{"type":["string","null"],"enum":["world","experience","observation",null],"description":"Restrict to one fact type"}
+          "factType":{"type":["string","null"],"enum":["world","experience","observation",null],"description":"Restrict to one fact type"},
+          "sessionId":{"type":["string","null"],"description":"Restrict to units retained under this session id"}
         },"required":["query"],
         "examples":[{"query":"quando foi o deploy que falhou?","window":"7d"},
                     {"query":"decisões sobre Postgres","topK":5,"factType":"experience"}]}
@@ -59,6 +64,7 @@ public sealed class MemoryToolsProvider : IToolProvider
           "bankKey":{"type":["string","null"]},
           "factType":{"type":["string","null"],"enum":["world","experience","observation",null]},
           "tag":{"type":["string","null"]},
+          "sessionId":{"type":["string","null"],"description":"Restrict to units retained under this session id"},
           "limit":{"type":"integer","description":"Default 20, cap 200"},
           "offset":{"type":"integer"}
         },
@@ -131,6 +137,35 @@ public sealed class MemoryToolsProvider : IToolProvider
           "observationId":{"type":"string","description":"Observation unit id (GUID)"}
         },"required":["observationId"],
         "examples":[{"observationId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject ContextSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"],"description":"Bank to summarize (default 'default')"},
+          "topK":{"type":"integer","description":"Items per section (default 10, cap 50)"},
+          "since":{"type":["string","null"],"description":"ISO-8601 — only items at/after this moment count as 'recent'"},
+          "synthesize":{"type":["boolean","null"],"description":"true asks the chat provider for a prose summary (opt-in LLM; ignored when unconfigured)"}
+        },
+        "examples":[{},{"topK":5,"since":"2026-11-01T00:00:00Z"},{"synthesize":true}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject TimelineSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "from":{"type":["string","null"],"description":"ISO-8601 lower bound (inclusive) on occurred/mentioned time"},
+          "to":{"type":["string","null"],"description":"ISO-8601 upper bound (inclusive)"},
+          "factType":{"type":["string","null"],"enum":["world","experience","observation",null]},
+          "groupBy":{"type":["string","null"],"enum":["day","hour","week",null],"description":"Bucket granularity (default day)"},
+          "limit":{"type":"integer","description":"Max units scanned (default 50, cap 200)"}
+        },
+        "examples":[{"groupBy":"day"},{"factType":"observation","from":"2026-11-01T00:00:00Z","groupBy":"week"}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject StatsSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"],"description":"Bank to measure — omitted aggregates every bank in the caller scope"}
+        },
+        "examples":[{"bankKey":"default"},{}]}
         """)!.AsObject();
 
     private static readonly JsonObject ReflectSchema = JsonNode.Parse("""
@@ -535,6 +570,36 @@ public sealed class MemoryToolsProvider : IToolProvider
             },
             new CatalogTool
             {
+                Name = "memory_context",
+                Title = "Session-start digest",
+                Description = "Deterministic digest to open a session with: top directives, recent facts, top observations, stale models/pages, recent operation failures and mini-stats — no LLM cost. Call this first when starting work on a bank.",
+                InputSchema = ContextSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = ContextAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_timeline",
+                Title = "Memory timeline",
+                Description = "Chronological view of a bank's units grouped in day/hour/week buckets, ordered by when the fact happened (OccurredStart) falling back to when it was retained.",
+                InputSchema = TimelineSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = TimelineAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_stats",
+                Title = "Memory stats",
+                Description = "Per-bank health metrics — units by fact type, embedding coverage, links, observations proof counts, operation status, consolidation backlog. Use it to decide when to consolidate or audit a bank.",
+                InputSchema = StatsSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = StatsAsync
+            },
+            new CatalogTool
+            {
                 Name = "memory_bank_delete",
                 Title = "Delete memory bank",
                 Description = "Delete a bank and ALL its memories. Requires confirm=true.",
@@ -562,7 +627,10 @@ public sealed class MemoryToolsProvider : IToolProvider
             OptionalStringMap(ctx, "metadata"),
             ToolArgs.OptionalString(ctx, "strategy") ?? "extract",
             ToolArgs.OptionalString(ctx, "documentId"),
-            ToolArgs.OptionalString(ctx, "documentTitle"));
+            ToolArgs.OptionalString(ctx, "documentTitle"),
+            ToolArgs.OptionalString(ctx, "sourcePrompt"),
+            ToolArgs.OptionalString(ctx, "sessionId"),
+            ToolArgs.OptionalString(ctx, "origin"));
         var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
 
@@ -605,7 +673,8 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalDouble(ctx, "minScore"),
             ToolArgs.OptionalString(ctx, "window"),
             ToolArgs.OptionalIntOrNull(ctx, "budget"),
-            ToolArgs.OptionalString(ctx, "factType"));
+            ToolArgs.OptionalString(ctx, "factType"),
+            ToolArgs.OptionalString(ctx, "sessionId"));
         var recall = ctx.Services.GetRequiredService<MemoryRecallService>();
         var result = await recall.RecallAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), req, ct);
         return await ToolResults.Structured($"{result.Results.Count} memor(ies)", result);
@@ -621,7 +690,8 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalString(ctx, "factType"),
             ToolArgs.OptionalString(ctx, "tag"),
             ToolArgs.OptionalInt(ctx, "limit", 20, 200),
-            ToolArgs.OptionalInt(ctx, "offset", 0, 1_000_000), ct);
+            ToolArgs.OptionalInt(ctx, "offset", 0, 1_000_000),
+            ToolArgs.OptionalString(ctx, "sessionId"), ct);
         return await ToolResults.Structured($"{items.Count} unit(s)", new { count = items.Count, units = items });
     }
 
@@ -1056,6 +1126,61 @@ public sealed class MemoryToolsProvider : IToolProvider
                 ParseGuid(ToolArgs.RequiredString(ctx, "observationId")), banks, ct);
             return await ToolResults.Structured($"{history.Count} version(s)",
                 new { count = history.Count, versions = history });
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    // ---------- context / timeline / stats (SPEC-20261112-memory-context-timeline-stats) ----------
+
+    private static async ValueTask<CallToolResult> ContextAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemoryContextService>();
+        try
+        {
+            var digest = await svc.ContextAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                ToolArgs.OptionalInt(ctx, "topK", 10, 50),
+                ParseDate(ToolArgs.OptionalString(ctx, "since"))?.UtcDateTime,
+                ToolArgs.OptionalBool(ctx, "synthesize") == true, ct);
+            return await ToolResults.Structured(MemoryContextService.BuildDigest(digest), digest);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> TimelineAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemoryContextService>();
+        try
+        {
+            var result = await svc.TimelineAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                ParseDate(ToolArgs.OptionalString(ctx, "from"))?.UtcDateTime,
+                ParseDate(ToolArgs.OptionalString(ctx, "to"))?.UtcDateTime,
+                ToolArgs.OptionalString(ctx, "factType") is { } ft ? [ft] : null,
+                ToolArgs.OptionalString(ctx, "groupBy") ?? "day",
+                ToolArgs.OptionalInt(ctx, "limit", 50, 200), ct);
+            return await ToolResults.Structured($"{result.Buckets.Count} bucket(s)", result);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> StatsAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemoryContextService>();
+        try
+        {
+            var stats = await svc.StatsAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), ct);
+            return await ToolResults.Structured("memory stats", stats);
         }
         catch (MemoryBadRequestException ex)
         {

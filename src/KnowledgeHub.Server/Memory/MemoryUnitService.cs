@@ -9,7 +9,8 @@ namespace KnowledgeHub.Server.Memory;
 public sealed class MemoryUnitService(KnowledgeHubDbContext db, MemoryBankService banks)
 {
     public async Task<IReadOnlyList<MemoryUnitDto>> ListAsync(
-        string? bankKey, string? factType, string? tag, int limit, int offset, CancellationToken ct)
+        string? bankKey, string? factType, string? tag, int limit, int offset,
+        string? sessionId, CancellationToken ct)
     {
         var bank = await banks.ResolveAsync(bankKey, ct, create: false);
         var q = db.MemoryUnits.AsNoTracking()
@@ -18,6 +19,8 @@ public sealed class MemoryUnitService(KnowledgeHubDbContext db, MemoryBankServic
             q = q.Where(u => u.FactType == factType);
         if (tag is { Length: > 0 })
             q = q.Where(u => u.Tags.Contains(tag));
+        if (sessionId is { Length: > 0 })
+            q = q.Where(u => u.Document != null && u.Document.SourceSessionId == sessionId);
         var rows = await q.Include(u => u.Document)
             .OrderByDescending(u => u.MentionedAt)
             .Skip(Math.Max(offset, 0)).Take(Math.Clamp(limit, 1, 200))
@@ -87,5 +90,9 @@ public sealed class MemoryUnitService(KnowledgeHubDbContext db, MemoryBankServic
             : null,
         u.ContentHash, u.Document != null ? u.Document.ExternalId : null, u.ChunkIndex,
         u.FactType == "observation" ? MemoryRecallService.ParseSources(u.SourceMemoryIdsJson) : null,
-        u.FactType == "observation" ? u.ProofCount : null);
+        u.FactType == "observation" ? u.ProofCount : null,
+        // SPEC-20261112-memory-prompt-provenance RF-004 (preview ≤500 chars).
+        u.Document?.SourcePrompt is { Length: > 0 } sp
+            ? sp[..Math.Min(500, sp.Length)] : null,
+        u.Document?.SourceSessionId, u.Document?.Origin);
 }
