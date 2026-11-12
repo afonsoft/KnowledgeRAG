@@ -59,13 +59,20 @@ check, not a blocker.
 
 **Session start** — before the first non-trivial task:
 
-1. `context_recovery {repo: "owner/name"}` — latest compacted snapshot of
+1. `memory_context` — deterministic bank digest: directives, recent facts,
+   top observations, stale models/pages, recent failures. Zero LLM cost;
+   call it first whenever a bank exists.
+2. `context_recovery {repo: "owner/name"}` — latest compacted snapshot of
    prior work on this repo (decisions, open items). `repo` is the GitHub
    `owner/name` (lowercase), or the URL — it is normalized.
-2. `memory_recall` for durable facts beyond the working snapshot
+3. `memory_recall` for durable facts beyond the working snapshot
    (project conventions, standing corrections).
-3. `memory_pages_tree` / `memory_page` — standing pages (architecture,
+4. `memory_pages_tree` / `memory_page` — standing pages (architecture,
    conventions) maintained by the hub; cheap reads, no LLM cost.
+
+Supporting reads while planning: `memory_timeline` (what happened when,
+bucketed by day/hour/week) and `memory_stats` (bank health — consolidation
+backlog, embedding coverage, observation proof counts).
 
 **During work** — when you learn something worth keeping:
 
