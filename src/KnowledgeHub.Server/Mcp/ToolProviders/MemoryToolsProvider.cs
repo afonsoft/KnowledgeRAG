@@ -25,8 +25,8 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject RetainSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"],"description":"Target bank (default 'default'); auto-created on first use"},
-          ArgContent:{"type":"string","description":"Text to remember — observations, decisions, facts, transcripts"},
+          "bankKey":{"type":["string","null"],"description":"Target bank (default 'default'); auto-created on first use"},
+          "content":{"type":"string","description":"Text to remember — observations, decisions, facts, transcripts"},
           "context":{"type":["string","null"],"description":"Why this is being remembered (helps extraction)"},
           "timestamp":{"type":["string","null"],"description":"ISO-8601 moment the content happened (default: now)"},
           "tags":{"type":["array","null"],"items":{"type":"string"},"description":"Free-form tags"},
@@ -35,14 +35,14 @@ public sealed class MemoryToolsProvider : IToolProvider
           "strategy":{"type":["string","null"],"enum":["extract","verbatim",null],"description":"extract = LLM fact extraction (default); verbatim = store content as-is, no LLM"},
           "documentId":{"type":["string","null"],"description":"Logical document id — enables delta-retain (unchanged chunks keep their ids)"},
           "documentTitle":{"type":["string","null"],"description":"Title for the logical document"}
-        },"required":[ArgContent],
-        "examples":[{ArgContent:"Deploy da API falhou por falta de memória no nó 3","strategy":"verbatim"},
-                    {ArgBankKey:"projeto-x",ArgContent:"O time decidiu migrar para Postgres em março","mode":"async"}]}
+        },"required":["content"],
+        "examples":[{"content":"Deploy da API falhou por falta de memória no nó 3","strategy":"verbatim"},
+                    {"bankKey":"projeto-x","content":"O time decidiu migrar para Postgres em março","mode":"async"}]}
         """)!.AsObject();
 
     private static readonly JsonObject RecallSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"],"description":"Bank to search (default 'default')"},
+          "bankKey":{"type":["string","null"],"description":"Bank to search (default 'default')"},
           "query":{"type":"string","description":"Natural-language recall query"},
           "topK":{"type":"integer","description":"Max results (default 8, cap 100)"},
           "minScore":{"type":["number","null"],"description":"Drop results with normalized score below this (0..1)"},
@@ -56,18 +56,18 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject ListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "factType":{"type":["string","null"],"enum":["world","experience","observation",null]},
           "tag":{"type":["string","null"]},
           "limit":{"type":"integer","description":"Default 20, cap 200"},
           "offset":{"type":"integer"}
         },
-        "examples":[{ArgBankKey:"default","factType":"world","limit":10}]}
+        "examples":[{"bankKey":"default","factType":"world","limit":10}]}
         """)!.AsObject();
 
     private static readonly JsonObject IdSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string","description":"Memory unit id (GUID)"}
         },"required":["id"],
         "examples":[{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}]}
@@ -75,7 +75,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject UpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string","description":"Memory unit id (GUID)"},
           "text":{"type":["string","null"],"description":"New fact text (rehashes + re-embeds)"},
           "context":{"type":["string","null"]},
@@ -87,47 +87,47 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject DeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string","description":"Memory unit id (GUID)"},
-          ArgConfirm:{"type":"boolean","description":"Must be true"},
+          "confirm":{"type":"boolean","description":"Must be true"},
           "hard":{"type":["boolean","null"],"description":"true = permanent delete; default soft-delete"}
-        },"required":["id",ArgConfirm],
-        "examples":[{"id":"3fa85f64-…",ArgConfirm:true}]}
+        },"required":["id","confirm"],
+        "examples":[{"id":"3fa85f64-…","confirm":true}]}
         """)!.AsObject();
 
     private static readonly JsonObject BankCreateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":"string","description":"Slug (unique per API key)"},
+          "bankKey":{"type":"string","description":"Slug (unique per API key)"},
           "name":{"type":["string","null"],"description":"Display name (default = bankKey)"},
           "mission":{"type":["string","null"],"description":"Bank purpose — guides future reflect"},
           "disposition":{"type":["object","null"],"description":"{\"skepticism\":1-5,\"literalism\":1-5,\"empathy\":1-5}"},
           "config":{"type":["object","null"],"description":"Per-bank config overrides (maxUnitsPerRetain, defaultStrategy, …)"}
-        },"required":[ArgBankKey],
-        "examples":[{ArgBankKey:"projeto-x","name":"Projeto X","mission":"memória do agente do projeto X"}]}
+        },"required":["bankKey"],
+        "examples":[{"bankKey":"projeto-x","name":"Projeto X","mission":"memória do agente do projeto X"}]}
         """)!.AsObject();
 
     private static readonly JsonObject BankUpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":"string"},
+          "bankKey":{"type":"string"},
           "name":{"type":["string","null"]},
           "mission":{"type":["string","null"]},
           "disposition":{"type":["object","null"]},
           "config":{"type":["object","null"]}
-        },"required":[ArgBankKey],
-        "examples":[{ArgBankKey:"projeto-x","mission":"memória do agente + decisões arquiteturais"}]}
+        },"required":["bankKey"],
+        "examples":[{"bankKey":"projeto-x","mission":"memória do agente + decisões arquiteturais"}]}
         """)!.AsObject();
 
     private static readonly JsonObject ConsolidateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "wait":{"type":["boolean","null"],"description":"true (default) runs inline and returns the summary; false queues a consolidate operation (poll operations_get)"}
         },
-        "examples":[{ArgBankKey:"projeto-x"},{ArgBankKey:"default","wait":false}]}
+        "examples":[{"bankKey":"projeto-x"},{"bankKey":"default","wait":false}]}
         """)!.AsObject();
 
     private static readonly JsonObject ObsHistorySchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "observationId":{"type":"string","description":"Observation unit id (GUID)"}
         },"required":["observationId"],
         "examples":[{"observationId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}]}
@@ -135,7 +135,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject ReflectSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "query":{"type":"string","description":"Question to reflect over the bank's memory"},
           "context":{"type":["string","null"],"description":"Extra context injected into the reflect prompt"},
           "budget":{"type":["string","null"],"enum":["low","mid","high",null],"description":"Reflect depth — iterations: low=3, mid=6, high=Memory:Reflect:MaxIterations (default 10)"},
@@ -153,31 +153,31 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject DirectivesListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "includeInactive":{"type":["boolean","null"]}
         },"examples":[{}]}
         """)!.AsObject();
 
     private static readonly JsonObject DirectiveCreateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "name":{"type":["string","null"],"description":"Short label"},
-          ArgContent:{"type":"string","description":"The standing instruction (max 2000 chars)"},
+          "content":{"type":"string","description":"The standing instruction (max 2000 chars)"},
           "priority":{"type":["integer","null"],"description":"Higher applies first (default 0)"},
           "isActive":{"type":["boolean","null"]},
           "tags":{"type":["array","null"],"items":{"type":"string"},"description":"Scope tags — empty = bank-global"}
-        },"required":[ArgContent],
-        "examples":[{ArgContent:"Sempre responda em pt-BR","priority":10},
-                    {ArgContent:"Nunca exponha dados de billing","tags":["public"]}]}
+        },"required":["content"],
+        "examples":[{"content":"Sempre responda em pt-BR","priority":10},
+                    {"content":"Nunca exponha dados de billing","tags":["public"]}]}
         """)!.AsObject();
 
     private static readonly JsonObject DirectiveUpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string"},
           "isActive":{"type":["boolean","null"]},
           "priority":{"type":["integer","null"]},
-          ArgContent:{"type":["string","null"]},
+          "content":{"type":["string","null"]},
           "tags":{"type":["array","null"],"items":{"type":"string"}}
         },"required":["id"],
         "examples":[{"id":"3fa85f64-…","isActive":false}]}
@@ -185,23 +185,23 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject DirectiveDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string"},
-          ArgConfirm:{"type":"boolean","description":"Must be true"}
-        },"required":["id",ArgConfirm],
-        "examples":[{"id":"3fa85f64-…",ArgConfirm:true}]}
+          "confirm":{"type":"boolean","description":"Must be true"}
+        },"required":["id","confirm"],
+        "examples":[{"id":"3fa85f64-…","confirm":true}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "subtype":{"type":["string","null"],"enum":["mental_model","page",null]}
         },"examples":[{}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelGetSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":["string","null"]},
           "path":{"type":["string","null"],"description":"'folder/name' or 'name'"}
         },"examples":[{"id":"3fa85f64-…"},{"path":"projeto/convencoes/api"}]}
@@ -209,7 +209,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject MentalModelCreateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "subtype":{"type":["string","null"],"enum":["mental_model","page",null]},
           "name":{"type":"string"},
           "path":{"type":["string","null"],"description":"folder path e.g. 'projeto/convencoes'"},
@@ -223,30 +223,30 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject MentalModelUpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string"},
           "name":{"type":["string","null"]},
           "path":{"type":["string","null"]},
           "sourceQuery":{"type":["string","null"]},
           "trigger":{"type":["object","null"]},
           "tags":{"type":["array","null"],"items":{"type":"string"}},
-          ArgContent:{"type":["string","null"],"description":"manual edit — recorded as manual_edit in history"}
+          "content":{"type":["string","null"],"description":"manual edit — recorded as manual_edit in history"}
         },"required":["id"],
         "examples":[{"id":"3fa85f64-…","path":"projeto/api"}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string"},
-          ArgConfirm:{"type":"boolean","description":"Must be true"}
-        },"required":["id",ArgConfirm],
-        "examples":[{"id":"3fa85f64-…",ArgConfirm:true}]}
+          "confirm":{"type":"boolean","description":"Must be true"}
+        },"required":["id","confirm"],
+        "examples":[{"id":"3fa85f64-…","confirm":true}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelRefreshSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "id":{"type":"string"},
           "wait":{"type":["boolean","null"],"description":"true = run now synchronously (ignores min-interval); false = signal the worker"}
         },"required":["id"],
@@ -255,7 +255,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject PageSearchSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":["string","null"]},
+          "bankKey":{"type":["string","null"]},
           "query":{"type":"string"},
           "limit":{"type":["integer","null"]}
         },"required":["query"],
@@ -264,10 +264,10 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject BankDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgBankKey:{"type":"string"},
-          ArgConfirm:{"type":"boolean","description":"Must be true — deletes the bank and ALL its memories"}
-        },"required":[ArgBankKey,ArgConfirm],
-        "examples":[{ArgBankKey:"projeto-x",ArgConfirm:true}]}
+          "bankKey":{"type":"string"},
+          "confirm":{"type":"boolean","description":"Must be true — deletes the bank and ALL its memories"}
+        },"required":["bankKey","confirm"],
+        "examples":[{"bankKey":"projeto-x","confirm":true}]}
         """)!.AsObject();
 
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)

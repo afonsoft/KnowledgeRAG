@@ -24,9 +24,9 @@ public sealed class OperationsToolsProvider : IToolProvider
 
     private static readonly JsonObject OperationsListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "status":{"type":["string","null"],"enum":["queued","running","done","failed",CancelledStatus,null],"description":"Filter by job status"},
+          "status":{"type":["string","null"],"enum":["queued","running","done","failed","cancelled",null],"description":"Filter by job status"},
           "kind":{"type":["string","null"],"enum":["sync","reindex",null],"description":"Filter by job kind"},
-          ArgSourceId:{"type":["string","null"],"description":"Filter by source id (GUID)"},
+          "sourceId":{"type":["string","null"],"description":"Filter by source id (GUID)"},
           "limit":{"type":"integer","description":"Max jobs to return (default 20, cap 100)"},
           "offset":{"type":"integer","description":"Skip the newest N jobs (default 0)"}
         },
@@ -44,11 +44,11 @@ public sealed class OperationsToolsProvider : IToolProvider
         {"type":"object","properties":{
           "id":{"type":["string","null"],"description":"Document id (GUID)"},
           "path":{"type":["string","null"],"description":"Document uriReference (path/URL) — resolves the document when id is absent"},
-          ArgSourceId:{"type":["string","null"],"description":"Source id (GUID) — narrows path resolution"},
+          "sourceId":{"type":["string","null"],"description":"Source id (GUID) — narrows path resolution"},
           "title":{"type":["string","null"],"description":"New title"}
         },
         "examples":[{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","title":"New title"},
-                    {"path":"notes/design.md",ArgSourceId:"9f1b…","title":"Design doc"}]}
+                    {"path":"notes/design.md","sourceId":"9f1b…","title":"Design doc"}]}
         """)!.AsObject();
 
     private static readonly JsonObject DocumentDeleteSchema = JsonNode.Parse("""
@@ -61,10 +61,10 @@ public sealed class OperationsToolsProvider : IToolProvider
 
     private static readonly JsonObject SourceRescanSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          ArgSourceId:{"type":"string","description":"Source id (GUID) to re-sync"},
+          "sourceId":{"type":"string","description":"Source id (GUID) to re-sync"},
           "kind":{"type":["string","null"],"enum":["sync","reindex",null],"description":"sync (default, incremental) or reindex (force re-chunk)"}
-        },"required":[ArgSourceId],
-        "examples":[{ArgSourceId:"9f1b3c2e-…"},{ArgSourceId:"9f1b3c2e-…","kind":"reindex"}]}
+        },"required":["sourceId"],
+        "examples":[{"sourceId":"9f1b3c2e-…"},{"sourceId":"9f1b3c2e-…","kind":"reindex"}]}
         """)!.AsObject();
 
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)
