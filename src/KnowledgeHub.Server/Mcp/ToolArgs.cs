@@ -19,6 +19,7 @@ public static class ToolArgs
     {
         if (!TryGet(ctx, name, out var el))
             return fallback;
+        el = Coerce(ctx, name, el);
         if (el.ValueKind != JsonValueKind.Number || !el.TryGetInt32(out var value))
             throw new McpProtocolException($"argument '{name}' must be an integer", McpErrorCode.InvalidParams);
         if (value <= 0)
@@ -32,15 +33,42 @@ public static class ToolArgs
     {
         if (!TryGet(ctx, name, out var el))
             return null;
+        el = Coerce(ctx, name, el);
         if (el.ValueKind != JsonValueKind.Number || !el.TryGetInt32(out var value))
             throw new McpProtocolException($"argument '{name}' must be an integer", McpErrorCode.InvalidParams);
         return value;
     }
 
-    public static bool? OptionalBool(ToolCallContext ctx, string name) =>
-        TryGet(ctx, name, out var el) && el.ValueKind is JsonValueKind.True or JsonValueKind.False
+    /// <summary>Top-level numeric arg (minScore etc.) — JSON-stringified
+    /// numbers coerce like the rest (SPEC-20261111-mcp-ergonomics-wave2).</summary>
+    public static double? OptionalDouble(ToolCallContext ctx, string name)
+    {
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        el = Coerce(ctx, name, el);
+        return el.ValueKind == JsonValueKind.Number && el.TryGetDouble(out var d)
+            ? d
+            : throw new McpProtocolException($"argument '{name}' must be a number", McpErrorCode.InvalidParams);
+    }
+
+    /// <summary>Top-level array-or-null arg — tolerates coercion without the
+    /// object-only restriction of <see cref="OptionalObject"/>.</summary>
+    public static JsonElement? OptionalElement(ToolCallContext ctx, string name)
+    {
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        return Coerce(ctx, name, el);
+    }
+
+    public static bool? OptionalBool(ToolCallContext ctx, string name)
+    {
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        el = Coerce(ctx, name, el);
+        return el.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? el.GetBoolean()
             : null;
+    }
 
     /// <summary>SPEC-20261001-mcp-recall-ergonomics: object-typed arg
     /// (minScores/temporalWindow). A present non-object value is a caller
@@ -49,6 +77,7 @@ public static class ToolArgs
     {
         if (!TryGet(ctx, name, out var el))
             return null;
+        el = Coerce(ctx, name, el);
         return el.ValueKind == JsonValueKind.Object
             ? el
             : throw new McpProtocolException($"argument '{name}' must be an object", McpErrorCode.InvalidParams);
@@ -82,12 +111,47 @@ public static class ToolArgs
 
     public static string[]? OptionalStringArray(ToolCallContext ctx, string name)
     {
-        if (!TryGet(ctx, name, out var el) || el.ValueKind != JsonValueKind.Array)
+        if (!TryGet(ctx, name, out var el))
+            return null;
+        el = Coerce(ctx, name, el);
+        if (el.ValueKind != JsonValueKind.Array)
             return null;
         return el.EnumerateArray()
             .Where(e => e.ValueKind == JsonValueKind.String)
             .Select(e => e.GetString()!)
             .ToArray();
+    }
+
+    /// <summary>SPEC-20261111-mcp-ergonomics-wave2 RF-001: LLM clients
+    /// frequently send typed arguments as JSON-stringified values
+    /// (<c>"5"</c>, <c>"{\"a\":1}"</c>, <c>"[\"x\",\"y\"]"</c>). When the
+    /// declared arg type is non-string, parse the payload and re-read the
+    /// typed element; unparseable strings fall through to the normal
+    /// validation error of each accessor. Coercion is logged at Debug so bad
+    /// clients stay observable.</summary>
+    private static JsonElement Coerce(ToolCallContext ctx, string name, JsonElement el)
+    {
+        if (el.ValueKind != JsonValueKind.String)
+            return el;
+        var s = el.GetString();
+        if (string.IsNullOrWhiteSpace(s))
+            return el;
+        var first = s.TrimStart()[0];
+        if (first is not ('{' or '[' or '"' or 't' or 'f' or 'n' or '-' or >= '0' and <= '9'))
+            return el;
+        try
+        {
+            using var doc = JsonDocument.Parse(s);
+            var coerced = doc.RootElement.Clone();
+            ctx.Services.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                ?.CreateLogger("KnowledgeHub.Server.Mcp.ToolArgs")
+                .LogDebug("Coerced JSON-stringified argument '{Name}' ({Kind})", name, coerced.ValueKind);
+            return coerced;
+        }
+        catch (JsonException)
+        {
+            return el;
+        }
     }
 
     private static bool TryGet(ToolCallContext ctx, string name, out JsonElement element)

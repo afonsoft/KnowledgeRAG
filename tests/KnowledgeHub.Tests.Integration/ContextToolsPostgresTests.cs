@@ -4,6 +4,7 @@ using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -47,10 +48,13 @@ public sealed class ContextToolsPostgresTests
             Options.Create(new ContextOptions()),
             Options.Create(new KnowledgeHub.Server.Configuration.CacheOptions()),
             NullLogger<ContextCacheService>.Instance);
+        var config = new ConfigurationBuilder().AddInMemoryCollection().Build();
         return new ContextSnapshotService(
             new PgFactory(connString),
             Options.Create(new ContextOptions { MaxSnapshotsPerRepo = 3 }),
             cache,
+            new KnowledgeHub.Server.Security.SecretScanner(config, NullLogger<KnowledgeHub.Server.Security.SecretScanner>.Instance),
+            new KnowledgeHub.Server.Security.DefensePolicyResolver(config),
             NullLogger<ContextSnapshotService>.Instance);
     }
 

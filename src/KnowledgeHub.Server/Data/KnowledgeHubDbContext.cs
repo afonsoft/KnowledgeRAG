@@ -57,6 +57,18 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
     /// <summary>SPEC-20261004-context-snapshots RF-002: repo-scoped context.</summary>
     public DbSet<ContextSnapshot> ContextSnapshots => Set<ContextSnapshot>();
 
+    // SPEC-20261111-agent-memory-retain RF-001: agent memory layer.
+    public DbSet<MemoryBank> MemoryBanks => Set<MemoryBank>();
+    public DbSet<MemoryUnit> MemoryUnits => Set<MemoryUnit>();
+    public DbSet<MemoryDocument> MemoryDocuments => Set<MemoryDocument>();
+    public DbSet<MemoryLink> MemoryLinks => Set<MemoryLink>();
+    public DbSet<MemoryUnitEntity> MemoryUnitEntities => Set<MemoryUnitEntity>();
+    public DbSet<MemoryDirective> MemoryDirectives => Set<MemoryDirective>();
+    public DbSet<MemoryOperation> MemoryOperations => Set<MemoryOperation>();
+    public DbSet<ObservationHistory> ObservationHistories => Set<ObservationHistory>();
+    public DbSet<MemoryMentalModel> MemoryMentalModels => Set<MemoryMentalModel>();
+    public DbSet<MentalModelHistory> MentalModelHistories => Set<MentalModelHistory>();
+
     /// <summary>Configura as entidades do modelo: chaves, índices, tamanhos e relacionamentos.</summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -438,6 +450,140 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
                 .HasFilter("\"IdempotencyKey\" IS NOT NULL");
             e.HasIndex(s => new { s.RepoKey, s.CreatedAt });
             e.HasIndex(s => new { s.RepoKey, s.Label });
+        });
+
+        // SPEC-20261111-agent-memory-retain RF-001: agent memory layer.
+        modelBuilder.Entity<MemoryBank>(e =>
+        {
+            e.HasKey(b => b.Id);
+            e.Property(b => b.BankKey).IsRequired().HasMaxLength(200);
+            e.Property(b => b.Name).IsRequired().HasMaxLength(200);
+            e.Property(b => b.Mission).HasMaxLength(2000);
+            // (BankKey, ApiKeyId) is the caller-facing identity — the same
+            // slug may exist under different keys without collision.
+            e.HasIndex(b => new { b.BankKey, b.ApiKeyId }).IsUnique();
+            e.HasMany(b => b.Units).WithOne(u => u.Bank)
+                .HasForeignKey(u => u.BankId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(b => b.Documents).WithOne(d => d.Bank)
+                .HasForeignKey(d => d.BankId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(b => b.Directives).WithOne(d => d.Bank)
+                .HasForeignKey(d => d.BankId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MemoryUnit>(e =>
+        {
+            e.HasKey(u => u.Id);
+            e.Property(u => u.Text).IsRequired();
+            e.Property(u => u.FactType).IsRequired().HasMaxLength(16);
+            e.Property(u => u.Context).HasMaxLength(1000);
+            e.Property(u => u.ContentHash).IsRequired().HasMaxLength(64);
+            e.Property(u => u.MetadataJson).HasColumnType(Database.IsNpgsql() ? "jsonb" : "TEXT");
+            e.Property(u => u.Embedding).HasColumnType(Database.IsNpgsql() ? "bytea" : "BLOB");
+            e.Property(u => u.EmbeddingModel).HasMaxLength(200);
+            // FactType domain check — providers share the same DDL shape.
+            e.ToTable(t => t.HasCheckConstraint(
+                "CK_MemoryUnits_FactType",
+                "\"FactType\" IN ('world','experience','observation')"));
+            e.HasIndex(u => new { u.BankId, u.IsDeleted, u.FactType });
+            e.HasIndex(u => new { u.BankId, u.EventDate });
+            e.HasIndex(u => new { u.BankId, u.ConsolidatedAt });
+            e.HasOne(u => u.Document).WithMany(d => d.Units)
+                .HasForeignKey(u => u.DocumentId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<MemoryDocument>(e =>
+        {
+            e.HasKey(d => d.Id);
+            e.Property(d => d.ExternalId).IsRequired().HasMaxLength(200);
+            e.Property(d => d.Title).HasMaxLength(500);
+            e.Property(d => d.ContentHash).IsRequired().HasMaxLength(64);
+            e.Property(d => d.MetadataJson).HasColumnType(Database.IsNpgsql() ? "jsonb" : "TEXT");
+            e.HasIndex(d => new { d.BankId, d.ExternalId }).IsUnique();
+        });
+
+        modelBuilder.Entity<MemoryLink>(e =>
+        {
+            e.HasKey(l => l.Id);
+            e.Property(l => l.LinkType).IsRequired().HasMaxLength(16);
+            e.ToTable(t => t.HasCheckConstraint(
+                "CK_MemoryLinks_LinkType",
+                "\"LinkType\" IN ('temporal','semantic','causal')"));
+            // Dedupe guard — insertion is idempotent on the unique triple.
+            e.HasIndex(l => new { l.FromUnitId, l.ToUnitId, l.LinkType, l.EntityId }).IsUnique();
+            e.HasIndex(l => l.ToUnitId);
+            e.HasOne(l => l.FromUnit).WithMany()
+                .HasForeignKey(l => l.FromUnitId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(l => l.ToUnit).WithMany()
+                .HasForeignKey(l => l.ToUnitId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        modelBuilder.Entity<MemoryUnitEntity>(e =>
+        {
+            e.HasKey(ue => new { ue.UnitId, ue.EntityId });
+            e.HasIndex(ue => new { ue.BankId, ue.EntityId });
+            e.HasOne(ue => ue.Unit).WithMany()
+                .HasForeignKey(ue => ue.UnitId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(ue => ue.Entity).WithMany()
+                .HasForeignKey(ue => ue.EntityId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MemoryDirective>(e =>
+        {
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Name).HasMaxLength(200);
+            e.Property(d => d.Content).IsRequired().HasMaxLength(2000);
+            e.HasIndex(d => new { d.BankId, d.IsActive });
+        });
+
+        modelBuilder.Entity<MemoryOperation>(e =>
+        {
+            e.HasKey(o => o.Id);
+            e.Property(o => o.Kind).IsRequired().HasMaxLength(16);
+            e.Property(o => o.Status).IsRequired().HasMaxLength(16);
+            e.Property(o => o.PayloadJson).IsRequired();
+            e.HasIndex(o => new { o.BankId, o.Status });
+            e.HasIndex(o => new { o.ApiKeyId, o.Status });
+            e.HasOne(o => o.Bank).WithMany()
+                .HasForeignKey(o => o.BankId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SPEC-20261111-memory-observations-consolidation RF-003.
+        modelBuilder.Entity<ObservationHistory>(e =>
+        {
+            e.HasKey(h => h.Id);
+            e.Property(h => h.Text).IsRequired();
+            e.Property(h => h.AddedSourceIdsJson).IsRequired();
+            e.Property(h => h.Action).IsRequired().HasMaxLength(16);
+            e.HasIndex(h => new { h.ObservationUnitId, h.Version }).IsUnique();
+            e.HasIndex(h => h.BankId);
+            e.HasOne(h => h.Observation).WithMany()
+                .HasForeignKey(h => h.ObservationUnitId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // SPEC-20261111-mental-models-pages RF-001.
+        modelBuilder.Entity<MemoryMentalModel>(e =>
+        {
+            e.HasKey(m => m.Id);
+            e.Property(m => m.Subtype).IsRequired().HasMaxLength(16);
+            e.ToTable(t => t.HasCheckConstraint("CK_MentalModel_Subtype",
+                "\"Subtype\" IN ('mental_model','page')"));
+            e.Property(m => m.Name).IsRequired().HasMaxLength(200);
+            e.Property(m => m.Path).IsRequired().HasMaxLength(500);
+            e.Property(m => m.SourceQuery).IsRequired().HasMaxLength(2000);
+            e.Property(m => m.Content).IsRequired();
+            e.HasIndex(m => new { m.BankId, m.Path, m.Name }).IsUnique();
+            e.HasIndex(m => new { m.BankId, m.Subtype });
+            e.HasOne(m => m.Bank).WithMany()
+                .HasForeignKey(m => m.BankId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MentalModelHistory>(e =>
+        {
+            e.HasKey(h => h.Id);
+            e.Property(h => h.Content).IsRequired();
+            e.HasIndex(h => new { h.ModelId, h.Version }).IsUnique();
+            e.HasOne(h => h.Model).WithMany()
+                .HasForeignKey(h => h.ModelId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

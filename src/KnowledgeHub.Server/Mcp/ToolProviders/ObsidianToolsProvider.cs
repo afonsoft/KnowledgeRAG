@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using KnowledgeHub.Server.Data;
 using KnowledgeHub.Server.Ingestion;
@@ -109,14 +110,39 @@ public sealed class ObsidianToolsProvider : IToolProvider
             ?? throw new McpProtocolException("vault source has no configured path", McpErrorCode.InvalidParams);
         var full = ObsidianNoteWriter.SafePath(root, path, forWrite: true);
 
+        // SPEC-20261111-memory-defense RF-003: screen before persisting —
+        // content plus tags (they land in frontmatter).
+        var outcome = Security.WritePathDefense.Screen(
+            ctx.Services, db, vault, content, "write_note");
+        var tagOutcome = tags is { Length: > 0 }
+            ? Security.WritePathDefense.Screen(
+                ctx.Services, db, vault, string.Join(',', tags), "write_note")
+            : null;
+        if (outcome.Blocked || tagOutcome?.Blocked == true)
+        {
+            var blocked = outcome.Findings
+                .Concat(tagOutcome?.Findings ?? [])
+                .Where(f => f.Action == Security.SecretAction.Block);
+            return await ToolResults.Error(JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                findings = blocked.Select(f => new { pattern = f.Pattern, count = f.Count })
+            }));
+        }
+
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(
-            content, tags, ObsidianNoteWriter.ResolveOrigin(ctx.Services)), ct);
+            outcome.Text,
+            tagOutcome is null ? tags : tagOutcome.Text.Split(',', StringSplitOptions.TrimEntries),
+            ObsidianNoteWriter.ResolveOrigin(ctx.Services)), ct);
 
         var relative = Path.GetRelativePath(root, full);
         var ingestion = ctx.Services.GetRequiredService<IngestionService>();
         await ingestion.SyncFileAsync(vault.Id, relative, ct);
 
-        return await ToolResults.Text($"Wrote `{relative}` to vault '{vault.Name}' and re-indexed it.");
+        var redactions = outcome.Redactions.Count > 0
+            ? $" Redacted: {string.Join(',', outcome.Redactions.Select(f => $"{f.Pattern}x{f.Count}"))}."
+            : "";
+        return await ToolResults.Text($"Wrote `{relative}` to vault '{vault.Name}' and re-indexed it.{redactions}");
     }
 }

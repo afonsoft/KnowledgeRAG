@@ -1,0 +1,12 @@
+{
+  "_comment": "Devin CLI — merge into ~/.config/devin/mcp.json. SSE fallback: https://HOST/mcp/sse?access_token=AFT_KEY_HERE",
+  "mcpServers": {
+    "knowledge-hub": {
+      "type": "streamable-http",
+      "url": "https://HOST/mcp",
+      "headers": {
+        "Authorization": "Bearer AFT_KEY_HERE"
+      }
+    }
+  }
+}

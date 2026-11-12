@@ -35,7 +35,7 @@ public sealed class PerformanceCacheTests
     {
         var notifier = new FakeNotifier();
         var provider = new CountingProvider();
-        var catalog = new DynamicToolCatalog([provider], notifier);
+        var catalog = new DynamicToolCatalog([provider], notifier, new ConfigurationBuilder().Build());
         var services = new ServiceCollection().BuildServiceProvider();
 
         var first = await catalog.GetToolsAsync(services, CancellationToken.None);

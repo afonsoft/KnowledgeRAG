@@ -288,6 +288,18 @@ async with KnowledgeHubClient("http://<host>:5000", api_key="aft_...") as kh:
 
 Each SDK wraps the official MCP client of its language (no protocol reimplementation), adds typed models for `search_knowledge`/`ask_knowledge`/`agent_chat`, and streams `/api/ask/stream` + `/api/agent/stream` events. Publish: `git tag sdk-v*.*.*` → NuGet/PyPI when `NUGET_API_KEY`/`PYPI_API_TOKEN` secrets exist.
 
+## Agent Skill
+
+Installable [Agent Skills](https://agentskills.io) teach any coding agent (Claude Code, Cursor, Devin, OpenCode, Windsurf) to use your hub correctly — grounding before edits, session-start `context_recovery`, session-end `context_save`, proactive `memory_retain`, and the `Correction:`/`📚 From KnowledgeHub` protocols:
+
+```bash
+npx skills add afonsoft/KnowledgeRAG -s knowledge-hub          # workflow/memory skill
+npx skills add afonsoft/KnowledgeRAG -s knowledge-hub-docs     # operational docs (generated)
+npx skills add afonsoft/KnowledgeRAG -s knowledge-hub-architect # adoption planner
+```
+
+Skills live in [`skills/`](skills/index.json); per-harness MCP wiring snippets in [`skills/knowledge-hub/wiring/`](skills/knowledge-hub/wiring/). See `docs/en/AGENT-SKILL.md` / `docs/pt/AGENT-SKILL.md`.
+
 ## Configuration
 
 ```jsonc

@@ -1,16 +1,32 @@
 # Short-term memory — session state (overwritten each session, ≤100 lines)
 
-- **Branch ativa**: `feature/devin-20261007-knowledge-review` (pushed) — base `main` atualizada.
-- **SPEC-20261007-knowledge-review**: `Approved`, Ticket [#567](https://github.com/afonsoft/KnowledgeRAG/issues/567) (labels `feature`+`todo`).
-- **Decisões travadas**: `src/KnowledgeHub.Review.Cli` no slnx · motor híbrido (gates determinísticos + `IChatClient`; `--reasoning=hub` via `agent_chat`) · `APPROVE`+`enablePullRequestAutoMerge` · triggers `pull_request`+`workflow_dispatch` · stacked→diff por camada · pr-agent opcional · `REVIEW_LANGUAGE` default pt-BR · genérico via `GITHUB_REPOSITORY`.
-- **Bloqueio conhecido**: `.github/workflows/` protegido — `knowledge-review.yml` entregue no PR, commit final pelo owner.
-- **Baseline**: build 0 warnings · 1129+ unit · 306+ integration verdes (carry-over).
-- **Deploy produção**: `knowledgehub` container healthy em `0.0.0.0:5550->8080`, `rag.afonsoft.dev` OK. `.env`: `DATABASE_PROVIDER=postgres`, `CACHE_PROVIDER=redis` (DB3).
-- **Pendências conhecidas**: Cloudflare bloqueia `/.well-known/agent-card.json` na edge (ação do usuário); `.env` `required:false` = deleção silenciosa.
+- **Sessão**: implementando Epic E29 (#609) — 8 SPECs aprovadas do hindsight analysis.
+- **Branch**: `feature/devin-20261111-agent-memory-e29` (nunca commitar em main).
+- **Feito + commitado**:
+  - #616 agent-rules-hardening → `e133352`. #614 ergonomics RF-001/002/003/005/006 → `40f1bb2` (RF-004 bank scope entregue depois em #610). SPECs+analysis → `e419109`.
+  - #610 agent-memory-retain → `dad0957`: 7 entidades Memory*, migrations duais, retain/recall 4 braços RRF, MemoryToolsProvider, REST `/api/memory`, async ops, bank scoping (`/mcp/banks/{key}` + X-Memory-Bank + arg, precedência path>header>arg).
+  - #611 memory-observations-consolidation → `809313b`: MemoryUnit += SourceMemoryIdsJson/ProofCount; ObservationHistory entity; MemoryConsolidationService (triage→adjudicação→decide LLM, aliases f*/o*/p*, evidence obrigatória em create, refine-not-overwrite, fold dedup, version map por batch); MemoryConsolidationLocks (1 run/bank→409); IMemoryConsolidationTrigger/Hook; MemoryConsolidationWorker (tick 15min + sinais); preferObservations no recall (suprime facts fonte); tools memory_consolidate+memory_observation_history; REST `/banks/{key}/consolidate` + `/observations/{id}/history`; MemoryNotFoundException→404, MemoryConflictException→409; op kind="consolidate" no MemoryRetainWorker. 33/33 testes memory verdes.
+- **Feito + commitado (cont.)**:
+  - #612 memory-reflect-directives → `a1ff831`: MemoryReflectService (loop read-only com tools search_observations/recall_facts/done; citações validadas∩retrieved→droppedCitations+uncited; structured output 2ª passada+retry; disposition→persona; directives filtradas tags; budget low=3/mid=6/high=ReflectMaxIterations); MemoryDirectiveService + MemoryDirective{+Name,Tags,UpdatedAt} migration dual; recall factType vírgula; tools memory_reflect+memory_directives_*; REST `/banks/{key}/reflect` + `/directives/*`. SPEC→Done, issue→in_review.
+  - #613 mental-models-pages → NÃO commitado ainda (testes verdes 57/57 memory): MemoryMentalModel+MentalModelHistory entities + migration `MemoryMentalModels` dual; MentalModelTrigger (mode delta|full, refreshAfterConsolidation, refreshIntervalMinutes|refreshCron@every, minRefreshIntervalSeconds, factTypes, tagsMatch, tags; PageDefault=observations+delta+afterConsolidation); MentalModelService (CRUD, tree, search snippets, GetPageAsync cache opt-in IDistributedCache, StaleIdsAsync, FindAsync pasta normalizada+nome OrdinalIgnoreCase); MentalModelRefreshService (locks por model, full/delta watermark LastMemorySeenAt, history trim HistoryLimit=20, prompt answer-as-document); MentalModelsWorker (channel signals + scan 1min interval triggers); MentalModelConsolidationHook (sinaliza models refreshAfterConsolidation); VaultPageProjector (`{Vault:Path}/_memory/{bankKey}/{path}/{slug}.md`, Memory:Pages:ProjectToVault flag, banner managed-by, best-effort); 12 tools memory_mental_models_*+memory_pages_*+memory_page_*; REST mental-models/*+pages/*. 14 testes MentalModelsTests.
+- **Design decisions**: ApiKeyId=Guid.Empty sentinel; `List<string>` Tags = primitive collection EF; MemoryBadRequest→400/NotFound→404/Conflict→409/ServiceUnavailable→503; op Kinds: retain|consolidate; ToolArgs.OptionalInt(ctx,name,fallback,max) retorna int (não nullable).
+- **#615 memory-defense** → `12ccde9` + fix review `21cc7b8`: SecretScanner (52 padrões, timeout 100ms, fingerprint salted, ExtraPatterns c/ ReDoS-reject), DefensePolicyResolver (global→bank→source, allow|redact|block), WritePathDefense helper, cobertura retain/write_note/write_knowledge/ingest/context_save, `GET /api/security/secret-scan/status`, 422 MCP+REST. Review gaps fechados: audit só não-allow; `doc.RawContent` redigido (RedactNonAllow); title/tags screened. SPEC→Done, issue→in_review.
+- **#617 knowledge-hub-agent-skill** → `9381936` + status `a947d11`: 3 skills em `skills/` (knowledge-hub workflow/memória c/ wiring/, knowledge-hub-docs GERADA via scripts/generate-skills.sh de markers `skill-docs` em CLAUDE.md+API.md, knowledge-hub-architect), index.json, wiring JSONs ×5 harnesses, SkillsFreshnessTests (7 testes), README+docs en/pt. SPEC→Done, issue→in_review.
+- **ÉPICO E29 COMPLETO**: 8/8 SPECs implementadas, 12 commits em `feature/devin-20261111-agent-memory-e29`, 1915 unit tests verdes, format limpo. Labels #610-#616 → in_review, #617 → in_review.
+- **Resta**: push + PR épico (ou por-slice?) + label sync in_pullrequest→done. Integração Postgres roda em CI.
+- **Bugs conhecidos**: xunit 2.9.3 não honra SkipException → early-return; `$$"""` p/ `{` literal em interpolação; Where após OrderBy perde IOrderedQueryable (ordenar por último); PageDefault tem refreshAfterConsolidation=true (correto).
+- **Lock files** (packages.lock.json) sujos por restore local — NÃO commitar.
 
-## Session summary (2026-10-07 — SPEC knowledge-review)
+## Gate final E29 (2026-11-12)
+- Commit 5b0ad40: contract pin E29 + SchemaExamples (lint RF-006).
+- Unit 1915/1915 | format limpo | integração 373/375.
+- Falhas: Ask_FinalFloor_Empty (PRÉ-EXISTENTE — reproduzida em worktree de main; floor aplica em Normalized relativo, top hit ≈1.0) + flake de host-timeout sob contenção (passa isolado).
+- Bug pré-existente em main: minScores.final nunca esvazia quando há braço único (Normalized do top = 1.0). Candidato a issue fix.
+- Resta: push + PR épico.
 
-- Pedido: CLI .NET console p/ GitHub Action que replica Devin Review — lê PRs, ingere comentários de bots (Devin/Sonar/CodeQL), LLM decide SOLID/Clean Arch, approve+auto-merge ou comentário detalhado, persistência via MCP do hub.
-- Pesquisa: docs devin-review + stacked-prs mapeadas (bug catcher, security CWE, REVIEW.md, auto-merge, stack por camada); repo reusa `KnowledgeHub.Sdk` (MCP facade) + `IChatClient`.
-- Entregue: `.specs/SPEC-20261007-knowledge-review.md` (9 RFs), Issue #567, branch pushed (commits `24b1fd9`, `de81315`).
-- Próximo passo: `/execute-specs` na SPEC-20261007 ou abertura de PR com a SPEC.
+## Gate final E29 — TUDO VERDE (2026-11-12)
+- d362a3b: fix stale Ask_FinalFloor test (Normalized floor semantics; bug era pré-existente em main).
+- 5b0ad40: contract pin E29 + SchemaExamples.
+- Unit 1915/1915 | Integration 375/375 | format limpo | build 0 erros.
+- Branch: 14 commits. Resta: push + PR épico.
+- gentle-ai analisado (clone /tmp/gentle-ai): gaps p/ próximo epic = memory_timeline/stats/bank_merge, RDD-lite no review CLI, path deny-list, bench de jornada, delegation triggers.

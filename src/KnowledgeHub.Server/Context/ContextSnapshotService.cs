@@ -21,6 +21,8 @@ public sealed class ContextSnapshotService
     private readonly IDbContextFactory<KnowledgeHubDbContext> _dbFactory;
     private readonly ContextOptions _options;
     private readonly ContextCacheService _cache;
+    private readonly Security.ISecretScanner _secretScanner;
+    private readonly Security.DefensePolicyResolver _policyResolver;
     private readonly ILogger<ContextSnapshotService> _logger;
 
     private const int MaxSaveRetries = 3;
@@ -29,11 +31,15 @@ public sealed class ContextSnapshotService
         IDbContextFactory<KnowledgeHubDbContext> dbFactory,
         IOptions<ContextOptions> options,
         ContextCacheService cache,
+        Security.ISecretScanner secretScanner,
+        Security.DefensePolicyResolver policyResolver,
         ILogger<ContextSnapshotService> logger)
     {
         _dbFactory = dbFactory;
         _options = options.Value;
         _cache = cache;
+        _secretScanner = secretScanner;
+        _policyResolver = policyResolver;
         _logger = logger;
     }
 
@@ -60,6 +66,15 @@ public sealed class ContextSnapshotService
         Guid? createdByKeyId,
         CancellationToken ct)
     {
+        // SPEC-20261111-memory-defense RF-003: shared scanner on top of the
+        // legacy marker check in ParseItems — parity = any non-allow finding
+        // fails with the same secret_detected error (no silent redaction).
+        var policy = _policyResolver.Global();
+        Security.WritePathDefense.EnsureNoSecretFindings(_secretScanner, policy, label, "label");
+        foreach (var item in items)
+            Security.WritePathDefense.EnsureNoSecretFindings(
+                _secretScanner, policy, item.Content, $"items[{item.Kind}]");
+
         var payloadJson = ContextPayload.Serialize(items);
         var payloadBytes = Encoding.UTF8.GetByteCount(payloadJson);
         if (payloadBytes > _options.MaxPayloadBytes)

@@ -27,6 +27,8 @@ public sealed class IngestionService : IIngestionService
     private readonly IEnumerable<Connectors.ISourceConnector> connectors;
     private readonly Microsoft.Extensions.Caching.Distributed.IDistributedCache cache;
     private readonly Security.IContentSanitizer sanitizer;
+    private readonly Security.MemoryDefense defense;
+    private readonly Security.DefensePolicyResolver policyResolver;
     private readonly Settings.IGraphSettingsService graphSettings;
     private readonly Settings.IEmbeddingSettingsService embeddingSettings;
     private readonly ILogger<IngestionService> logger;
@@ -42,6 +44,8 @@ public sealed class IngestionService : IIngestionService
         connectors = deps.Connectors;
         cache = deps.Cache;
         sanitizer = deps.Sanitizer;
+        defense = deps.Defense;
+        policyResolver = deps.PolicyResolver;
         graphSettings = deps.GraphSettings;
         embeddingSettings = deps.EmbeddingSettings;
         hybrid = deps.Hybrid;
@@ -623,7 +627,7 @@ public sealed class IngestionService : IIngestionService
                     EnrichedText = EnrichPiece(plan.Source.Name, plan.Title, piece)
                 }).ToList();
                 plan.Db.Chunks.AddRange(newChunks);
-                ScanChunks(newChunks, doc.Id, plan.Source.Id, plan.Title, plan.Db, plan.Warnings);
+                ScanChunks(newChunks, doc, plan.Source, plan.Title, plan.Db, plan.Warnings);
 
                 await plan.Db.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
@@ -727,36 +731,109 @@ public sealed class IngestionService : IIngestionService
     /// warning for the sync result.
     /// </summary>
     private void ScanChunks(
-        List<DocumentChunk> chunks, Guid documentId, Guid sourceId, string title,
+        List<DocumentChunk> chunks, KnowledgeDocument doc, KnowledgeSource source, string title,
         KnowledgeHubDbContext db, List<string> warnings)
     {
         var flaggedCount = 0;
         var flagNames = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var chunk in chunks)
+        var policy = policyResolver.ForSource(source);
+        var blockedCount = 0;
+        var redactedCount = 0;
+        foreach (var chunk in chunks.ToList())
         {
-            var flags = sanitizer.Scan(chunk.TextContent);
-            if (flags.Count == 0)
-                continue;
-            chunk.SuspicionFlags = string.Join(',', flags);
-            flaggedCount++;
-            foreach (var f in flags)
-                flagNames.Add(f);
-            db.SecurityEvents.Add(new SecurityEvent
+            if (ScanSuspicion(chunk, doc, source, db) is { Count: > 0 } flags)
             {
-                SourceId = sourceId,
-                DocumentId = documentId,
-                ChunkIndex = chunk.ChunkIndex,
-                Flags = chunk.SuspicionFlags
-            });
+                chunk.SuspicionFlags = string.Join(',', flags);
+                flaggedCount++;
+                foreach (var f in flags)
+                    flagNames.Add(f);
+            }
+
+            // SPEC-20261111-memory-defense RF-003: secret scan per chunk —
+            // block drops the chunk entirely (nothing persists), redact
+            // rewrites TextContent and the enriched/FTS copy, allow audits.
+            switch (ScreenChunkSecrets(chunk, doc, source, policy, db))
+            {
+                case SecretVerdict.Blocked:
+                    db.Chunks.Remove(chunk);
+                    chunks.Remove(chunk);
+                    blockedCount++;
+                    break;
+                case SecretVerdict.Redacted:
+                    redactedCount++;
+                    break;
+            }
         }
+
+        // Same invariant for the persisted raw document: read_document must
+        // never serve a blocked/redacted secret back to an LLM. Chunk-level
+        // block drops the chunk; the raw copy keeps the item minus every
+        // non-allow pattern (change-detection hash is computed upstream on
+        // the connector bytes, unaffected).
+        if (doc.RawContent is not null)
+            doc.RawContent = defense.RedactNonAllow(doc.RawContent, policy);
 
         if (flaggedCount > 0)
         {
             logger.LogWarning(
                 "Security scan flagged {Count} chunk(s) in '{Title}' ({DocumentId}): {Flags}",
-                flaggedCount, title, documentId, string.Join(',', flagNames));
+                flaggedCount, title, doc.Id, string.Join(',', flagNames));
             warnings.Add($"{title}: {flaggedCount} chunk(s) flagged ({string.Join(',', flagNames)})");
         }
+
+        if (blockedCount + redactedCount > 0)
+        {
+            logger.LogWarning(
+                "Secret scan in '{Title}' ({DocumentId}): {Blocked} chunk(s) dropped, {Redacted} redacted",
+                title, doc.Id, blockedCount, redactedCount);
+            warnings.Add(
+                $"{title}: secret scan dropped {blockedCount} chunk(s), redacted {redactedCount}");
+        }
+    }
+
+    private enum SecretVerdict { Clean, Redacted, Blocked }
+
+    /// <summary>Prompt-injection suspicion flags → row flag + SecurityEvent per chunk.</summary>
+    private List<string> ScanSuspicion(
+        DocumentChunk chunk, KnowledgeDocument doc, KnowledgeSource source, KnowledgeHubDbContext db)
+    {
+        var flags = sanitizer.Scan(chunk.TextContent);
+        if (flags.Count > 0)
+        {
+            db.SecurityEvents.Add(new SecurityEvent
+            {
+                SourceId = source.Id,
+                DocumentId = doc.Id,
+                ChunkIndex = chunk.ChunkIndex,
+                Flags = string.Join(',', flags)
+            });
+        }
+        return flags.ToList();
+    }
+
+    /// <summary>Secret scan of one chunk: audits non-allow findings, drops or redacts.</summary>
+    private SecretVerdict ScreenChunkSecrets(
+        DocumentChunk chunk, KnowledgeDocument doc, KnowledgeSource source,
+        Security.DefensePolicy policy, KnowledgeHubDbContext db)
+    {
+        var outcome = defense.Screen(chunk.TextContent, policy);
+        foreach (var f in outcome.Findings.Where(f => f.Action != Security.SecretAction.Allow))
+            db.SecurityEvents.Add(new SecurityEvent
+            {
+                SourceId = source.Id,
+                DocumentId = doc.Id,
+                ChunkIndex = chunk.ChunkIndex,
+                Flags = "secret_scan",
+                Detail = $"ingest:{f.Pattern}:{f.Action.ToString().ToLowerInvariant()}:{f.Fingerprint}"
+            });
+        if (outcome.Blocked)
+            return SecretVerdict.Blocked;
+        if (outcome.Redactions.Count == 0)
+            return SecretVerdict.Clean;
+        chunk.TextContent = outcome.Text;
+        if (chunk.EnrichedText is not null)
+            chunk.EnrichedText = defense.Screen(chunk.EnrichedText, policy).Text;
+        return SecretVerdict.Redacted;
     }
 
     /// <summary>SPEC-20260924-contextual-chunk-enrichment: structural prefix
@@ -1179,7 +1256,7 @@ public sealed class IngestionService : IIngestionService
             EnrichedText = EnrichPiece(source.Name, file.Title, piece)
         }).ToList();
         ctx.Db.Chunks.AddRange(newChunks);
-        ScanChunks(newChunks, doc.Id, source.Id, file.Title, ctx.Db, watcherWarnings);
+        ScanChunks(newChunks, doc, source, file.Title, ctx.Db, watcherWarnings);
 
         await ctx.Db.SaveChangesAsync(cancellationToken);
         await EmbedChunksAsync(newChunks, doc, source, ctx.Vectors, cancellationToken);

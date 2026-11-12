@@ -56,10 +56,16 @@ public static class McpServiceCollectionExtensions
             });
 
         services.AddOptions<McpServerOptions>()
-            .Configure<IMcpActivityFeed, SessionCallGate, McpSessionRegistry, IMcpRequestMetrics>(
-                (options, feed, gate, registry, metrics) =>
+            .Configure<IMcpActivityFeed, SessionCallGate, McpSessionRegistry, IMcpRequestMetrics, IConfiguration>(
+                (options, feed, gate, registry, metrics, cfg) =>
             {
                 options.ServerInfo = new Implementation { Name = "knowledge", Version = "0.1.1" };
+                // SPEC-20261111-mcp-ergonomics-wave2 RF-005: admins attach
+                // deployment notes (conventions, default bank, usage hints)
+                // that initialize answers and tool surfaces echo back.
+                var instructions = cfg["Mcp:Instructions"];
+                if (!string.IsNullOrWhiteSpace(instructions))
+                    options.ServerInstructions = SanitizeInstructions(instructions);
                 options.Capabilities = new ServerCapabilities
                 {
                     Tools = new ToolsCapability { ListChanged = true },
@@ -71,6 +77,17 @@ public static class McpServiceCollectionExtensions
             });
 
         return builder;
+    }
+
+    /// <summary>SPEC-20261111-mcp-ergonomics-wave2 RF-005: deployment
+    /// instructions are operator input echoed to clients — strip HTML-ish
+    /// markup, collapse whitespace and cap at 2000 chars.</summary>
+    public static string SanitizeInstructions(string raw)
+    {
+        var cleaned = new string(raw.Where(c => c is not ('<' or '>')).ToArray());
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s{2,}", " ",
+            System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(250)).Trim();
+        return cleaned.Length > 2000 ? cleaned[..2000] : cleaned;
     }
 
     /// <summary>

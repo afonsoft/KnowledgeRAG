@@ -1285,6 +1285,430 @@ namespace KnowledgeHub.Server.Migrations
                     b.ToTable("McpTasks");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryBank", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BankKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConfigJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DispositionJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Mission")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankKey", "ApiKeyId")
+                        .IsUnique();
+
+                    b.ToTable("MemoryBanks");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryDirective", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("BankId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("INTEGER");
+
+                    b.PrimitiveCollection<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankId", "IsActive");
+
+                    b.ToTable("MemoryDirectives");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("BankId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankId", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("MemoryDocuments");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("EntityId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("FromUnitId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LinkType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ToUnitId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Weight")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ToUnitId");
+
+                    b.HasIndex("FromUnitId", "ToUnitId", "LinkType", "EntityId")
+                        .IsUnique();
+
+                    b.ToTable("MemoryLinks", t =>
+                        {
+                            t.HasCheckConstraint("CK_MemoryLinks_LinkType", "\"LinkType\" IN ('temporal','semantic','causal')");
+                        });
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryMentalModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("BankId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastMemorySeenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastRefreshError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastRefreshedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceQuery")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StructuredContentJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Subtype")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.PrimitiveCollection<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TriggerJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankId", "Subtype");
+
+                    b.HasIndex("BankId", "Path", "Name")
+                        .IsUnique();
+
+                    b.ToTable("MemoryMentalModels", t =>
+                        {
+                            t.HasCheckConstraint("CK_MentalModel_Subtype", "\"Subtype\" IN ('mental_model','page')");
+                        });
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ApiKeyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("BankId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UnitsCreated")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApiKeyId", "Status");
+
+                    b.HasIndex("BankId", "Status");
+
+                    b.ToTable("MemoryOperations");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryUnit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("BankId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ChunkIndex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ConsolidatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ConsolidationFailedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Context")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("Embedding")
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("EmbeddingModel")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EventDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FactType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("MentionedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MetadataJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("OccurredEnd")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("OccurredStart")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProofCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceMemoryIdsJson")
+                        .HasColumnType("TEXT");
+
+                    b.PrimitiveCollection<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId");
+
+                    b.HasIndex("BankId", "ConsolidatedAt");
+
+                    b.HasIndex("BankId", "EventDate");
+
+                    b.HasIndex("BankId", "IsDeleted", "FactType");
+
+                    b.ToTable("MemoryUnits", t =>
+                        {
+                            t.HasCheckConstraint("CK_MemoryUnits_FactType", "\"FactType\" IN ('world','experience','observation')");
+                        });
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryUnitEntity", b =>
+                {
+                    b.Property<Guid>("UnitId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("BankId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UnitId", "EntityId");
+
+                    b.HasIndex("EntityId");
+
+                    b.HasIndex("BankId", "EntityId");
+
+                    b.ToTable("MemoryUnitEntities");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MentalModelHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ManualEdit")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("ModelId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ModelId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("MentalModelHistories");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ModelProfile", b =>
                 {
                     b.Property<int>("Id")
@@ -1325,6 +1749,50 @@ namespace KnowledgeHub.Server.Migrations
                         .IsUnique();
 
                     b.ToTable("ModelProfiles");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ObservationHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AddedSourceIdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("BankId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ObservationUnitId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProofCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BankId");
+
+                    b.HasIndex("ObservationUnitId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("ObservationHistories");
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.RagEvaluationEntity", b =>
@@ -1647,6 +2115,128 @@ namespace KnowledgeHub.Server.Migrations
                     b.Navigation("Source");
                 });
 
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryDirective", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryBank", "Bank")
+                        .WithMany("Directives")
+                        .HasForeignKey("BankId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bank");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryDocument", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryBank", "Bank")
+                        .WithMany("Documents")
+                        .HasForeignKey("BankId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bank");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryLink", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryUnit", "FromUnit")
+                        .WithMany()
+                        .HasForeignKey("FromUnitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryUnit", "ToUnit")
+                        .WithMany()
+                        .HasForeignKey("ToUnitId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("FromUnit");
+
+                    b.Navigation("ToUnit");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryMentalModel", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryBank", "Bank")
+                        .WithMany()
+                        .HasForeignKey("BankId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bank");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryOperation", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryBank", "Bank")
+                        .WithMany()
+                        .HasForeignKey("BankId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bank");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryUnit", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryBank", "Bank")
+                        .WithMany("Units")
+                        .HasForeignKey("BankId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryDocument", "Document")
+                        .WithMany("Units")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Bank");
+
+                    b.Navigation("Document");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryUnitEntity", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.KgNode", "Entity")
+                        .WithMany()
+                        .HasForeignKey("EntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryUnit", "Unit")
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Entity");
+
+                    b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MentalModelHistory", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryMentalModel", "Model")
+                        .WithMany()
+                        .HasForeignKey("ModelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Model");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ObservationHistory", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryUnit", "Observation")
+                        .WithMany()
+                        .HasForeignKey("ObservationUnitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Observation");
+                });
+
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.ApiKey", b =>
                 {
                     b.Navigation("ChatSettings");
@@ -1672,6 +2262,20 @@ namespace KnowledgeHub.Server.Migrations
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.KnowledgeSource", b =>
                 {
                     b.Navigation("Documents");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryBank", b =>
+                {
+                    b.Navigation("Directives");
+
+                    b.Navigation("Documents");
+
+                    b.Navigation("Units");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryDocument", b =>
+                {
+                    b.Navigation("Units");
                 });
 #pragma warning restore 612, 618
         }

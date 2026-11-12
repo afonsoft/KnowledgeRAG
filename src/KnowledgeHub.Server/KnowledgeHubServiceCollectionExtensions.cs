@@ -481,6 +481,8 @@ public static class KnowledgeHubServiceCollectionExtensions
             sp.GetRequiredService<IEnumerable<Ingestion.Connectors.ISourceConnector>>(),
             sp.GetRequiredService<Caching.L1L2Cache>(),
             sp.GetRequiredService<Security.IContentSanitizer>(),
+            sp.GetRequiredService<Security.MemoryDefense>(),
+            sp.GetRequiredService<Security.DefensePolicyResolver>(),
             sp.GetRequiredService<Settings.IGraphSettingsService>(),
             sp.GetRequiredService<Settings.IEmbeddingSettingsService>(),
             sp.GetService<Microsoft.Extensions.Caching.Hybrid.HybridCache>()));
@@ -513,6 +515,53 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<KnowledgeHub.Server.Context.ContextCacheService>();
         services.AddSingleton<KnowledgeHub.Server.Context.ContextSnapshotService>();
         services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.ContextToolsProvider>();
+        // SPEC-20261111-mcp-ergonomics-wave2 RF-002/RF-003: operations_* job
+        // tools + document_*/source_rescan corpus management.
+        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.OperationsToolsProvider>();
+        services.AddSingleton<IToolProvider, KnowledgeHub.Server.Mcp.ToolProviders.MemoryToolsProvider>();
+
+        // SPEC-20261111-agent-memory-retain: agent memory layer.
+        services.AddScoped<Memory.MemoryBankContext>();
+        services.AddSingleton<Memory.MemoryConfigResolver>();
+        // SPEC-20261111-memory-defense.
+        services.AddSingleton<Security.ISecretScanner, Security.SecretScanner>();
+        services.AddSingleton<Security.DefensePolicyResolver>();
+        services.AddSingleton<Security.MemoryDefense>();
+        services.AddScoped<Memory.IMemoryDefenseScreen, Memory.MemoryDefenseScreen>();
+        services.AddSingleton<Memory.IMemoryRetainQueue, Memory.MemoryRetainQueue>();
+        services.AddHostedService<Memory.MemoryRetainWorker>();
+        services.AddScoped<Memory.MemoryBankService>();
+        services.AddScoped<Memory.MemoryEntityLinker>();
+        services.AddScoped(sp => new Memory.MemoryRetainDeps(
+            sp.GetRequiredService<Memory.MemoryBankService>(),
+            sp.GetRequiredService<Memory.MemoryConfigResolver>(),
+            sp.GetRequiredService<Memory.MemoryEntityLinker>(),
+            sp.GetRequiredService<Memory.IMemoryDefenseScreen>(),
+            sp,
+            sp.GetRequiredService<Embeddings.IEmbeddingProvider>(),
+            sp.GetRequiredService<Memory.IMemoryConsolidationTrigger>()));
+        services.AddScoped<Memory.MemoryRetainService>();
+        services.AddScoped<Memory.MemoryRecallService>();
+        services.AddScoped<Memory.MemoryUnitService>();
+        // SPEC-20261111-memory-observations-consolidation.
+        services.AddSingleton<Memory.MemoryConsolidationLocks>();
+        services.AddSingleton<Memory.IMemoryConsolidationTrigger, Memory.MemoryConsolidationTrigger>();
+        services.AddSingleton<Memory.IMemoryConsolidationHook, Memory.MentalModels.MentalModelConsolidationHook>();
+        services.AddHostedService<Memory.MemoryConsolidationWorker>();
+        services.AddScoped<Memory.MemoryConsolidationService>();
+        // SPEC-20261111-memory-reflect-directives.
+        services.AddScoped<Memory.MemoryReflectService>();
+        services.AddScoped<Memory.MemoryDirectiveService>();
+        // SPEC-20261111-mental-models-pages.
+        services.AddScoped<Memory.MentalModels.MentalModelService>();
+        services.AddScoped<Memory.MentalModels.MentalModelRefreshService>();
+        services.AddSingleton<Memory.MentalModels.MentalModelRefreshLocks>();
+        services.AddSingleton<Memory.MentalModels.VaultPageProjector>();
+        services.AddSingleton<Memory.MentalModels.MentalModelsWorker>();
+        services.AddSingleton<Memory.MentalModels.IMentalModelRefreshTrigger>(sp =>
+            sp.GetRequiredService<Memory.MentalModels.MentalModelsWorker>());
+        services.AddHostedService(sp =>
+            sp.GetRequiredService<Memory.MentalModels.MentalModelsWorker>());
         services.AddSingleton<IDynamicToolCatalog, DynamicToolCatalog>();
         services.AddSingleton<IToolCatalogChangeNotifier, ToolCatalogChangeNotifier>();
 

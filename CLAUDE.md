@@ -54,6 +54,7 @@ Save everything, always. Read `memory.md` and the 3 most recent long-term files 
 
 ## MCP Server & Como Usar
 
+<!-- skill-docs:begin -->
 O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e clientes externos:
 
 - **Endpoints de Transporte**:
@@ -79,6 +80,8 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
    - `set_chat_settings(endpoint, model, apiKey)`: Configura modelo LLM e endpoint específicos para a sessão da chave chamadora.
    - `set_api_key_settings(provider, apiKey)`: Configura chaves de integração upstream (`firecrawl`, `deepwiki`, `tavily`, `context7`) para a sessão da chave chamadora.
 4. **Context snapshots** (SPEC-20261004): snapshots de contexto de trabalho versionados por repositório (`repo` obrigatório, `owner/name` ou URL do GitHub, normalizado lowercase). `context_save` persiste itens tipados (decision/note/passage/tool_output/summary, scan de secrets, idempotencyKey); `context_recovery` retorna o snapshot mais recente/versão/label já compactado ao `tokenBudget`; `context_compact` compacta itens ou um snapshot (elision determinística + summarization com fallback, nunca falha) e pode persistir via `save=true`. Espelho REST em `/api/context/*`. Nunca grava no vault nem em `ConversationMessage`.
+5. **Memória persistente** (Epic E29 — SPECs 20261111): ciclo `memory_retain → memory_consolidate → memory_recall/memory_reflect` por `MemoryBank` (escopo via `/mcp/banks/{key}` ou header `X-Memory-Bank`). `memory_retain` (verbatim|extract, async via operations) grava fatos tipados; `memory_consolidate` refina fatos em observações com evidência; `memory_recall` busca híbrida 4 braços; `memory_reflect` responde com citações validadas sob diretivas do bank; `memory_mental_models_*`/`memory_pages_*` mantêm páginas auto-refresh projetadas no vault; `memory_directives_*` configuram o reflect. Writes passam pelo secret-scan (`422 blocked` quando a política é `block`).
+6. **Operações & documentos** (SPEC-20261111-mcp-ergonomics-wave2): `operations_list`/`operations_get`/`operations_cancel`/`operations_retry` cobrem jobs de ingestão e operações de memória async; `document_update`/`document_delete` completam o CRUD de documentos.
 
 ### Recomendações para Agentes
 
@@ -87,6 +90,7 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 - **Registro de trabalho**: Sempre registre o que foi feito com `write_note`; quando precisar criar conhecimento ou memória persistente, use `write_knowledge`.
 - **Análise de Impacto**: Execute `analyze_impact` antes de refatorar contratos ou tipos compartilhados em `KnowledgeHub.Shared`.
 - **Segurança**: Nunca realize commit ou emita em logs chaves `aft_*`, credenciais ou segredos presentes em `.env`.
+<!-- skill-docs:end -->
 
 ## Convenções
 
@@ -97,6 +101,16 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 - **Specs**: `.specs/SPEC-*.md` aprovadas são a fonte da verdade; manter `Status`/`Ticket` sincronizados com a implementação.
 - **Secrets**: nunca commitar `.env`, `*.key`, `*.pem`. API keys via variáveis de ambiente (`Chat__ApiKey`, `Embeddings__ApiKey`).
 - **Commits**: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`).
+
+## Convenções de Testes (SPEC-20261111-agent-rules-hardening)
+
+- **Asserts determinísticos primeiro**: regras, parsing e contratos usam `Assert.*` rígido em testes unitários rápidos. **Nunca** hard-assert campos internos decididos por LLM (ex.: `fact_type`, classificação, atribuição).
+- **LLM-as-judge** (`tests/KnowledgeHub.Tests.Unit/Testing/LlmJudgeAssert.cs`): para comportamento não-determinístico use `await LlmJudgeAssert.PassesAsync(criteria, actual)` — julga uma *propriedade* do output, nunca a string exata. Configurar via env `Tests__LlmJudge__Endpoint`/`Model`/`ApiKey` (qualquer endpoint OpenAI-compatible); sem config o teste é no-op determinístico (xunit v2 não honra skip dinâmico no console/CI), nunca falha máquina sem judge.
+- **Blackbox** (`tests/KnowledgeHub.Tests.Blackbox/`): suite separada que exerce o app **só por seams públicos** (MCP JSON-RPC, REST, SDK publicado) — sem internals. Toda capability nomeável nova deve ganhar um cenário blackbox. Smoke atual: `initialize → tools/list → tools/call` com `isError=false`.
+- **Paridade de migrations** (`Conventions/MigrationParityTests.cs`): migration adicionada a `src/KnowledgeHub.Server/Migrations/` exige contraparte de mesmo *name-base* em `Migrations/Postgres/` (e vice-versa). Opt-out explícito por arquivo: comentário `// dialect: sqlite-only` ou `// dialect: postgres-only`. Baseline: migrações SQLite anteriores a `PostgresInitial` são grandfathered.
+- **`.env.example` sync** (`Conventions/EnvExampleTests.cs`): todo `Environment.GetEnvironmentVariable("VAR")` em `src/` exige entrada em `.env.example` (comentada ou não); opt-out por linha com `// env:optional`.
+- **Config hierárquica vs estática**: campo é **hierárquico** quando resolve por escopo (env → key/caller → bank/source) e **estático** quando é infra do processo (port, DB path, session mode). Checklist ao adicionar config: (1) decidir hierárquica vs estática; (2) registrar o default em `appsettings*.json` ou `.env.example`; (3) ler via `IConfiguration`/per-key settings conforme o tipo; (4) documentar na tabela de config dos docs quando pública; (5) teste cobrindo o override por escopo quando hierárquica.
+- **Gates antes de PR**: rodar `dotnet format --verify-no-changes`, `dotnet test` completo, e invocar a skill `code-review-and-quality` no diff. Feature com componente externo (conector, proxy, provider) exige: testes de integração reais do sistema externo + cenário blackbox quando a capability é pública + registro de config/docs.
 
 ## Comandos
 
