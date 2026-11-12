@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using KnowledgeHub.Server.Auth;
@@ -18,10 +19,14 @@ namespace KnowledgeHub.Server.Mcp.ToolProviders;
 /// </summary>
 public sealed class MemoryToolsProvider : IToolProvider
 {
+    private const string ArgBankKey = "bankKey";
+    private const string ArgConfirm = "confirm";
+    private const string ArgContent = "content";
+
     private static readonly JsonObject RetainSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"],"description":"Target bank (default 'default'); auto-created on first use"},
-          "content":{"type":"string","description":"Text to remember — observations, decisions, facts, transcripts"},
+          ArgBankKey:{"type":["string","null"],"description":"Target bank (default 'default'); auto-created on first use"},
+          ArgContent:{"type":"string","description":"Text to remember — observations, decisions, facts, transcripts"},
           "context":{"type":["string","null"],"description":"Why this is being remembered (helps extraction)"},
           "timestamp":{"type":["string","null"],"description":"ISO-8601 moment the content happened (default: now)"},
           "tags":{"type":["array","null"],"items":{"type":"string"},"description":"Free-form tags"},
@@ -30,14 +35,14 @@ public sealed class MemoryToolsProvider : IToolProvider
           "strategy":{"type":["string","null"],"enum":["extract","verbatim",null],"description":"extract = LLM fact extraction (default); verbatim = store content as-is, no LLM"},
           "documentId":{"type":["string","null"],"description":"Logical document id — enables delta-retain (unchanged chunks keep their ids)"},
           "documentTitle":{"type":["string","null"],"description":"Title for the logical document"}
-        },"required":["content"],
-        "examples":[{"content":"Deploy da API falhou por falta de memória no nó 3","strategy":"verbatim"},
-                    {"bankKey":"projeto-x","content":"O time decidiu migrar para Postgres em março","mode":"async"}]}
+        },"required":[ArgContent],
+        "examples":[{ArgContent:"Deploy da API falhou por falta de memória no nó 3","strategy":"verbatim"},
+                    {ArgBankKey:"projeto-x",ArgContent:"O time decidiu migrar para Postgres em março","mode":"async"}]}
         """)!.AsObject();
 
     private static readonly JsonObject RecallSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"],"description":"Bank to search (default 'default')"},
+          ArgBankKey:{"type":["string","null"],"description":"Bank to search (default 'default')"},
           "query":{"type":"string","description":"Natural-language recall query"},
           "topK":{"type":"integer","description":"Max results (default 8, cap 100)"},
           "minScore":{"type":["number","null"],"description":"Drop results with normalized score below this (0..1)"},
@@ -51,18 +56,18 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject ListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "factType":{"type":["string","null"],"enum":["world","experience","observation",null]},
           "tag":{"type":["string","null"]},
           "limit":{"type":"integer","description":"Default 20, cap 200"},
           "offset":{"type":"integer"}
         },
-        "examples":[{"bankKey":"default","factType":"world","limit":10}]}
+        "examples":[{ArgBankKey:"default","factType":"world","limit":10}]}
         """)!.AsObject();
 
     private static readonly JsonObject IdSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string","description":"Memory unit id (GUID)"}
         },"required":["id"],
         "examples":[{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}]}
@@ -70,7 +75,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject UpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string","description":"Memory unit id (GUID)"},
           "text":{"type":["string","null"],"description":"New fact text (rehashes + re-embeds)"},
           "context":{"type":["string","null"]},
@@ -82,47 +87,47 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject DeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string","description":"Memory unit id (GUID)"},
-          "confirm":{"type":"boolean","description":"Must be true"},
+          ArgConfirm:{"type":"boolean","description":"Must be true"},
           "hard":{"type":["boolean","null"],"description":"true = permanent delete; default soft-delete"}
-        },"required":["id","confirm"],
-        "examples":[{"id":"3fa85f64-…","confirm":true}]}
+        },"required":["id",ArgConfirm],
+        "examples":[{"id":"3fa85f64-…",ArgConfirm:true}]}
         """)!.AsObject();
 
     private static readonly JsonObject BankCreateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":"string","description":"Slug (unique per API key)"},
+          ArgBankKey:{"type":"string","description":"Slug (unique per API key)"},
           "name":{"type":["string","null"],"description":"Display name (default = bankKey)"},
           "mission":{"type":["string","null"],"description":"Bank purpose — guides future reflect"},
           "disposition":{"type":["object","null"],"description":"{\"skepticism\":1-5,\"literalism\":1-5,\"empathy\":1-5}"},
           "config":{"type":["object","null"],"description":"Per-bank config overrides (maxUnitsPerRetain, defaultStrategy, …)"}
-        },"required":["bankKey"],
-        "examples":[{"bankKey":"projeto-x","name":"Projeto X","mission":"memória do agente do projeto X"}]}
+        },"required":[ArgBankKey],
+        "examples":[{ArgBankKey:"projeto-x","name":"Projeto X","mission":"memória do agente do projeto X"}]}
         """)!.AsObject();
 
     private static readonly JsonObject BankUpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":"string"},
+          ArgBankKey:{"type":"string"},
           "name":{"type":["string","null"]},
           "mission":{"type":["string","null"]},
           "disposition":{"type":["object","null"]},
           "config":{"type":["object","null"]}
-        },"required":["bankKey"],
-        "examples":[{"bankKey":"projeto-x","mission":"memória do agente + decisões arquiteturais"}]}
+        },"required":[ArgBankKey],
+        "examples":[{ArgBankKey:"projeto-x","mission":"memória do agente + decisões arquiteturais"}]}
         """)!.AsObject();
 
     private static readonly JsonObject ConsolidateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "wait":{"type":["boolean","null"],"description":"true (default) runs inline and returns the summary; false queues a consolidate operation (poll operations_get)"}
         },
-        "examples":[{"bankKey":"projeto-x"},{"bankKey":"default","wait":false}]}
+        "examples":[{ArgBankKey:"projeto-x"},{ArgBankKey:"default","wait":false}]}
         """)!.AsObject();
 
     private static readonly JsonObject ObsHistorySchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "observationId":{"type":"string","description":"Observation unit id (GUID)"}
         },"required":["observationId"],
         "examples":[{"observationId":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}]}
@@ -130,7 +135,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject ReflectSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "query":{"type":"string","description":"Question to reflect over the bank's memory"},
           "context":{"type":["string","null"],"description":"Extra context injected into the reflect prompt"},
           "budget":{"type":["string","null"],"enum":["low","mid","high",null],"description":"Reflect depth — iterations: low=3, mid=6, high=Memory:Reflect:MaxIterations (default 10)"},
@@ -148,31 +153,31 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject DirectivesListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "includeInactive":{"type":["boolean","null"]}
         },"examples":[{}]}
         """)!.AsObject();
 
     private static readonly JsonObject DirectiveCreateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "name":{"type":["string","null"],"description":"Short label"},
-          "content":{"type":"string","description":"The standing instruction (max 2000 chars)"},
+          ArgContent:{"type":"string","description":"The standing instruction (max 2000 chars)"},
           "priority":{"type":["integer","null"],"description":"Higher applies first (default 0)"},
           "isActive":{"type":["boolean","null"]},
           "tags":{"type":["array","null"],"items":{"type":"string"},"description":"Scope tags — empty = bank-global"}
-        },"required":["content"],
-        "examples":[{"content":"Sempre responda em pt-BR","priority":10},
-                    {"content":"Nunca exponha dados de billing","tags":["public"]}]}
+        },"required":[ArgContent],
+        "examples":[{ArgContent:"Sempre responda em pt-BR","priority":10},
+                    {ArgContent:"Nunca exponha dados de billing","tags":["public"]}]}
         """)!.AsObject();
 
     private static readonly JsonObject DirectiveUpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string"},
           "isActive":{"type":["boolean","null"]},
           "priority":{"type":["integer","null"]},
-          "content":{"type":["string","null"]},
+          ArgContent:{"type":["string","null"]},
           "tags":{"type":["array","null"],"items":{"type":"string"}}
         },"required":["id"],
         "examples":[{"id":"3fa85f64-…","isActive":false}]}
@@ -180,23 +185,23 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject DirectiveDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string"},
-          "confirm":{"type":"boolean","description":"Must be true"}
-        },"required":["id","confirm"],
-        "examples":[{"id":"3fa85f64-…","confirm":true}]}
+          ArgConfirm:{"type":"boolean","description":"Must be true"}
+        },"required":["id",ArgConfirm],
+        "examples":[{"id":"3fa85f64-…",ArgConfirm:true}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "subtype":{"type":["string","null"],"enum":["mental_model","page",null]}
         },"examples":[{}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelGetSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":["string","null"]},
           "path":{"type":["string","null"],"description":"'folder/name' or 'name'"}
         },"examples":[{"id":"3fa85f64-…"},{"path":"projeto/convencoes/api"}]}
@@ -204,7 +209,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject MentalModelCreateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "subtype":{"type":["string","null"],"enum":["mental_model","page",null]},
           "name":{"type":"string"},
           "path":{"type":["string","null"],"description":"folder path e.g. 'projeto/convencoes'"},
@@ -218,30 +223,30 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject MentalModelUpdateSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string"},
           "name":{"type":["string","null"]},
           "path":{"type":["string","null"]},
           "sourceQuery":{"type":["string","null"]},
           "trigger":{"type":["object","null"]},
           "tags":{"type":["array","null"],"items":{"type":"string"}},
-          "content":{"type":["string","null"],"description":"manual edit — recorded as manual_edit in history"}
+          ArgContent:{"type":["string","null"],"description":"manual edit — recorded as manual_edit in history"}
         },"required":["id"],
         "examples":[{"id":"3fa85f64-…","path":"projeto/api"}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string"},
-          "confirm":{"type":"boolean","description":"Must be true"}
-        },"required":["id","confirm"],
-        "examples":[{"id":"3fa85f64-…","confirm":true}]}
+          ArgConfirm:{"type":"boolean","description":"Must be true"}
+        },"required":["id",ArgConfirm],
+        "examples":[{"id":"3fa85f64-…",ArgConfirm:true}]}
         """)!.AsObject();
 
     private static readonly JsonObject MentalModelRefreshSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "id":{"type":"string"},
           "wait":{"type":["boolean","null"],"description":"true = run now synchronously (ignores min-interval); false = signal the worker"}
         },"required":["id"],
@@ -250,7 +255,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject PageSearchSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":["string","null"]},
+          ArgBankKey:{"type":["string","null"]},
           "query":{"type":"string"},
           "limit":{"type":["integer","null"]}
         },"required":["query"],
@@ -259,10 +264,10 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static readonly JsonObject BankDeleteSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "bankKey":{"type":"string"},
-          "confirm":{"type":"boolean","description":"Must be true — deletes the bank and ALL its memories"}
-        },"required":["bankKey","confirm"],
-        "examples":[{"bankKey":"projeto-x","confirm":true}]}
+          ArgBankKey:{"type":"string"},
+          ArgConfirm:{"type":"boolean","description":"Must be true — deletes the bank and ALL its memories"}
+        },"required":[ArgBankKey,ArgConfirm],
+        "examples":[{ArgBankKey:"projeto-x",ArgConfirm:true}]}
         """)!.AsObject();
 
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -547,7 +552,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static async ValueTask<CallToolResult> RetainAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        var content = ToolArgs.RequiredString(ctx, "content");
+        var content = ToolArgs.RequiredString(ctx, ArgContent);
         var mode = ToolArgs.OptionalString(ctx, "mode") ?? "sync";
         var req = new MemoryRetainRequest(
             content,
@@ -558,7 +563,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalString(ctx, "strategy") ?? "extract",
             ToolArgs.OptionalString(ctx, "documentId"),
             ToolArgs.OptionalString(ctx, "documentTitle"));
-        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey"));
+        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
 
         if (mode == "async")
@@ -602,7 +607,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalIntOrNull(ctx, "budget"),
             ToolArgs.OptionalString(ctx, "factType"));
         var recall = ctx.Services.GetRequiredService<MemoryRecallService>();
-        var result = await recall.RecallAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")), req, ct);
+        var result = await recall.RecallAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), req, ct);
         return await ToolResults.Structured($"{result.Results.Count} memor(ies)", result);
     }
 
@@ -612,7 +617,7 @@ public sealed class MemoryToolsProvider : IToolProvider
     {
         var svc = ctx.Services.GetRequiredService<MemoryUnitService>();
         var items = await svc.ListAsync(
-            MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+            MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
             ToolArgs.OptionalString(ctx, "factType"),
             ToolArgs.OptionalString(ctx, "tag"),
             ToolArgs.OptionalInt(ctx, "limit", 20, 200),
@@ -625,7 +630,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         var svc = ctx.Services.GetRequiredService<MemoryUnitService>();
         try
         {
-            var unit = await svc.GetAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+            var unit = await svc.GetAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")), ct);
             return await ToolResults.Structured("memory unit", unit);
         }
@@ -642,12 +647,13 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var unit = await svc.UpdateAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
-                ToolArgs.OptionalString(ctx, "text"),
-                ToolArgs.OptionalString(ctx, "context"),
-                OptionalStringList(ctx, "tags"),
-                OptionalStringMap(ctx, "metadata"),
+                new MemoryUnitService.MemoryUnitPatch(
+                    ToolArgs.OptionalString(ctx, "text"),
+                    ToolArgs.OptionalString(ctx, "context"),
+                    OptionalStringList(ctx, "tags"),
+                    OptionalStringMap(ctx, "metadata")),
                 embeddings, ct);
             return await ToolResults.Structured("memory updated", unit);
         }
@@ -659,12 +665,12 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static async ValueTask<CallToolResult> DeleteAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        if (ToolArgs.OptionalBool(ctx, "confirm") != true)
+        if (ToolArgs.OptionalBool(ctx, ArgConfirm) != true)
             return await ToolResults.Error("memory_delete requires confirm:true");
         var svc = ctx.Services.GetRequiredService<MemoryUnitService>();
         try
         {
-            await svc.DeleteAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+            await svc.DeleteAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
                 ToolArgs.OptionalBool(ctx, "hard") == true, ct);
             return await ToolResults.Structured("memory deleted", new { deleted = true });
@@ -695,7 +701,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var result = await svc.ReflectAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")), req, ct);
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), req, ct);
             return await ToolResults.Structured("reflect answer", result);
         }
         catch (MemoryBadRequestException ex)
@@ -714,7 +720,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var items = await svc.ListAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ToolArgs.OptionalBool(ctx, "includeInactive") == true, ct);
             return await ToolResults.Structured($"{items.Count} directive(s)",
                 new { count = items.Count, directives = items });
@@ -731,9 +737,9 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var d = await svc.CreateAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ToolArgs.OptionalString(ctx, "name"),
-                ToolArgs.RequiredString(ctx, "content"),
+                ToolArgs.RequiredString(ctx, ArgContent),
                 ToolArgs.OptionalInt(ctx, "priority", 0, int.MaxValue),
                 ToolArgs.OptionalBool(ctx, "isActive"),
                 OptionalStringList(ctx, "tags"), ct);
@@ -751,11 +757,11 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var d = await svc.UpdateAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
                 ToolArgs.OptionalBool(ctx, "isActive"),
                 ctx.Arguments?.TryGetValue("priority", out _) == true ? ToolArgs.OptionalInt(ctx, "priority", 0, int.MaxValue) : null,
-                ToolArgs.OptionalString(ctx, "content"),
+                ToolArgs.OptionalString(ctx, ArgContent),
                 OptionalStringList(ctx, "tags"), ct);
             return await ToolResults.Structured("directive updated", d);
         }
@@ -767,13 +773,13 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static async ValueTask<CallToolResult> DirectiveDeleteAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        if (ToolArgs.OptionalBool(ctx, "confirm") != true)
+        if (ToolArgs.OptionalBool(ctx, ArgConfirm) != true)
             return await ToolResults.Error("memory_directives_delete requires confirm:true");
         var svc = ctx.Services.GetRequiredService<MemoryDirectiveService>();
         try
         {
             await svc.DeleteAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")), ct);
             return await ToolResults.Structured("directive deleted", new { deleted = true });
         }
@@ -786,7 +792,7 @@ public sealed class MemoryToolsProvider : IToolProvider
     // ---------- mental models + pages (SPEC-20261111-mental-models-pages) ----------
 
     private static string? EffKey(ToolCallContext ctx) =>
-        MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey"));
+        MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
 
     private static async ValueTask<CallToolResult> MentalModelsListAsync(ToolCallContext ctx, CancellationToken ct)
     {
@@ -824,12 +830,13 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var dto = await svc.CreateAsync(EffKey(ctx),
-                ToolArgs.OptionalString(ctx, "subtype") ?? "mental_model",
-                ToolArgs.RequiredString(ctx, "name"),
-                ToolArgs.OptionalString(ctx, "path"),
-                ToolArgs.RequiredString(ctx, "sourceQuery"),
-                OptionalJson(ctx, "trigger"),
-                OptionalStringList(ctx, "tags"), ct);
+                new Memory.MentalModels.MentalModelCreate(
+                    ToolArgs.OptionalString(ctx, "subtype") ?? "mental_model",
+                    ToolArgs.RequiredString(ctx, "name"),
+                    ToolArgs.OptionalString(ctx, "path"),
+                    ToolArgs.RequiredString(ctx, "sourceQuery"),
+                    OptionalJson(ctx, "trigger"),
+                    OptionalStringList(ctx, "tags")), ct);
             if (ToolArgs.OptionalBool(ctx, "wait") == true)
             {
                 var refresh = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelRefreshService>();
@@ -856,13 +863,14 @@ public sealed class MemoryToolsProvider : IToolProvider
         {
             var dto = await svc.UpdateAsync(EffKey(ctx),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
-                ToolArgs.OptionalString(ctx, "name"),
-                ToolArgs.OptionalString(ctx, "path"),
-                ToolArgs.OptionalString(ctx, "sourceQuery"),
-                OptionalJson(ctx, "trigger"),
-                OptionalStringList(ctx, "tags"),
-                ToolArgs.OptionalString(ctx, "content"),
-                manualEdit: true, ct);
+                new Memory.MentalModels.MentalModelUpdate(
+                    ToolArgs.OptionalString(ctx, "name"),
+                    ToolArgs.OptionalString(ctx, "path"),
+                    ToolArgs.OptionalString(ctx, "sourceQuery"),
+                    OptionalJson(ctx, "trigger"),
+                    OptionalStringList(ctx, "tags"),
+                    ToolArgs.OptionalString(ctx, ArgContent),
+                    ManualEdit: true), ct);
             return await ToolResults.Structured("model updated", dto);
         }
         catch (MemoryBadRequestException ex)
@@ -877,7 +885,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static async ValueTask<CallToolResult> MentalModelsDeleteAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        if (ToolArgs.OptionalBool(ctx, "confirm") != true)
+        if (ToolArgs.OptionalBool(ctx, ArgConfirm) != true)
             return await ToolResults.Error("memory_mental_models_delete requires confirm:true");
         var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
         try
@@ -963,12 +971,13 @@ public sealed class MemoryToolsProvider : IToolProvider
         var svc = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelService>();
         try
         {
-            var dto = await svc.CreateAsync(EffKey(ctx), "page",
-                ToolArgs.RequiredString(ctx, "name"),
-                ToolArgs.OptionalString(ctx, "path"),
-                ToolArgs.RequiredString(ctx, "sourceQuery"),
-                OptionalJson(ctx, "trigger"),
-                OptionalStringList(ctx, "tags"), ct);
+            var dto = await svc.CreateAsync(EffKey(ctx),
+                new Memory.MentalModels.MentalModelCreate("page",
+                    ToolArgs.RequiredString(ctx, "name"),
+                    ToolArgs.OptionalString(ctx, "path"),
+                    ToolArgs.RequiredString(ctx, "sourceQuery"),
+                    OptionalJson(ctx, "trigger"),
+                    OptionalStringList(ctx, "tags")), ct);
             if (ToolArgs.OptionalBool(ctx, "wait") == true)
             {
                 var refresh = ctx.Services.GetRequiredService<Memory.MentalModels.MentalModelRefreshService>();
@@ -1001,7 +1010,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static async ValueTask<CallToolResult> ConsolidateAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey"));
+        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
         try
         {
@@ -1043,7 +1052,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var history = await svc.HistoryAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, "bankKey")),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
                 ParseGuid(ToolArgs.RequiredString(ctx, "observationId")), banks, ct);
             return await ToolResults.Structured($"{history.Count} version(s)",
                 new { count = history.Count, versions = history });
@@ -1069,7 +1078,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var bank = await banks.CreateAsync(
-                ToolArgs.RequiredString(ctx, "bankKey"),
+                ToolArgs.RequiredString(ctx, ArgBankKey),
                 ToolArgs.OptionalString(ctx, "name") ?? "",
                 ToolArgs.OptionalString(ctx, "mission"),
                 OptionalJson(ctx, "disposition"),
@@ -1088,7 +1097,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var bank = await banks.UpdateAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.RequiredString(ctx, "bankKey"))!,
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.RequiredString(ctx, ArgBankKey))!,
                 ToolArgs.OptionalString(ctx, "name"),
                 ToolArgs.OptionalString(ctx, "mission"),
                 OptionalJson(ctx, "disposition"),
@@ -1103,13 +1112,13 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static async ValueTask<CallToolResult> BankDeleteAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        if (ToolArgs.OptionalBool(ctx, "confirm") != true)
+        if (ToolArgs.OptionalBool(ctx, ArgConfirm) != true)
             return await ToolResults.Error("memory_bank_delete requires confirm:true");
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
         try
         {
             await banks.DeleteAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.RequiredString(ctx, "bankKey"))!, ct);
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.RequiredString(ctx, ArgBankKey))!, ct);
             return await ToolResults.Structured("bank deleted", new { deleted = true });
         }
         catch (MemoryBadRequestException ex)
@@ -1125,11 +1134,14 @@ public sealed class MemoryToolsProvider : IToolProvider
             ? g
             : throw new McpProtocolException("argument 'id' must be a GUID", McpErrorCode.InvalidParams);
 
-    private static DateTimeOffset? ParseDate(string? raw) =>
-        raw is null ? null
-            : DateTimeOffset.TryParse(raw, out var d)
-                ? d
-                : throw new McpProtocolException("argument 'timestamp' must be ISO-8601", McpErrorCode.InvalidParams);
+    private static DateTimeOffset? ParseDate(string? raw)
+    {
+        if (raw is null)
+            return null;
+        if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
+            return d;
+        throw new McpProtocolException("argument 'timestamp' must be ISO-8601", McpErrorCode.InvalidParams);
+    }
 
     private static IReadOnlyList<string>? OptionalStringList(ToolCallContext ctx, string name) =>
         ToolArgs.OptionalStringArray(ctx, name);

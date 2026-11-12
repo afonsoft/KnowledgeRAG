@@ -227,7 +227,7 @@ public sealed class MemoryReflectService(
 
     // ---------------- prompt ----------------
 
-    internal string BuildSystemPrompt(MemoryBank bank, List<MemoryDirective> directives, string? context)
+    internal static string BuildSystemPrompt(MemoryBank bank, List<MemoryDirective> directives, string? context)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("You are reflecting over an agent memory bank to answer a question grounded in evidence.");
@@ -357,7 +357,7 @@ public sealed class MemoryReflectService(
 
     // ---------------- structured output (RF-004) ----------------
 
-    private async Task<(JsonElement?, string?)> ExtractStructuredAsync(
+    private static async Task<(JsonElement?, string?)> ExtractStructuredAsync(
         IChatClient chat, string answer, JsonElement schema, CancellationToken ct)
     {
         var prompt = $$"""
@@ -401,12 +401,14 @@ public sealed class MemoryReflectService(
 
     // ---------------- helpers ----------------
 
-    private static string? ArgString(AIFunctionArguments args, string name) =>
-        args.TryGetValue(name, out var v) && v is not null
-            ? v is JsonElement el && el.ValueKind == JsonValueKind.String
-                ? el.GetString()
-                : v.ToString()
-            : null;
+    private static string? ArgString(AIFunctionArguments args, string name)
+    {
+        if (!args.TryGetValue(name, out var v) || v is null)
+            return null;
+        return v is JsonElement el && el.ValueKind == JsonValueKind.String
+            ? el.GetString()
+            : v.ToString();
+    }
 
     private static IEnumerable<string> ArgStrings(object raw)
     {

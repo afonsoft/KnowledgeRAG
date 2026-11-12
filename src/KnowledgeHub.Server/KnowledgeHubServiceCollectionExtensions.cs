@@ -532,6 +532,14 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddHostedService<Memory.MemoryRetainWorker>();
         services.AddScoped<Memory.MemoryBankService>();
         services.AddScoped<Memory.MemoryEntityLinker>();
+        services.AddScoped(sp => new Memory.MemoryRetainDeps(
+            sp.GetRequiredService<Memory.MemoryBankService>(),
+            sp.GetRequiredService<Memory.MemoryConfigResolver>(),
+            sp.GetRequiredService<Memory.MemoryEntityLinker>(),
+            sp.GetRequiredService<Memory.IMemoryDefenseScreen>(),
+            sp,
+            sp.GetRequiredService<Embeddings.IEmbeddingProvider>(),
+            sp.GetRequiredService<Memory.IMemoryConsolidationTrigger>()));
         services.AddScoped<Memory.MemoryRetainService>();
         services.AddScoped<Memory.MemoryRecallService>();
         services.AddScoped<Memory.MemoryUnitService>();

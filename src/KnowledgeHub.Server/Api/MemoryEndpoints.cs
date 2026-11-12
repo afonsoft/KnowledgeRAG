@@ -15,6 +15,9 @@ namespace KnowledgeHub.Server.Api;
 /// </summary>
 public static class MemoryEndpoints
 {
+    private const string BankKey = "bankKey";
+    private const string Confirm = "confirm";
+
     public static RouteGroupBuilder MapMemoryApi(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/memory");
@@ -32,19 +35,19 @@ public static class MemoryEndpoints
         group.MapPatch("/units/{id:guid}", async (HttpContext http, Guid id, CancellationToken ct) =>
             await Invoke(http, "memory_update", Merge(await BodyAsync(http, ct) ?? new JsonObject(), "id", id.ToString()), ct));
         group.MapDelete("/units/{id:guid}", (HttpContext http, Guid id, CancellationToken ct) =>
-            Invoke(http, "memory_delete", Merge(Query(http), "id", id.ToString(), ("confirm", true)), ct));
+            Invoke(http, "memory_delete", Merge(Query(http), "id", id.ToString(), (Confirm, true)), ct));
 
         group.MapGet("/banks", (HttpContext http, CancellationToken ct) =>
             Invoke(http, "memory_bank_list", new JsonObject(), ct));
         group.MapPost("/banks", async (HttpContext http, CancellationToken ct) =>
             await Invoke(http, "memory_bank_create", await BodyAsync(http, ct), ct));
         group.MapPatch("/banks/{key}", async (HttpContext http, string key, CancellationToken ct) =>
-            await Invoke(http, "memory_bank_update", Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct));
+            await Invoke(http, "memory_bank_update", Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct));
         group.MapDelete("/banks/{key}", (HttpContext http, string key, CancellationToken ct) =>
-            Invoke(http, "memory_bank_delete", Merge(new JsonObject(), "bankKey", key, ("confirm", true)), ct));
+            Invoke(http, "memory_bank_delete", Merge(new JsonObject(), BankKey, key, (Confirm, true)), ct));
         group.MapPost("/banks/{key}/consolidate", async (HttpContext http, string key, CancellationToken ct) =>
             await Invoke(http, "memory_consolidate",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct))
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct))
             .RequireRateLimiting("llm");
         group.MapGet("/observations/{id:guid}/history", (HttpContext http, Guid id, CancellationToken ct) =>
             Invoke(http, "memory_observation_history",
@@ -53,58 +56,58 @@ public static class MemoryEndpoints
         // SPEC-20261111-memory-reflect-directives RF-005.
         group.MapPost("/banks/{key}/reflect", async (HttpContext http, string key, CancellationToken ct) =>
             await Invoke(http, "memory_reflect",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct))
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct))
             .RequireRateLimiting("llm");
         group.MapGet("/banks/{key}/directives", (HttpContext http, string key, CancellationToken ct) =>
             Invoke(http, "memory_directives_list",
-                Merge(Query(http), "bankKey", key), ct));
+                Merge(Query(http), BankKey, key), ct));
         group.MapPost("/banks/{key}/directives", async (HttpContext http, string key, CancellationToken ct) =>
             await Invoke(http, "memory_directives_create",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct));
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct));
         group.MapPatch("/banks/{key}/directives/{id:guid}", async (HttpContext http, string key, Guid id, CancellationToken ct) =>
             await Invoke(http, "memory_directives_update",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key, ("id", id.ToString())), ct));
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key, ("id", id.ToString())), ct));
         group.MapDelete("/banks/{key}/directives/{id:guid}", (HttpContext http, string key, Guid id, CancellationToken ct) =>
             Invoke(http, "memory_directives_delete",
-                Merge(new JsonObject(), "bankKey", key, ("id", id.ToString()), ("confirm", true)), ct));
+                Merge(new JsonObject(), BankKey, key, ("id", id.ToString()), (Confirm, true)), ct));
 
         // SPEC-20261111-mental-models-pages RF-004.
         group.MapGet("/banks/{key}/mental-models", (HttpContext http, string key, CancellationToken ct) =>
-            Invoke(http, "memory_mental_models_list", Merge(Query(http), "bankKey", key), ct));
+            Invoke(http, "memory_mental_models_list", Merge(Query(http), BankKey, key), ct));
         group.MapPost("/banks/{key}/mental-models", async (HttpContext http, string key, CancellationToken ct) =>
             await Invoke(http, "memory_mental_models_create",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct))
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct))
             .RequireRateLimiting("llm");
         group.MapGet("/banks/{key}/mental-models/{id:guid}", (HttpContext http, string key, Guid id, CancellationToken ct) =>
             Invoke(http, "memory_mental_models_get",
-                Merge(Query(http), "bankKey", key, ("id", id.ToString())), ct));
+                Merge(Query(http), BankKey, key, ("id", id.ToString())), ct));
         group.MapPatch("/banks/{key}/mental-models/{id:guid}", async (HttpContext http, string key, Guid id, CancellationToken ct) =>
             await Invoke(http, "memory_mental_models_update",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key, ("id", id.ToString())), ct));
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key, ("id", id.ToString())), ct));
         group.MapDelete("/banks/{key}/mental-models/{id:guid}", (HttpContext http, string key, Guid id, CancellationToken ct) =>
             Invoke(http, "memory_mental_models_delete",
-                Merge(new JsonObject(), "bankKey", key, ("id", id.ToString()), ("confirm", true)), ct));
+                Merge(new JsonObject(), BankKey, key, ("id", id.ToString()), (Confirm, true)), ct));
         group.MapPost("/banks/{key}/mental-models/{id:guid}/refresh", async (HttpContext http, string key, Guid id, CancellationToken ct) =>
             await Invoke(http, "memory_mental_model_refresh",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key, ("id", id.ToString())), ct))
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key, ("id", id.ToString())), ct))
             .RequireRateLimiting("llm");
         group.MapGet("/banks/{key}/pages/tree", (HttpContext http, string key, CancellationToken ct) =>
-            Invoke(http, "memory_pages_tree", Merge(Query(http), "bankKey", key), ct));
+            Invoke(http, "memory_pages_tree", Merge(Query(http), BankKey, key), ct));
         group.MapGet("/banks/{key}/pages/search", (HttpContext http, string key, CancellationToken ct) =>
-            Invoke(http, "memory_pages_search", Merge(Query(http), "bankKey", key), ct));
+            Invoke(http, "memory_pages_search", Merge(Query(http), BankKey, key), ct));
         group.MapGet("/banks/{key}/pages/{id:guid}", (HttpContext http, string key, Guid id, CancellationToken ct) =>
             Invoke(http, "memory_page_get",
-                Merge(Query(http), "bankKey", key, ("id", id.ToString())), ct));
+                Merge(Query(http), BankKey, key, ("id", id.ToString())), ct));
         group.MapPost("/banks/{key}/pages", async (HttpContext http, string key, CancellationToken ct) =>
             await Invoke(http, "memory_page_create",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key), ct))
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct))
             .RequireRateLimiting("llm");
         group.MapPatch("/banks/{key}/pages/{id:guid}", async (HttpContext http, string key, Guid id, CancellationToken ct) =>
             await Invoke(http, "memory_page_update",
-                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "bankKey", key, ("id", id.ToString())), ct));
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key, ("id", id.ToString())), ct));
         group.MapDelete("/banks/{key}/pages/{id:guid}", (HttpContext http, string key, Guid id, CancellationToken ct) =>
             Invoke(http, "memory_page_delete",
-                Merge(new JsonObject(), "bankKey", key, ("id", id.ToString()), ("confirm", true)), ct));
+                Merge(new JsonObject(), BankKey, key, ("id", id.ToString()), (Confirm, true)), ct));
 
         return group;
     }
@@ -120,9 +123,8 @@ public static class MemoryEndpoints
                 detail: $"tool '{tool}' is not registered");
         var args = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         if (body is not null)
-            foreach (var prop in body)
-                if (prop.Value is not null)
-                    args[prop.Key] = JsonSerializer.SerializeToElement(prop.Value);
+            foreach (var prop in body.Where(p => p.Value is not null))
+                args[prop.Key] = JsonSerializer.SerializeToElement(prop.Value!);
         var ctx = new ToolCallContext
         {
             Services = http.RequestServices,

@@ -10,7 +10,8 @@ OUT="$ROOT/skills/knowledge-hub-docs/SKILL.md"
 MODE="${1:-write}"
 
 extract() { # file -> all marked blocks
-  awk '/<!-- skill-docs:begin -->/{f=1;next}/<!-- skill-docs:end -->/{f=0;next}f' "$1"
+  local src_file="$1"
+  awk '/<!-- skill-docs:begin -->/{f=1;next}/<!-- skill-docs:end -->/{f=0;next}f' "$src_file"
 }
 
 gen() {

@@ -34,12 +34,16 @@ public sealed class MemoryUnitService(KnowledgeHubDbContext db, MemoryBankServic
         return ToDto(u);
     }
 
+    public sealed record MemoryUnitPatch(
+        string? Text, string? Context, IReadOnlyList<string>? Tags,
+        IReadOnlyDictionary<string, string>? Metadata);
+
     /// <summary>Patch text/context/tags/metadata — rehashes + re-embeds when text changes.</summary>
     public async Task<MemoryUnitDto> UpdateAsync(
-        string? bankKey, Guid id, string? text, string? context,
-        IReadOnlyList<string>? tags, IReadOnlyDictionary<string, string>? metadata,
+        string? bankKey, Guid id, MemoryUnitPatch patch,
         Embeddings.IEmbeddingProvider embeddings, CancellationToken ct)
     {
+        var (text, context, tags, metadata) = patch;
         var bank = await banks.ResolveAsync(bankKey, ct, create: false);
         var u = await db.MemoryUnits.Include(x => x.Document)
             .FirstOrDefaultAsync(x => x.BankId == bank.Id && x.Id == id && !x.IsDeleted, ct)

@@ -74,7 +74,7 @@ public sealed class MentalModelRefreshService(
                 return new MentalModelRefreshResult(model.Id, true, false, false, 0);
             }
 
-            var prompt = BuildPrompt(model, trigger, delta, runStart);
+            var prompt = BuildPrompt(model, trigger, delta);
             var response = await chat.GetResponseAsync(
                 [new ChatMessage(ChatRole.User, prompt)], cancellationToken: ct);
             var content = response.Text?.Trim();
@@ -130,7 +130,7 @@ public sealed class MentalModelRefreshService(
     }
 
     private static string BuildPrompt(
-        MemoryMentalModel model, MentalModelTrigger trigger, List<MemoryUnit> units, DateTime runStart)
+        MemoryMentalModel model, MentalModelTrigger trigger, List<MemoryUnit> units)
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"You maintain a living document that answers: \"{model.SourceQuery}\"");

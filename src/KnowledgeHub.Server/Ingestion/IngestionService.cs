@@ -741,48 +741,27 @@ public sealed class IngestionService : IIngestionService
         var redactedCount = 0;
         foreach (var chunk in chunks.ToList())
         {
-            var flags = sanitizer.Scan(chunk.TextContent);
-            if (flags.Count > 0)
+            if (ScanSuspicion(chunk, doc, source, db) is { Count: > 0 } flags)
             {
                 chunk.SuspicionFlags = string.Join(',', flags);
                 flaggedCount++;
                 foreach (var f in flags)
                     flagNames.Add(f);
-                db.SecurityEvents.Add(new SecurityEvent
-                {
-                    SourceId = source.Id,
-                    DocumentId = doc.Id,
-                    ChunkIndex = chunk.ChunkIndex,
-                    Flags = chunk.SuspicionFlags
-                });
             }
 
             // SPEC-20261111-memory-defense RF-003: secret scan per chunk —
             // block drops the chunk entirely (nothing persists), redact
             // rewrites TextContent and the enriched/FTS copy, allow audits.
-            var outcome = defense.Screen(chunk.TextContent, policy);
-            foreach (var f in outcome.Findings.Where(f => f.Action != Security.SecretAction.Allow))
-                db.SecurityEvents.Add(new SecurityEvent
-                {
-                    SourceId = source.Id,
-                    DocumentId = doc.Id,
-                    ChunkIndex = chunk.ChunkIndex,
-                    Flags = "secret_scan",
-                    Detail = $"ingest:{f.Pattern}:{f.Action.ToString().ToLowerInvariant()}:{f.Fingerprint}"
-                });
-
-            if (outcome.Blocked)
+            switch (ScreenChunkSecrets(chunk, doc, source, policy, db))
             {
-                db.Chunks.Remove(chunk);
-                chunks.Remove(chunk);
-                blockedCount++;
-            }
-            else if (outcome.Redactions.Count > 0)
-            {
-                chunk.TextContent = outcome.Text;
-                if (chunk.EnrichedText is not null)
-                    chunk.EnrichedText = defense.Screen(chunk.EnrichedText, policy).Text;
-                redactedCount++;
+                case SecretVerdict.Blocked:
+                    db.Chunks.Remove(chunk);
+                    chunks.Remove(chunk);
+                    blockedCount++;
+                    break;
+                case SecretVerdict.Redacted:
+                    redactedCount++;
+                    break;
             }
         }
 
@@ -810,6 +789,51 @@ public sealed class IngestionService : IIngestionService
             warnings.Add(
                 $"{title}: secret scan dropped {blockedCount} chunk(s), redacted {redactedCount}");
         }
+    }
+
+    private enum SecretVerdict { Clean, Redacted, Blocked }
+
+    /// <summary>Prompt-injection suspicion flags → row flag + SecurityEvent per chunk.</summary>
+    private List<string> ScanSuspicion(
+        DocumentChunk chunk, KnowledgeDocument doc, KnowledgeSource source, KnowledgeHubDbContext db)
+    {
+        var flags = sanitizer.Scan(chunk.TextContent);
+        if (flags.Count > 0)
+        {
+            db.SecurityEvents.Add(new SecurityEvent
+            {
+                SourceId = source.Id,
+                DocumentId = doc.Id,
+                ChunkIndex = chunk.ChunkIndex,
+                Flags = string.Join(',', flags)
+            });
+        }
+        return flags.ToList();
+    }
+
+    /// <summary>Secret scan of one chunk: audits non-allow findings, drops or redacts.</summary>
+    private SecretVerdict ScreenChunkSecrets(
+        DocumentChunk chunk, KnowledgeDocument doc, KnowledgeSource source,
+        Security.DefensePolicy policy, KnowledgeHubDbContext db)
+    {
+        var outcome = defense.Screen(chunk.TextContent, policy);
+        foreach (var f in outcome.Findings.Where(f => f.Action != Security.SecretAction.Allow))
+            db.SecurityEvents.Add(new SecurityEvent
+            {
+                SourceId = source.Id,
+                DocumentId = doc.Id,
+                ChunkIndex = chunk.ChunkIndex,
+                Flags = "secret_scan",
+                Detail = $"ingest:{f.Pattern}:{f.Action.ToString().ToLowerInvariant()}:{f.Fingerprint}"
+            });
+        if (outcome.Blocked)
+            return SecretVerdict.Blocked;
+        if (outcome.Redactions.Count == 0)
+            return SecretVerdict.Clean;
+        chunk.TextContent = outcome.Text;
+        if (chunk.EnrichedText is not null)
+            chunk.EnrichedText = defense.Screen(chunk.EnrichedText, policy).Text;
+        return SecretVerdict.Redacted;
     }
 
     /// <summary>SPEC-20260924-contextual-chunk-enrichment: structural prefix

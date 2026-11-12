@@ -149,13 +149,13 @@ public class MentalModelsTests : IDisposable
         using var db = Open();
         await BankAsync(db);
         var svc = Models(db);
-        var m = await svc.CreateAsync(null, "page", "Convenções", "projeto",
-            "Quais as convenções?", null, null, default);
+        var m = await svc.CreateAsync(null, new MentalModelCreate("page", "Convenções", "projeto",
+            "Quais as convenções?", null, null), default);
         Assert.Equal("projeto", m.Path);
         await Assert.ThrowsAsync<MemoryConflictException>(() =>
-            svc.CreateAsync(null, "page", "Convenções", "projeto", "q", null, null, default));
-        var sameNameOtherFolder = await svc.CreateAsync(null, "page", "Convenções",
-            "api", "q", null, null, default);
+            svc.CreateAsync(null, new MentalModelCreate("page", "Convenções", "projeto", "q", null, null), default));
+        var sameNameOtherFolder = await svc.CreateAsync(null, new MentalModelCreate("page", "Convenções",
+            "api", "q", null, null), default);
         Assert.Equal("api", sameNameOtherFolder.Path);
 
         var got = await svc.GetAsync(null, m.Id, null, default);
@@ -163,8 +163,8 @@ public class MentalModelsTests : IDisposable
         var byPath = await svc.GetAsync(null, null, "projeto/convenções", default);
         Assert.Equal(m.Id, byPath.Id);
 
-        var upd = await svc.UpdateAsync(null, m.Id, "Convenções v2", "projeto/api",
-            null, null, null, null, true, default);
+        var upd = await svc.UpdateAsync(null, m.Id, new MentalModelUpdate("Convenções v2", "projeto/api",
+            null, null, null, null, true), default);
         Assert.Equal("projeto/api", upd.Path);
         Assert.Equal("Convenções v2", upd.Name);
         Assert.True(await svc.DeleteAsync(null, m.Id, default));
@@ -178,9 +178,9 @@ public class MentalModelsTests : IDisposable
         using var db = Open();
         await BankAsync(db);
         var svc = Models(db);
-        await svc.CreateAsync(null, "page", "Api", "projeto/convencoes", "q", null, null, default);
-        await svc.CreateAsync(null, "page", "Estilo", "projeto/convencoes", "q", null, null, default);
-        await svc.CreateAsync(null, "page", "Root", null, "q", null, null, default);
+        await svc.CreateAsync(null, new MentalModelCreate("page", "Api", "projeto/convencoes", "q", null, null), default);
+        await svc.CreateAsync(null, new MentalModelCreate("page", "Estilo", "projeto/convencoes", "q", null, null), default);
+        await svc.CreateAsync(null, new MentalModelCreate("page", "Root", null, "q", null, null), default);
         var tree = await svc.PageTreeAsync(null, default);
         Assert.Equal(2, tree.Count); // 'projeto' folder + root page
         var folder = Assert.Single(tree, t => t.IsFolder);
@@ -196,7 +196,7 @@ public class MentalModelsTests : IDisposable
         using var db = Open();
         var bank = await BankAsync(db);
         var svc = Models(db);
-        var p = await svc.CreateAsync(null, "page", "Estilo", null, "q", null, null, default);
+        var p = await svc.CreateAsync(null, new MentalModelCreate("page", "Estilo", null, "q", null, null), default);
         db.MemoryMentalModels.Find(p.Id)!.Content = "sempre usar snake_case em migrations";
         await db.SaveChangesAsync();
         var hits = await svc.SearchPagesAsync(null, "snake_case", 10, default);
@@ -214,7 +214,7 @@ public class MentalModelsTests : IDisposable
         var u = Unit(bank, "Convenção: testes com xUnit");
         db.MemoryUnits.Add(u);
         var svc = Models(db);
-        var page = await svc.CreateAsync(null, "page", "Conv", null, "convenções?", null, null, default);
+        var page = await svc.CreateAsync(null, new MentalModelCreate("page", "Conv", null, "convenções?", null, null), default);
         var chat = new OneShotChat("# Convenções\n- testes com xUnit");
         var r = await Refresher(db, chat).RefreshAsync(page.Id, true, default);
 
@@ -235,7 +235,7 @@ public class MentalModelsTests : IDisposable
         var bank = await BankAsync(db);
         var svc = Models(db);
         db.MemoryUnits.Add(Unit(bank, "old", mentionedAt: DateTime.UtcNow.AddHours(-2)));
-        var page = await svc.CreateAsync(null, "page", "P", null, "q", null, null, default);
+        var page = await svc.CreateAsync(null, new MentalModelCreate("page", "P", null, "q", null, null), default);
         var chat = new OneShotChat("v1");
         var svc2 = Refresher(db, chat);
         await svc2.RefreshAsync(page.Id, true, default);
@@ -254,7 +254,7 @@ public class MentalModelsTests : IDisposable
         var bank = await BankAsync(db);
         var svc = Models(db);
         var trigger = """{"minRefreshIntervalSeconds":3600}""";
-        var page = await svc.CreateAsync(null, "page", "P", null, "q", trigger, null, default);
+        var page = await svc.CreateAsync(null, new MentalModelCreate("page", "P", null, "q", trigger, null), default);
         var locks = new MentalModelRefreshLocks();
         var sp = new ServiceCollection().BuildServiceProvider();
         var refresh = new MentalModelRefreshService(db, svc, locks,
@@ -273,7 +273,7 @@ public class MentalModelsTests : IDisposable
         using var db = Open();
         var bank = await BankAsync(db);
         var svc = Models(db);
-        var page = await svc.CreateAsync(null, "page", "P", null, "q", null, null, default);
+        var page = await svc.CreateAsync(null, new MentalModelCreate("page", "P", null, "q", null, null), default);
         var got1 = await svc.GetAsync(null, page.Id, null, default);
         Assert.False(got1.Stale); // no units yet
         db.MemoryUnits.Add(Unit(bank, "novo fato"));
@@ -288,7 +288,7 @@ public class MentalModelsTests : IDisposable
         using var db = Open();
         var bank = await BankAsync(db);
         var svc = Models(db);
-        var page = await svc.CreateAsync(null, "page", "P", null, "q", null, null, default);
+        var page = await svc.CreateAsync(null, new MentalModelCreate("page", "P", null, "q", null, null), default);
         var chat = new OneShotChat("v");
         var refresh = Refresher(db, chat);
         for (var i = 0; i < 5; i++)
@@ -299,7 +299,7 @@ public class MentalModelsTests : IDisposable
         }
         // HistoryLimit=3 in test config → last 3 auto versions + manual edits.
         Assert.Equal(3, db.MentalModelHistories.Count(h => h.ModelId == page.Id && !h.ManualEdit));
-        await svc.UpdateAsync(null, page.Id, null, null, null, null, null, "edit manual", true, default);
+        await svc.UpdateAsync(null, page.Id, new MentalModelUpdate(null, null, null, null, null, "edit manual", true), default);
         Assert.Single(db.MentalModelHistories.Where(h => h.ModelId == page.Id && h.ManualEdit));
     }
 
@@ -312,8 +312,8 @@ public class MentalModelsTests : IDisposable
         var bank = await BankAsync(db);
         db.MemoryUnits.Add(Unit(bank, "convenção X"));
         var svc = Models(db, vault: true);
-        var page = await svc.CreateAsync(null, "page", "Convenções", "projeto",
-            "convenções?", null, null, default);
+        var page = await svc.CreateAsync(null, new MentalModelCreate("page", "Convenções", "projeto",
+            "convenções?", null, null), default);
         await Refresher(db, new OneShotChat("doc"), vault: true).RefreshAsync(page.Id, true, default);
 
         var file = Path.Combine(_vault, "_memory", "default", "projeto", "convenções.md");
@@ -330,7 +330,7 @@ public class MentalModelsTests : IDisposable
         using var db = Open();
         var bank = await BankAsync(db);
         var svc = Models(db, vault: true);
-        var page = await svc.CreateAsync(null, "page", "Página", "a", "q", null, null, default);
+        var page = await svc.CreateAsync(null, new MentalModelCreate("page", "Página", "a", "q", null, null), default);
         var model = db.MemoryMentalModels.Find(page.Id)!;
         model.Content = "c";
         model.LastRefreshedAt = DateTime.UtcNow;
@@ -339,7 +339,7 @@ public class MentalModelsTests : IDisposable
         var oldFile = Path.Combine(_vault, "_memory", "default", "a", "página.md");
         Assert.True(File.Exists(oldFile));
 
-        await svc.UpdateAsync(null, page.Id, null, "b", null, null, null, null, true, default);
+        await svc.UpdateAsync(null, page.Id, new MentalModelUpdate(null, "b", null, null, null, null, true), default);
         Assert.False(File.Exists(oldFile));
         Assert.True(File.Exists(Path.Combine(_vault, "_memory", "default", "b", "página.md")));
 
@@ -353,9 +353,9 @@ public class MentalModelsTests : IDisposable
         using var db = Open();
         var bank = await BankAsync(db);
         var svc = Models(db);
-        var withHook = await svc.CreateAsync(null, "page", "P1", null, "q",
-            """{"refreshAfterConsolidation":true}""", null, default);
-        var noHook = await svc.CreateAsync(null, "mental_model", "P2", null, "q", null, null, default);
+        var withHook = await svc.CreateAsync(null, new MentalModelCreate("page", "P1", null, "q",
+            """{"refreshAfterConsolidation":true}""", null), default);
+        var noHook = await svc.CreateAsync(null, new MentalModelCreate("mental_model", "P2", null, "q", null, null), default);
         var signals = new List<Guid>();
         var hook = new MentalModelConsolidationHook(
             new ServiceCollection().AddSingleton(db).BuildServiceProvider(),

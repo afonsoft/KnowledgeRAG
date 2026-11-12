@@ -85,7 +85,8 @@ public static class McpServiceCollectionExtensions
     public static string SanitizeInstructions(string raw)
     {
         var cleaned = new string(raw.Where(c => c is not ('<' or '>')).ToArray());
-        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s{2,}", " ").Trim();
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\s{2,}", " ",
+            System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(250)).Trim();
         return cleaned.Length > 2000 ? cleaned[..2000] : cleaned;
     }
 

@@ -65,11 +65,11 @@ public sealed class MemoryDefenseTests : IDisposable
         var screen = new MemoryDefenseScreen(
             new MemoryDefense(new SecretScanner(config, NullLogger<SecretScanner>.Instance)),
             new DefensePolicyResolver(config), db);
-        return new MemoryRetainService(db, banks,
+        return new MemoryRetainService(db, new MemoryRetainDeps(banks,
             new MemoryConfigResolver(config),
             new MemoryEntityLinker(db), screen,
             new ServiceCollection().BuildServiceProvider(),
-            new FakeEmbeddings(), new MemoryConsolidationTrigger(),
+            new FakeEmbeddings(), new MemoryConsolidationTrigger()),
             NullLogger<MemoryRetainService>.Instance);
     }
 
@@ -156,8 +156,9 @@ public sealed class MemoryDefenseTests : IDisposable
     {
         var scanner = new SecretScanner(Cfg(), NullLogger<SecretScanner>.Instance);
         var policy = new DefensePolicyResolver(Cfg()).Global();
-        WritePathDefense.EnsureNoSecretFindings(
-            scanner, policy, "ping jane.doe@example.com", "items[note]"); // no throw
+        var ex = Record.Exception(() => WritePathDefense.EnsureNoSecretFindings(
+            scanner, policy, "ping jane.doe@example.com", "items[note]"));
+        Assert.Null(ex);
     }
 
     // ---------- WritePathDefense.Screen audit (write_note/write_knowledge) ----------

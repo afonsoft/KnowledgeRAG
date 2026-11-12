@@ -19,6 +19,14 @@ public sealed record PageTreeNode(
 
 public sealed record PageSearchHit(Guid Id, string Name, string Path, string Snippet);
 
+public sealed record MentalModelCreate(
+    string Subtype, string Name, string? Path, string SourceQuery,
+    string? TriggerJson, IReadOnlyList<string>? Tags);
+
+public sealed record MentalModelUpdate(
+    string? Name, string? Path, string? SourceQuery, string? TriggerJson,
+    IReadOnlyList<string>? Tags, string? Content, bool ManualEdit);
+
 /// <summary>
 /// SPEC-20261111-mental-models-pages RF-001/RF-003/RF-004/RF-005: CRUD for
 /// mental models + pages, folder tree, cheap DB reads (page_get is the
@@ -31,33 +39,31 @@ public sealed class MentalModelService(
     IServiceProvider sp)
 {
     public async Task<MentalModelDto> CreateAsync(
-        string? bankKey, string subtype, string name, string? path,
-        string sourceQuery, string? triggerJson, IReadOnlyList<string>? tags,
-        CancellationToken ct)
+        string? bankKey, MentalModelCreate input, CancellationToken ct)
     {
-        if (subtype is not ("mental_model" or "page"))
+        if (input.Subtype is not ("mental_model" or "page"))
             throw new MemoryBadRequestException("subtype must be 'mental_model' or 'page'");
-        if (string.IsNullOrWhiteSpace(name))
+        if (string.IsNullOrWhiteSpace(input.Name))
             throw new MemoryBadRequestException("name is required");
-        if (string.IsNullOrWhiteSpace(sourceQuery))
+        if (string.IsNullOrWhiteSpace(input.SourceQuery))
             throw new MemoryBadRequestException("sourceQuery is required");
         var bank = await banks.ResolveAsync(bankKey, ct, create: false);
-        var norm = MentalModelTrigger.NormalizePath(path);
-        var trigger = MentalModelTrigger.Parse(triggerJson, subtype);
+        var norm = MentalModelTrigger.NormalizePath(input.Path);
+        var trigger = MentalModelTrigger.Parse(input.TriggerJson, input.Subtype);
         var exists = await db.MemoryMentalModels.AnyAsync(
-            m => m.BankId == bank.Id && m.Path == norm && m.Name == name, ct);
+            m => m.BankId == bank.Id && m.Path == norm && m.Name == input.Name, ct);
         if (exists)
-            throw new MemoryConflictException($"model '{name}' already exists at '{norm}'");
+            throw new MemoryConflictException($"model '{input.Name}' already exists at '{norm}'");
 
         var model = new MemoryMentalModel
         {
             BankId = bank.Id,
-            Subtype = subtype,
-            Name = name.Trim(),
+            Subtype = input.Subtype,
+            Name = input.Name.Trim(),
             Path = norm,
-            SourceQuery = sourceQuery.Trim(),
+            SourceQuery = input.SourceQuery.Trim(),
             TriggerJson = trigger.ToJson().GetRawText(),
-            Tags = (tags ?? []).Select(t => t.ToLowerInvariant()).ToList(),
+            Tags = (input.Tags ?? []).Select(t => t.ToLowerInvariant()).ToList(),
             Content = ""
         };
         db.MemoryMentalModels.Add(model);
@@ -73,7 +79,6 @@ public sealed class MentalModelService(
         if (subtype is not null)
             q = q.Where(m => m.Subtype == subtype);
         var models = await q.OrderBy(m => m.Path).ThenBy(m => m.Name).ToListAsync(ct);
-        var modelsById = models.ToDictionary(m => m.Id);
         var staleIds = await StaleIdsAsync(bank, models, ct);
         return models.Select(m => ToDto(m, Trigger(m), staleIds.Contains(m.Id))).ToList();
     }
@@ -123,16 +128,14 @@ public sealed class MentalModelService(
     }
 
     public async Task<MentalModelDto> UpdateAsync(
-        string? bankKey, Guid id, string? name, string? path, string? sourceQuery,
-        string? triggerJson, IReadOnlyList<string>? tags, string? content,
-        bool manualEdit, CancellationToken ct)
+        string? bankKey, Guid id, MentalModelUpdate input, CancellationToken ct)
     {
         var bank = await banks.ResolveAsync(bankKey, ct, create: false);
         var model = await db.MemoryMentalModels.FirstOrDefaultAsync(
             m => m.BankId == bank.Id && m.Id == id, ct)
             ?? throw new MemoryNotFoundException("mental model not found");
-        var norm = path is null ? model.Path : MentalModelTrigger.NormalizePath(path);
-        var newName = name?.Trim() ?? model.Name;
+        var norm = input.Path is null ? model.Path : MentalModelTrigger.NormalizePath(input.Path);
+        var newName = input.Name?.Trim() ?? model.Name;
         var (oldPath, oldName) = (model.Path, model.Name);
         if (newName != model.Name || norm != model.Path)
         {
@@ -141,18 +144,18 @@ public sealed class MentalModelService(
             if (dup)
                 throw new MemoryConflictException($"model '{newName}' already exists at '{norm}'");
         }
-        if (triggerJson is not null)
-            model.TriggerJson = MentalModelTrigger.Parse(triggerJson, model.Subtype)
+        if (input.TriggerJson is not null)
+            model.TriggerJson = MentalModelTrigger.Parse(input.TriggerJson, model.Subtype)
                 .ToJson().GetRawText();
-        if (sourceQuery is { Length: > 0 })
-            model.SourceQuery = sourceQuery.Trim();
-        if (tags is not null)
-            model.Tags = tags.Select(t => t.ToLowerInvariant()).ToList();
-        var contentChanged = content is not null && content != model.Content;
+        if (input.SourceQuery is { Length: > 0 })
+            model.SourceQuery = input.SourceQuery.Trim();
+        if (input.Tags is not null)
+            model.Tags = input.Tags.Select(t => t.ToLowerInvariant()).ToList();
+        var contentChanged = input.Content is not null && input.Content != model.Content;
         if (contentChanged)
         {
-            model.Content = content!;
-            await AppendHistoryAsync(model, manualEdit: true, ct);
+            model.Content = input.Content!;
+            await AppendHistoryAsync(model, input.ManualEdit, ct);
         }
         model.Name = newName;
         model.Path = norm;

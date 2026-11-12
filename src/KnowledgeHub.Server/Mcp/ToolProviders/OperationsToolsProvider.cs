@@ -18,11 +18,15 @@ namespace KnowledgeHub.Server.Mcp.ToolProviders;
 /// </summary>
 public sealed class OperationsToolsProvider : IToolProvider
 {
+    private const string OperationNotFound = "operation not found";
+    private const string CancelledStatus = "cancelled";
+    private const string ArgSourceId = "sourceId";
+
     private static readonly JsonObject OperationsListSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "status":{"type":["string","null"],"enum":["queued","running","done","failed","cancelled",null],"description":"Filter by job status"},
+          "status":{"type":["string","null"],"enum":["queued","running","done","failed",CancelledStatus,null],"description":"Filter by job status"},
           "kind":{"type":["string","null"],"enum":["sync","reindex",null],"description":"Filter by job kind"},
-          "sourceId":{"type":["string","null"],"description":"Filter by source id (GUID)"},
+          ArgSourceId:{"type":["string","null"],"description":"Filter by source id (GUID)"},
           "limit":{"type":"integer","description":"Max jobs to return (default 20, cap 100)"},
           "offset":{"type":"integer","description":"Skip the newest N jobs (default 0)"}
         },
@@ -40,11 +44,11 @@ public sealed class OperationsToolsProvider : IToolProvider
         {"type":"object","properties":{
           "id":{"type":["string","null"],"description":"Document id (GUID)"},
           "path":{"type":["string","null"],"description":"Document uriReference (path/URL) — resolves the document when id is absent"},
-          "sourceId":{"type":["string","null"],"description":"Source id (GUID) — narrows path resolution"},
+          ArgSourceId:{"type":["string","null"],"description":"Source id (GUID) — narrows path resolution"},
           "title":{"type":["string","null"],"description":"New title"}
         },
         "examples":[{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","title":"New title"},
-                    {"path":"notes/design.md","sourceId":"9f1b…","title":"Design doc"}]}
+                    {"path":"notes/design.md",ArgSourceId:"9f1b…","title":"Design doc"}]}
         """)!.AsObject();
 
     private static readonly JsonObject DocumentDeleteSchema = JsonNode.Parse("""
@@ -57,10 +61,10 @@ public sealed class OperationsToolsProvider : IToolProvider
 
     private static readonly JsonObject SourceRescanSchema = JsonNode.Parse("""
         {"type":"object","properties":{
-          "sourceId":{"type":"string","description":"Source id (GUID) to re-sync"},
+          ArgSourceId:{"type":"string","description":"Source id (GUID) to re-sync"},
           "kind":{"type":["string","null"],"enum":["sync","reindex",null],"description":"sync (default, incremental) or reindex (force re-chunk)"}
-        },"required":["sourceId"],
-        "examples":[{"sourceId":"9f1b3c2e-…"},{"sourceId":"9f1b3c2e-…","kind":"reindex"}]}
+        },"required":[ArgSourceId],
+        "examples":[{ArgSourceId:"9f1b3c2e-…"},{ArgSourceId:"9f1b3c2e-…","kind":"reindex"}]}
         """)!.AsObject();
 
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -147,7 +151,7 @@ public sealed class OperationsToolsProvider : IToolProvider
         var kind = ToolArgs.OptionalString(ctx, "kind");
         var limit = ToolArgs.OptionalInt(ctx, "limit", 20, 100);
         var offset = ToolArgs.OptionalInt(ctx, "offset", 0, 1_000_000);
-        var sourceId = ParseGuid(ToolArgs.OptionalString(ctx, "sourceId"), "sourceId");
+        var sourceId = ParseGuid(ToolArgs.OptionalString(ctx, ArgSourceId), ArgSourceId);
 
         var ingest = (await db.IngestionJobs.AsNoTracking().ToListAsync(ct))
             .Where(j => scope.AllowsSource(j.SourceId))
@@ -190,14 +194,14 @@ public sealed class OperationsToolsProvider : IToolProvider
         if (job is not null)
         {
             if (!scope.AllowsSource(job.SourceId))
-                return await ToolResults.Error("operation not found");
+                return await ToolResults.Error(OperationNotFound);
             return await ToolResults.Structured("operation", Project(job));
         }
         var scopeKey = scope.ApiKeyId ?? Guid.Empty;
         var memOp = await db.MemoryOperations.AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == id && o.ApiKeyId == scopeKey, ct);
         if (memOp is null)
-            return await ToolResults.Error("operation not found");
+            return await ToolResults.Error(OperationNotFound);
         return await ToolResults.Structured("operation", new OpView(
             memOp.Id, "memory", null, memOp.Kind, memOp.Status, memOp.UnitsCreated,
             memOp.Error, memOp.ResultJson, null, null, null, null, memOp.BankId,
@@ -220,11 +224,11 @@ public sealed class OperationsToolsProvider : IToolProvider
             var memOp = await db.MemoryOperations
                 .FirstOrDefaultAsync(o => o.Id == id && o.ApiKeyId == scopeKey, ct);
             if (memOp is null)
-                return await ToolResults.Error("operation not found");
+                return await ToolResults.Error(OperationNotFound);
             var memQueue = ctx.Services.GetRequiredService<Memory.IMemoryRetainQueue>();
             if (memOp.Status == "queued")
             {
-                memOp.Status = "cancelled";
+                memOp.Status = CancelledStatus;
                 memOp.FinishedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync(ct);
                 memQueue.TryCancel(id);
@@ -244,7 +248,7 @@ public sealed class OperationsToolsProvider : IToolProvider
 
         if (job.Status == "queued")
         {
-            job.Status = "cancelled";
+            job.Status = CancelledStatus;
             job.FinishedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
             queue.TryCancel(id);
@@ -269,26 +273,8 @@ public sealed class OperationsToolsProvider : IToolProvider
         if (job is not null && !scope.AllowsSource(job.SourceId))
             job = null;
         if (job is null)
-        {
-            var scopeKey = scope.ApiKeyId ?? Guid.Empty;
-            var memOp = await db.MemoryOperations.AsNoTracking()
-                .FirstOrDefaultAsync(o => o.Id == id && o.ApiKeyId == scopeKey, ct);
-            if (memOp is null)
-                return await ToolResults.Error("operation not found");
-            if (memOp.Status is not ("failed" or "cancelled"))
-                return await ToolResults.Error($"only failed or cancelled operations can be retried (current: {memOp.Status})");
-            var bank = await db.MemoryBanks.AsNoTracking().FirstOrDefaultAsync(b => b.Id == memOp.BankId, ct);
-            if (bank is null)
-                return await ToolResults.Error("the operation's memory bank no longer exists");
-            var memQueue = ctx.Services.GetRequiredService<Memory.IMemoryRetainQueue>();
-            var payload = JsonSerializer.Deserialize<Memory.MemoryRetainRequest>(memOp.PayloadJson);
-            if (payload is null)
-                return await ToolResults.Error("the operation payload is corrupt");
-            var requeued = await memQueue.EnqueueAsync(bank, memOp.ApiKeyId, payload, ct);
-            return await ToolResults.Structured("operation requeued",
-                new { requeued = true, operationId = requeued.Id });
-        }
-        if (job.Status is not ("failed" or "cancelled"))
+            return await RetryMemoryOperationAsync(ctx, db, scope, id, ct);
+        if (job.Status is not ("failed" or CancelledStatus))
             return await ToolResults.Error($"only failed or cancelled operations can be retried (current: {job.Status})");
 
         var enqueued = await queue.EnqueueAsync(job.SourceId, job.Kind, ct);
@@ -297,13 +283,35 @@ public sealed class OperationsToolsProvider : IToolProvider
             new { requeued = !enqueued.Existing, operation = Project(enqueued.Job) });
     }
 
+    private static async ValueTask<CallToolResult> RetryMemoryOperationAsync(
+        ToolCallContext ctx, KnowledgeHubDbContext db, CallerScope scope, Guid id, CancellationToken ct)
+    {
+        var scopeKey = scope.ApiKeyId ?? Guid.Empty;
+        var memOp = await db.MemoryOperations.AsNoTracking()
+            .FirstOrDefaultAsync(o => o.Id == id && o.ApiKeyId == scopeKey, ct);
+        if (memOp is null)
+            return await ToolResults.Error(OperationNotFound);
+        if (memOp.Status is not ("failed" or CancelledStatus))
+            return await ToolResults.Error($"only failed or cancelled operations can be retried (current: {memOp.Status})");
+        var bank = await db.MemoryBanks.AsNoTracking().FirstOrDefaultAsync(b => b.Id == memOp.BankId, ct);
+        if (bank is null)
+            return await ToolResults.Error("the operation's memory bank no longer exists");
+        var payload = JsonSerializer.Deserialize<Memory.MemoryRetainRequest>(memOp.PayloadJson);
+        if (payload is null)
+            return await ToolResults.Error("the operation payload is corrupt");
+        var memQueue = ctx.Services.GetRequiredService<Memory.IMemoryRetainQueue>();
+        var requeued = await memQueue.EnqueueAsync(bank, memOp.ApiKeyId, payload, ct);
+        return await ToolResults.Structured("operation requeued",
+            new { requeued = true, operationId = requeued.Id });
+    }
+
     private static async ValueTask<CallToolResult> DocumentUpdateAsync(ToolCallContext ctx, CancellationToken ct)
     {
         var db = ctx.Services.GetRequiredService<KnowledgeHubDbContext>();
         var scope = await ResolveScopeAsync(ctx, ct);
         var id = ParseGuid(ToolArgs.OptionalString(ctx, "id"), "id");
         var path = ToolArgs.OptionalString(ctx, "path");
-        var sourceId = ParseGuid(ToolArgs.OptionalString(ctx, "sourceId"), "sourceId");
+        var sourceId = ParseGuid(ToolArgs.OptionalString(ctx, ArgSourceId), ArgSourceId);
         var title = ToolArgs.OptionalString(ctx, "title");
 
         if (id is null && path is null)
@@ -353,7 +361,7 @@ public sealed class OperationsToolsProvider : IToolProvider
         var db = ctx.Services.GetRequiredService<KnowledgeHubDbContext>();
         var queue = ctx.Services.GetRequiredService<IIngestionQueue>();
         var scope = await ResolveScopeAsync(ctx, ct);
-        var sourceId = ParseGuid(ToolArgs.RequiredString(ctx, "sourceId"), "sourceId")!.Value;
+        var sourceId = ParseGuid(ToolArgs.RequiredString(ctx, ArgSourceId), ArgSourceId)!.Value;
         var kind = ToolArgs.OptionalString(ctx, "kind") ?? "sync";
 
         if (!scope.AllowsSource(sourceId))

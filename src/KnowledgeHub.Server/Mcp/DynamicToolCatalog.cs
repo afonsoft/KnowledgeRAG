@@ -100,8 +100,7 @@ public sealed class DynamicToolCatalog(
         var raw = configuration["Mcp:Instructions"];
         if (string.IsNullOrWhiteSpace(raw)) return;
         var note = McpEngine.McpServiceCollectionExtensions.SanitizeInstructions(raw);
-        foreach (var tool in tools)
-            if (PrincipalTools.Contains(tool.Name))
-                tool.Description = $"{tool.Description}\n\nDeployment: {note}";
+        foreach (var tool in tools.Where(t => PrincipalTools.Contains(t.Name)))
+            tool.Description = $"{tool.Description}\n\nDeployment: {note}";
     }
 }

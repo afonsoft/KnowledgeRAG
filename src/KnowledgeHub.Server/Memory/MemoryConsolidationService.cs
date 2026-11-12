@@ -122,7 +122,7 @@ public sealed class MemoryConsolidationService(
         var bank = await banks.ResolveAsync(bankKey, ct, create: false);
         var exists = await db.MemoryUnits.AsNoTracking()
             .AnyAsync(u => u.BankId == bank.Id && u.Id == observationId
-                && u.FactType == "observation", ct);
+                && u.FactType == ObsFactType, ct);
         if (!exists)
             throw new MemoryNotFoundException($"observation '{observationId}' not found");
         var rows = await db.ObservationHistories.AsNoTracking()
@@ -150,6 +150,9 @@ public sealed class MemoryConsolidationService(
     /// <summary>Max history version per observation — loaded once per batch.</summary>
     private Dictionary<Guid, int> _versions = [];
 
+    private const string ObsFactType = "observation";
+    private const string UpdateAction = "update";
+
     private async Task ProcessBatchAsync(MemoryBank bank, IChatClient chat,
         List<MemoryUnit> facts, Counters stats, CancellationToken ct)
     {
@@ -159,86 +162,9 @@ public sealed class MemoryConsolidationService(
             .GroupBy(h => h.ObservationUnitId)
             .Select(g => new { g.Key, Max = g.Max(h => h.Version) })
             .ToDictionaryAsync(x => x.Key, x => x.Max, ct);
-        var remaining = new List<MemoryUnit>(facts);
-
-        // RF-005 — optional decision-model triage: restate folds directly,
-        // chatter is stamped without an action. Failure → all go to the LLM.
-        if (config.ConsolidationTriage(bank) == "decision-model")
-        {
-            var verdicts = await TriageAsync(chat, facts, candidates, ct);
-            if (verdicts is not null)
-            {
-                remaining = [];
-                foreach (var fact in facts)
-                {
-                    var v = verdicts.GetValueOrDefault(fact.Id);
-                    if (v is ("restate" or "changes", { } obsId)
-                        && candidates.FirstOrDefault(c => c.Id == obsId) is { } obs)
-                    {
-                        FoldEvidence(obs, [fact.Id]);
-                        Stamp(fact);
-                        stats.Updated++;
-                        stats.Processed++;
-                    }
-                    else if (v.Verdict == "chatter")
-                    {
-                        Stamp(fact);
-                        stats.Skipped++;
-                        stats.Processed++;
-                    }
-                    else
-                    {
-                        remaining.Add(fact);
-                    }
-                }
-            }
-        }
-
-        // RF-004 — dedup adjudication: near-duplicate (fact, observation)
-        // pairs decided in ONE LLM call ('same' folds, 'distinct' continues).
-        var threshold = config.ConsolidationDedupThreshold(bank);
-        var pairs = remaining
-            .SelectMany(f => candidates
-                .Where(c => Similarity(f, c) >= threshold)
-                .Select(c => (Fact: f, Obs: c)))
-            .ToList();
-        if (pairs.Count > 0)
-        {
-            var verdicts = await AdjudicateAsync(chat, pairs, ct);
-            if (verdicts is not null)
-            {
-                foreach (var (fact, obs) in pairs)
-                {
-                    if (verdicts.GetValueOrDefault(fact.Id) == "same" && remaining.Remove(fact))
-                    {
-                        FoldEvidence(obs, [fact.Id]);
-                        Stamp(fact);
-                        stats.Updated++;
-                        stats.Processed++;
-                    }
-                }
-            }
-        }
-
-        List<MemoryUnit> toEmbed = [];
-        if (remaining.Count > 0)
-        {
-            var actions = await DecideAsync(chat, remaining, candidates, ct);
-            if (actions is null)
-            {
-                // Whole-batch parse failure → retryable failure stamp, not partial.
-                foreach (var f in remaining)
-                {
-                    f.ConsolidationFailedAt = DateTime.UtcNow;
-                    stats.Failed++;
-                    stats.Processed++;
-                }
-            }
-            else
-            {
-                toEmbed = ApplyActions(bank, actions, remaining, candidates, stats);
-            }
-        }
+        var remaining = await TriageStageAsync(bank, chat, facts, candidates, stats, ct);
+        await AdjudicationStageAsync(bank, chat, remaining, candidates, stats, ct);
+        var toEmbed = await DecideStageAsync(bank, chat, remaining, candidates, stats, ct);
 
         // Embeddings are best-effort — the semantic arm degrades, never blocks.
         foreach (var obs in toEmbed)
@@ -246,11 +172,100 @@ public sealed class MemoryConsolidationService(
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// RF-005 — optional decision-model triage: restate folds directly,
+    /// chatter is stamped without an action. Failure → all go to the LLM.
+    /// Returns the facts still needing full adjudication.
+    /// </summary>
+    private async Task<List<MemoryUnit>> TriageStageAsync(MemoryBank bank, IChatClient chat,
+        List<MemoryUnit> facts, List<MemoryUnit> candidates, Counters stats, CancellationToken ct)
+    {
+        if (config.ConsolidationTriage(bank) != "decision-model")
+            return new List<MemoryUnit>(facts);
+        var verdicts = await TriageAsync(chat, facts, candidates, ct);
+        if (verdicts is null)
+            return new List<MemoryUnit>(facts);
+
+        var remaining = new List<MemoryUnit>();
+        foreach (var fact in facts)
+        {
+            var v = verdicts.GetValueOrDefault(fact.Id);
+            if (v is ("restate" or "changes", { } obsId)
+                && candidates.FirstOrDefault(c => c.Id == obsId) is { } obs)
+            {
+                FoldEvidence(obs, [fact.Id]);
+                Stamp(fact);
+                stats.Updated++;
+            }
+            else if (v.Verdict == "chatter")
+            {
+                Stamp(fact);
+                stats.Skipped++;
+            }
+            else
+            {
+                remaining.Add(fact);
+                continue;
+            }
+            stats.Processed++;
+        }
+        return remaining;
+    }
+
+    /// <summary>
+    /// RF-004 — dedup adjudication: near-duplicate (fact, observation)
+    /// pairs decided in ONE LLM call ('same' folds, 'distinct' continues).
+    /// </summary>
+    private async Task AdjudicationStageAsync(MemoryBank bank, IChatClient chat,
+        List<MemoryUnit> remaining, List<MemoryUnit> candidates, Counters stats, CancellationToken ct)
+    {
+        var threshold = config.ConsolidationDedupThreshold(bank);
+        var pairs = remaining
+            .SelectMany(f => candidates
+                .Where(c => Similarity(f, c) >= threshold)
+                .Select(c => (Fact: f, Obs: c)))
+            .ToList();
+        if (pairs.Count == 0)
+            return;
+        var verdicts = await AdjudicateAsync(chat, pairs, ct);
+        if (verdicts is null)
+            return;
+        foreach (var (fact, obs) in pairs)
+        {
+            if (verdicts.GetValueOrDefault(fact.Id) == "same" && remaining.Remove(fact))
+            {
+                FoldEvidence(obs, [fact.Id]);
+                Stamp(fact);
+                stats.Updated++;
+                stats.Processed++;
+            }
+        }
+    }
+
+    /// <summary>LLM decide → apply actions; whole-batch parse failure stamps retryable failures.</summary>
+    private async Task<List<MemoryUnit>> DecideStageAsync(MemoryBank bank, IChatClient chat,
+        List<MemoryUnit> remaining, List<MemoryUnit> candidates, Counters stats, CancellationToken ct)
+    {
+        if (remaining.Count == 0)
+            return [];
+        var actions = await DecideAsync(chat, remaining, candidates, ct);
+        if (actions is not null)
+            return ApplyActions(bank, actions, remaining, candidates, stats);
+        // Whole-batch parse failure → retryable failure stamp, not partial.
+        foreach (var f in remaining)
+        {
+            f.ConsolidationFailedAt = DateTime.UtcNow;
+            stats.Failed++;
+            stats.Processed++;
+        }
+        return [];
+    }
+
     private async Task<List<MemoryUnit>> LoadCandidatesAsync(
         MemoryBank bank, List<MemoryUnit> facts, CancellationToken ct)
     {
         var pool = await db.MemoryUnits
-            .Where(u => u.BankId == bank.Id && !u.IsDeleted && u.FactType == "observation")
+            .Where(u => u.BankId == bank.Id && !u.IsDeleted && u.FactType == ObsFactType)
             .OrderByDescending(u => u.ProofCount)
             .ThenByDescending(u => u.MentionedAt)
             .Take(200)
@@ -284,32 +299,7 @@ public sealed class MemoryConsolidationService(
                 .Where(f => f is not null).Cast<MemoryUnit>().ToList();
             foreach (var f in sources)
                 touched.Add(f.Id);
-
-            switch (action.Action)
-            {
-                case "create" when action.Text is { Length: > 0 } text
-                    && HasEvidence(action, sources):
-                    if (CreateObservation(bank, text, sources) is { } created)
-                        toEmbed.Add(created);
-                    else
-                        stats.Updated++; // folded into an identical observation
-                    stats.Created++;
-                    break;
-                case "update" when action.Text is { Length: > 0 } text
-                    && obsByAlias.GetValueOrDefault(Norm(action.ObservationId)) is { } target
-                    && sources.Count > 0:
-                    UpdateObservation(target, text, sources);
-                    toEmbed.Add(target);
-                    stats.Updated++;
-                    break;
-                case "delete" when obsByAlias.GetValueOrDefault(Norm(action.ObservationId)) is { } del:
-                    DeleteObservation(del, sources);
-                    stats.Deleted++;
-                    break;
-                default:
-                    if (sources.Count > 0) stats.Skipped++;
-                    break;
-            }
+            ApplyAction(bank, action, sources, obsByAlias, toEmbed, stats);
             foreach (var f in sources)
                 Stamp(f);
         }
@@ -324,13 +314,44 @@ public sealed class MemoryConsolidationService(
         return toEmbed;
     }
 
+    private void ApplyAction(MemoryBank bank, ConsolidationAction action,
+        List<MemoryUnit> sources, Dictionary<string, MemoryUnit> obsByAlias,
+        List<MemoryUnit> toEmbed, Counters stats)
+    {
+        switch (action.Action)
+        {
+            case "create" when action.Text is { Length: > 0 } text
+                && HasEvidence(action, sources):
+                if (CreateObservation(bank, text, sources) is { } created)
+                    toEmbed.Add(created);
+                else
+                    stats.Updated++; // folded into an identical observation
+                stats.Created++;
+                break;
+            case UpdateAction when action.Text is { Length: > 0 } text
+                && obsByAlias.GetValueOrDefault(Norm(action.ObservationId)) is { } target
+                && sources.Count > 0:
+                UpdateObservation(target, text, sources);
+                toEmbed.Add(target);
+                stats.Updated++;
+                break;
+            case "delete" when obsByAlias.GetValueOrDefault(Norm(action.ObservationId)) is { } del:
+                DeleteObservation(del, sources);
+                stats.Deleted++;
+                break;
+            default:
+                if (sources.Count > 0) stats.Skipped++;
+                break;
+        }
+    }
+
     /// <summary>Returns the new observation, or null when it folded into a dupe.</summary>
     private MemoryUnit? CreateObservation(MemoryBank bank, string text, List<MemoryUnit> sources)
     {
         var sourceIds = sources.Select(f => f.Id).ToList();
         var hash = MemoryHasher.Hash(text);
         var dupe = db.MemoryUnits.Local.FirstOrDefault(u =>
-            u.BankId == bank.Id && !u.IsDeleted && u.FactType == "observation"
+            u.BankId == bank.Id && !u.IsDeleted && u.FactType == ObsFactType
             && u.ContentHash == hash);
         if (dupe is not null)
         {
@@ -341,7 +362,7 @@ public sealed class MemoryConsolidationService(
         {
             BankId = bank.Id,
             Text = text,
-            FactType = "observation",
+            FactType = ObsFactType,
             Context = sources.FirstOrDefault()?.Context,
             MentionedAt = DateTime.UtcNow,
             ContentHash = hash,
@@ -362,7 +383,7 @@ public sealed class MemoryConsolidationService(
         var merged = ParseSources(obs.SourceMemoryIdsJson).Union(added).ToList();
         obs.SourceMemoryIdsJson = JsonSerializer.Serialize(merged);
         obs.ProofCount = merged.Count;
-        AddHistory(obs, newText, added, "update");
+        AddHistory(obs, newText, added, UpdateAction);
     }
 
     /// <summary>RF-004 fold: fact becomes extra evidence of an existing observation.</summary>
@@ -371,7 +392,7 @@ public sealed class MemoryConsolidationService(
         var merged = ParseSources(obs.SourceMemoryIdsJson).Union(newSourceIds).ToList();
         obs.SourceMemoryIdsJson = JsonSerializer.Serialize(merged);
         obs.ProofCount = merged.Count;
-        AddHistory(obs, obs.Text, newSourceIds, "update");
+        AddHistory(obs, obs.Text, newSourceIds, UpdateAction);
     }
 
     private void DeleteObservation(MemoryUnit obs, List<MemoryUnit> sources)
@@ -530,7 +551,7 @@ public sealed class MemoryConsolidationService(
         foreach (var el in arr.Value)
         {
             var action = el.TryGetProperty("action", out var a) ? a.GetString()?.ToLowerInvariant() : null;
-            if (action is not ("create" or "update" or "delete" or "skip"))
+            if (action is not ("create" or UpdateAction or "delete" or "skip"))
                 continue;
             result.Add(new ConsolidationAction(
                 action,
@@ -578,8 +599,11 @@ public sealed class MemoryConsolidationService(
         var result = new Dictionary<Guid, string>();
         foreach (var el in arr.Value)
         {
-            var alias = el.TryGetProperty("pair", out var p) ? p.GetString()
-                : el.TryGetProperty("fact_id", out var f2) ? f2.GetString() : null;
+            string? alias = null;
+            if (el.TryGetProperty("pair", out var p))
+                alias = p.GetString();
+            else if (el.TryGetProperty("fact_id", out var f2))
+                alias = f2.GetString();
             if (alias is null || !byAlias.TryGetValue(Norm(alias), out var fid))
                 continue;
             if (el.TryGetProperty("decision", out var d))
@@ -620,7 +644,7 @@ public sealed class MemoryConsolidationService(
         && action.Evidence.Any(q => sources.Any(f =>
             f.Text.Contains(q, StringComparison.OrdinalIgnoreCase)));
 
-    private double Similarity(MemoryUnit a, MemoryUnit b)
+    private static double Similarity(MemoryUnit a, MemoryUnit b)
     {
         if (a.Embedding is not null && b.Embedding is not null
             && a.EmbeddingModel == b.EmbeddingModel)

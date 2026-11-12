@@ -12,6 +12,16 @@ namespace KnowledgeHub.Server.Memory;
 /// <summary>Extract mode requires a configured chat provider (503).</summary>
 public sealed class MemoryServiceUnavailableException(string message) : Exception(message);
 
+/// <summary>Retain pipeline collaborators — keeps the service ctor under the DI param limit.</summary>
+public sealed record MemoryRetainDeps(
+    MemoryBankService Banks,
+    MemoryConfigResolver Config,
+    MemoryEntityLinker Linker,
+    IMemoryDefenseScreen Defense,
+    IServiceProvider Sp,
+    Embeddings.IEmbeddingProvider Embeddings,
+    IMemoryConsolidationTrigger Consolidation);
+
 /// <summary>
 /// SPEC-20261111-agent-memory-retain RF-002/RF-005: the retain pipeline —
 /// defense screen → (verbatim | LLM extract) → dedupe/delta-retain by
@@ -20,13 +30,7 @@ public sealed class MemoryServiceUnavailableException(string message) : Exceptio
 /// </summary>
 public sealed class MemoryRetainService(
     KnowledgeHubDbContext db,
-    MemoryBankService banks,
-    MemoryConfigResolver config,
-    MemoryEntityLinker linker,
-    IMemoryDefenseScreen defense,
-    IServiceProvider sp,
-    Embeddings.IEmbeddingProvider embeddings,
-    IMemoryConsolidationTrigger consolidation,
+    MemoryRetainDeps deps,
     ILogger<MemoryRetainService> logger)
 {
     /// <summary>
@@ -53,181 +57,229 @@ public sealed class MemoryRetainService(
     {
         if (string.IsNullOrWhiteSpace(req.Content))
             throw new MemoryBadRequestException("content is required");
-        var bank = await banks.ResolveAsync(bankKey, ct);
+        var bank = await deps.Banks.ResolveAsync(bankKey, ct);
         return await ExecuteAsync(bank, req, ct);
+    }
+
+    /// <summary>State carried through one retain execution.</summary>
+    private sealed class RetainRun
+    {
+        public required MemoryBank Bank { get; init; }
+        public required MemoryRetainRequest Req { get; init; }
+        public required DateTime MentionedAt { get; init; }
+        public required List<MemoryUnit> NewUnits { get; init; }
+        public required Dictionary<string, Guid> SeenHashes { get; init; }
+        public required List<Guid> DedupedIds { get; init; }
+        public required Dictionary<int, List<MemoryUnit>> Preserved { get; init; }
+        public MemoryDocument? Doc { get; set; }
+        public int PreservedCount => Preserved.Values.Sum(v => v.Count);
     }
 
     /// <summary>Executes against an already-resolved bank (worker path).</summary>
     public async Task<MemoryRetainResult> ExecuteAsync(
         MemoryBank bank, MemoryRetainRequest req, CancellationToken ct)
     {
-        var maxUnits = config.MaxUnitsPerRetain(bank);
-        var maxText = config.MaxUnitTextLength(bank);
-        var strategy = req.Strategy is { Length: > 0 } s ? s : config.DefaultStrategy(bank);
+        var maxUnits = deps.Config.MaxUnitsPerRetain(bank);
+        var strategy = req.Strategy is { Length: > 0 } s ? s : deps.Config.DefaultStrategy(bank);
         if (strategy is not ("extract" or "verbatim"))
             throw new MemoryBadRequestException($"strategy must be 'extract' or 'verbatim' (got '{strategy}')");
 
-        var mentionedAt = req.Timestamp?.UtcDateTime ?? DateTime.UtcNow;
         var chunks = Chunk(req.Content);
+        var run = new RetainRun
+        {
+            Bank = bank,
+            Req = req,
+            MentionedAt = req.Timestamp?.UtcDateTime ?? DateTime.UtcNow,
+            NewUnits = [],
+            SeenHashes = await ExistingHashesAsync(bank, ct),
+            DedupedIds = [],
+            Preserved = []
+        };
 
         // RF-005 delta-retain: same (bank, externalId) — per-chunk hash reuse.
-        MemoryDocument? doc = null;
-        var preserved = new Dictionary<int, List<MemoryUnit>>();
         var docHash = MemoryHasher.Hash(req.Content);
-        if (req.DocumentId is { Length: > 0 } externalId)
-        {
-            doc = await db.MemoryDocuments
-                .Include(d => d.Units)
-                .FirstOrDefaultAsync(d => d.BankId == bank.Id && d.ExternalId == externalId, ct);
-            if (doc?.ContentHash == docHash)
-            {
-                return new MemoryRetainResult(bank.Id,
-                    doc.Units.Where(u => !u.IsDeleted).Select(u => u.Id).ToList(),
-                    0, doc.Units.Count(u => !u.IsDeleted));
-            }
-            if (doc is not null)
-            {
-                var chunkHashes = chunks.Select(MemoryHasher.Hash).ToHashSet();
-                var stale = new List<MemoryUnit>();
-                foreach (var u in doc.Units.Where(u => !u.IsDeleted))
-                {
-                    if (u.ChunkIndex is { } idx && idx < chunks.Count && chunkHashes.Contains(u.ContentHash))
-                        (preserved.TryGetValue(idx, out var l) ? l : preserved[idx] = []).Add(u);
-                    else
-                        stale.Add(u);
-                }
-                foreach (var u in stale)
-                    u.IsDeleted = true;
-                doc.ContentHash = docHash;
-                doc.UpdatedAt = DateTime.UtcNow;
-                if (req.DocumentTitle is not null) doc.Title = req.DocumentTitle;
-            }
-        }
-
-        var newUnits = new List<MemoryUnit>();
-        // Dedupe covers the whole bank (not just this document): a re-retain
-        // of an existing fact reports it preserved instead of duplicating.
-        var existingByHash = await db.MemoryUnits.AsNoTracking()
-            .Where(u => u.BankId == bank.Id && !u.IsDeleted)
-            .Select(u => new { u.ContentHash, u.Id })
-            .ToListAsync(ct);
-        var seenHashes = new Dictionary<string, Guid>();
-        foreach (var e in existingByHash)
-            seenHashes.TryAdd(e.ContentHash, e.Id);
-        var dedupedIds = new List<Guid>();
+        var early = await PrepareDeltaAsync(run, chunks, docHash, ct);
+        if (early is not null)
+            return early;
 
         if (strategy == "verbatim")
-        {
-            for (var i = 0; i < chunks.Count; i++)
-            {
-                if (preserved.ContainsKey(i)) continue;
-                var text = await defense.ScreenAsync(chunks[i], bank, ct);
-                if (text.Length > maxText)
-                    throw new MemoryBadRequestException($"content exceeds maxUnitTextLength ({maxText})");
-                var hash = MemoryHasher.Hash(text);
-                if (seenHashes.TryGetValue(hash, out var dup))
-                {
-                    if (dup != Guid.Empty) dedupedIds.Add(dup);
-                    continue;
-                }
-                seenHashes[hash] = Guid.Empty;
-                if (newUnits.Count + preserved.Values.Sum(v => v.Count) >= maxUnits)
-                    throw new MemoryBadRequestException($"retain exceeds maxUnitsPerRetain ({maxUnits})");
-                newUnits.Add(await NewUnitAsync(bank, doc, i, text, "experience",
-                    req.Context, mentionedAt, hash, req, ct));
-            }
-        }
+            await RetainVerbatimAsync(run, chunks, maxUnits, ct);
         else
-        {
-            var chat = sp.GetService<IChatClient>()
-                ?? throw new MemoryServiceUnavailableException(
-                    "extract strategy requires a configured chat provider — use strategy 'verbatim' or configure Chat:*");
-            var total = preserved.Values.Sum(v => v.Count);
-            for (var i = 0; i < chunks.Count; i++)
-            {
-                if (preserved.ContainsKey(i)) continue;
-                var screened = await defense.ScreenAsync(chunks[i], bank, ct);
-                var facts = await ExtractAsync(chat, screened, req.Context, mentionedAt, ct);
-                foreach (var fact in facts)
-                {
-                    var text = fact.Text.Length > maxText ? fact.Text[..maxText] : fact.Text;
-                    var hash = MemoryHasher.Hash(text);
-                    if (seenHashes.TryGetValue(hash, out var dup) && dup != Guid.Empty)
-                    { dedupedIds.Add(dup); continue; }
-                    seenHashes[hash] = Guid.Empty;
-                    if (++total > maxUnits)
-                        throw new MemoryBadRequestException($"retain exceeds maxUnitsPerRetain ({maxUnits})");
-                    var unit = await NewUnitAsync(bank, doc, i, text, fact.FactType,
-                        fact.Context ?? req.Context, mentionedAt, hash, req, ct);
-                    unit.EventDate = fact.EventDate;
-                    unit.OccurredStart = fact.OccurredStart;
-                    unit.OccurredEnd = fact.OccurredEnd;
-                    newUnits.Add(unit);
-                    await linker.LinkEntitiesAsync(unit, bank.Id, fact.Entities, ct);
-                    await linker.LinkTemporalNeighborsAsync(unit, config.TemporalLinkWindowDays(bank), ct);
-                }
-            }
-        }
+            await RetainExtractAsync(run, chunks, maxUnits, ct);
 
         // RF-005: create the logical document row on first retain of an id.
-        if (doc is null && req.DocumentId is { Length: > 0 } extId)
+        if (run.Doc is null && req.DocumentId is { Length: > 0 } extId)
         {
-            doc = new MemoryDocument
+            run.Doc = new MemoryDocument
             {
                 BankId = bank.Id,
                 ExternalId = extId,
                 Title = req.DocumentTitle,
                 ContentHash = docHash
             };
-            db.MemoryDocuments.Add(doc);
-            foreach (var u in newUnits.Concat(preserved.Values.SelectMany(v => v)))
-                u.Document = doc;
+            db.MemoryDocuments.Add(run.Doc);
+            foreach (var u in run.NewUnits.Concat(run.Preserved.Values.SelectMany(v => v)))
+                u.Document = run.Doc;
         }
 
         await db.SaveChangesAsync(ct);
         // SPEC-20261111-memory-observations-consolidation RF-001 (a): signal the
         // consolidation worker when new facts landed and a chat provider exists.
-        if (newUnits.Count > 0 && sp.GetService<IChatClient>() is not null)
-            consolidation.Signal(bank.Id);
-        var allIds = preserved.Values.SelectMany(v => v.Select(u => u.Id))
-            .Concat(newUnits.Select(u => u.Id))
-            .Concat(dedupedIds).Distinct().ToList();
-        var preservedCount = allIds.Count - newUnits.Count;
+        if (run.NewUnits.Count > 0 && deps.Sp.GetService<IChatClient>() is not null)
+            deps.Consolidation.Signal(bank.Id);
+        var allIds = run.Preserved.Values.SelectMany(v => v.Select(u => u.Id))
+            .Concat(run.NewUnits.Select(u => u.Id))
+            .Concat(run.DedupedIds).Distinct().ToList();
+        var preservedCount = allIds.Count - run.NewUnits.Count;
         logger.LogInformation("retain: bank {Bank} strategy {Strategy} → {New} new units, {Kept} preserved",
-            bank.BankKey, strategy, newUnits.Count, preservedCount);
-        return new MemoryRetainResult(bank.Id, allIds, newUnits.Count, preservedCount);
+            bank.BankKey, strategy, run.NewUnits.Count, preservedCount);
+        return new MemoryRetainResult(bank.Id, allIds, run.NewUnits.Count, preservedCount);
     }
 
-    private async Task<MemoryUnit> NewUnitAsync(MemoryBank bank, MemoryDocument? doc, int chunkIndex,
-        string text, string factType, string? context, DateTime mentionedAt,
-        string hash, MemoryRetainRequest req, CancellationToken ct)
+    /// <summary>Bank-wide hash dedupe set: real ids for existing units, Empty for this run.</summary>
+    private async Task<Dictionary<string, Guid>> ExistingHashesAsync(MemoryBank bank, CancellationToken ct)
+    {
+        var existing = await db.MemoryUnits.AsNoTracking()
+            .Where(u => u.BankId == bank.Id && !u.IsDeleted)
+            .Select(u => new { u.ContentHash, u.Id })
+            .ToListAsync(ct);
+        var seen = new Dictionary<string, Guid>();
+        foreach (var e in existing)
+            seen.TryAdd(e.ContentHash, e.Id);
+        return seen;
+    }
+
+    /// <summary>
+    /// RF-005 delta-retain: finds the existing document for (bank, externalId),
+    /// marks unchanged chunks preserved + stale units deleted. Returns an early
+    /// result when the doc hash is unchanged (nothing to do).
+    /// </summary>
+    private async Task<MemoryRetainResult?> PrepareDeltaAsync(
+        RetainRun run, List<string> chunks, string docHash, CancellationToken ct)
+    {
+        if (run.Req.DocumentId is not { Length: > 0 } externalId)
+            return null;
+        var doc = await db.MemoryDocuments
+            .Include(d => d.Units)
+            .FirstOrDefaultAsync(d => d.BankId == run.Bank.Id && d.ExternalId == externalId, ct);
+        run.Doc = doc;
+        if (doc?.ContentHash == docHash)
+        {
+            return new MemoryRetainResult(run.Bank.Id,
+                doc.Units.Where(u => !u.IsDeleted).Select(u => u.Id).ToList(),
+                0, doc.Units.Count(u => !u.IsDeleted));
+        }
+        if (doc is null)
+            return null;
+
+        var chunkHashes = chunks.Select(MemoryHasher.Hash).ToHashSet();
+        var stale = new List<MemoryUnit>();
+        foreach (var u in doc.Units.Where(u => !u.IsDeleted))
+        {
+            if (u.ChunkIndex is { } idx && idx < chunks.Count && chunkHashes.Contains(u.ContentHash))
+            {
+                if (!run.Preserved.TryGetValue(idx, out var bucket))
+                    run.Preserved[idx] = bucket = [];
+                bucket.Add(u);
+            }
+            else
+            {
+                stale.Add(u);
+            }
+        }
+        foreach (var u in stale)
+            u.IsDeleted = true;
+        doc.ContentHash = docHash;
+        doc.UpdatedAt = DateTime.UtcNow;
+        if (run.Req.DocumentTitle is not null) doc.Title = run.Req.DocumentTitle;
+        return null;
+    }
+
+    private async Task RetainVerbatimAsync(RetainRun run, List<string> chunks, int maxUnits, CancellationToken ct)
+    {
+        var maxText = deps.Config.MaxUnitTextLength(run.Bank);
+        for (var i = 0; i < chunks.Count; i++)
+        {
+            if (run.Preserved.ContainsKey(i)) continue;
+            var text = await deps.Defense.ScreenAsync(chunks[i], run.Bank, ct);
+            if (text.Length > maxText)
+                throw new MemoryBadRequestException($"content exceeds maxUnitTextLength ({maxText})");
+            var hash = MemoryHasher.Hash(text);
+            if (run.SeenHashes.TryGetValue(hash, out var dup))
+            {
+                if (dup != Guid.Empty) run.DedupedIds.Add(dup);
+                continue;
+            }
+            run.SeenHashes[hash] = Guid.Empty;
+            if (run.NewUnits.Count + run.PreservedCount >= maxUnits)
+                throw new MemoryBadRequestException($"retain exceeds maxUnitsPerRetain ({maxUnits})");
+            run.NewUnits.Add(await NewUnitAsync(run, i, text, "experience",
+                run.Req.Context, hash, ct));
+        }
+    }
+
+    private async Task RetainExtractAsync(RetainRun run, List<string> chunks, int maxUnits, CancellationToken ct)
+    {
+        var maxText = deps.Config.MaxUnitTextLength(run.Bank);
+        var chat = deps.Sp.GetService<IChatClient>()
+            ?? throw new MemoryServiceUnavailableException(
+                "extract strategy requires a configured chat provider — use strategy 'verbatim' or configure Chat:*");
+        var total = run.PreservedCount;
+        for (var i = 0; i < chunks.Count; i++)
+        {
+            if (run.Preserved.ContainsKey(i)) continue;
+            var screened = await deps.Defense.ScreenAsync(chunks[i], run.Bank, ct);
+            var facts = await ExtractAsync(chat, screened, run.Req.Context, run.MentionedAt, ct);
+            foreach (var fact in facts)
+            {
+                var text = fact.Text.Length > maxText ? fact.Text[..maxText] : fact.Text;
+                var hash = MemoryHasher.Hash(text);
+                if (run.SeenHashes.TryGetValue(hash, out var dup) && dup != Guid.Empty)
+                { run.DedupedIds.Add(dup); continue; }
+                run.SeenHashes[hash] = Guid.Empty;
+                if (++total > maxUnits)
+                    throw new MemoryBadRequestException($"retain exceeds maxUnitsPerRetain ({maxUnits})");
+                var unit = await NewUnitAsync(run, i, text, fact.FactType,
+                    fact.Context ?? run.Req.Context, hash, ct);
+                unit.EventDate = fact.EventDate;
+                unit.OccurredStart = fact.OccurredStart;
+                unit.OccurredEnd = fact.OccurredEnd;
+                run.NewUnits.Add(unit);
+                await deps.Linker.LinkEntitiesAsync(unit, run.Bank.Id, fact.Entities, ct);
+                await deps.Linker.LinkTemporalNeighborsAsync(unit, deps.Config.TemporalLinkWindowDays(run.Bank), ct);
+            }
+        }
+    }
+
+    private async Task<MemoryUnit> NewUnitAsync(RetainRun run, int chunkIndex,
+        string text, string factType, string? context, string hash, CancellationToken ct)
     {
         var unit = new MemoryUnit
         {
-            BankId = bank.Id,
-            DocumentId = doc?.Id,
+            BankId = run.Bank.Id,
+            DocumentId = run.Doc?.Id,
             ChunkIndex = chunkIndex,
             Text = text,
             FactType = MemoryUnit.FactTypes.Contains(factType) ? factType : "experience",
             Context = context,
-            MentionedAt = mentionedAt,
-            EventDate = mentionedAt,
+            MentionedAt = run.MentionedAt,
+            EventDate = run.MentionedAt,
             ContentHash = hash,
-            Tags = req.Tags?.Select(t => t.Trim()).Where(t => t.Length > 0).Distinct().Take(20).ToList() ?? [],
-            MetadataJson = req.Metadata is { Count: > 0 } ? JsonSerializer.Serialize(req.Metadata) : null
+            Tags = run.Req.Tags?.Select(t => t.Trim()).Where(t => t.Length > 0).Distinct().Take(20).ToList() ?? [],
+            MetadataJson = run.Req.Metadata is { Count: > 0 } ? JsonSerializer.Serialize(run.Req.Metadata) : null
         };
         db.MemoryUnits.Add(unit);
         try
         {
-            var vec = await embeddings.EmbedDocumentAsync(text, ct);
+            var vec = await deps.Embeddings.EmbedDocumentAsync(text, ct);
             unit.Embedding = ToBytes(vec);
-            unit.EmbeddingModel = embeddings.ModelId;
+            unit.EmbeddingModel = deps.Embeddings.ModelId;
         }
         catch (Exception ex)
         {
             // Embedding failure must not lose the memory — the semantic arm
             // simply skips units without vectors.
-            logger.LogWarning(ex, "memory unit embedding failed (bank {Bank})", bank.BankKey);
+            logger.LogWarning(ex, "memory unit embedding failed (bank {Bank})", run.Bank.BankKey);
         }
         return unit;
     }
@@ -274,31 +326,41 @@ public sealed class MemoryRetainService(
         try
         {
             using var doc = JsonDocument.Parse(text[start..(end + 1)]);
-            var facts = new List<ExtractedFact>();
-            foreach (var el in doc.RootElement.EnumerateArray())
-            {
-                var factText = el.TryGetProperty("text", out var t) ? t.GetString() : null;
-                if (string.IsNullOrWhiteSpace(factText))
-                    continue;
-                var entities = new List<ExtractedEntity>();
-                if (el.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
-                    foreach (var e in ents.EnumerateArray())
-                        if (e.TryGetProperty("name", out var n) && !string.IsNullOrWhiteSpace(n.GetString()))
-                            entities.Add(new ExtractedEntity(n.GetString()!,
-                                e.TryGetProperty("type", out var ty) ? ty.GetString() : null));
-                facts.Add(new ExtractedFact(
-                    factText,
-                    el.TryGetProperty("fact_type", out var ft) ? ft.GetString() ?? "world" : "world",
-                    el.TryGetProperty("context", out var c) ? c.GetString() : null,
-                    ParseDate(el, "event_date"), ParseDate(el, "occurred_start"), ParseDate(el, "occurred_end"),
-                    entities));
-            }
-            return facts;
+            return doc.RootElement.EnumerateArray()
+                .Select(ParseFact)
+                .Where(f => f is not null)
+                .Select(f => f!)
+                .ToList();
         }
         catch (JsonException)
         {
             return [];
         }
+    }
+
+    private static ExtractedFact? ParseFact(JsonElement el)
+    {
+        var factText = el.TryGetProperty("text", out var t) ? t.GetString() : null;
+        if (string.IsNullOrWhiteSpace(factText))
+            return null;
+        return new ExtractedFact(
+            factText,
+            el.TryGetProperty("fact_type", out var ft) ? ft.GetString() ?? "world" : "world",
+            el.TryGetProperty("context", out var c) ? c.GetString() : null,
+            ParseDate(el, "event_date"), ParseDate(el, "occurred_start"), ParseDate(el, "occurred_end"),
+            ParseEntities(el));
+    }
+
+    private static List<ExtractedEntity> ParseEntities(JsonElement el)
+    {
+        var entities = new List<ExtractedEntity>();
+        if (!el.TryGetProperty("entities", out var ents) || ents.ValueKind != JsonValueKind.Array)
+            return entities;
+        foreach (var e in ents.EnumerateArray())
+            if (e.TryGetProperty("name", out var n) && !string.IsNullOrWhiteSpace(n.GetString()))
+                entities.Add(new ExtractedEntity(n.GetString()!,
+                    e.TryGetProperty("type", out var ty) ? ty.GetString() : null));
+        return entities;
     }
 
     private static DateTime? ParseDate(JsonElement el, string prop) =>

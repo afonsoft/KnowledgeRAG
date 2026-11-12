@@ -20,6 +20,8 @@ namespace KnowledgeHub.Server.Mcp.ToolProviders;
 /// </summary>
 public sealed class KnowledgeToolsProvider : IToolProvider
 {
+    private const string WriteKnowledgeTool = "write_knowledge";
+
     private static readonly JsonObject SearchSchema = JsonNode.Parse("""
         {"type":"object","properties":{
           "query":{"type":"string","description":"Text or question to search for","examples":["what is RAG?"]},
@@ -160,7 +162,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             },
             new CatalogTool
             {
-                Name = "write_knowledge",
+                Name = WriteKnowledgeTool,
                 Title = "Write knowledge",
                 Description = "Persists content into the knowledge base. For markdown-vault sources it creates a .md file; for other sources it stores a document that is indexed and immediately searchable.",
                 InputSchema = WriteSchema,
@@ -647,12 +649,12 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         // SPEC-20261111-memory-defense RF-003: screen once before either write
         // path — title and tags land in frontmatter, so they are content too.
         var titleOutcome = Security.WritePathDefense.Screen(
-            ctx.Services, db, target, note.Title, "write_knowledge");
+            ctx.Services, db, target, note.Title, WriteKnowledgeTool);
         var outcome = Security.WritePathDefense.Screen(
-            ctx.Services, db, target, note.Content, "write_knowledge");
+            ctx.Services, db, target, note.Content, WriteKnowledgeTool);
         var tagOutcome = note.Tags is { Length: > 0 }
             ? Security.WritePathDefense.Screen(
-                ctx.Services, db, target, string.Join(',', note.Tags), "write_knowledge")
+                ctx.Services, db, target, string.Join(',', note.Tags), WriteKnowledgeTool)
             : null;
         if (titleOutcome.Blocked || outcome.Blocked || tagOutcome?.Blocked == true)
         {

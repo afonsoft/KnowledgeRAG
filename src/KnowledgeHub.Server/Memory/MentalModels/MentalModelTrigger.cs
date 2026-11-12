@@ -57,11 +57,10 @@ public sealed record MentalModelTrigger(
         if (tagsMatch is not ("any" or "all"))
             throw new MemoryBadRequestException("trigger.tagsMatch must be 'any' or 'all'");
         var factTypes = StrList(el, "factTypes") ?? defaults.FactTypes;
-        if (factTypes is not null)
-            foreach (var f in factTypes)
-                if (!MemoryUnit.FactTypes.Contains(f))
-                    throw new MemoryBadRequestException(
-                        $"trigger.factTypes '{f}' invalid — allowed: {string.Join(',', MemoryUnit.FactTypes)}");
+        var invalid = factTypes?.FirstOrDefault(f => !MemoryUnit.FactTypes.Contains(f));
+        if (invalid is not null)
+            throw new MemoryBadRequestException(
+                $"trigger.factTypes '{invalid}' invalid — allowed: {string.Join(',', MemoryUnit.FactTypes)}");
 
         var interval = PosInt(el, "refreshIntervalMinutes")
             ?? ParseEvery(Str(el, "refreshCron"), "refreshCron");
@@ -118,10 +117,12 @@ public sealed record MentalModelTrigger(
         el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
             && v.TryGetInt32(out var i) ? i : null;
 
-    private static int? PosInt(JsonElement el, string name) =>
-        Int(el, name) is { } i
-            ? i > 0 ? i : throw new MemoryBadRequestException($"trigger.{name} must be > 0")
-            : null;
+    private static int? PosInt(JsonElement el, string name)
+    {
+        if (Int(el, name) is not { } i)
+            return null;
+        return i > 0 ? i : throw new MemoryBadRequestException($"trigger.{name} must be > 0");
+    }
 
     private static List<string>? StrList(JsonElement el, string name) =>
         el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
@@ -139,7 +140,11 @@ public sealed record MentalModelTrigger(
         if (c.StartsWith("@every ", StringComparison.OrdinalIgnoreCase))
         {
             var span = c[7..].Trim();
-            var mult = span.EndsWith('h') ? 60 : span.EndsWith('m') ? 1 : 0;
+            var mult = 0;
+            if (span.EndsWith('h'))
+                mult = 60;
+            else if (span.EndsWith('m'))
+                mult = 1;
             if (mult > 0 && int.TryParse(span[..^1], out var n) && n > 0)
                 return n * mult;
         }
@@ -165,7 +170,8 @@ public sealed record MentalModelTrigger(
         {
             if (seg is "." or "..")
                 throw new MemoryBadRequestException("path segments '.'/'..' not allowed");
-            if (!System.Text.RegularExpressions.Regex.IsMatch(seg, @"^[a-zA-Z0-9][a-zA-Z0-9-_ ]*$"))
+            if (!System.Text.RegularExpressions.Regex.IsMatch(seg, @"^[a-zA-Z0-9][a-zA-Z0-9-_ ]*$",
+                    System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromMilliseconds(250)))
                 throw new MemoryBadRequestException($"path segment '{seg}' invalid");
         }
         return string.Join('/', segments.Select(s => s.ToLowerInvariant()));

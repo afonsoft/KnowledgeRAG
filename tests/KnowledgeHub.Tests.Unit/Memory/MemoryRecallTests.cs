@@ -56,11 +56,11 @@ public class MemoryRecallTests : IDisposable
     {
         var banks = new MemoryBankService(db, new FakeScope(CallerScope.Unrestricted));
         var bank = await banks.ResolveAsync(null, default);
-        var retain = new MemoryRetainService(db, banks,
+        var retain = new MemoryRetainService(db, new MemoryRetainDeps(banks,
             new MemoryConfigResolver(new ConfigurationBuilder().Build()),
             new MemoryEntityLinker(db), new NoOpMemoryDefenseScreen(),
             new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
-            new FakeEmbeddings(), new MemoryConsolidationTrigger(),
+            new FakeEmbeddings(), new MemoryConsolidationTrigger()),
             NullLogger<MemoryRetainService>.Instance);
         var recall = new MemoryRecallService(db, banks, new FakeEmbeddings(),
             NullLogger<MemoryRecallService>.Instance);

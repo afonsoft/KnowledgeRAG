@@ -60,11 +60,11 @@ public class MemoryRetainTests : IDisposable
             // No IChatClient registered → extract mode must fail clearly.
         }
         var banks = new MemoryBankService(db, new FakeScope(scope ?? CallerScope.Unrestricted));
-        return new MemoryRetainService(db, banks,
+        return new MemoryRetainService(db, new MemoryRetainDeps(banks,
             new MemoryConfigResolver(new ConfigurationBuilder().Build()),
             new MemoryEntityLinker(db), new NoOpMemoryDefenseScreen(),
             sp ?? services.BuildServiceProvider(),
-            new FakeEmbeddings(), new MemoryConsolidationTrigger(),
+            new FakeEmbeddings(), new MemoryConsolidationTrigger()),
             NullLogger<MemoryRetainService>.Instance);
     }
 

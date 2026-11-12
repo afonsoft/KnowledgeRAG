@@ -105,10 +105,13 @@ public sealed partial class SecretScanner : ISecretScanner
         }
         if (!config.GetValue("Security:SecretScan:Enabled", true))
             logger.LogWarning("Security:SecretScan is DISABLED — write-paths will persist secrets unscreened");
+        _patternNames = _patterns.Select(p => p.Name).ToList();
         logger.LogInformation("SecretScanner loaded {Count} built-in + {Extras} extra patterns", _patterns.Count - extras, extras);
     }
 
-    public IReadOnlyList<string> Patterns => _patterns.Select(p => p.Name).ToList();
+    private readonly List<string> _patternNames = [];
+
+    public IReadOnlyList<string> Patterns => _patternNames;
 
     public IReadOnlyList<SecretFinding> Scan(string text)
     {

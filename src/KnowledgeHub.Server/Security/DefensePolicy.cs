@@ -53,7 +53,7 @@ public sealed class DefensePolicyResolver(IConfiguration config)
         return Merge(g, ov);
     }
 
-    private DefensePolicy Parse(IConfigurationSection section)
+    private static DefensePolicy Parse(IConfigurationSection section)
     {
         var enabled = section.GetValue("Enabled", true);
         var def = ParseAction(section["DefaultAction"]) ?? SecretAction.Redact;
@@ -77,23 +77,35 @@ public sealed class DefensePolicyResolver(IConfiguration config)
             if (!doc.RootElement.TryGetProperty("defense", out var d)
                 || d.ValueKind != JsonValueKind.Object)
                 return null;
-            var enabled = d.TryGetProperty("enabled", out var e) &&
-                e.ValueKind is JsonValueKind.True or JsonValueKind.False
-                ? e.GetBoolean() : (bool?)null;
-            var def = d.TryGetProperty("defaultAction", out var da) &&
-                da.ValueKind == JsonValueKind.String
-                ? ParseAction(da.GetString()) : null;
-            var patterns = new Dictionary<string, SecretAction>(StringComparer.OrdinalIgnoreCase);
-            if (d.TryGetProperty("patterns", out var p) && p.ValueKind == JsonValueKind.Object)
-                foreach (var kv in p.EnumerateObject())
-                    if (ParseAction(kv.Value.GetString()) is { } a)
-                        patterns[kv.Name] = a;
-            return new DefensePolicy(enabled ?? true, def ?? SecretAction.Redact, patterns);
+            return new DefensePolicy(
+                ReadEnabled(d),
+                ReadDefault(d),
+                ReadPatterns(d));
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    private static bool ReadEnabled(JsonElement d) =>
+        !d.TryGetProperty("enabled", out var e)
+        || e.ValueKind is not (JsonValueKind.True or JsonValueKind.False)
+        || e.GetBoolean();
+
+    private static SecretAction ReadDefault(JsonElement d) =>
+        d.TryGetProperty("defaultAction", out var da) && da.ValueKind == JsonValueKind.String
+            ? ParseAction(da.GetString()) ?? SecretAction.Redact
+            : SecretAction.Redact;
+
+    private static Dictionary<string, SecretAction> ReadPatterns(JsonElement d)
+    {
+        var patterns = new Dictionary<string, SecretAction>(StringComparer.OrdinalIgnoreCase);
+        if (d.TryGetProperty("patterns", out var p) && p.ValueKind == JsonValueKind.Object)
+            foreach (var kv in p.EnumerateObject())
+                if (ParseAction(kv.Value.GetString()) is { } a)
+                    patterns[kv.Name] = a;
+        return patterns;
     }
 
     private static DefensePolicy Merge(DefensePolicy g, DefensePolicy? ov)
