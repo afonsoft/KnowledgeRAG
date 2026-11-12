@@ -110,7 +110,29 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
     ];
 
     private static readonly HashSet<string> WriteTools =
-        ["write_knowledge", "write_note", "firecrawl_crawl", "tavily_crawl", "tavily_research", "set_api_key_settings", "set_chat_settings", "run_flow"];
+        ["write_knowledge", "write_note", "firecrawl_crawl", "tavily_crawl", "tavily_research", "set_api_key_settings", "set_chat_settings", "run_flow",
+         "document_update", "document_delete",
+         "operations_cancel", "operations_retry",
+         "memory_retain", "memory_update", "memory_delete",
+         "memory_bank_create", "memory_bank_update", "memory_bank_delete",
+         "memory_directives_create", "memory_directives_update", "memory_directives_delete",
+         "memory_mental_models_create", "memory_mental_models_update", "memory_mental_models_delete", "memory_mental_model_refresh",
+         "memory_page_create", "memory_page_update", "memory_page_delete",
+         "memory_consolidate", "source_rescan"];
+
+    // Epic E29 wave (SPEC-20261111-*): new tools are name-pinned here and get a
+    // structural schema assertion below; full-schema pins should be added to
+    // PinnedSchemas when the surface stabilizes (same rule as the legacy tools).
+    private static readonly HashSet<string> NewWaveTools =
+        ["document_update", "document_delete",
+         "operations_list", "operations_get", "operations_cancel", "operations_retry",
+         "memory_retain", "memory_recall", "memory_list", "memory_get", "memory_update", "memory_delete",
+         "memory_bank_list", "memory_bank_create", "memory_bank_update", "memory_bank_delete",
+         "memory_reflect", "memory_directives_list", "memory_directives_create", "memory_directives_update", "memory_directives_delete",
+         "memory_mental_models_list", "memory_mental_models_get", "memory_mental_models_create", "memory_mental_models_update",
+         "memory_mental_models_delete", "memory_mental_model_refresh",
+         "memory_pages_tree", "memory_pages_search", "memory_page_get", "memory_page_create", "memory_page_update", "memory_page_delete",
+         "memory_consolidate", "memory_observation_history", "source_rescan"];
 
     [Fact]
     public async Task ToolCatalog_NamesSchemasAndHints_MatchPinnedContract()
@@ -133,19 +155,26 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
 
         var slug = sourceName.ToLowerInvariant();
         var expectedNames = PinnedSchemas.Keys.Where(k => k != "__query_source__")
-            .Append($"query_{slug}").Order().ToList();
+            .Concat(NewWaveTools).Append($"query_{slug}").Order().ToList();
         var actualNames = tools.Select(t => t.GetProperty("name").GetString()!).Order().ToList();
         Assert.Equal(string.Join(", ", expectedNames), string.Join(", ", actualNames));
 
         foreach (var tool in tools)
         {
             var name = tool.GetProperty("name").GetString()!;
-            var key = name.StartsWith("query_") ? "__query_source__" : name;
-            using var expectedDoc = JsonDocument.Parse(PinnedSchemas[key]);
-            var expected = Canonicalize(expectedDoc.RootElement);
-            var actual = Canonicalize(tool.GetProperty("inputSchema"));
-            Assert.True(expected == actual,
-                $"inputSchema drift for '{name}'\nexpected: {expected}\nactual:   {actual}");
+            if (!NewWaveTools.Contains(name))
+            {
+                var key = name.StartsWith("query_") ? "__query_source__" : name;
+                using var expectedDoc = JsonDocument.Parse(PinnedSchemas[key]);
+                var expected = Canonicalize(expectedDoc.RootElement);
+                var actual = Canonicalize(tool.GetProperty("inputSchema"));
+                Assert.True(expected == actual,
+                    $"inputSchema drift for '{name}'\nexpected: {expected}\nactual:   {actual}");
+            }
+            else
+            {
+                Assert.Equal("object", tool.GetProperty("inputSchema").GetProperty("type").GetString());
+            }
 
             var expectedReadOnly = !WriteTools.Contains(name);
             var actualReadOnly = tool.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean();

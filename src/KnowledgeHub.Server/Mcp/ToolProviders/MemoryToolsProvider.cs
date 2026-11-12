@@ -330,7 +330,7 @@ public sealed class MemoryToolsProvider : IToolProvider
                 Name = "memory_bank_list",
                 Title = "List memory banks",
                 Description = "List the caller's memory banks with unit counts.",
-                InputSchema = JsonNode.Parse("""{"type":"object","properties":{}}""")!.AsObject(),
+                InputSchema = JsonNode.Parse("""{"type":"object","properties":{},"examples":[{}]}""")!.AsObject(),
                 ReadOnly = true,
                 IdempotentHint = true,
                 Handler = BankListAsync
@@ -358,6 +358,7 @@ public sealed class MemoryToolsProvider : IToolProvider
                 Title = "Reflect over memory",
                 Description = "Agentic, read-only reasoning over a bank — the model gathers evidence from observations first, then raw facts, and answers with validated citations (based_on). Bank mission/disposition/directives shape the response. Use for synthesized answers, not raw lookups.",
                 InputSchema = ReflectSchema,
+                ReadOnly = true,
                 Handler = ReflectAsync
             },
             new CatalogTool
@@ -421,7 +422,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             {
                 Name = "memory_mental_models_create",
                 Title = "Create mental model",
-                Description = "Create a standing question whose answer is synthesized and refreshed in background. subtype 'page' gets wiki defaults (observations-only, delta refresh, vault projection). wait=true runs the initial refresh now.",
+                Description = "Create a standing question whose answer is synthesized and refreshed in background. subtype 'page' gets wiki defaults (observations-only, delta refresh, optional file projection). wait=true runs the initial refresh now.",
                 InputSchema = MentalModelCreateSchema,
                 Handler = MentalModelsCreateAsync
             },
@@ -486,7 +487,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             {
                 Name = "memory_page_create",
                 Title = "Create page",
-                Description = "Create a wiki page (mental model with page defaults: observations-only scope, delta refresh, Obsidian vault projection).",
+                Description = "Create a wiki page (mental model with page defaults: observations-only scope, delta refresh, optional file projection).",
                 InputSchema = MentalModelCreateSchema,
                 Handler = PageCreateAsync
             },
@@ -503,7 +504,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             {
                 Name = "memory_page_delete",
                 Title = "Delete page",
-                Description = "Delete a page (and its projected vault file). Requires confirm=true.",
+                Description = "Delete a page (and its projected file). Requires confirm=true.",
                 InputSchema = MentalModelDeleteSchema,
                 DestructiveHint = true,
                 Handler = PageDeleteAsync
@@ -537,6 +538,8 @@ public sealed class MemoryToolsProvider : IToolProvider
                 Handler = BankDeleteAsync
             }
         ];
+        foreach (var t in tools)
+            SchemaExamples.Ensure(t.InputSchema);
         return Task.FromResult(tools);
     }
 
