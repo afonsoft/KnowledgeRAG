@@ -9,7 +9,7 @@
 | Stack | `.NET 10`, EF Core (migration dual SQLite+Postgres), MCP/REST |
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/devin-20261112-agent-memory-e30` |
-| Status | `In implementation` |
+| Status | `Done` |
 | Ticket | #621 — Epic #619 |
 | Source | Benchmark analysis: `Gentleman-Programming/gentle-ai` (`engram` — `mem_save_prompt`, `capture_prompt`) |
 | Depends on | `SPEC-20261111-agent-memory-retain` (#610), `SPEC-20261111-memory-defense` (#615) |

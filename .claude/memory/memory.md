@@ -1,32 +1,21 @@
-# Short-term memory — session state (overwritten each session, ≤100 lines)
+# Session memory — 2026-11-12 (E30 merged)
 
-- **Sessão**: implementando Epic E29 (#609) — 8 SPECs aprovadas do hindsight analysis.
-- **Branch**: `feature/devin-20261111-agent-memory-e29` (nunca commitar em main).
-- **Feito + commitado**:
-  - #616 agent-rules-hardening → `e133352`. #614 ergonomics RF-001/002/003/005/006 → `40f1bb2` (RF-004 bank scope entregue depois em #610). SPECs+analysis → `e419109`.
-  - #610 agent-memory-retain → `dad0957`: 7 entidades Memory*, migrations duais, retain/recall 4 braços RRF, MemoryToolsProvider, REST `/api/memory`, async ops, bank scoping (`/mcp/banks/{key}` + X-Memory-Bank + arg, precedência path>header>arg).
-  - #611 memory-observations-consolidation → `809313b`: MemoryUnit += SourceMemoryIdsJson/ProofCount; ObservationHistory entity; MemoryConsolidationService (triage→adjudicação→decide LLM, aliases f*/o*/p*, evidence obrigatória em create, refine-not-overwrite, fold dedup, version map por batch); MemoryConsolidationLocks (1 run/bank→409); IMemoryConsolidationTrigger/Hook; MemoryConsolidationWorker (tick 15min + sinais); preferObservations no recall (suprime facts fonte); tools memory_consolidate+memory_observation_history; REST `/banks/{key}/consolidate` + `/observations/{id}/history`; MemoryNotFoundException→404, MemoryConflictException→409; op kind="consolidate" no MemoryRetainWorker. 33/33 testes memory verdes.
-- **Feito + commitado (cont.)**:
-  - #612 memory-reflect-directives → `a1ff831`: MemoryReflectService (loop read-only com tools search_observations/recall_facts/done; citações validadas∩retrieved→droppedCitations+uncited; structured output 2ª passada+retry; disposition→persona; directives filtradas tags; budget low=3/mid=6/high=ReflectMaxIterations); MemoryDirectiveService + MemoryDirective{+Name,Tags,UpdatedAt} migration dual; recall factType vírgula; tools memory_reflect+memory_directives_*; REST `/banks/{key}/reflect` + `/directives/*`. SPEC→Done, issue→in_review.
-  - #613 mental-models-pages → NÃO commitado ainda (testes verdes 57/57 memory): MemoryMentalModel+MentalModelHistory entities + migration `MemoryMentalModels` dual; MentalModelTrigger (mode delta|full, refreshAfterConsolidation, refreshIntervalMinutes|refreshCron@every, minRefreshIntervalSeconds, factTypes, tagsMatch, tags; PageDefault=observations+delta+afterConsolidation); MentalModelService (CRUD, tree, search snippets, GetPageAsync cache opt-in IDistributedCache, StaleIdsAsync, FindAsync pasta normalizada+nome OrdinalIgnoreCase); MentalModelRefreshService (locks por model, full/delta watermark LastMemorySeenAt, history trim HistoryLimit=20, prompt answer-as-document); MentalModelsWorker (channel signals + scan 1min interval triggers); MentalModelConsolidationHook (sinaliza models refreshAfterConsolidation); VaultPageProjector (`{Vault:Path}/_memory/{bankKey}/{path}/{slug}.md`, Memory:Pages:ProjectToVault flag, banner managed-by, best-effort); 12 tools memory_mental_models_*+memory_pages_*+memory_page_*; REST mental-models/*+pages/*. 14 testes MentalModelsTests.
-- **Design decisions**: ApiKeyId=Guid.Empty sentinel; `List<string>` Tags = primitive collection EF; MemoryBadRequest→400/NotFound→404/Conflict→409/ServiceUnavailable→503; op Kinds: retain|consolidate; ToolArgs.OptionalInt(ctx,name,fallback,max) retorna int (não nullable).
-- **#615 memory-defense** → `12ccde9` + fix review `21cc7b8`: SecretScanner (52 padrões, timeout 100ms, fingerprint salted, ExtraPatterns c/ ReDoS-reject), DefensePolicyResolver (global→bank→source, allow|redact|block), WritePathDefense helper, cobertura retain/write_note/write_knowledge/ingest/context_save, `GET /api/security/secret-scan/status`, 422 MCP+REST. Review gaps fechados: audit só não-allow; `doc.RawContent` redigido (RedactNonAllow); title/tags screened. SPEC→Done, issue→in_review.
-- **#617 knowledge-hub-agent-skill** → `9381936` + status `a947d11`: 3 skills em `skills/` (knowledge-hub workflow/memória c/ wiring/, knowledge-hub-docs GERADA via scripts/generate-skills.sh de markers `skill-docs` em CLAUDE.md+API.md, knowledge-hub-architect), index.json, wiring JSONs ×5 harnesses, SkillsFreshnessTests (7 testes), README+docs en/pt. SPEC→Done, issue→in_review.
-- **ÉPICO E29 COMPLETO**: 8/8 SPECs implementadas, 12 commits em `feature/devin-20261111-agent-memory-e29`, 1915 unit tests verdes, format limpo. Labels #610-#616 → in_review, #617 → in_review.
-- **Resta**: push + PR épico (ou por-slice?) + label sync in_pullrequest→done. Integração Postgres roda em CI.
-- **Bugs conhecidos**: xunit 2.9.3 não honra SkipException → early-return; `$$"""` p/ `{` literal em interpolação; Where após OrderBy perde IOrderedQueryable (ordenar por último); PageDefault tem refreshAfterConsolidation=true (correto).
-- **Lock files** (packages.lock.json) sujos por restore local — NÃO commitar.
+## Estado
+- **PR #618 (Epic E29)**: MERGED squash `bcbca16` — 8 SPECs agent memory.
+- **PR #622 (Epic E30)**: MERGED squash `e352701` 22:21 UTC — #620 context/timeline/stats + #621 prompt provenance.
+- Issues #620/#621 → done + CLOSED. Epic #619 CLOSED. SPECs → Done (PR #623 housekeeping).
+- Branch work consolidada; `main` local atualizado p/ `e352701`.
 
-## Gate final E29 (2026-11-12)
-- Commit 5b0ad40: contract pin E29 + SchemaExamples (lint RF-006).
-- Unit 1915/1915 | format limpo | integração 373/375.
-- Falhas: Ask_FinalFloor_Empty (PRÉ-EXISTENTE — reproduzida em worktree de main; floor aplica em Normalized relativo, top hit ≈1.0) + flake de host-timeout sob contenção (passa isolado).
-- Bug pré-existente em main: minScores.final nunca esvazia quando há braço único (Normalized do top = 1.0). Candidato a issue fix.
-- Resta: push + PR épico.
+## E30 entregue
+- **#620**: `memory_context` (digest session-start determinístico, synthesize opt-in), `memory_timeline` (day/hour/week, OccurredStart??MentionedAt, from>to→400), `memory_stats` (per-bank + agregado global). REST `/api/memory/banks/{key}/context|timeline|stats` + `/api/memory/stats`. SKILL.md: session start abre com memory_context.
+- **#621**: `MemoryDocument` += SourcePrompt (defense-screened, cap 2000 + promptTruncated metadata), SourceSessionId, Origin (explicit|passive|import|system, check), PromptHash; idx (BankId,SourceSessionId). Migrations dual. retain dedupe (bank,sess,promptHash)→promptSeen:true antes da extração; doc provenance-only `prov:{sess}:{hash16}`. recall/list += sessionId; provenance em DTOs/recall/timeline (≤500 chars).
 
-## Gate final E29 — TUDO VERDE (2026-11-12)
-- d362a3b: fix stale Ask_FinalFloor test (Normalized floor semantics; bug era pré-existente em main).
-- 5b0ad40: contract pin E29 + SchemaExamples.
-- Unit 1915/1915 | Integration 375/375 | format limpo | build 0 erros.
-- Branch: 14 commits. Resta: push + PR épico.
-- gentle-ai analisado (clone /tmp/gentle-ai): gaps p/ próximo epic = memory_timeline/stats/bank_merge, RDD-lite no review CLI, path deny-list, bench de jornada, delegation triggers.
+## Gates finais
+- Unit 1931/1931 | Integration 375/375 | Blackbox 1/1 | Parity 3/3 | format limpo | CI todos verdes (SonarCloud/CodeQL/Qodana/Snyk/Trivy/Docker/UI).
+- Flake conhecido: `Semantic_Mode_PreservesVectorResults` (timing sob carga paralela — passa isolado; pré-existente).
+
+## Próximo Epic (gaps gentle-ai restantes)
+- memory_bank_merge (name drift), RDD-lite no knowledge-review (candidato congelado + lentes por risco), deny-list de paths (.env/.ssh), bench de jornada (turns/custo), delegation trigger table.
+
+## Bugs conhecidos
+- xunit 2.9.3 não honra SkipException → early-return; packages.lock.json sujos por restore local — NÃO commitar; deleções bootstrap wwwroot/lib pré-existentes do ambiente.

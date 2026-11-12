@@ -9,7 +9,7 @@
 | Stack | `.NET 10`, EF Core, MCP/REST |
 | Repository | `afonsoft/KnowledgeRAG` |
 | Branch | `feature/devin-20261112-agent-memory-e30` |
-| Status | `In implementation` |
+| Status | `Done` |
 | Ticket | #620 — Epic #619 |
 | Source | Benchmark analysis: `Gentleman-Programming/gentle-ai` (`engram` — `mem_context`, `mem_timeline`, `mem_stats`) |
 | Depends on | `SPEC-20261111-agent-memory-retain` (#610), `SPEC-20261111-memory-observations-consolidation` (#611), `SPEC-20261111-mental-models-pages` (#613) |
