@@ -533,6 +533,7 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddHostedService<Memory.MemoryRetainWorker>();
         services.AddScoped<Memory.MemoryBankService>();
         services.AddScoped<Memory.MemoryBankMergeService>();
+        services.AddScoped<Memory.MemorySessionService>();
         services.AddScoped<Memory.MemoryEntityLinker>();
         services.AddScoped(sp => new Memory.MemoryRetainDeps(
             sp.GetRequiredService<Memory.MemoryBankService>(),

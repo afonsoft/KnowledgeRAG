@@ -124,6 +124,16 @@ public static class MemoryEndpoints
         group.MapGet("/stats", (HttpContext http, CancellationToken ct) =>
             Invoke(http, "memory_stats", new JsonObject(), ct));
 
+        // SPEC-20261114-memory-session-lifecycle.
+        group.MapPost("/banks/{key}/sessions/begin", async (HttpContext http, string key, CancellationToken ct) =>
+            await Invoke(http, "memory_session_begin",
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct));
+        group.MapPost("/banks/{key}/sessions/end", async (HttpContext http, string key, CancellationToken ct) =>
+            await Invoke(http, "memory_session_end",
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), BankKey, key), ct));
+        group.MapGet("/banks/{key}/sessions", (HttpContext http, string key, CancellationToken ct) =>
+            Invoke(http, "memory_session_list", Merge(Query(http), BankKey, key), ct));
+
         return group;
     }
 

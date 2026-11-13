@@ -170,6 +170,36 @@ public sealed class MemoryToolsProvider : IToolProvider
         "examples":[{"bankKey":"default"},{}]}
         """)!.AsObject();
 
+    private static readonly JsonObject SessionBeginSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "repo":{"type":["string","null"],"description":"Repository slug — used as bank when bankKey absent"},
+          "sessionId":{"type":["string","null"],"description":"Caller session/thread id (map agent_chat threadId here; default: generated sess-*)"},
+          "label":{"type":["string","null"],"description":"What this session is for (cap 500)"}
+        },
+        "examples":[{"bankKey":"default","sessionId":"thread-42","label":"merge refactor"}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject SessionEndSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "repo":{"type":["string","null"]},
+          "sessionId":{"type":"string","description":"Session to close"},
+          "summary":{"type":["string","null"],"description":"Where the session stopped — defense-screened (cap 2000)"}
+        },"required":["sessionId"],
+        "examples":[{"sessionId":"thread-42","summary":"merged banks, PR open"}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject SessionListSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "bankKey":{"type":["string","null"]},
+          "repo":{"type":["string","null"]},
+          "openOnly":{"type":["boolean","null"],"description":"Only open sessions (default false)"},
+          "limit":{"type":"integer","description":"Default 20, cap 100"}
+        },
+        "examples":[{"openOnly":true}]}
+        """)!.AsObject();
+
     private static readonly JsonObject ReflectSchema = JsonNode.Parse("""
         {"type":"object","properties":{
           "bankKey":{"type":["string","null"]},
@@ -627,6 +657,35 @@ public sealed class MemoryToolsProvider : IToolProvider
                 InputSchema = BankMergeSchema,
                 IdempotentHint = true,
                 Handler = BankMergeAsync
+            },
+            // SPEC-20261114-memory-session-lifecycle.
+            new CatalogTool
+            {
+                Name = "memory_session_begin",
+                Title = "Begin session",
+                Description = "Mark a work session open on a bank — pass your agent_chat threadId as sessionId so context recovery and retain stay stitched. Repeat begin on an open session returns alreadyOpen.",
+                InputSchema = SessionBeginSchema,
+                IdempotentHint = true,
+                Handler = SessionBeginAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_session_end",
+                Title = "End session",
+                Description = "Close a session with an optional summary — the digest shows it as 'last ended' so the next session knows where you stopped. Idempotent.",
+                InputSchema = SessionEndSchema,
+                IdempotentHint = true,
+                Handler = SessionEndAsync
+            },
+            new CatalogTool
+            {
+                Name = "memory_session_list",
+                Title = "List sessions",
+                Description = "Session events on a bank — open and completed sessions with labels, times and summaries.",
+                InputSchema = SessionListSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = SessionListAsync
             }
         ];
         foreach (var t in tools)
@@ -1202,6 +1261,66 @@ public sealed class MemoryToolsProvider : IToolProvider
             var stats = await svc.StatsAsync(
                 MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")), ct);
             return await ToolResults.Structured("memory stats", stats);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    // ---------- session lifecycle (SPEC-20261114) ----------
+
+    private static async ValueTask<CallToolResult> SessionBeginAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemorySessionService>();
+        try
+        {
+            var r = await svc.BeginAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
+                ToolArgs.OptionalString(ctx, "sessionId"),
+                ToolArgs.OptionalString(ctx, "label"), ct);
+            return await ToolResults.Structured(
+                r.AlreadyOpen ? "session already open" : "session open", r);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+    }
+
+    private static async ValueTask<CallToolResult> SessionEndAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemorySessionService>();
+        try
+        {
+            var r = await svc.EndAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
+                ToolArgs.RequiredString(ctx, "sessionId"),
+                ToolArgs.OptionalString(ctx, "summary"), ct);
+            return await ToolResults.Structured(
+                r.Ended ? "session ended" : "session already closed", r);
+        }
+        catch (MemoryBadRequestException ex)
+        {
+            return await ToolResults.Error(ex.Message);
+        }
+        catch (MemoryDefenseException ex)
+        {
+            return await ToolResults.Error(JsonSerializer.Serialize(new { blocked = true, findings = ex.Findings.Select(f => new { f.Pattern }) }));
+        }
+    }
+
+    private static async ValueTask<CallToolResult> SessionListAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var svc = ctx.Services.GetRequiredService<MemorySessionService>();
+        try
+        {
+            var items = await svc.ListAsync(
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
+                ToolArgs.OptionalBool(ctx, "openOnly") == true,
+                ToolArgs.OptionalInt(ctx, "limit", 20, 100), ct);
+            return await ToolResults.Structured($"{items.Count} session(s)",
+                new { count = items.Count, sessions = items });
         }
         catch (MemoryBadRequestException ex)
         {
