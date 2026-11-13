@@ -4,7 +4,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | `Approved` |
+| Status | `Done` |
 | Ticket | #632 — Epic #630 |
 | Epic | E32 — agent-hardening wave 4 (gentle-ai parity) |
 | Date | 2026-11-14 |
