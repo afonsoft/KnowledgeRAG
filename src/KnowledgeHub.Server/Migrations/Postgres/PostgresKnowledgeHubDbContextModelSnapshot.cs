@@ -1324,6 +1324,9 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                     b.Property<string>("DispositionJson")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("MergedIntoBankId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Mission")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -1334,6 +1337,8 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("MergedIntoBankId");
 
                     b.HasIndex("BankKey", "ApiKeyId")
                         .IsUnique();
@@ -2157,6 +2162,16 @@ namespace KnowledgeHub.Server.Migrations.Postgres
                         .IsRequired();
 
                     b.Navigation("Source");
+                });
+
+            modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryBank", b =>
+                {
+                    b.HasOne("KnowledgeHub.Server.Domain.Entities.MemoryBank", "MergedInto")
+                        .WithMany()
+                        .HasForeignKey("MergedIntoBankId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("MergedInto");
                 });
 
             modelBuilder.Entity("KnowledgeHub.Server.Domain.Entities.MemoryDirective", b =>

@@ -462,6 +462,11 @@ public class KnowledgeHubDbContext(DbContextOptions options) : DbContext(options
             // (BankKey, ApiKeyId) is the caller-facing identity — the same
             // slug may exist under different keys without collision.
             e.HasIndex(b => new { b.BankKey, b.ApiKeyId }).IsUnique();
+            // SPEC-20261113: merge tombstone — self-FK, never cascades.
+            e.HasOne(b => b.MergedInto).WithMany()
+                .HasForeignKey(b => b.MergedIntoBankId)
+                .OnDelete(DeleteBehavior.NoAction);
+            e.HasIndex(b => b.MergedIntoBankId);
             e.HasMany(b => b.Units).WithOne(u => u.Bank)
                 .HasForeignKey(u => u.BankId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(b => b.Documents).WithOne(d => d.Bank)

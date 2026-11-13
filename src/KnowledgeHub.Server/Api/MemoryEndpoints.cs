@@ -114,6 +114,11 @@ public static class MemoryEndpoints
             Invoke(http, "memory_context", Merge(Query(http), BankKey, key), ct));
         group.MapGet("/banks/{key}/timeline", (HttpContext http, string key, CancellationToken ct) =>
             Invoke(http, "memory_timeline", Merge(Query(http), BankKey, key), ct));
+        // SPEC-20261113-memory-bank-merge RF-003.
+        group.MapPost("/banks/{key}/merge", async (HttpContext http, string key, CancellationToken ct) =>
+            await Invoke(http, "memory_bank_merge",
+                Merge(await BodyAsync(http, ct) ?? new JsonObject(), "targetKey", key), ct));
+
         group.MapGet("/banks/{key}/stats", (HttpContext http, string key, CancellationToken ct) =>
             Invoke(http, "memory_stats", Merge(new JsonObject(), BankKey, key), ct));
         group.MapGet("/stats", (HttpContext http, CancellationToken ct) =>

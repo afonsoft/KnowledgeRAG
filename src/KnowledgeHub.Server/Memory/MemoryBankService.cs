@@ -17,6 +17,8 @@ public sealed class MemoryBankService(KnowledgeHubDbContext db, ICallerScopeProv
     public async Task<Guid> ScopeKeyAsync(CancellationToken ct) =>
         (await callerScope.GetAsync(ct)).ApiKeyId ?? MemoryBank.ServerWideKey;
 
+    private const int MaxMergeHops = 8;
+
     /// <summary>Resolve or auto-create a bank for the caller ("default" when key null).</summary>
     public async Task<MemoryBank> ResolveAsync(string? bankKey, CancellationToken ct, bool create = true)
     {
@@ -32,18 +34,39 @@ public sealed class MemoryBankService(KnowledgeHubDbContext db, ICallerScopeProv
             db.MemoryBanks.Add(bank);
             await db.SaveChangesAsync(ct);
         }
-        return bank ?? throw new MemoryNotFoundException($"memory bank '{key}' not found");
+        if (bank is null)
+            throw new MemoryNotFoundException($"memory bank '{key}' not found");
+        return await FollowMergeAsync(bank, key, ct);
     }
 
-    public async Task<IReadOnlyList<MemoryBankDto>> ListAsync(CancellationToken ct)
+    /// <summary>SPEC-20261113 RF-002: merged banks redirect to their target
+    /// (≤8 hops, cycle-safe) — old keys keep working after a merge.</summary>
+    private async Task<MemoryBank> FollowMergeAsync(MemoryBank bank, string key, CancellationToken ct)
+    {
+        var seen = new HashSet<Guid> { bank.Id };
+        var hops = 0;
+        while (bank.MergedIntoBankId is { } next)
+        {
+            if (++hops > MaxMergeHops || !seen.Add(next))
+                throw new MemoryBadRequestException(
+                    $"memory bank '{key}' merge chain cycles or exceeds {MaxMergeHops} hops");
+            bank = await db.MemoryBanks.FindAsync([next], ct)
+                ?? throw new MemoryNotFoundException($"memory bank '{key}' merge target missing");
+        }
+        return bank;
+    }
+
+    public async Task<IReadOnlyList<MemoryBankDto>> ListAsync(bool includeMerged, CancellationToken ct)
     {
         var scope = await ScopeKeyAsync(ct);
-        return await db.MemoryBanks.AsNoTracking()
-            .Where(b => b.ApiKeyId == scope)
+        var q = db.MemoryBanks.AsNoTracking().Where(b => b.ApiKeyId == scope);
+        if (!includeMerged)
+            q = q.Where(b => b.MergedIntoBankId == null);
+        return await q
             .OrderBy(b => b.BankKey)
             .Select(b => new MemoryBankDto(
                 b.Id, b.BankKey, b.Name, b.Mission, b.DispositionJson, b.ConfigJson,
-                b.CreatedAt, b.Units.Count(u => !u.IsDeleted)))
+                b.CreatedAt, b.Units.Count(u => !u.IsDeleted), b.MergedIntoBankId != null))
             .ToListAsync(ct);
     }
 

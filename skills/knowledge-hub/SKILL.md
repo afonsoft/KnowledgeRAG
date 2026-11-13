@@ -74,6 +74,12 @@ Supporting reads while planning: `memory_timeline` (what happened when,
 bucketed by day/hour/week) and `memory_stats` (bank health — consolidation
 backlog, embedding coverage, observation proof counts).
 
+**Bank identity** — prefer passing `repo` (your repo slug `owner/name` or git
+URL) over a free-form `bankKey`: repo-derived banks converge across agents.
+When two banks ended up naming the same project, unify them with
+`memory_bank_merge {sourceKey, targetKey}` — memories move to the target and
+the old key keeps resolving, so nothing breaks.
+
 **During work** — when you learn something worth keeping:
 
 - `memory_retain(content, strategy: "extract")` — durable facts: decisions,
