@@ -128,3 +128,15 @@ exists.
 - Retain facts, not transcripts — one meaningful fact per `memory_retain` chunk.
 - Respect per-bank boundaries: if the user names a bank, pass `bankKey`;
   otherwise the server default applies.
+
+## 7. Delegation triggers
+
+Measured thresholds (see `tests/KnowledgeHub.Tests.Bench`) — when a subagent
+pays off vs working inline:
+
+| Situation | Threshold | Action |
+|---|---|---|
+| Codebase exploration | >3 search/read calls or >10k tokens of reading expected | Delegate to an explore subagent — it returns a digest, not raw output |
+| Parallel writers | ≥2 disjoint file surfaces (~100+ lines apart, no shared state) | One subagent per surface, in parallel |
+| Independent verification | Named risk only: security, data loss, public contract, migration | Dedicated verifier after implementation |
+| Everything else | Below thresholds | Work inline — delegation costs a context round-trip |
