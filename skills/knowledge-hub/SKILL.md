@@ -59,15 +59,19 @@ check, not a blocker.
 
 **Session start** — before the first non-trivial task:
 
-1. `memory_context` — deterministic bank digest: directives, recent facts,
-   top observations, stale models/pages, recent failures. Zero LLM cost;
+1. `memory_session_begin {sessionId, label}` — mark the session open on the
+   bank (use your agent_chat threadId as sessionId). Idempotent — repeat
+   begin returns `alreadyOpen:true`.
+2. `memory_context` — deterministic bank digest: directives, recent facts,
+   top observations, stale models/pages, recent failures, plus open
+   sessions and where the last session stopped. Zero LLM cost;
    call it first whenever a bank exists.
-2. `context_recovery {repo: "owner/name"}` — latest compacted snapshot of
+3. `context_recovery {repo: "owner/name"}` — latest compacted snapshot of
    prior work on this repo (decisions, open items). `repo` is the GitHub
    `owner/name` (lowercase), or the URL — it is normalized.
-3. `memory_recall` for durable facts beyond the working snapshot
+4. `memory_recall` for durable facts beyond the working snapshot
    (project conventions, standing corrections).
-4. `memory_pages_tree` / `memory_page` — standing pages (architecture,
+5. `memory_pages_tree` / `memory_page` — standing pages (architecture,
    conventions) maintained by the hub; cheap reads, no LLM cost.
 
 Supporting reads while planning: `memory_timeline` (what happened when,
@@ -89,6 +93,8 @@ the old key keeps resolving, so nothing breaks.
 
 **Session end / before compaction**:
 
+- `memory_session_end {sessionId, summary}` — close the session with where
+  you stopped; the next `memory_context` shows it as "last ended".
 - `context_save {repo, items: [...], label}` — typed items (`decision`,
   `note`, `passage`, `tool_output`, `summary`). Save before long pauses,
   branch switches, or context resets. Never store secrets — writes are

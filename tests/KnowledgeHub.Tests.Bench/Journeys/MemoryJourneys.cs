@@ -21,6 +21,9 @@ public static class MemoryJourneys
             SessionGrounding(projectBank),
             RetainDedupePrompt($"bench-dedupe-{runId}"),
             RetainAsyncPoll($"bench-async-{runId}"),
+            SessionLifecycle(projectBank, $"sess-{runId}"),
+            BankMergeFlow($"bench-src-{runId}", $"bench-dst-{runId}"),
+            KnowledgeSearch(),
         ];
     }
 
@@ -93,6 +96,50 @@ public static class MemoryJourneys
             Assert: And(Ok(), PropEquals("status", "done")),
             PollMax: 20,
             PollDelayMs: 100),
+    ]);
+
+    /// <summary>SPEC-20261114-bench-v2: begin → context sees open session →
+    /// end → session_list shows the closed row. The E32 lifecycle loop.</summary>
+    public static Journey SessionLifecycle(string bank, string sessionId) => new("session-lifecycle",
+    [
+        JourneyStep.Call("memory_session_begin", new { bankKey = bank, sessionId, label = "bench" },
+            And(Ok(), PropEquals("alreadyOpen", false))),
+        JourneyStep.Call("memory_context", new { bankKey = bank },
+            And(Ok(), HasProp("openSessions"))),
+        JourneyStep.Call("memory_session_end", new { bankKey = bank, sessionId, summary = "bench done" },
+            And(Ok(), PropEquals("ended", true))),
+        JourneyStep.Call("memory_session_list", new { bankKey = bank },
+            And(Ok(), IntAtLeast("count", 1))),
+    ]);
+
+    /// <summary>SPEC-20261114-bench-v2: merge source→target then recall through
+    /// the OLD key — the tombstone redirect must keep it resolving.</summary>
+    public static Journey BankMergeFlow(string source, string target) => new("bank-merge-flow",
+    [
+        JourneyStep.Call("memory_bank_create", new { bankKey = source, name = "merge source" }, Ok()),
+        JourneyStep.Call("memory_retain", new
+        {
+            bankKey = source,
+            content = "Bench fact written into the soon-to-be-merged bank.",
+            strategy = "verbatim",
+        }, And(Ok(), IntAtLeast("unitsCreated", 1))),
+        JourneyStep.Call("memory_bank_create", new { bankKey = target, name = "merge target" }, Ok()),
+        JourneyStep.Call("memory_bank_merge", new { sourceKey = source, targetKey = target },
+            And(Ok(), PropEquals("merged", true))),
+        JourneyStep.Call("memory_recall", new { bankKey = source, query = "merged bank", topK = 3 },
+            And(Ok(), HasProp("results"))),
+        JourneyStep.Call("memory_bank_list", new { includeMerged = true },
+            And(Ok(), HasProp("banks"))),
+    ]);
+
+    /// <summary>SPEC-20261114-bench-v2: the RAG arm — two hybrid searches on the
+    /// seeded vault source (empty result sets are fine; this measures friction).</summary>
+    public static Journey KnowledgeSearch() => new("knowledge-search",
+    [
+        JourneyStep.Call("search_knowledge", new { query = "vector search memory bank" },
+            And(Ok(), HasProp("results"))),
+        JourneyStep.Call("search_knowledge", new { query = "session lifecycle context" },
+            And(Ok(), HasProp("results"))),
     ]);
 
     // ---- assert helpers: each returns an error string or null (pass) ----
