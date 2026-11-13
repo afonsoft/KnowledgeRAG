@@ -118,7 +118,8 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
          "memory_directives_create", "memory_directives_update", "memory_directives_delete",
          "memory_mental_models_create", "memory_mental_models_update", "memory_mental_models_delete", "memory_mental_model_refresh",
          "memory_page_create", "memory_page_update", "memory_page_delete",
-         "memory_consolidate", "source_rescan"];
+         "memory_consolidate", "source_rescan",
+         "memory_session_begin", "memory_session_end"];
 
     // Epic E29 wave (SPEC-20261111-*): new tools are name-pinned here and get a
     // structural schema assertion below; full-schema pins should be added to
@@ -133,7 +134,8 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
          "memory_mental_models_delete", "memory_mental_model_refresh",
          "memory_pages_tree", "memory_pages_search", "memory_page_get", "memory_page_create", "memory_page_update", "memory_page_delete",
          "memory_consolidate", "memory_observation_history", "source_rescan",
-         "memory_context", "memory_timeline", "memory_stats", "memory_bank_merge"];
+         "memory_context", "memory_timeline", "memory_stats", "memory_bank_merge",
+         "memory_session_begin", "memory_session_end", "memory_session_list"];
 
     [Fact]
     public async Task ToolCatalog_NamesSchemasAndHints_MatchPinnedContract()

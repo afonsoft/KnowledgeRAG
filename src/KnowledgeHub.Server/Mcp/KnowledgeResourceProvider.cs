@@ -96,7 +96,8 @@ public static class KnowledgeResourceProvider
 
             var root = IngestionService.ResolveVaultRoot(vault.ConfigurationJson)
                 ?? throw new McpProtocolException("vault has no configured path", McpErrorCode.ResourceNotFound);
-            var full = ObsidianNoteWriter.SafePath(root, docPath, forWrite: false);
+            var full = ObsidianNoteWriter.SafePath(root, docPath, forWrite: false,
+                services.GetService<Security.PathDenyList>());
 
             if (!File.Exists(full))
                 throw new McpProtocolException($"resource '{uri}' not found", McpErrorCode.ResourceNotFound);

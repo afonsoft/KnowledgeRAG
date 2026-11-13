@@ -39,6 +39,7 @@ Todos os endpoints `/api/*` exigem autenticação (sessão por cookie ou `Author
 | `GET /api/ingestion/jobs?sourceId=&status=&limit=` | lista jobs (filtro por fonte + status) |
 | `GET /api/ingestion/jobs/{id}` | um job — status, contadores por doc, erro |
 | `POST /api/ingestion/jobs/{id}/cancel` | cancela job em fila (`409` se já em execução/terminal) |
+| `GET/POST /api/memory/...` | banks de memória (+ `merge`), units, recall/reflect, consolidação, mental models & páginas, ciclo de sessão (`banks/{key}/sessions/begin|end`), context/timeline/stats — espelho das tools `memory_*` do MCP |
 
 ## Busca, respostas, agente
 

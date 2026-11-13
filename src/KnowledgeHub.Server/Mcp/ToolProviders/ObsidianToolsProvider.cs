@@ -80,7 +80,8 @@ public sealed class ObsidianToolsProvider : IToolProvider
 
         var root = IngestionService.ResolveVaultRoot(vault.ConfigurationJson)
             ?? throw new McpProtocolException("vault source has no configured path", McpErrorCode.InvalidParams);
-        var full = ObsidianNoteWriter.SafePath(root, path, forWrite: false);
+        var full = ObsidianNoteWriter.SafePath(root, path, forWrite: false,
+            ctx.Services.GetService<Security.PathDenyList>());
 
         if (!File.Exists(full))
             return await ToolResults.Error($"document '{path}' not found in vault '{vault.Name}'");
@@ -108,7 +109,8 @@ public sealed class ObsidianToolsProvider : IToolProvider
 
         var root = IngestionService.ResolveVaultRoot(vault.ConfigurationJson)
             ?? throw new McpProtocolException("vault source has no configured path", McpErrorCode.InvalidParams);
-        var full = ObsidianNoteWriter.SafePath(root, path, forWrite: true);
+        var full = ObsidianNoteWriter.SafePath(root, path, forWrite: true,
+            ctx.Services.GetService<Security.PathDenyList>());
 
         // SPEC-20261111-memory-defense RF-003: screen before persisting —
         // content plus tags (they land in frontmatter).

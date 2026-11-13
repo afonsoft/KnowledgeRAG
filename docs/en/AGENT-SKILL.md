@@ -10,7 +10,7 @@ npx skills add afonsoft/KnowledgeRAG -s knowledge-hub
 
 | Skill | What it teaches |
 |---|---|
-| `knowledge-hub` | Session lifecycle: `context_recovery` on start, `context_save` on end; grounding-first (`search_knowledge`/`memory_recall` before assuming); proactive `memory_retain`; `Correction: <topic>` supersede protocol; `📚 From KnowledgeHub` credit markers; per-harness MCP wiring. |
+| `knowledge-hub` | Session lifecycle: `memory_session_begin` + `memory_context` + `context_recovery` on start, `memory_session_end` + `context_save` on end; grounding-first (`search_knowledge`/`memory_recall` before assuming); proactive `memory_retain`; `repo`-derived bank identity + `memory_bank_merge` for duplicates; `Correction: <topic>` supersede protocol; `📚 From KnowledgeHub` credit markers; per-harness MCP wiring. |
 | `knowledge-hub-docs` | Operational reference: endpoints, `aft_*` auth, tool catalog, transports, jobs, troubleshooting. **Generated** from `CLAUDE.md` + `docs/en/API.md` by `scripts/generate-skills.sh` — never edited by hand; CI fails on divergence. |
 | `knowledge-hub-architect` | Adoption planner: maps your knowledge locations to `SourceType`s, proposes memory banks, tag schema and a first eval baseline. |
 

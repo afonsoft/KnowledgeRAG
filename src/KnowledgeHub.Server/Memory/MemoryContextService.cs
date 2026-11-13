@@ -39,7 +39,11 @@ public sealed class MemoryContextService(
         IReadOnlyList<FailureDigest> RecentFailures,
         MemoryStatsResult Stats,
         bool Synthesized,
-        string? SynthesizedText);
+        string? SynthesizedText,
+        /// <summary>SPEC-20261114: open sessions (kind=session,status=running).</summary>
+        IReadOnlyList<MemorySessionService.SessionDto>? OpenSessions = null,
+        /// <summary>SPEC-20261114: most recent completed session + summary.</summary>
+        MemorySessionService.SessionDto? LastCompletedSession = null);
 
     public sealed record TimelineItem(Guid Id, string FactType, string TextPreview,
         IReadOnlyList<string> Entities, DateTime OccurredAt,
@@ -120,10 +124,20 @@ public sealed class MemoryContextService(
         var dto = new MemoryBankDto(bank.Id, bank.BankKey, bank.Name, bank.Mission,
             bank.DispositionJson, bank.ConfigJson, bank.CreatedAt, stats.TotalUnits);
 
+        // SPEC-20261114: open sessions + where the last one stopped.
+        var sessionOps = await db.MemoryOperations.AsNoTracking()
+            .Where(o => o.BankId == bank.Id && o.Kind == MemorySessionService.SessionKind)
+            .OrderByDescending(o => o.StartedAt)
+            .Take(topK)
+            .ToListAsync(ct);
+        var sessions = sessionOps.Select(MemorySessionService.ToDto).ToList();
+
         var (synth, synthText) = await TrySynthesizeAsync(
             bank, directives, recentFacts, topObs, stale, failures, stats, synthesize, ct);
         return new MemoryContextResult(dto, directives, recentFacts, topObs,
-            stale, failures, stats, synth, synthText);
+            stale, failures, stats, synth, synthText,
+            sessions.Where(s => s.Status == "running").ToList(),
+            sessions.FirstOrDefault(s => s.Status == "done"));
     }
 
     /// <summary>RF-002: chronological buckets ordered by OccurredStart
@@ -288,6 +302,15 @@ public sealed class MemoryContextService(
             sb.AppendLine("\n## Directives");
             foreach (var d in r.Directives)
                 sb.AppendLine($"- [p{d.Priority}] {d.Name ?? "(unnamed)"}");
+        }
+        var open = r.OpenSessions ?? [];
+        if (open.Count > 0 || r.LastCompletedSession is not null)
+        {
+            sb.AppendLine("\n## Sessions");
+            foreach (var s in open)
+                sb.AppendLine($"- OPEN {s.SessionId} since {s.StartedAt:u}{(s.Label is null ? "" : $" — {s.Label}")}");
+            if (r.LastCompletedSession is { } last)
+                sb.AppendLine($"- last ended {last.FinishedAt:u}{(last.Summary is null ? "" : $" — {last.Summary}")}");
         }
         if (r.RecentFacts.Count > 0)
         {

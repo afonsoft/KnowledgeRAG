@@ -18,5 +18,20 @@
     "maxCalls": 21,
     "budgetMs": 90000,
     "warnMs": 30000
+  },
+  "session-lifecycle": {
+    "maxCalls": 4,
+    "budgetMs": 30000,
+    "warnMs": 10000
+  },
+  "bank-merge-flow": {
+    "maxCalls": 6,
+    "budgetMs": 60000,
+    "warnMs": 20000
+  },
+  "knowledge-search": {
+    "maxCalls": 2,
+    "budgetMs": 30000,
+    "warnMs": 15000
   }
 }
