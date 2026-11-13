@@ -14,7 +14,7 @@ in deterministic mode: zero LLM, zero network beyond loopback.
 dotnet test tests/KnowledgeHub.Tests.Bench
 ```
 
-## Journeys (v1)
+## Journeys (v2)
 
 | Journey | Flow | Hard gate |
 |---|---|---|
@@ -22,6 +22,9 @@ dotnet test tests/KnowledgeHub.Tests.Bench
 | `session-grounding` | context → recall → list (the E30 session-start pattern, on a populated bank) | ≤3 calls |
 | `retain-dedupe-prompt` | retain → retain(same prompt+session) | ≤2 calls, proves `promptSeen:true` |
 | `retain-async-poll` | retain(async) → operations_get poll until done (≤20 × 100ms) | ≤21 calls |
+| `session-lifecycle` | session_begin → context (sees openSessions) → session_end → session_list | ≤4 calls |
+| `bank-merge-flow` | bank_create → retain → bank_create → merge → recall via OLD key → bank_list | ≤6 calls, proves tombstone redirect |
+| `knowledge-search` | search_knowledge × 2 — the RAG arm | ≤2 calls |
 
 ## Baselines
 

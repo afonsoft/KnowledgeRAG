@@ -12,9 +12,10 @@ metadata:
 # Knowledge MCP Hub
 
 You have access to a **Knowledge MCP Hub** — a persistent knowledge + memory
-server the user runs for you. Treat it as your long-term memory: ground
-yourself before assuming, record what you learn, and start each session by
-recovering context instead of asking the user to repeat it.
+server the user runs for you. Treat it as your long-term memory and use it
+**every session, not just when asked**: ground yourself before assuming,
+record what you learn, and start each session by recovering context instead
+of asking the user to repeat it.
 
 ## 1. Connection
 
@@ -57,7 +58,7 @@ check, not a blocker.
 
 ## 3. Session lifecycle
 
-**Session start** — before the first non-trivial task:
+**Session start** — ALWAYS, before the first non-trivial task:
 
 1. `memory_session_begin {sessionId, label}` — mark the session open on the
    bank (use your agent_chat threadId as sessionId). Idempotent — repeat
@@ -91,7 +92,7 @@ the old key keeps resolving, so nothing breaks.
 - `write_note(title, path, content)` — session log entries in the vault.
 - `write_knowledge(title, content)` — durable knowledge docs.
 
-**Session end / before compaction**:
+**Session end / before compaction** — ALWAYS:
 
 - `memory_session_end {sessionId, summary}` — close the session with where
   you stopped; the next `memory_context` shows it as "last ended".
@@ -128,8 +129,12 @@ exists.
 ## 6. Rules
 
 - Never commit, print, or log `aft_*` keys or secrets — anywhere.
-- `context_save`/`memory_retain` content is secret-scanned; a `422 blocked`
-  response means a credential leaked into your payload — remove it, don't retry verbatim.
+- `context_save`/`memory_retain`/`memory_session_end` content is
+  secret-scanned; a `422 blocked` response means a credential leaked into
+  your payload — remove it, don't retry verbatim.
+- Sensitive vault paths (`.env`, `*.pem`, `credentials*`, `.ssh/`…) are
+  deny-listed server-side — reads/writes/ingestion are refused; don't try
+  to work around it.
 - Prefer `memory_recall`/`search_knowledge` over asking the user to re-explain.
 - Retain facts, not transcripts — one meaningful fact per `memory_retain` chunk.
 - Respect per-bank boundaries: if the user names a bank, pass `bankKey`;

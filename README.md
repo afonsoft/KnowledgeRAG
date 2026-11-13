@@ -186,6 +186,18 @@ integrations change, and live sessions get `tools/list_changed`.
 | `context_save` | Persists a versioned working-context snapshot per repository (`repo` required, `owner/name`) — typed items, secret scan, `idempotencyKey` dedup |
 | `context_recovery` | Returns the latest/version/label snapshot compacted to `tokenBudget` (`none`/`elision`/`elision+summary`); repo-scoped cache with `stats.cacheHit` |
 | `context_compact` | Compacts `items` or `fromVersion` (deterministic elision + optional LLM summary with fallback); `save=true` persists as a new snapshot |
+| `memory_session_begin` / `memory_session_end` / `memory_session_list` | Session lifecycle on a bank — open (idempotent), close with a defense-screened summary, list. The `memory_context` digest surfaces open sessions and where the last one stopped |
+| `memory_context` | Deterministic session-start digest — directives, recent facts, top observations, stale models/pages, recent failures, open sessions, stats. Zero LLM cost; `synthesize:true` opt-in |
+| `memory_retain` | Persists typed facts (verbatim or LLM `extract` strategy; `mode:"async"` via operations) with prompt/session provenance + dedupe (`promptSeen`) |
+| `memory_recall` | Hybrid 4-arm retrieval over bank memory (facts, entities, embeddings, recency) — `sessionId` filter supported |
+| `memory_consolidate` / `memory_observation_history` | Refines raw facts into evidence-backed observations; audit history per observation |
+| `memory_reflect` | Answers a question over bank memory under bank directives — validated citations |
+| `memory_list` / `memory_get` / `memory_update` / `memory_delete` | Memory unit CRUD — list with filters, get by id, update text/tags/metadata, delete |
+| `memory_bank_*` | Bank CRUD + `memory_bank_merge` (unifies duplicate banks — all data moves to the target, the old key keeps resolving via tombstone redirect); `repo` arg derives `repo:owner/name` bank identity on every `memory_*` tool |
+| `memory_directives_*` | Bank-scoped directives (priorities/tags) that steer `memory_reflect` answers |
+| `memory_mental_models_*` / `memory_page_*` / `memory_pages_*` | Durable mental models and vault-projected pages with staleness tracking + refresh |
+| `memory_timeline` / `memory_stats` | Chronological buckets (`day`/`hour`/`week`) and bank-health stats (per bank or aggregated) |
+| `operations_*` | `list`/`get`/`cancel`/`retry` for ingestion jobs and async memory operations |
 | `search_graph_relationships` / `search_graph_diverse` | 2-hop relationship expansion; cluster-diversified results (low/med/high) |
 | `search_graph_episode` | Retrieval scoped to a single ingestion episode (`KgEpisode`) |
 | `ask_question`, `read_wiki_structure`, `read_wiki_contents` | DeepWiki upstream proxy |
@@ -211,7 +223,9 @@ same tools as follow-up candidates. Full arg table: `docs/en/API.md`.
 To connect an AI coding assistant (such as Claude Code, OpenCode, Cursor, or Devin) to the Knowledge MCP Hub, copy and paste the prompt below into the assistant:
 
 ```text
-Configure the Knowledge Hub MCP server in your environment to access organizational knowledge and RAG tools:
+Configure the Knowledge Hub MCP server in your environment. It is your
+persistent memory + knowledge layer: use it EVERY session, not just when
+asked. Treat the rules below as standing instructions.
 
 1. Connection Parameters:
 - URL: http://<host>:5000/mcp (or legacy SSE at http://<host>:5000/mcp/sse?access_token=aft_YOUR_KEY)
@@ -239,20 +253,46 @@ Configure the Knowledge Hub MCP server in your environment to access organizatio
 - Cursor / Devin / Generic:
   Add an HTTP MCP server with URL "http://<host>:5000/mcp" and header "Authorization: Bearer aft_YOUR_KEY".
 
-3. Onboarding Protocol (required on the first session):
-- First use ask_question to ask about the repository, consulting the
-  documentation with read_wiki_contents before assuming business rules.
-- When you finish each task, record what was done with write_note.
-- When you need to create persistent knowledge or memory, use write_knowledge.
+3. Bank identity (do this once per project):
+- Pass repo="<your repo slug>" (e.g. "myorg/myrepo" or the git URL) to every
+  memory_* call — the hub derives the bank as repo:owner/name, so all agents
+  on the same project converge on ONE memory bank.
+- If two banks ended up naming the same project, unify them with
+  memory_bank_merge — the old key keeps resolving.
 
-4. Recommended Tool Usage:
-- search_knowledge(query, topK): Run semantic and hybrid queries across vaults and documents before writing code.
-- ask_knowledge(question, topK): Ask questions to receive answers synthesized from indexed evidence with citations.
-- find_dependencies / analyze_impact: Inspect entity graphs (GraphRAG) when assessing architectural impact.
-- read_document / write_note / write_knowledge: Read documents and persist notes or knowledge into the connected Obsidian vault.
-- set_chat_settings / set_api_key_settings: Configure custom chat models or integration API keys for your session.
+4. Session start — ALWAYS, before the first non-trivial task (in order):
+  a) memory_session_begin {repo, sessionId: <your thread/chat id>, label}
+  b) memory_context {repo}          — free digest: open sessions, where the
+                                      last session stopped, directives,
+                                      recent facts, stale pages
+  c) context_recovery {repo}        — latest compacted work snapshot
+  d) memory_recall {repo, query}    — durable facts relevant to today's task
+  e) search_knowledge {query}       — ground business rules and conventions
+                                      BEFORE writing code; never assume
+Do all five in your first turn whenever a bank exists. On a brand-new
+project, session_begin + context are enough — the rest return empty.
 
-5. A2A Interoperability (Agent-to-Agent, v1.0):
+5. During work — retain proactively:
+- memory_retain {repo, content, strategy:"extract"} whenever you learn a
+  durable fact: decisions, conventions, gotchas, corrections, credentials
+  locations (NEVER the secrets themselves). Do not wait to be asked.
+- Pass sessionId + sourcePrompt on retains — dedupe is automatic.
+- write_note for session logs in the vault; write_knowledge for durable docs.
+- find_dependencies / analyze_impact before refactoring shared contracts.
+
+6. Session end / before compaction — ALWAYS:
+  a) memory_session_end {repo, sessionId, summary: "where you stopped"}
+  b) context_save {repo, items: [{type:"decision"|"note"|"summary", ...}]}
+The next session's memory_context will show your summary as "last ended".
+
+7. Hard rules:
+- NEVER print, commit, or store aft_* keys, tokens or secrets — writes are
+  secret-scanned and sensitive vault paths (.env, *.pem, credentials*) are
+  deny-listed server-side.
+- Writes returning isError with "blocked" mean the defense policy fired —
+  strip the secret and retry; never work around it.
+
+8. A2A Interoperability (Agent-to-Agent, v1.0):
 - Besides MCP, the hub publishes an A2A endpoint for agent-to-agent delegation:
   - Agent Card (anonymous discovery): http://<host>:5000/.well-known/agent-card.json
   - Endpoint: http://<host>:5000/a2a — JSON-RPC 2.0 and HTTP+JSON bindings (…/a2a/message:send)
@@ -434,6 +474,10 @@ Skills live in [`skills/`](skills/index.json); per-harness MCP wiring snippets i
   },
   "Mcp": {
     "SessionMode": "StatefulForInitializeClients"  // Stateless | Stateful | StatefulForInitializeClients
+  },
+  "Security": {
+    "PathDenyList": [],                        // extra glob patterns blocked in vault read/write/ingest (built-in defaults cover .env, *.pem, credentials*, .ssh/, tokens, keys…)
+    "PathAllowList": []                        // allow-list overrides a deny match (e.g. "credentials-rotation-runbook.md")
   },
   "Auth": {
     "AdminInitialPassword": "123qwe"           // seed password for admin user

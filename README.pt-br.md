@@ -188,6 +188,18 @@ integrações mudam, e sessões ativas recebem `tools/list_changed`.
 | `context_save` | Persiste snapshot versionado de contexto por repositório (`repo` obrigatório, `owner/name`) — itens tipados, scan de secrets, dedup por `idempotencyKey` |
 | `context_recovery` | Retorna o snapshot mais recente/versão/label compactado ao `tokenBudget` (`none`/`elision`/`elision+summary`); cache por repo com `stats.cacheHit` |
 | `context_compact` | Compacta `items` ou `fromVersion` (elision determinística + summarization LLM com fallback); `save=true` persiste como novo snapshot |
+| `memory_session_begin` / `memory_session_end` / `memory_session_list` | Ciclo de sessão por bank — abre (idempotente), fecha com resumo filtrado pelo defense, lista. O digest `memory_context` expõe sessões abertas e onde a última parou |
+| `memory_context` | Digest determinístico de abertura de sessão — diretivas, fatos recentes, top observations, models/páginas stale, falhas recentes, sessões abertas, stats. Custo LLM zero; `synthesize:true` opt-in |
+| `memory_retain` | Persiste fatos tipados (verbatim ou `extract` via LLM; `mode:"async"` via operations) com proveniência de prompt/sessão + dedupe (`promptSeen`) |
+| `memory_recall` | Retrieval híbrido de 4 braços sobre a memória do bank (fatos, entidades, embeddings, recência) — filtro `sessionId` suportado |
+| `memory_consolidate` / `memory_observation_history` | Refina fatos brutos em observações com evidência; histórico de auditoria por observação |
+| `memory_reflect` | Responde uma pergunta sobre a memória do bank sob diretivas do bank — citações validadas |
+| `memory_list` / `memory_get` / `memory_update` / `memory_delete` | CRUD de units de memória — lista com filtros, get por id, update de texto/tags/metadata, delete |
+| `memory_bank_*` | CRUD de banks + `memory_bank_merge` (unifica banks duplicados — tudo migra para o target e a key antiga continua resolvendo via tombstone redirect); arg `repo` deriva identidade `repo:owner/name` em toda tool `memory_*` |
+| `memory_directives_*` | Diretivas do bank (prioridades/tags) que direcionam respostas do `memory_reflect` |
+| `memory_mental_models_*` / `memory_page_*` / `memory_pages_*` | Mental models duráveis e páginas projetadas no vault com tracking de staleness + refresh |
+| `memory_timeline` / `memory_stats` | Buckets cronológicos (`day`/`hour`/`week`) e stats de saúde do bank (por bank ou agregado) |
+| `operations_*` | `list`/`get`/`cancel`/`retry` para jobs de ingestão e operações de memória async |
 | `search_graph_relationships` / `search_graph_diverse` | Expansão de relacionamentos em 2 hops; resultados diversificados por cluster (low/med/high) |
 | `search_graph_episode` | Retrieval escopado a um episódio de ingestão (`KgEpisode`) |
 | `ask_question`, `read_wiki_structure`, `read_wiki_contents` | Proxy upstream DeepWiki |
@@ -213,7 +225,9 @@ mesmas tools como candidatos de follow-up. Tabela completa: `docs/pt/API.md`.
 Para conectar um agente de IA ou assistente de código (como Claude Code, OpenCode, Cursor ou Devin) ao Knowledge MCP Hub, copie e envie o prompt abaixo para o assistente:
 
 ```text
-Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de conhecimento e ferramentas RAG da organização:
+Configure o servidor MCP do Knowledge Hub no seu ambiente. Ele é sua camada
+persistente de memória + conhecimento: use-o em TODA sessão, não só quando
+pedirem. Trate as regras abaixo como instruções permanentes.
 
 1. Parâmetros de Conexão:
 - URL: http://<host>:5000/mcp (ou SSE legado em http://<host>:5000/mcp/sse?access_token=aft_SUA_CHAVE)
@@ -241,20 +255,47 @@ Configure o servidor MCP do Knowledge Hub no seu ambiente para acessar a base de
 - Cursor / Devin / Genérico:
   Adicione o servidor MCP HTTP com URL "http://<host>:5000/mcp" e cabeçalho "Authorization: Bearer aft_SUA_CHAVE".
 
-3. Protocolo de Onboarding (obrigatório na primeira sessão):
-- Primeiro use ask_question para perguntar sobre o repositório, consultando a
-  documentação com read_wiki_contents antes de assumir regras de negócio.
-- Ao concluir cada tarefa, registre o que foi feito com write_note.
-- Quando precisar criar conhecimento ou memória persistente, use write_knowledge.
+3. Identidade do bank (uma vez por projeto):
+- Passe repo="<slug do seu repo>" (ex.: "minhaorg/meurepo" ou a URL git) em
+  toda chamada memory_* — o hub deriva o bank como repo:owner/name, então
+  todos os agentes do mesmo projeto convergem para UM bank de memória.
+- Se dois banks acabaram nomeando o mesmo projeto, unifique com
+  memory_bank_merge — a key antiga continua resolvendo.
 
-4. Recomendações de Uso das Ferramentas:
-- search_knowledge(query, topK): Execute buscas semânticas e híbridas (BM25 + vetorial) para obter contexto antes de implementar código.
-- ask_knowledge(question, topK): Faça perguntas conceituais para obter respostas sintetizadas e fundamentadas com citações.
-- find_dependencies / analyze_impact: Avalie o grafo de entidades e dependências (GraphRAG) ao planejar refatorações.
-- read_document / write_note / write_knowledge: Acesse documentos e registre notas ou conhecimento no cofre Obsidian conectado.
-- set_chat_settings / set_api_key_settings: Configure seu modelo de chat ou chaves de integração upstream se desejar overrides para sua sessão.
+4. Início de sessão — SEMPRE, antes da primeira tarefa não trivial (em ordem):
+  a) memory_session_begin {repo, sessionId: <seu thread/chat id>, label}
+  b) memory_context {repo}          — digest gratuito: sessões abertas, onde
+                                      a última sessão parou, diretivas,
+                                      fatos recentes, páginas stale
+  c) context_recovery {repo}        — snapshot de trabalho mais recente
+  d) memory_recall {repo, query}    — fatos duráveis relevantes à tarefa
+  e) search_knowledge {query}       — fundamente regras de negócio e
+                                      convenções ANTES de escrever código;
+                                      nunca assuma
+Execute os cinco no seu primeiro turno sempre que houver um bank. Num
+projeto novo, session_begin + context bastam — o resto retorna vazio.
 
-5. Interoperabilidade A2A (Agent-to-Agent, v1.0):
+5. Durante o trabalho — retenha proativamente:
+- memory_retain {repo, content, strategy:"extract"} sempre que aprender um
+  fato durável: decisões, convenções, gotchas, correções, localizações de
+  credenciais (NUNCA os segredos em si). Não espere ser pedido.
+- Passe sessionId + sourcePrompt nos retains — dedupe é automático.
+- write_note para logs de sessão no vault; write_knowledge para docs duráveis.
+- find_dependencies / analyze_impact antes de refatorar contratos compartilhados.
+
+6. Fim de sessão / antes de compactação — SEMPRE:
+  a) memory_session_end {repo, sessionId, summary: "onde você parou"}
+  b) context_save {repo, items: [{type:"decision"|"note"|"summary", ...}]}
+O memory_context da próxima sessão mostrará seu resumo como "last ended".
+
+7. Regras rígidas:
+- NUNCA exiba, commite ou armazene chaves aft_*, tokens ou segredos — writes
+  passam por secret-scan e paths sensíveis do vault (.env, *.pem,
+  credentials*) estão em deny-list no servidor.
+- Writes retornando isError com "blocked" significam que a política de
+  defesa disparou — remova o segredo e retente; nunca contorne.
+
+8. Interoperabilidade A2A (Agent-to-Agent, v1.0):
 - Além do MCP, o hub publica um endpoint A2A para delegação entre agentes:
   - Agent Card (descoberta, anônimo): http://<host>:5000/.well-known/agent-card.json
   - Endpoint: http://<host>:5000/a2a — bindings JSON-RPC 2.0 e HTTP+JSON (…/a2a/message:send)
@@ -422,6 +463,10 @@ Cada SDK embrulha o client MCP oficial da linguagem (sem reimplementar protocolo
   },
   "Mcp": {
     "SessionMode": "StatefulForInitializeClients"  // Stateless | Stateful | StatefulForInitializeClients
+  },
+  "Security": {
+    "PathDenyList": [],                        // padrões glob extras bloqueados em read/write/ingestão do vault (defaults cobrem .env, *.pem, credentials*, .ssh/, tokens, keys…)
+    "PathAllowList": []                        // allow-list sobrepõe um deny match (ex.: "credentials-rotation-runbook.md")
   },
   "Auth": {
     "AdminInitialPassword": "123qwe"           // senha seed para usuário admin

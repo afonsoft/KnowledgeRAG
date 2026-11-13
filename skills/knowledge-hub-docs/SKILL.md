@@ -81,7 +81,7 @@ All `/api/*` endpoints require authentication (cookie session or `Authorization:
 |---|---|
 | `GET /api/ingestion/jobs?sourceId=&status=&limit=` | list jobs |
 | `GET /api/ingestion/jobs/{id}` · `POST /api/ingestion/jobs/{id}/cancel` | job detail / cancel (`409` when running) |
-| `GET/POST /api/memory/...` | memory banks, units, recall/reflect, consolidation, mental models & pages — mirror of the `memory_*` MCP tools |
+| `GET/POST /api/memory/...` | memory banks (+ `merge`), units, recall/reflect, consolidation, mental models & pages, session lifecycle (`banks/{key}/sessions/begin|end`), context/timeline/stats — mirror of the `memory_*` MCP tools |
 
 ## Troubleshooting
 
