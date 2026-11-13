@@ -16,6 +16,8 @@ public sealed class MemorySessionService(
     KnowledgeHubDbContext db, MemoryBankService banks, IMemoryDefenseScreen defense)
 {
     public const string SessionKind = "session";
+    private const string StatusRunning = "running";
+    private const string StatusDone = "done";
     private const int LabelCap = 500;
     private const int SummaryCap = 2000;
 
@@ -49,7 +51,7 @@ public sealed class MemorySessionService(
 
         var open = await db.MemoryOperations
             .FirstOrDefaultAsync(o => o.BankId == bank.Id && o.Kind == SessionKind
-                && o.Status == "running" && o.PayloadJson.Contains($"\"sessionId\":\"{id}\""), ct);
+                && o.Status == StatusRunning && o.PayloadJson.Contains($"\"sessionId\":\"{id}\""), ct);
         if (open is not null)
             return new BeginResult(id, bank.Id, open.StartedAt ?? open.CreatedAt, true);
 
@@ -58,7 +60,7 @@ public sealed class MemorySessionService(
             BankId = bank.Id,
             ApiKeyId = scope,
             Kind = SessionKind,
-            Status = "running",
+            Status = StatusRunning,
             PayloadJson = JsonSerializer.Serialize(new { sessionId = id, label }),
             StartedAt = DateTime.UtcNow,
             CreatedAt = DateTime.UtcNow,
@@ -84,7 +86,7 @@ public sealed class MemorySessionService(
                 && o.PayloadJson.Contains($"\"sessionId\":\"{id}\""))
             .OrderByDescending(o => o.StartedAt)
             .FirstOrDefaultAsync(ct);
-        if (op is null || op.Status != "running")
+        if (op is null || op.Status != StatusRunning)
             return new EndResult(id, false, true);
 
         // Defense-screened like retained content — MemoryDefenseException
@@ -92,7 +94,7 @@ public sealed class MemorySessionService(
         var screened = await defense.ScreenAsync(summary ?? "", bank, ct);
 
         var now = DateTime.UtcNow;
-        op.Status = "done";
+        op.Status = StatusDone;
         op.FinishedAt = now;
         op.ResultJson = JsonSerializer.Serialize(new { summary = screened });
         await db.SaveChangesAsync(ct);
@@ -106,7 +108,7 @@ public sealed class MemorySessionService(
         var bank = await banks.ResolveAsync(bankKey, ct, create: false);
         var rows = await db.MemoryOperations.AsNoTracking()
             .Where(o => o.BankId == bank.Id && o.Kind == SessionKind
-                && (!openOnly || o.Status == "running"))
+                && (!openOnly || o.Status == StatusRunning))
             .OrderByDescending(o => o.StartedAt)
             .Take(Math.Clamp(limit, 1, 100))
             .ToListAsync(ct);
@@ -123,7 +125,10 @@ public sealed class MemorySessionService(
             label = doc.RootElement.TryGetProperty("label", out var l) && l.ValueKind == JsonValueKind.String
                 ? l.GetString() : null;
         }
-        catch (JsonException) { }
+        catch (JsonException)
+        {
+            // Malformed payload — fall back to the op row fields below.
+        }
         if (o.ResultJson is { } rj)
         {
             try
@@ -132,7 +137,10 @@ public sealed class MemorySessionService(
                 summary = doc.RootElement.TryGetProperty("summary", out var s) && s.ValueKind == JsonValueKind.String
                     ? s.GetString() : null;
             }
-            catch (JsonException) { }
+            catch (JsonException)
+            {
+                // Malformed result — summary stays null.
+            }
         }
         return new SessionDto(sessionId ?? o.Id.ToString("N"), label, o.Status,
             o.StartedAt ?? o.CreatedAt, o.FinishedAt, summary);

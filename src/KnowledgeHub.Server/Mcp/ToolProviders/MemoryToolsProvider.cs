@@ -22,6 +22,8 @@ public sealed class MemoryToolsProvider : IToolProvider
     private const string ArgBankKey = "bankKey";
     private const string ArgConfirm = "confirm";
     private const string ArgContent = "content";
+    private const string ArgSessionId = "sessionId";
+    private const string ArgLimit = "limit";
 
     private static readonly JsonObject RetainSchema = JsonNode.Parse("""
         {"type":"object","properties":{
@@ -709,7 +711,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalString(ctx, "documentId"),
             ToolArgs.OptionalString(ctx, "documentTitle"),
             ToolArgs.OptionalString(ctx, "sourcePrompt"),
-            ToolArgs.OptionalString(ctx, "sessionId"),
+            ToolArgs.OptionalString(ctx, ArgSessionId),
             ToolArgs.OptionalString(ctx, "origin"));
         var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo"));
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
@@ -754,7 +756,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalString(ctx, "window"),
             ToolArgs.OptionalIntOrNull(ctx, "budget"),
             ToolArgs.OptionalString(ctx, "factType"),
-            ToolArgs.OptionalString(ctx, "sessionId"));
+            ToolArgs.OptionalString(ctx, ArgSessionId));
         var recall = ctx.Services.GetRequiredService<MemoryRecallService>();
         var result = await recall.RecallAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")), req, ct);
         return await ToolResults.Structured($"{result.Results.Count} memor(ies)", result);
@@ -769,9 +771,9 @@ public sealed class MemoryToolsProvider : IToolProvider
             MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
             ToolArgs.OptionalString(ctx, "factType"),
             ToolArgs.OptionalString(ctx, "tag"),
-            ToolArgs.OptionalInt(ctx, "limit", 20, 200),
+            ToolArgs.OptionalInt(ctx, ArgLimit, 20, 200),
             ToolArgs.OptionalInt(ctx, "offset", 0, 1_000_000),
-            ToolArgs.OptionalString(ctx, "sessionId"), ct);
+            ToolArgs.OptionalString(ctx, ArgSessionId), ct);
         return await ToolResults.Structured($"{items.Count} unit(s)", new { count = items.Count, units = items });
     }
 
@@ -1091,7 +1093,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         {
             var hits = await svc.SearchPagesAsync(EffKey(ctx),
                 ToolArgs.RequiredString(ctx, "query"),
-                ToolArgs.OptionalInt(ctx, "limit", 10, 50), ct);
+                ToolArgs.OptionalInt(ctx, ArgLimit, 10, 50), ct);
             return await ToolResults.Structured($"{hits.Count} hit(s)", new { count = hits.Count, hits });
         }
         catch (MemoryBadRequestException ex)
@@ -1244,7 +1246,7 @@ public sealed class MemoryToolsProvider : IToolProvider
                 ParseDate(ToolArgs.OptionalString(ctx, "to"))?.UtcDateTime,
                 ToolArgs.OptionalString(ctx, "factType") is { } ft ? [ft] : null,
                 ToolArgs.OptionalString(ctx, "groupBy") ?? "day",
-                ToolArgs.OptionalInt(ctx, "limit", 50, 200), ct);
+                ToolArgs.OptionalInt(ctx, ArgLimit, 50, 200), ct);
             return await ToolResults.Structured($"{result.Buckets.Count} bucket(s)", result);
         }
         catch (MemoryBadRequestException ex)
@@ -1277,7 +1279,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         {
             var r = await svc.BeginAsync(
                 MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
-                ToolArgs.OptionalString(ctx, "sessionId"),
+                ToolArgs.OptionalString(ctx, ArgSessionId),
                 ToolArgs.OptionalString(ctx, "label"), ct);
             return await ToolResults.Structured(
                 r.AlreadyOpen ? "session already open" : "session open", r);
@@ -1295,7 +1297,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         {
             var r = await svc.EndAsync(
                 MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
-                ToolArgs.RequiredString(ctx, "sessionId"),
+                ToolArgs.RequiredString(ctx, ArgSessionId),
                 ToolArgs.OptionalString(ctx, "summary"), ct);
             return await ToolResults.Structured(
                 r.Ended ? "session ended" : "session already closed", r);
@@ -1318,7 +1320,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             var items = await svc.ListAsync(
                 MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ToolArgs.OptionalBool(ctx, "openOnly") == true,
-                ToolArgs.OptionalInt(ctx, "limit", 20, 100), ct);
+                ToolArgs.OptionalInt(ctx, ArgLimit, 20, 100), ct);
             return await ToolResults.Structured($"{items.Count} session(s)",
                 new { count = items.Count, sessions = items });
         }

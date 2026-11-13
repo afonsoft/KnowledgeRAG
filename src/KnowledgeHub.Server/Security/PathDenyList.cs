@@ -48,5 +48,6 @@ public sealed class PathDenyList
 
     private static Regex ToRegex(string pattern) => new(
         "^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\?", ".") + "$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
 }
