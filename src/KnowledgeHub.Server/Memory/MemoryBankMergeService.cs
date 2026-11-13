@@ -25,6 +25,23 @@ public sealed class MemoryBankMergeService(KnowledgeHubDbContext db, MemoryBankS
     public async Task<MemoryBankMergeResult> MergeAsync(
         string sourceKey, string targetKey, CancellationToken ct)
     {
+        // RF-001: re-parenting + tombstone commit atomically — ExecuteUpdate
+        // statements run outside the SaveChanges batch, so an explicit
+        // transaction (execution-strategy aware for retrying providers) is
+        // required for "one transaction".
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var result = await MergeCoreAsync(sourceKey, targetKey, ct);
+            await tx.CommitAsync(ct);
+            return result;
+        });
+    }
+
+    private async Task<MemoryBankMergeResult> MergeCoreAsync(
+        string sourceKey, string targetKey, CancellationToken ct)
+    {
         var scope = await banks.ScopeKeyAsync(ct);
         var source = await db.MemoryBanks
             .FirstOrDefaultAsync(b => b.BankKey == sourceKey.Trim() && b.ApiKeyId == scope, ct)
