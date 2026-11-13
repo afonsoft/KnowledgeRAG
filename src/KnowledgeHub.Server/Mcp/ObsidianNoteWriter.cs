@@ -55,7 +55,8 @@ public static class ObsidianNoteWriter
     }
 
     /// <summary>Map a relative vault path to a canonical full path, or throw InvalidParams.</summary>
-    public static string SafePath(string vaultRoot, string relativePath, bool forWrite)
+    public static string SafePath(string vaultRoot, string relativePath, bool forWrite,
+        Security.PathDenyList? denyList = null)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
             throw new McpProtocolException("argument 'path' must not be empty", McpErrorCode.InvalidParams);
@@ -72,6 +73,13 @@ public static class ObsidianNoteWriter
         if (!full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(full, vaultRoot, StringComparison.OrdinalIgnoreCase))
             throw new McpProtocolException("path escapes the vault root", McpErrorCode.InvalidParams);
+
+        // SPEC-20261114-path-denylist RF-002: sensitive names denied even
+        // inside the vault root. Never echo the matched pattern (oracle).
+        if (denyList?.IsDenied(normalized) == true)
+            throw new McpProtocolException(
+                $"path '{Path.GetFileName(normalized)}' is denied by policy",
+                McpErrorCode.InvalidParams);
 
         return full;
     }

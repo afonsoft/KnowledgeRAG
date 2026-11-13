@@ -34,6 +34,7 @@ public sealed class IngestionService : IIngestionService
     private readonly ILogger<IngestionService> logger;
     private readonly Caching.ICacheInvalidationBus? invalidationBus;
     private readonly Microsoft.Extensions.Caching.Hybrid.HybridCache? hybrid;
+    private readonly Security.PathDenyList pathDeny;
 
     public IngestionService(IngestionServiceDeps deps, IConfiguration configuration,
         ILogger<IngestionService> logger, Caching.ICacheInvalidationBus? invalidationBus = null)
@@ -51,6 +52,7 @@ public sealed class IngestionService : IIngestionService
         hybrid = deps.Hybrid;
         this.logger = logger;
         this.invalidationBus = invalidationBus;
+        pathDeny = new Security.PathDenyList(configuration);
     }
 
     private const string SyncStatusFailed = "failed";
@@ -1320,7 +1322,7 @@ public sealed class IngestionService : IIngestionService
         }
     }
 
-    private static IEnumerable<string> EnumerateMarkdown(string root)
+    private IEnumerable<string> EnumerateMarkdown(string root)
     {
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
         foreach (var file in Directory.EnumerateFiles(root, "*.md", options))
@@ -1337,10 +1339,13 @@ public sealed class IngestionService : IIngestionService
 
     private static readonly char[] PathSeparators = [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar];
 
-    private static bool IsExcluded(string relativePath)
+    private bool IsExcluded(string relativePath)
     {
         var segments = relativePath.Split(PathSeparators);
-        return segments.Any(s => s.StartsWith('.') || s.Equals(".obsidian", StringComparison.OrdinalIgnoreCase));
+        // SPEC-20261114-path-denylist RF-003: dot-segments plus sensitive
+        // names (credentials.md, secrets.md…) are never ingested.
+        return segments.Any(s => s.StartsWith('.') || s.Equals(".obsidian", StringComparison.OrdinalIgnoreCase))
+            || pathDeny.IsDenied(relativePath);
     }
 
     private static SyncResultDto Fail(Guid sourceId, string reason, double ms = 0) =>

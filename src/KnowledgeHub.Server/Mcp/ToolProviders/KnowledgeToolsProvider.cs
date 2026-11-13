@@ -675,7 +675,7 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         };
 
         return target.SourceType == SourceType.ObsidianVault
-            ? await WriteToVaultAsync(db, ingestion, target, note, ct)
+            ? await WriteToVaultAsync(ctx.Services, db, ingestion, target, note, ct)
             : await WriteToDocumentAsync(ctx, db, target, slugs[target.Id], note, ct);
     }
 
@@ -683,13 +683,14 @@ public sealed class KnowledgeToolsProvider : IToolProvider
         string Title, string Content, string[]? Tags, WriteOriginContext? Origin);
 
     private static async ValueTask<CallToolResult> WriteToVaultAsync(
-        KnowledgeHubDbContext db, IngestionService ingestion,
+        IServiceProvider services, KnowledgeHubDbContext db, IngestionService ingestion,
         Domain.Entities.KnowledgeSource target, NoteWrite note, CancellationToken ct)
     {
         var root = IngestionService.ResolveVaultRoot(target.ConfigurationJson)
             ?? throw new McpProtocolException("vault source has no configured path", McpErrorCode.InvalidParams);
         var relative = ObsidianNoteWriter.TitleToFileName(note.Title);
-        var full = ObsidianNoteWriter.SafePath(root, relative, forWrite: true);
+        var full = ObsidianNoteWriter.SafePath(root, relative, forWrite: true,
+            services.GetService<Security.PathDenyList>());
 
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         await File.WriteAllTextAsync(full, ObsidianNoteWriter.WithFrontmatter(note.Content, note.Tags, note.Origin), ct);

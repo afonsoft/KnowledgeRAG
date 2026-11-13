@@ -525,6 +525,7 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Memory.MemoryConfigResolver>();
         // SPEC-20261111-memory-defense.
         services.AddSingleton<Security.ISecretScanner, Security.SecretScanner>();
+        services.AddSingleton<Security.PathDenyList>();
         services.AddSingleton<Security.DefensePolicyResolver>();
         services.AddSingleton<Security.MemoryDefense>();
         services.AddScoped<Memory.IMemoryDefenseScreen, Memory.MemoryDefenseScreen>();
