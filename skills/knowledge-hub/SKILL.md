@@ -74,6 +74,12 @@ Supporting reads while planning: `memory_timeline` (what happened when,
 bucketed by day/hour/week) and `memory_stats` (bank health — consolidation
 backlog, embedding coverage, observation proof counts).
 
+**Bank identity** — prefer passing `repo` (your repo slug `owner/name` or git
+URL) over a free-form `bankKey`: repo-derived banks converge across agents.
+When two banks ended up naming the same project, unify them with
+`memory_bank_merge {sourceKey, targetKey}` — memories move to the target and
+the old key keeps resolving, so nothing breaks.
+
 **During work** — when you learn something worth keeping:
 
 - `memory_retain(content, strategy: "extract")` — durable facts: decisions,
@@ -122,3 +128,15 @@ exists.
 - Retain facts, not transcripts — one meaningful fact per `memory_retain` chunk.
 - Respect per-bank boundaries: if the user names a bank, pass `bankKey`;
   otherwise the server default applies.
+
+## 7. Delegation triggers
+
+Measured thresholds (see `tests/KnowledgeHub.Tests.Bench`) — when a subagent
+pays off vs working inline:
+
+| Situation | Threshold | Action |
+|---|---|---|
+| Codebase exploration | >3 search/read calls or >10k tokens of reading expected | Delegate to an explore subagent — it returns a digest, not raw output |
+| Parallel writers | ≥2 disjoint file surfaces (~100+ lines apart, no shared state) | One subagent per surface, in parallel |
+| Independent verification | Named risk only: security, data loss, public contract, migration | Dedicated verifier after implementation |
+| Everything else | Below thresholds | Work inline — delegation costs a context round-trip |

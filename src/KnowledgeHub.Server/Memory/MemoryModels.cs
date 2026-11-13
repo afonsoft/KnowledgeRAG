@@ -96,7 +96,9 @@ public sealed record MemoryUnitDto(
 public sealed record MemoryBankDto(
     Guid Id, string BankKey, string Name, string? Mission,
     string? DispositionJson, string? ConfigJson,
-    DateTime CreatedAt, int UnitCount);
+    DateTime CreatedAt, int UnitCount,
+    /// <summary>SPEC-20261113: true when this bank is a merge tombstone.</summary>
+    bool Merged = false);
 
 /// <summary>One fact extracted by the LLM in extract mode.</summary>
 public sealed record ExtractedFact(

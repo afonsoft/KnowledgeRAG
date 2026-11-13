@@ -114,7 +114,7 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
          "document_update", "document_delete",
          "operations_cancel", "operations_retry",
          "memory_retain", "memory_update", "memory_delete",
-         "memory_bank_create", "memory_bank_update", "memory_bank_delete",
+         "memory_bank_create", "memory_bank_update", "memory_bank_delete", "memory_bank_merge",
          "memory_directives_create", "memory_directives_update", "memory_directives_delete",
          "memory_mental_models_create", "memory_mental_models_update", "memory_mental_models_delete", "memory_mental_model_refresh",
          "memory_page_create", "memory_page_update", "memory_page_delete",
@@ -133,7 +133,7 @@ public class McpContractTests : IClassFixture<McpContractTests.Fixture>
          "memory_mental_models_delete", "memory_mental_model_refresh",
          "memory_pages_tree", "memory_pages_search", "memory_page_get", "memory_page_create", "memory_page_update", "memory_page_delete",
          "memory_consolidate", "memory_observation_history", "source_rescan",
-         "memory_context", "memory_timeline", "memory_stats"];
+         "memory_context", "memory_timeline", "memory_stats", "memory_bank_merge"];
 
     [Fact]
     public async Task ToolCatalog_NamesSchemasAndHints_MatchPinnedContract()

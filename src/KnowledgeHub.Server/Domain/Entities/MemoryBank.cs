@@ -25,6 +25,12 @@ public sealed class MemoryBank
     public string? DispositionJson { get; set; }
     /// <summary>Per-bank config overrides (RF-007 hierarchy: bank > key > global).</summary>
     public string? ConfigJson { get; set; }
+
+    /// <summary>SPEC-20261113-memory-bank-merge: set when this bank was merged
+    /// into another — resolution follows the pointer (tombstone redirect).</summary>
+    public Guid? MergedIntoBankId { get; set; }
+    public MemoryBank? MergedInto { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<MemoryUnit> Units { get; set; } = [];

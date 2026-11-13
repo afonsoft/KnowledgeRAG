@@ -1,0 +1,22 @@
+{
+  "memory-lifecycle": {
+    "maxCalls": 7,
+    "budgetMs": 60000,
+    "warnMs": 20000
+  },
+  "session-grounding": {
+    "maxCalls": 3,
+    "budgetMs": 30000,
+    "warnMs": 10000
+  },
+  "retain-dedupe-prompt": {
+    "maxCalls": 2,
+    "budgetMs": 30000,
+    "warnMs": 10000
+  },
+  "retain-async-poll": {
+    "maxCalls": 21,
+    "budgetMs": 90000,
+    "warnMs": 30000
+  }
+}

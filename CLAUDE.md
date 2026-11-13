@@ -107,16 +107,29 @@ O Knowledge MCP Hub disponibiliza um servidor MCP nativo para agentes de IA e cl
 - **Asserts determinísticos primeiro**: regras, parsing e contratos usam `Assert.*` rígido em testes unitários rápidos. **Nunca** hard-assert campos internos decididos por LLM (ex.: `fact_type`, classificação, atribuição).
 - **LLM-as-judge** (`tests/KnowledgeHub.Tests.Unit/Testing/LlmJudgeAssert.cs`): para comportamento não-determinístico use `await LlmJudgeAssert.PassesAsync(criteria, actual)` — julga uma *propriedade* do output, nunca a string exata. Configurar via env `Tests__LlmJudge__Endpoint`/`Model`/`ApiKey` (qualquer endpoint OpenAI-compatible); sem config o teste é no-op determinístico (xunit v2 não honra skip dinâmico no console/CI), nunca falha máquina sem judge.
 - **Blackbox** (`tests/KnowledgeHub.Tests.Blackbox/`): suite separada que exerce o app **só por seams públicos** (MCP JSON-RPC, REST, SDK publicado) — sem internals. Toda capability nomeável nova deve ganhar um cenário blackbox. Smoke atual: `initialize → tools/list → tools/call` com `isError=false`.
+- **Journey bench** (`tests/KnowledgeHub.Tests.Bench/`, SPEC-20261113): jornadas MCP nomeadas medem calls/latência/payload contra `tests/eval/journeys/baseline.json` — gate hard em **call count** (fricção estrutural) + `budgetMs` generoso (CI noise); `warnMs` é informativo. Jornada nova exige entrada no baseline: `BENCH_UPDATE_BASELINE=1 dotnet test tests/KnowledgeHub.Tests.Bench` regera o arquivo (só local, nunca CI).
 - **Paridade de migrations** (`Conventions/MigrationParityTests.cs`): migration adicionada a `src/KnowledgeHub.Server/Migrations/` exige contraparte de mesmo *name-base* em `Migrations/Postgres/` (e vice-versa). Opt-out explícito por arquivo: comentário `// dialect: sqlite-only` ou `// dialect: postgres-only`. Baseline: migrações SQLite anteriores a `PostgresInitial` são grandfathered.
 - **`.env.example` sync** (`Conventions/EnvExampleTests.cs`): todo `Environment.GetEnvironmentVariable("VAR")` em `src/` exige entrada em `.env.example` (comentada ou não); opt-out por linha com `// env:optional`.
 - **Config hierárquica vs estática**: campo é **hierárquico** quando resolve por escopo (env → key/caller → bank/source) e **estático** quando é infra do processo (port, DB path, session mode). Checklist ao adicionar config: (1) decidir hierárquica vs estática; (2) registrar o default em `appsettings*.json` ou `.env.example`; (3) ler via `IConfiguration`/per-key settings conforme o tipo; (4) documentar na tabela de config dos docs quando pública; (5) teste cobrindo o override por escopo quando hierárquica.
 - **Gates antes de PR**: rodar `dotnet format --verify-no-changes`, `dotnet test` completo, e invocar a skill `code-review-and-quality` no diff. Feature com componente externo (conector, proxy, provider) exige: testes de integração reais do sistema externo + cenário blackbox quando a capability é pública + registro de config/docs.
+
+## Delegation Triggers (SPEC-20261113-agent-journey-bench RF-004)
+
+Thresholds calibrados pelo journey bench — decida inline vs delegar:
+
+| Situação | Threshold medido | Ação |
+|---|---|---|
+| Exploração de código | >3 chamadas de search/read **ou** >10k tokens de leitura esperados | Delegar a `subagent_explore` (contexto isolado, retorna síntese) |
+| Escritores paralelos | ≥2 superfícies de arquivo **disjuntas** (~100+ linhas de separação, sem shared state) | Subagents paralelos, um por superfície |
+| Verificação independente | Risco nomeado (security, perda de dados, contrato público, migration) | Verifier dedicado após a implementação |
+| Resto | Abaixo dos thresholds | Trabalhar inline — delegação custa um round-trip de contexto |
 
 ## Comandos
 
 ```bash
 dotnet build KnowledgeHub.slnx                    # build all
 dotnet test                                       # unit + integration tests
+dotnet test tests/KnowledgeHub.Tests.Bench        # journey bench vs baseline
 dotnet format KnowledgeHub.slnx --verify-no-changes  # formatting gate
 dotnet run --project src/KnowledgeHub.Server      # serve http://localhost:5000
 dotnet ef database update -p src/KnowledgeHub.Server  # apply EF migrations

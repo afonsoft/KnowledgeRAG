@@ -531,6 +531,7 @@ public static class KnowledgeHubServiceCollectionExtensions
         services.AddSingleton<Memory.IMemoryRetainQueue, Memory.MemoryRetainQueue>();
         services.AddHostedService<Memory.MemoryRetainWorker>();
         services.AddScoped<Memory.MemoryBankService>();
+        services.AddScoped<Memory.MemoryBankMergeService>();
         services.AddScoped<Memory.MemoryEntityLinker>();
         services.AddScoped(sp => new Memory.MemoryRetainDeps(
             sp.GetRequiredService<Memory.MemoryBankService>(),

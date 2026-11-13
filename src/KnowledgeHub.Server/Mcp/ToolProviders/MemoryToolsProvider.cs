@@ -37,7 +37,8 @@ public sealed class MemoryToolsProvider : IToolProvider
           "documentTitle":{"type":["string","null"],"description":"Title for the logical document"},
           "sourcePrompt":{"type":["string","null"],"description":"Originating prompt/turn — defense-screened, capped at 2000 chars, deduped per (bank, sessionId)"},
           "sessionId":{"type":["string","null"],"description":"Caller session/thread id — map your agent_chat threadId here"},
-          "origin":{"type":["string","null"],"enum":["explicit","passive","import","system",null],"description":"Who produced the content (default explicit)"}
+          "origin":{"type":["string","null"],"enum":["explicit","passive","import","system",null],"description":"Who produced the content (default explicit)"},
+          "repo":{"type":["string","null"],"description":"Repository slug (owner/name or github URL) — used as bank when bankKey absent"}
         },"required":["content"],
         "examples":[{"content":"Deploy da API falhou por falta de memória no nó 3","strategy":"verbatim"},
                     {"bankKey":"projeto-x","content":"O time decidiu migrar para Postgres em março","mode":"async"},
@@ -53,7 +54,8 @@ public sealed class MemoryToolsProvider : IToolProvider
           "window":{"type":["string","null"],"description":"Temporal window — whitelist: 1h, 6h, 24h, 7d — enables the temporal arm"},
           "budget":{"type":["integer","null"],"description":"Token budget for returned texts"},
           "factType":{"type":["string","null"],"enum":["world","experience","observation",null],"description":"Restrict to one fact type"},
-          "sessionId":{"type":["string","null"],"description":"Restrict to units retained under this session id"}
+          "sessionId":{"type":["string","null"],"description":"Restrict to units retained under this session id"},
+          "repo":{"type":["string","null"],"description":"Repository slug — used as bank when bankKey absent"}
         },"required":["query"],
         "examples":[{"query":"quando foi o deploy que falhou?","window":"7d"},
                     {"query":"decisões sobre Postgres","topK":5,"factType":"experience"}]}
@@ -303,6 +305,14 @@ public sealed class MemoryToolsProvider : IToolProvider
           "confirm":{"type":"boolean","description":"Must be true — deletes the bank and ALL its memories"}
         },"required":["bankKey","confirm"],
         "examples":[{"bankKey":"projeto-x","confirm":true}]}
+        """)!.AsObject();
+
+    private static readonly JsonObject BankMergeSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "sourceKey":{"type":"string","description":"Bank to merge FROM (becomes a redirect tombstone)"},
+          "targetKey":{"type":"string","description":"Bank to merge INTO (receives all memories)"}
+        },"required":["sourceKey","targetKey"],
+        "examples":[{"sourceKey":"myrepo","targetKey":"org-myrepo"}]}
         """)!.AsObject();
 
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -606,6 +616,17 @@ public sealed class MemoryToolsProvider : IToolProvider
                 InputSchema = BankDeleteSchema,
                 DestructiveHint = true,
                 Handler = BankDeleteAsync
+            },
+            // SPEC-20261113-memory-bank-merge RF-003.
+            new CatalogTool
+            {
+                Name = "memory_bank_merge",
+                Title = "Merge memory banks",
+                Description = "Merge sourceKey into targetKey: all memories move to the target; " +
+                    "the old key keeps resolving (name-drift remedy). Idempotent re-run.",
+                InputSchema = BankMergeSchema,
+                IdempotentHint = true,
+                Handler = BankMergeAsync
             }
         ];
         foreach (var t in tools)
@@ -631,7 +652,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalString(ctx, "sourcePrompt"),
             ToolArgs.OptionalString(ctx, "sessionId"),
             ToolArgs.OptionalString(ctx, "origin"));
-        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
+        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo"));
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
 
         if (mode == "async")
@@ -676,7 +697,7 @@ public sealed class MemoryToolsProvider : IToolProvider
             ToolArgs.OptionalString(ctx, "factType"),
             ToolArgs.OptionalString(ctx, "sessionId"));
         var recall = ctx.Services.GetRequiredService<MemoryRecallService>();
-        var result = await recall.RecallAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), req, ct);
+        var result = await recall.RecallAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")), req, ct);
         return await ToolResults.Structured($"{result.Results.Count} memor(ies)", result);
     }
 
@@ -686,7 +707,7 @@ public sealed class MemoryToolsProvider : IToolProvider
     {
         var svc = ctx.Services.GetRequiredService<MemoryUnitService>();
         var items = await svc.ListAsync(
-            MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+            MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
             ToolArgs.OptionalString(ctx, "factType"),
             ToolArgs.OptionalString(ctx, "tag"),
             ToolArgs.OptionalInt(ctx, "limit", 20, 200),
@@ -700,7 +721,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         var svc = ctx.Services.GetRequiredService<MemoryUnitService>();
         try
         {
-            var unit = await svc.GetAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+            var unit = await svc.GetAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")), ct);
             return await ToolResults.Structured("memory unit", unit);
         }
@@ -717,7 +738,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var unit = await svc.UpdateAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
                 new MemoryUnitService.MemoryUnitPatch(
                     ToolArgs.OptionalString(ctx, "text"),
@@ -740,7 +761,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         var svc = ctx.Services.GetRequiredService<MemoryUnitService>();
         try
         {
-            await svc.DeleteAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+            await svc.DeleteAsync(MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
                 ToolArgs.OptionalBool(ctx, "hard") == true, ct);
             return await ToolResults.Structured("memory deleted", new { deleted = true });
@@ -771,7 +792,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var result = await svc.ReflectAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), req, ct);
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")), req, ct);
             return await ToolResults.Structured("reflect answer", result);
         }
         catch (MemoryBadRequestException ex)
@@ -790,7 +811,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var items = await svc.ListAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ToolArgs.OptionalBool(ctx, "includeInactive") == true, ct);
             return await ToolResults.Structured($"{items.Count} directive(s)",
                 new { count = items.Count, directives = items });
@@ -807,7 +828,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var d = await svc.CreateAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ToolArgs.OptionalString(ctx, "name"),
                 ToolArgs.RequiredString(ctx, ArgContent),
                 ToolArgs.OptionalInt(ctx, "priority", 0, int.MaxValue),
@@ -827,7 +848,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var d = await svc.UpdateAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")),
                 ToolArgs.OptionalBool(ctx, "isActive"),
                 ctx.Arguments?.TryGetValue("priority", out _) == true ? ToolArgs.OptionalInt(ctx, "priority", 0, int.MaxValue) : null,
@@ -849,7 +870,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             await svc.DeleteAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ParseGuid(ToolArgs.RequiredString(ctx, "id")), ct);
             return await ToolResults.Structured("directive deleted", new { deleted = true });
         }
@@ -862,7 +883,7 @@ public sealed class MemoryToolsProvider : IToolProvider
     // ---------- mental models + pages (SPEC-20261111-mental-models-pages) ----------
 
     private static string? EffKey(ToolCallContext ctx) =>
-        MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
+        MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo"));
 
     private static async ValueTask<CallToolResult> MentalModelsListAsync(ToolCallContext ctx, CancellationToken ct)
     {
@@ -1080,7 +1101,7 @@ public sealed class MemoryToolsProvider : IToolProvider
 
     private static async ValueTask<CallToolResult> ConsolidateAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey));
+        var bankKey = MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo"));
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
         try
         {
@@ -1122,7 +1143,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var history = await svc.HistoryAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ParseGuid(ToolArgs.RequiredString(ctx, "observationId")), banks, ct);
             return await ToolResults.Structured($"{history.Count} version(s)",
                 new { count = history.Count, versions = history });
@@ -1141,7 +1162,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var digest = await svc.ContextAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ToolArgs.OptionalInt(ctx, "topK", 10, 50),
                 ParseDate(ToolArgs.OptionalString(ctx, "since"))?.UtcDateTime,
                 ToolArgs.OptionalBool(ctx, "synthesize") == true, ct);
@@ -1159,7 +1180,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var result = await svc.TimelineAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)),
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")),
                 ParseDate(ToolArgs.OptionalString(ctx, "from"))?.UtcDateTime,
                 ParseDate(ToolArgs.OptionalString(ctx, "to"))?.UtcDateTime,
                 ToolArgs.OptionalString(ctx, "factType") is { } ft ? [ft] : null,
@@ -1179,7 +1200,7 @@ public sealed class MemoryToolsProvider : IToolProvider
         try
         {
             var stats = await svc.StatsAsync(
-                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey)), ct);
+                MemoryBankContext.EffectiveKey(ctx.Services, ToolArgs.OptionalString(ctx, ArgBankKey), ToolArgs.OptionalString(ctx, "repo")), ct);
             return await ToolResults.Structured("memory stats", stats);
         }
         catch (MemoryBadRequestException ex)
@@ -1193,7 +1214,7 @@ public sealed class MemoryToolsProvider : IToolProvider
     private static async ValueTask<CallToolResult> BankListAsync(ToolCallContext ctx, CancellationToken ct)
     {
         var banks = ctx.Services.GetRequiredService<MemoryBankService>();
-        var items = await banks.ListAsync(ct);
+        var items = await banks.ListAsync(ToolArgs.OptionalBool(ctx, "includeMerged") == true, ct);
         return await ToolResults.Structured($"{items.Count} bank(s)", new { count = items.Count, banks = items });
     }
 
@@ -1250,6 +1271,30 @@ public sealed class MemoryToolsProvider : IToolProvider
         {
             return await ToolResults.Error(ex.Message);
         }
+    }
+
+    /// <summary>SPEC-20261113-memory-bank-merge RF-001/RF-003.</summary>
+    private static async ValueTask<CallToolResult> BankMergeAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var targetKey = MemoryBankContext.EffectiveKey(ctx.Services,
+            ToolArgs.RequiredString(ctx, "targetKey"))!;
+        var sourceKey = ToolArgs.RequiredString(ctx, "sourceKey");
+        var svc = ctx.Services.GetRequiredService<MemoryBankMergeService>();
+        try
+        {
+            var r = await svc.MergeAsync(sourceKey, targetKey, ct);
+            return await ToolResults.Structured(
+                r.Merged ? $"merged '{sourceKey}' → '{targetKey}'" : $"already merged",
+                new
+                {
+                    merged = r.Merged,
+                    alreadyMerged = r.AlreadyMerged,
+                    targetBankId = r.TargetBankId,
+                    r.Moved,
+                    r.Skipped
+                });
+        }
+        catch (MemoryBadRequestException ex) { return await ToolResults.Error(ex.Message); }
     }
 
     // ---------- helpers ----------
