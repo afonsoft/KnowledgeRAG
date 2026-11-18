@@ -20,6 +20,18 @@ namespace KnowledgeHub.Server.Mcp.ToolProviders;
 public sealed class FlowsToolsProvider(
     IServiceProvider providerScope) : IToolProvider
 {
+    private static readonly JsonObject FlowsUnifiedSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "op":{"type":"string","enum":["list","run"],"description":"'list' enumerates enabled flows; 'run' executes a flow by slug or id"},
+          "flow":{"type":"string","description":"Flow slug (flow_<slug>) or GUID — required when op=run"},
+          "inputs":{"type":"object","description":"Input values matching the flow's declared inputs — op=run only"}
+        },"required":["op"],
+        "examples":[
+          {"op":"list"},
+          {"op":"run","flow":"web_research_summary","inputs":{"topic":"AI trends"}}
+        ]}
+        """)!.AsObject();
+
     private static readonly JsonObject ListFlowsSchema = JsonNode.Parse("""
         {"type":"object","properties":{},"additionalProperties":false,"examples":[{}]}
         """)!.AsObject();

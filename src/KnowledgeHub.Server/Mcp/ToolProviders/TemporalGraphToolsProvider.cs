@@ -75,9 +75,44 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
         [
             new CatalogTool
             {
+                Name = "search_graph",
+                Title = "Search temporal and episodic graph",
+                Description = "Search graph with mode: 'temporal', 'recent', 'diverse', 'relationships', or 'episode'.",
+                InputSchema = JsonNode.Parse("""
+                    {"type":"object","properties":{
+                      "mode":{"type":"string","enum":["temporal","recent","diverse","relationships","episode"],"description":"Search mode"},
+                      "query":{"type":"string","description":"Free-text query"},
+                      "start":{"type":"string","description":"Window start"},
+                      "end":{"type":"string","description":"Window end"},
+                      "window":{"type":"string","description":"Sliding window (1h, 6h, 24h, 7d)"},
+                      "entity":{"type":"string","description":"Entity name"},
+                      "diversityLevel":{"type":"string","description":"Diversity level (low, medium, high)"},
+                      "depth":{"type":"integer","description":"Depth 1-3"},
+                      "episodeId":{"type":"string","description":"Episode GUID"},
+                      "maxResults":{"type":"integer","description":"Max results"}
+                    },"required":["mode"]}
+                    """)!.AsObject(),
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = async (ctx, ct) =>
+                {
+                    var mode = ToolArgs.String(ctx, "mode") ?? "recent";
+                    return mode switch
+                    {
+                        "temporal" => await TemporalAsync(ctx, ct),
+                        "recent" => await RecentAsync(ctx, ct),
+                        "diverse" => await DiverseAsync(ctx, ct),
+                        "relationships" => await RelationshipsAsync(ctx, ct),
+                        "episode" => await EpisodeAsync(ctx, ct),
+                        _ => await ToolResults.Error($"unknown mode '{mode}'")
+                    };
+                }
+            },
+            new CatalogTool
+            {
                 Name = "search_graph_temporal",
-                Title = "Search graph by time window",
-                Description = "Facts (entities + relations) observed inside an explicit time window — start/end accept RFC3339, yyyy-MM-ddTHH:mm:ss, yyyy-MM-dd HH:mm:ss or yyyy-MM-dd (UTC assumed). Use for 'what did we learn about X between A and B' questions or to compare how relations evolved. Responses over 8KB are condensed with a truncation warning.",
+                Title = "[DEPRECATED] Search graph by time window",
+                Description = "[DEPRECATED: use search_graph with mode='temporal']",
                 InputSchema = TemporalSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
@@ -86,8 +121,8 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
             new CatalogTool
             {
                 Name = "search_graph_recent",
-                Title = "Search graph recent facts",
-                Description = $"Facts observed inside a sliding window ending now — window is one of: {WindowList}. Use for 'what changed recently?', 'facts from the last day' questions. Responses over 8KB are condensed with a truncation warning.",
+                Title = "[DEPRECATED] Search graph recent facts",
+                Description = "[DEPRECATED: use search_graph with mode='recent']",
                 InputSchema = RecentSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
@@ -96,8 +131,8 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
             new CatalogTool
             {
                 Name = "search_graph_diverse",
-                Title = "Diversified graph search",
-                Description = "Neighbourhood of an entity diversified across label/type clusters — avoids returning many variants of one central node. diversityLevel: low = up to 5 per cluster, medium = 2, high = 1. Use for landscape/overview questions. Responses over 8KB are condensed with a truncation warning.",
+                Title = "[DEPRECATED] Diversified graph search",
+                Description = "[DEPRECATED: use search_graph with mode='diverse']",
                 InputSchema = DiverseSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
@@ -106,8 +141,8 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
             new CatalogTool
             {
                 Name = "search_graph_relationships",
-                Title = "Entity relationships (multi-hop)",
-                Description = "Multi-hop exploration of an entity's relationships in BOTH directions (default depth 2, cap 3), currently-valid edges only. Use for 'how is X connected?' questions where find_dependencies (outbound-only) is too narrow. Responses over 8KB are condensed with a truncation warning.",
+                Title = "[DEPRECATED] Multi-hop graph relationships",
+                Description = "[DEPRECATED: use search_graph with mode='relationships']",
                 InputSchema = RelationshipsSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
@@ -116,8 +151,8 @@ public sealed class TemporalGraphToolsProvider(IGraphSettingsService graphSettin
             new CatalogTool
             {
                 Name = "search_graph_episode",
-                Title = "Search graph by episode",
-                Description = "All facts attributed to one episode (ingestion run or agent session) — pass the `episodeId` surfaced by temporal/diverse results. Use to replay 'what was discovered during that sync/session?'. Responses over 8KB are condensed with a truncation warning.",
+                Title = "[DEPRECATED] Search graph by episode",
+                Description = "[DEPRECATED: use search_graph with mode='episode']",
                 InputSchema = EpisodeSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
