@@ -113,23 +113,102 @@ public sealed class TavilyToolsProvider(
     public async Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
         if (!_options.Enabled
-            // Runtime toggle (Settings → Integrações): disabled providers
-            // contribute nothing to tools/list; stale tools/call hits the
-            // generic unknown-tool error.
             || (services.GetService<Settings.IIntegrationStateService>() is { } state
                 && !await state.IsEnabledAsync(Settings.IntegrationProviders.Tavily, cancellationToken)))
             return [];
 
-        var tools = new Dictionary<string, CatalogTool>(StringComparer.Ordinal);
-        foreach (var tool in StaticCoreTools())
-            tools[tool.Name] = tool;
+        var list = new List<CatalogTool>
+        {
+            new CatalogTool
+            {
+                Name = "tavily_proxy",
+                Title = "Tavily search proxy",
+                Description = "Tavily upstream proxy tool with op: search, extract, crawl, map, research.",
+                InputSchema = JsonNode.Parse("""
+                    {"type":"object","properties":{
+                      "op":{"type":"string","enum":["search","extract","crawl","map","research"],"description":"Operation"},
+                      "query":{"type":"string","description":"Search query or topic"},
+                      "urls":{"type":"array","items":{"type":"string"},"description":"URLs for extract"},
+                      "url":{"type":"string","description":"URL for crawl or map"},
+                      "input":{"type":"string","description":"Research input"}
+                    },"required":["op"]}
+                    """)!.AsObject(),
+                ReadOnly = true,
+                IdempotentHint = true,
+                OpenWorldHint = true,
+                Handler = async (ctx, ct) =>
+                {
+                    var op = ToolArgs.String(ctx, "op") ?? "search";
+                    var targetTool = op switch
+                    {
+                        "search" => "tavily_search",
+                        "extract" => "tavily_extract",
+                        "crawl" => ToolCrawl,
+                        "map" => "tavily_map",
+                        "research" => ToolResearch,
+                        _ => null
+                    };
+                    if (targetTool is null)
+                        return await ToolResults.Error($"unknown op '{op}'");
+                    return await DispatchAsync(targetTool, ctx, ct);
+                }
+            },
+            new CatalogTool
+            {
+                Name = "tavily_search",
+                Title = "[DEPRECATED] Web search (Tavily)",
+                Description = "[DEPRECATED: use tavily_proxy with op='search']",
+                InputSchema = SearchSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                OpenWorldHint = true,
+                Handler = (ctx, ct) => DispatchAsync("tavily_search", ctx, ct)
+            },
+            new CatalogTool
+            {
+                Name = "tavily_extract",
+                Title = "[DEPRECATED] Extract content (Tavily)",
+                Description = "[DEPRECATED: use tavily_proxy with op='extract']",
+                InputSchema = ExtractSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                OpenWorldHint = true,
+                Handler = (ctx, ct) => DispatchAsync("tavily_extract", ctx, ct)
+            },
+            new CatalogTool
+            {
+                Name = "tavily_map",
+                Title = "[DEPRECATED] Map site (Tavily)",
+                Description = "[DEPRECATED: use tavily_proxy with op='map']",
+                InputSchema = MapSchema,
+                ReadOnly = true,
+                IdempotentHint = true,
+                OpenWorldHint = true,
+                Handler = (ctx, ct) => DispatchAsync("tavily_map", ctx, ct)
+            },
+            new CatalogTool
+            {
+                Name = ToolCrawl,
+                Title = "[DEPRECATED] Crawl site (Tavily)",
+                Description = "[DEPRECATED: use tavily_proxy with op='crawl']",
+                InputSchema = CrawlSchema,
+                ReadOnly = false,
+                OpenWorldHint = true,
+                Handler = (ctx, ct) => DispatchAsync(ToolCrawl, ctx, ct)
+            },
+            new CatalogTool
+            {
+                Name = ToolResearch,
+                Title = "[DEPRECATED] Deep research (Tavily)",
+                Description = "[DEPRECATED: use tavily_proxy with op='research']",
+                InputSchema = ResearchSchema,
+                ReadOnly = false,
+                OpenWorldHint = true,
+                Handler = (ctx, ct) => DispatchAsync(ToolResearch, ctx, ct)
+            }
+        ];
 
-        // Dynamic merge only makes sense when an upstream session can authenticate.
-        if (await upstream.HasApiKeyAsync(cancellationToken))
-            foreach (var tool in await GetDynamicToolsAsync(cancellationToken))
-                tools[tool.Name] = tool;
-
-        return [.. tools.Values];
+        return list;
     }
 
     /// <summary>Drops the cached upstream tools/list — called when the
