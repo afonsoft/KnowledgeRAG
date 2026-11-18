@@ -133,18 +133,25 @@ public sealed class KnowledgeToolsProvider : IToolProvider
             {
                 Name = "search_knowledge",
                 Title = "Search knowledge",
-                Description = "Unified semantic search across all active knowledge sources. Returns ranked passages with source name, document title, score and URI. Use for exploratory lookups; use a scoped query_* tool to search a single source.",
+                Description = "Unified semantic search across all active knowledge sources. Returns ranked passages. When 'generate' is set to true, synthesizes an answer with citations (equivalent to ask_knowledge).",
                 InputSchema = SearchSchema,
                 OutputSchema = SearchOutputSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
-                Handler = SearchKnowledgeAsync
+                Handler = async (ctx, ct) =>
+                {
+                    if (ToolArgs.OptionalBool(ctx, "generate") == true)
+                    {
+                        return await AskKnowledgeAsync(ctx, ct);
+                    }
+                    return await SearchKnowledgeAsync(ctx, ct);
+                }
             },
             new CatalogTool
             {
                 Name = "ask_knowledge",
-                Title = "Ask knowledge",
-                Description = "Answers a natural-language question using the indexed knowledge base. When a chat provider is configured, returns a synthesized answer with [n] citations — each citation includes the document title, source name and file path, which can be passed to read_document to fetch the full document. Without a provider (or generate=false) returns the raw aggregated context.",
+                Title = "[DEPRECATED] Ask knowledge",
+                Description = "[DEPRECATED: use search_knowledge with generate=true] Answers a natural-language question using the indexed knowledge base with synthesized answer and citations.",
                 InputSchema = AskSchema,
                 OutputSchema = AskOutputSchema,
                 ReadOnly = true,
