@@ -8,18 +8,34 @@ using ModelContextProtocol.Protocol;
 namespace KnowledgeHub.Server.Mcp.ToolProviders;
 
 /// <summary>
-/// Settings tools (SPEC-20260916-api-key-settings RF-004 + SPEC-20260926-split-settings-tools):
-/// set_api_key_settings — allows an API key to configure integration API keys (firecrawl, deepwiki, tavily, context7).
-/// set_chat_settings — allows an API key to configure chat LLM endpoint, model and API key.
+/// Unified settings tool (consolidation wave 1):
+/// <c>set_settings</c> — configures per-key integration API keys or chat LLM settings.
+/// Replaces the former <c>set_api_key_settings</c> and <c>set_chat_settings</c> tools.
+/// Legacy aliases are kept for backward compatibility (deprecated).
 /// </summary>
 public sealed class SettingsToolsProvider : IToolProvider
 {
+    private static readonly JsonObject UnifiedSchema = JsonNode.Parse("""
+        {"type":"object","properties":{
+          "scope":{"type":"string","enum":["chat","integration"],"description":"'chat' configures LLM endpoint/model/apiKey; 'integration' configures upstream provider keys (firecrawl, deepwiki, tavily, context7)"},
+          "provider":{"type":"string","enum":["firecrawl","deepwiki","tavily","context7"],"description":"Required when scope=integration: which integration provider to configure"},
+          "apiKey":{"type":["string","null"],"description":"API key override (null or empty = inherit from global)"},
+          "endpoint":{"type":["string","null"],"description":"scope=chat only: OpenAI-compatible base URL (null = inherit from global)"},
+          "model":{"type":["string","null"],"description":"scope=chat only: Model name (null = inherit from global)"}
+        },"required":["scope"],
+        "examples":[
+          {"scope":"integration","provider":"tavily","apiKey":"tvly-xxx"},
+          {"scope":"chat","endpoint":"https://api.openai.com/v1","model":"gpt-4o","apiKey":"sk-xxx"}
+        ]}
+        """)!.AsObject();
+
+    // Legacy schemas kept for alias resolution
     private static readonly JsonObject SetApiKeySettingsSchema = JsonNode.Parse("""
         {"type":"object","properties":{
           "provider":{"type":"string","enum":["firecrawl","deepwiki","tavily","context7"],"description":"Which integration provider to configure"},
           "apiKey":{"type":["string","null"],"description":"API key override (null or empty = inherit from global)"}
         },"required":["provider"],
-        "examples":[{"provider":"deepwiki","apiKey":"dw-secret-key"},{"provider":"firecrawl","apiKey":null}]}
+        "examples":[{"provider":"tavily","apiKey":"tvly-xxx"}]}
         """)!.AsObject();
 
     private static readonly JsonObject SetChatSettingsSchema = JsonNode.Parse("""
@@ -28,7 +44,7 @@ public sealed class SettingsToolsProvider : IToolProvider
           "model":{"type":["string","null"],"description":"Model name (null = inherit from global)"},
           "apiKey":{"type":["string","null"],"description":"Chat provider API key override (null = inherit from global)"}
         },
-        "examples":[{"endpoint":"http://localhost:11434","model":"llama3","apiKey":null}]}
+        "examples":[{"endpoint":"https://api.openai.com/v1","model":"gpt-4o","apiKey":"sk-xxx"}]}
         """)!.AsObject();
 
     public Task<IReadOnlyList<CatalogTool>> GetToolsAsync(IServiceProvider services, CancellationToken cancellationToken)
@@ -37,81 +53,75 @@ public sealed class SettingsToolsProvider : IToolProvider
         [
             new CatalogTool
             {
+                Name = "set_settings",
+                Title = "Configure settings",
+                Description = "Configure per-key settings. scope='chat' sets LLM endpoint/model/apiKey; scope='integration' sets upstream provider keys (firecrawl, deepwiki, tavily, context7). Replaces the deprecated set_chat_settings and set_api_key_settings tools.",
+                InputSchema = UnifiedSchema,
+                ReadOnly = false,
+                Handler = HandleUnifiedAsync
+            },
+            // --- deprecated aliases (backward compat) ---
+            new CatalogTool
+            {
                 Name = "set_api_key_settings",
-                Title = "Set API key settings",
-                Description = "Override integration API keys (firecrawl, deepwiki, tavily, context7) for the current API key. Pass null or empty apiKey to remove the override and inherit from global. Only available to API-key-authenticated sessions.",
+                Title = "[Deprecated] Set integration API key",
+                Description = "DEPRECATED — use set_settings(scope='integration') instead. Configures integration API keys.",
                 InputSchema = SetApiKeySettingsSchema,
                 ReadOnly = false,
-                IdempotentHint = true,
-                Handler = async (ctx, ct) =>
-                {
-                    var keyId = RequireApiKeySession(ctx);
-                    var provider = ToolArgs.RequiredString(ctx, "provider");
-                    var service = ctx.Services.GetRequiredService<IApiKeyChatSettingsService>();
-                    return await SaveOrRemoveIntegrationKeyAsync(service, keyId, provider, ctx, ct);
-                }
+                Handler = HandleLegacyIntegrationAsync
             },
             new CatalogTool
             {
                 Name = "set_chat_settings",
-                Title = "Set chat settings",
-                Description = "Override chat LLM settings (endpoint, model, API key) for the current API key. Null fields inherit from global defaults. Only available to API-key-authenticated sessions.",
+                Title = "[Deprecated] Set chat LLM settings",
+                Description = "DEPRECATED — use set_settings(scope='chat') instead. Configures chat LLM endpoint, model and API key.",
                 InputSchema = SetChatSettingsSchema,
                 ReadOnly = false,
-                IdempotentHint = true,
-                Handler = SetChatSettingsAsync
+                Handler = HandleLegacyChatAsync
             }
         ];
+
         return Task.FromResult(tools);
     }
 
-    private static async ValueTask<CallToolResult> SetChatSettingsAsync(
-        ToolCallContext ctx, CancellationToken ct)
+    // ── Unified handler ──
+    private static async ValueTask<CallToolResult> HandleUnifiedAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        var keyId = RequireApiKeySession(ctx);
-
-        var endpoint = ToolArgs.OptionalString(ctx, "endpoint");
-        var model = ToolArgs.OptionalString(ctx, "model");
-        var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
-
-        var service = ctx.Services.GetRequiredService<IApiKeyChatSettingsService>();
-        await service.SaveAsync(keyId, endpoint, model, apiKey, ct);
-        var result = await service.DescribeAsync(keyId, ct);
-
-        var msg = $"Chat settings updated for API key '{keyId}'.\n" +
-                  $"Provider: {result.Provider}\n" +
-                  $"Endpoint: {result.Endpoint ?? "(inherited)"}\n" +
-                  $"Model: {result.Model ?? "(inherited)"}\n" +
-                  $"Has override: {result.HasOverride}\n" +
-                  $"Override fields: {string.Join(", ", result.OverrideFields)}";
-        return await ToolResults.Text(msg);
+        var scope = ToolArgs.RequiredString(ctx, "scope");
+        return scope switch
+        {
+            "integration" => await HandleIntegrationCoreAsync(ctx, ct),
+            "chat" => await HandleChatCoreAsync(ctx, ct),
+            _ => await ToolResults.Error($"Unknown scope '{scope}'. Use 'chat' or 'integration'.")
+        };
     }
 
-    /// <summary>Resolves the caller's API-key identity or throws — the settings
-    /// tools are only available to API-key-authenticated sessions.</summary>
+    // ── Legacy alias handlers ──
+    private static ValueTask<CallToolResult> HandleLegacyIntegrationAsync(ToolCallContext ctx, CancellationToken ct)
+        => HandleIntegrationCoreAsync(ctx, ct);
+
+    private static ValueTask<CallToolResult> HandleLegacyChatAsync(ToolCallContext ctx, CancellationToken ct)
+        => HandleChatCoreAsync(ctx, ct);
+
+    // ── Core logic ──
     private static Guid RequireApiKeySession(ToolCallContext ctx)
     {
         var http = ctx.Services?.GetService<IHttpContextAccessor>()?.HttpContext;
         if (http is null)
             throw new McpProtocolException("HTTP context not available", McpErrorCode.InternalError);
-
-        var authMethod = http.User.FindFirst(ApiKeyAuthenticationHandler.AuthMethodClaim)?.Value;
-        var keyIdValue = http.User.FindFirst(ApiKeyAuthenticationHandler.KeyIdClaim)?.Value;
-        if (authMethod != "apikey" || !Guid.TryParse(keyIdValue, out var keyId))
-            throw new McpProtocolException("This tool is only available to API-key-authenticated sessions", McpErrorCode.InvalidParams);
+        if (http.Items[CallerIdentity.ItemKey] is not CallerIdentity { ApiKeyId: { } keyId })
+            throw new McpProtocolException("API key session required", McpErrorCode.InternalError);
         return keyId;
     }
 
-    /// <summary>Saves or removes the integration key override for one provider.</summary>
-    private static async ValueTask<CallToolResult> SaveOrRemoveIntegrationKeyAsync(
-        IApiKeyChatSettingsService service, Guid keyId, string provider,
-        ToolCallContext ctx, CancellationToken ct)
+    private static async ValueTask<CallToolResult> HandleIntegrationCoreAsync(ToolCallContext ctx, CancellationToken ct)
     {
-        if (provider is not ("firecrawl" or "deepwiki" or "tavily" or "context7"))
-            throw new McpProtocolException($"Unknown provider '{provider}'", McpErrorCode.InvalidParams);
-
+        var provider = ToolArgs.RequiredString(ctx, "provider");
         var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
-        if (!string.IsNullOrWhiteSpace(apiKey))
+        var keyId = RequireApiKeySession(ctx);
+        var service = ctx.Services.GetRequiredService<IApiKeyChatSettingsService>();
+
+        if (!string.IsNullOrEmpty(apiKey))
         {
             await service.SaveIntegrationKeyAsync(keyId, provider, apiKey, ct);
             return await ToolResults.Text($"{provider} API key saved for API key '{keyId}'.");
@@ -119,5 +129,17 @@ public sealed class SettingsToolsProvider : IToolProvider
 
         await service.RemoveIntegrationKeyAsync(keyId, provider, ct);
         return await ToolResults.Text($"{provider} API key removed for API key '{keyId}' — falls back to global.");
+    }
+
+    private static async ValueTask<CallToolResult> HandleChatCoreAsync(ToolCallContext ctx, CancellationToken ct)
+    {
+        var endpoint = ToolArgs.OptionalString(ctx, "endpoint");
+        var model = ToolArgs.OptionalString(ctx, "model");
+        var apiKey = ToolArgs.OptionalString(ctx, "apiKey");
+        var keyId = RequireApiKeySession(ctx);
+        var service = ctx.Services.GetRequiredService<IApiKeyChatSettingsService>();
+
+        await service.SaveAsync(keyId, endpoint, model, apiKey, ct);
+        return await ToolResults.Text($"Chat settings saved for API key '{keyId}'.");
     }
 }
