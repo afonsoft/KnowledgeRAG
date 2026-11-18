@@ -58,9 +58,38 @@ public sealed class GraphToolsProvider(IGraphSettingsService graphSettings) : IT
         [
             new CatalogTool
             {
+                Name = "graph_query",
+                Title = "Graph query",
+                Description = "Execute graph queries: dependencies, dependents, path, or impact analysis. Set 'op' to 'dependencies', 'dependents', 'path', or 'impact'.",
+                InputSchema = JsonNode.Parse("""
+                    {"type":"object","properties":{
+                      "op":{"type":"string","enum":["dependencies","dependents","path","impact"],"description":"Operation: dependencies, dependents, path, impact"},
+                      "component":{"type":"string","description":"Source entity name (for dependencies, dependents, impact)"},
+                      "a":{"type":"string","description":"Source entity A (for path)"},
+                      "b":{"type":"string","description":"Target entity B (for path)"},
+                      "depth":{"type":"integer","description":"Depth 1-3"}
+                    },"required":["op"]}
+                    """)!.AsObject(),
+                ReadOnly = true,
+                IdempotentHint = true,
+                Handler = async (ctx, ct) =>
+                {
+                    var op = ToolArgs.String(ctx, "op") ?? "dependencies";
+                    return op switch
+                    {
+                        "dependencies" => await TraverseAsync(ctx, ct, GraphDirection.Outbound),
+                        "dependents" => await TraverseAsync(ctx, ct, GraphDirection.Inbound),
+                        "path" => await FindPathAsync(ctx, ct),
+                        "impact" => await AnalyzeImpactAsync(ctx, ct),
+                        _ => await ToolResults.Error($"unknown op '{op}'")
+                    };
+                }
+            },
+            new CatalogTool
+            {
                 Name = "find_dependencies",
-                Title = "Find dependencies",
-                Description = "What does this component depend on? Outbound traversal of the knowledge graph built from indexed sources — every edge carries evidence (chunk + document + source). Use when the question is about RELATIONSHIPS ('what does X call/use/need?', 'which services touch Y?'), not text content — for content use search_knowledge first; its results return a `components` field with entity names you can pass here. Unknown names get 'did you mean' suggestions.",
+                Title = "[DEPRECATED] Find dependencies",
+                Description = "[DEPRECATED: use graph_query with op='dependencies'] What does this component depend on?",
                 InputSchema = ComponentSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
@@ -69,8 +98,8 @@ public sealed class GraphToolsProvider(IGraphSettingsService graphSettings) : IT
             new CatalogTool
             {
                 Name = "find_dependents",
-                Title = "Find dependents",
-                Description = "What depends on this component? Inbound traversal — answers 'who calls/uses/relies on X?' and 'what breaks if X changes?'. Use for reverse-impact questions on entities extracted from indexed sources; every edge carries evidence (chunk + document + source). Discover entity names via search_knowledge results (`components` field); unknown names get 'did you mean' suggestions.",
+                Title = "[DEPRECATED] Find dependents",
+                Description = "[DEPRECATED: use graph_query with op='dependents'] What depends on this component?",
                 InputSchema = ComponentSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
@@ -79,8 +108,8 @@ public sealed class GraphToolsProvider(IGraphSettingsService graphSettings) : IT
             new CatalogTool
             {
                 Name = "find_path",
-                Title = "Find path",
-                Description = "Shortest path between two entities in the knowledge graph (depth-capped BFS, up to 5 paths). Use for connectivity questions — 'how is A related to B?', 'is there a chain from X to Y?' — where both endpoints are known entity names (from search_knowledge `components` or prior graph results). Returns 'no path' when the entities are not connected within the depth cap.",
+                Title = "[DEPRECATED] Find path",
+                Description = "[DEPRECATED: use graph_query with op='path'] Shortest path between two entities.",
                 InputSchema = PathSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
@@ -89,8 +118,8 @@ public sealed class GraphToolsProvider(IGraphSettingsService graphSettings) : IT
             new CatalogTool
             {
                 Name = "analyze_impact",
-                Title = "Analyze impact",
-                Description = "Impact analysis for a component: 1-hop dependents plus the documents behind each relation's evidence — answers 'if X changes/fails, what is affected and where is it documented?'. Use for change-impact and blast-radius questions. Entity names come from search_knowledge results (`components` field) or graph traversal output; unknown names get 'did you mean' suggestions.",
+                Title = "[DEPRECATED] Analyze impact",
+                Description = "[DEPRECATED: use graph_query with op='impact'] Impact analysis for a component.",
                 InputSchema = ImpactSchema,
                 ReadOnly = true,
                 IdempotentHint = true,
